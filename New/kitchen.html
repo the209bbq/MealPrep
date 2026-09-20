@@ -11,11 +11,14 @@
     <div class="logo">209 Kitchen Board</div>
     <ul class="nav-links">
       <li><a href="index.html">View site</a></li>
+      <li><a href="#shopping">Shopping</a></li>
     </ul>
   </nav>
 
   <div class="kitchen-tabs">
     <button type="button" class="kitchen-tab is-active" data-tab="menu">Menu</button>
+    <button type="button" class="kitchen-tab" data-tab="lab">Recipes</button>
+    <button type="button" class="kitchen-tab" data-tab="shopping">Shopping</button>
     <button type="button" class="kitchen-tab" data-tab="orders">Orders</button>
   </div>
 
@@ -31,6 +34,100 @@
     <div class="kitchen-list" id="kitchen-list"></div>
   </section>
 
+  <section class="section kitchen-header" data-panel="lab" hidden>
+    <h1>Recipes &amp; nutrition</h1>
+    <p>Build meals the same way you run the weekly menu: type ingredients, costs, and yields here. USDA numbers are stored as records next to your inputs — they do not overwrite what you typed.</p>
+    <p class="kitchen-note">Optional FoodData Central key (or env <code>USDA_FDC_API_KEY</code> with <code>node server.mjs</code>). Leave blank to try the public DEMO_KEY. Do not commit a secret.</p>
+    <div class="form-row usda-key-row">
+      <label>USDA API key <input type="password" id="usda-key" autocomplete="off" /></label>
+      <button type="button" class="btn-secondary" id="save-usda-key">Save key on this device</button>
+    </div>
+    <div class="lab-toolbar">
+      <button type="button" class="btn-secondary" id="new-recipe">New recipe</button>
+      <button type="button" class="btn-secondary" id="export-workbook">Export CSV + xlsx</button>
+    </div>
+    <p class="order-success" id="lab-status" hidden></p>
+  </section>
+
+  <section class="section kitchen-list-wrap" data-panel="lab" hidden>
+    <div class="kitchen-list" id="recipe-lab-list"></div>
+    <form id="recipe-form" class="recipe-form kitchen-card is-on" novalidate>
+      <input type="hidden" id="recipe-id" />
+      <h2 id="recipe-form-title">Edit recipe</h2>
+      <div class="form-row">
+        <label>Name <input type="text" id="recipe-name" required /></label>
+        <label>Tag <input type="text" id="recipe-tag" placeholder="Signature Smoked" /></label>
+      </div>
+      <label>Description <textarea id="recipe-description" rows="2"></textarea></label>
+      <label>Prep notes <textarea id="recipe-instructions" rows="2"></textarea></label>
+      <div class="form-row">
+        <label>Yield (portions) <input type="number" id="recipe-yield" min="1" step="1" /></label>
+        <label>Portion grams <input type="number" id="recipe-portion-grams" min="0" step="1" /></label>
+      </div>
+      <div class="nutrition-overrides">
+        <h3>Your nutrition values (per portion)</h3>
+        <p class="kitchen-note">Blank fields use sourced/ingredient totals. A filled field is your input and is what the menu and spreadsheet “effective” column use.</p>
+        <div class="override-grid" id="override-grid"></div>
+      </div>
+      <div class="ingredient-head">
+        <h3>Ingredients</h3>
+        <button type="button" class="btn-secondary" id="add-ingredient">Add ingredient</button>
+      </div>
+      <div id="ingredient-list" class="ingredient-list"></div>
+      <div class="lab-totals" id="lab-totals"></div>
+      <div id="usda-hits" class="usda-hits"></div>
+      <div class="lab-actions">
+        <button type="submit" class="btn-primary">Save recipe</button>
+        <button type="button" class="btn-secondary" id="delete-recipe">Remove custom recipe</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="section kitchen-orders" data-panel="lab" hidden>
+    <h1>Sourced &amp; input records</h1>
+    <p class="kitchen-note">Every save and USDA lookup is stored with origin (input vs sourced), citation, and timestamp so the spreadsheet matches this board.</p>
+    <div class="orders-list" id="records-list"></div>
+  </section>
+
+  <section class="section kitchen-shopping" data-panel="shopping" hidden>
+    <h1>Shopping trips</h1>
+    <p class="kitchen-note">Save the local store websites you actually use. Ingredient lists group by assigned store or typical-item keywords. Sites are opened as search/home links — this board does not scrape them. Stores and trips save on this kitchen device.</p>
+
+    <div class="lab-grid">
+      <form id="store-form" class="store-form">
+        <h2>Add a store / website</h2>
+        <input type="hidden" id="store-id" />
+        <label>Store name <input type="text" id="store-name" placeholder="WinCo, Costco, restaurant depot…" required /></label>
+        <label>Website URL <input type="url" id="store-url" placeholder="https://" required /></label>
+        <label>Search URL template (optional, use {query}) <input type="text" id="store-search" placeholder="https://store.example/search?q={query}" /></label>
+        <label>Typical items / keywords <input type="text" id="store-typical" placeholder="chicken, rice, produce" /></label>
+        <label>Notes <textarea id="store-notes" rows="2"></textarea></label>
+        <div class="lab-toolbar">
+          <button type="submit" class="btn-primary" id="store-submit">Save store</button>
+          <button type="button" class="btn-secondary" id="store-cancel-edit" hidden>Cancel edit</button>
+        </div>
+      </form>
+      <div>
+        <h2>Saved stores</h2>
+        <div id="store-list" class="store-list"></div>
+      </div>
+    </div>
+
+    <div class="trip-builder">
+      <h2>Saved trips</h2>
+      <div id="trip-history" class="trip-history"></div>
+      <h2>Plan a trip</h2>
+      <p class="kitchen-note">Choose recipes to shop for. Ingredient lines from the Recipes tab win when present; otherwise the planner uses this week’s menu copy so you can still build a list.</p>
+      <label class="trip-label-field">Trip name <input type="text" id="trip-label" placeholder="Saturday Costco + WinCo run" /></label>
+      <div id="trip-recipe-pick" class="trip-recipe-pick"></div>
+      <div class="lab-toolbar">
+        <button type="button" class="btn-secondary" id="plan-week-trip">Shop this week’s menu</button>
+        <button type="button" class="btn-primary" id="plan-selected-trip">Plan trip for selected</button>
+      </div>
+      <div id="trip-result" class="trip-result"></div>
+    </div>
+  </section>
+
   <section class="section kitchen-orders" data-panel="orders" hidden>
     <h1>Order processor</h1>
     <p class="kitchen-note">New orders appear here after checkout. Move each ticket from New to Packed as you work the week.</p>
@@ -38,8 +135,14 @@
     <div class="orders-list" id="orders-list"></div>
   </section>
 
+  <script src="config.js"></script>
+  <script src="records.js"></script>
+  <script src="nutrition.js"></script>
   <script src="recipes.js"></script>
   <script src="orders.js"></script>
+  <script src="stores.js"></script>
+  <script src="workbook.js"></script>
   <script src="kitchen.js"></script>
+  <script src="shopping.js"></script>
 </body>
 </html>

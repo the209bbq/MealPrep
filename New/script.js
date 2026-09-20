@@ -82,9 +82,9 @@ function renderMenu() {
     <article class="menu-card ${recipe.soldOut ? 'is-sold-out' : ''}">
       <div class="card-tag">${recipe.tag}</div>
       ${recipe.soldOut ? '<div class="sold-out-badge">Sold out</div>' : ''}
-      <h3>${recipe.name}</h3>
-      <p>${recipe.description}</p>
-      <span class="calories">${recipe.calories} Cal | ${recipe.protein}g Protein</span>
+      <h3>${escapeHtml(recipe.name)}</h3>
+      <p>${escapeHtml(recipe.description)}</p>
+      <span class="calories">${escapeHtml(nutritionLabel(recipe))}</span>
       ${recipe.soldOut ? '' : `<button type="button" class="btn-add" data-add="${recipe.id}">Add to order</button>`}
     </article>
   `).join('');
@@ -106,8 +106,8 @@ function renderOrderPicker() {
       return `
         <div class="picker-row">
           <div>
-            <strong>${recipe.name}</strong>
-            <span>${recipe.tag}</span>
+            <strong>${escapeHtml(recipe.name)}</strong>
+            <span>${escapeHtml(recipe.tag)}</span>
           </div>
           <div class="qty-controls">
             <button type="button" data-qty="${recipe.id}" data-delta="-1" aria-label="Remove one ${recipe.name}">−</button>
