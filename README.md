@@ -2,6 +2,14 @@
 
 Static kitchen + ordering site. Customer menu is `New/index.html`. Kitchen board is `New/kitchen.html` (Menu, Recipes, Shopping, Orders).
 
+## Browse (GitHub Pages)
+
+After Pages is on (Settings → Pages → Source: **GitHub Actions**), the kitchen board is:
+
+**https://the209bbq.github.io/MealPrep/kitchen.html**
+
+Recipes and Shopping are tabs on that page. The public menu is [index.html](https://the209bbq.github.io/MealPrep/). USDA lookups still work in the browser with a key saved on the device or `DEMO_KEY` — this deploy does not add API secrets. Free Pages needs a **public** repo (this one is private until you toggle visibility).
+
 ## Recipes (kitchen board)
 
 The **Recipes** tab is part of the kitchen board — not a separate bot or CLI.
