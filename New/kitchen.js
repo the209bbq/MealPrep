@@ -59,6 +59,14 @@ function renderKitchen() {
       <div class="kitchen-actions">
         <button
           type="button"
+          class="toggle-btn"
+          data-id="${recipe.id}"
+          data-action="edit"
+        >
+          Edit recipe
+        </button>
+        <button
+          type="button"
           class="toggle-btn ${recipe.onThisWeek ? 'is-active' : ''}"
           data-id="${recipe.id}"
           data-action="week"
@@ -115,13 +123,30 @@ function renderOrders() {
   `).join('');
 }
 
+function openRecipesTab() {
+  tabs.forEach((item) => item.classList.toggle('is-active', item.dataset.tab === 'lab'));
+  panels.forEach((panel) => {
+    panel.hidden = panel.dataset.panel !== 'lab';
+  });
+}
+
 function renderRecipePick() {
-  const mount = document.getElementById('recipe-pick');
+  const mount = document.getElementById('recipe-lab-list');
   if (!mount) return;
   mount.innerHTML = getRecipes().map((recipe) => `
-    <button type="button" class="pick-chip ${recipe.id === activeRecipeId ? 'is-active' : ''}" data-open-recipe="${recipe.id}">
-      ${escapeHtml(recipe.name)}
-    </button>
+    <article class="kitchen-card ${recipe.id === activeRecipeId ? 'is-on' : ''}">
+      <div class="kitchen-card-copy">
+        <span class="card-tag">${escapeHtml(recipe.tag)}</span>
+        <h2>${escapeHtml(recipe.name)}</h2>
+        <p>${escapeHtml(recipe.description)}</p>
+        <span class="calories">${escapeHtml(nutritionLabel(recipe))} · ${formatMoney(recipeCostPerPortion(recipe))}/portion</span>
+      </div>
+      <div class="kitchen-actions">
+        <button type="button" class="toggle-btn ${recipe.id === activeRecipeId ? 'is-active' : ''}" data-open-recipe="${recipe.id}">
+          ${recipe.id === activeRecipeId ? 'Editing' : 'Edit'}
+        </button>
+      </div>
+    </article>
   `).join('');
 }
 
@@ -206,12 +231,25 @@ function fillRecipeForm(recipe) {
   document.getElementById('recipe-yield').value = recipe.yieldPortions || 10;
   document.getElementById('recipe-portion-grams').value = recipe.portionGrams || '';
   document.getElementById('override-grid').innerHTML = overrideInputs(recipe);
-  document.getElementById('ingredient-list').innerHTML = (recipe.ingredients || []).map(ingredientRow).join('') || '<p class="kitchen-note">No ingredients yet. Add a line or ask the bot to draft.</p>';
+  document.getElementById('ingredient-list').innerHTML = (recipe.ingredients || []).map(ingredientRow).join('') || '<p class="kitchen-note">No ingredients yet. Add a line and type amount, grams, and cost.</p>';
+  const title = document.getElementById('recipe-form-title');
+  if (title) title.textContent = recipe.name ? `Edit ${recipe.name}` : 'New recipe';
+  const compare = Object.keys(NUTRIENT_LABELS).map((field) => {
+    const inputVal = recipe.inputNutrition && recipe.inputNutrition[field] !== undefined && recipe.inputNutrition[field] !== ''
+      ? recipe.inputNutrition[field]
+      : '—';
+    const sourcedVal = recipe.sourcedNutrition ? recipe.sourcedNutrition[field] : 0;
+    const origin = (recipe.nutritionOrigins || {})[field] || 'unset';
+    return `<tr><th>${NUTRIENT_LABELS[field]}</th><td>${inputVal}</td><td>${sourcedVal || '—'}</td><td>${recipe.nutrition[field]} (${origin})</td></tr>`;
+  }).join('');
   const totals = document.getElementById('lab-totals');
   totals.innerHTML = `
     <p><strong>${escapeHtml(nutritionLabel(recipe))}</strong></p>
     <p>Yield ${recipe.yieldPortions || 1} portions · Ingredient cost ${formatMoney(recipeCost(recipe))} · ${formatMoney(recipeCostPerPortion(recipe))} / portion</p>
-    <p class="kitchen-note">Effective nutrition origin: ${escapeHtml(recipe.nutritionOrigin || 'unset')}</p>
+    <table class="nutrition-compare">
+      <thead><tr><th>Field</th><th>Your input</th><th>Sourced</th><th>Effective</th></tr></thead>
+      <tbody>${compare}</tbody>
+    </table>
   `;
   renderRecipePick();
 }
@@ -225,29 +263,31 @@ function renderRecords() {
     return;
   }
   mount.innerHTML = records.map((record) => `
-    <article class="record-item">
-      <strong>${escapeHtml(record.kind)} · ${escapeHtml(record.origin)}</strong>
-      <span>${escapeHtml(new Date(record.timestamp).toLocaleString())}</span>
+    <article class="order-ticket">
+      <header>
+        <strong>${escapeHtml(record.kind)}</strong>
+        <span class="status-pill">${escapeHtml(record.origin || '')}</span>
+      </header>
+      <p>${escapeHtml(new Date(record.timestamp).toLocaleString())}</p>
       <p>${escapeHtml(record.citation || record.source || '')}</p>
+      ${record.url ? `<p><a href="${escapeHtml(record.url)}" target="_blank" rel="noopener">Citation</a></p>` : ''}
     </article>
   `).join('');
 }
 
-function appendAssistant(role, text, extraHtml = '') {
-  const log = document.getElementById('assistant-log');
-  const item = document.createElement('div');
-  item.className = `assistant-msg is-${role}`;
-  item.innerHTML = `<strong>${role === 'user' ? 'David' : 'Bot'}</strong><pre>${escapeHtml(text)}</pre>${extraHtml}`;
-  log.appendChild(item);
-  log.scrollTop = log.scrollHeight;
-}
-
-function usdaResultHtml(foods) {
-  return `<div class="usda-hits">${foods.map((food) => `
-    <button type="button" class="pick-chip" data-apply-food="${food.fdcId}" data-food-name="${escapeHtml(food.name)}">
-      ${escapeHtml(food.name)} · ${food.nutritionPer100g.calories} kcal/100g
-    </button>
-  `).join('')}</div>`;
+function renderUsdaHits(foods, ingredientId) {
+  const mount = document.getElementById('usda-hits');
+  if (!mount) return;
+  if (!foods || !foods.length) {
+    mount.innerHTML = '';
+    return;
+  }
+  mount.innerHTML = `<p class="kitchen-note">USDA FoodData Central matches — pick one to attach sourced nutrition (your cost and typed amounts stay).</p>
+    ${foods.map((food) => `
+      <button type="button" class="toggle-btn" data-apply-food="${food.fdcId}" data-food-name="${escapeHtml(food.name)}" data-ingredient="${ingredientId}">
+        ${escapeHtml(food.name)} · ${food.nutritionPer100g.calories} kcal/100g
+      </button>
+    `).join('')}`;
 }
 
 async function applyUsdaToIngredient(ingredientId, query) {
@@ -257,10 +297,20 @@ async function applyUsdaToIngredient(ingredientId, query) {
   const q = query || ingredient.name;
   const foods = await searchUsdaFoods(q, 5);
   if (!foods.length) {
+    renderUsdaHits([]);
     showLabStatus(`No USDA match for ${q}. Keep your typed values.`);
     return;
   }
-  const detail = await getUsdaFood(foods[0].fdcId, Number(ingredient.grams) || 100);
+  renderUsdaHits(foods, ingredientId);
+  showLabStatus(`Choose a USDA match for ${ingredient.name}.`);
+}
+
+async function attachUsdaFood(ingredientId, fdcId, foodName) {
+  const recipe = readFormRecipe();
+  const ingredient = recipe.ingredients.find((item) => item.id === ingredientId);
+  if (!ingredient) return;
+  if (foodName) ingredient.name = ingredient.name || foodName;
+  const detail = await getUsdaFood(fdcId, Number(ingredient.grams) || 100);
   ingredient.fdcId = detail.fdcId;
   ingredient.source = detail.source;
   ingredient.citation = detail.citation;
@@ -278,6 +328,7 @@ async function applyUsdaToIngredient(ingredientId, query) {
     subjectId: ingredient.id,
     values: { name: ingredient.name, grams: ingredient.grams, nutrition: detail.scaled }
   });
+  renderUsdaHits([]);
   fillRecipeForm(hydrateRecipe(recipe));
   renderRecords();
   showLabStatus(`Sourced ${ingredient.name} from USDA. Your cost/yield fields were not overwritten.`);
@@ -358,6 +409,12 @@ kitchenList.addEventListener('click', (event) => {
   const recipe = getRecipes().find((item) => item.id === button.dataset.id);
   if (!recipe) return;
 
+  if (button.dataset.action === 'edit') {
+    fillRecipeForm(recipe);
+    openRecipesTab();
+    return;
+  }
+
   if (button.dataset.action === 'week') {
     updateRecipeAvailability(recipe.id, { onThisWeek: !recipe.onThisWeek });
   }
@@ -395,7 +452,7 @@ tabs.forEach((tab) => {
 
 document.getElementById('new-recipe').addEventListener('click', () => {
   fillRecipeForm(newRecipeTemplate());
-  showLabStatus('Blank recipe ready. Add ingredients or ask the bot to draft.');
+  showLabStatus('New recipe open. Add ingredients, then save. Use Source USDA on a line to attach cited nutrition.');
 });
 
 document.getElementById('export-workbook').addEventListener('click', () => {
@@ -404,7 +461,7 @@ document.getElementById('export-workbook').addEventListener('click', () => {
   showLabStatus('Downloaded CSV files and 209-meal-prep-workbook.xlsx.');
 });
 
-document.getElementById('recipe-pick').addEventListener('click', (event) => {
+document.getElementById('recipe-lab-list').addEventListener('click', (event) => {
   const button = event.target.closest('[data-open-recipe]');
   if (!button) return;
   const recipe = getRecipes().find((item) => item.id === button.dataset.openRecipe);
@@ -438,6 +495,19 @@ document.getElementById('ingredient-list').addEventListener('click', async (even
   }
 });
 
+document.getElementById('usda-hits').addEventListener('click', async (event) => {
+  const usdaHit = event.target.closest('[data-apply-food]');
+  if (!usdaHit) return;
+  usdaHit.disabled = true;
+  try {
+    await attachUsdaFood(usdaHit.dataset.ingredient, usdaHit.dataset.applyFood, usdaHit.dataset.foodName);
+  } catch (error) {
+    showLabStatus(error.message);
+  } finally {
+    usdaHit.disabled = false;
+  }
+});
+
 document.getElementById('recipe-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const recipe = readFormRecipe();
@@ -466,45 +536,6 @@ document.getElementById('delete-recipe').addEventListener('click', () => {
 document.getElementById('save-usda-key').addEventListener('click', () => {
   saveSettings({ usdaApiKey: document.getElementById('usda-key').value.trim() });
   showLabStatus('Saved the USDA key on this device only.');
-});
-
-document.getElementById('assistant-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const input = document.getElementById('assistant-input');
-  const message = input.value.trim();
-  if (!message) return;
-  appendAssistant('user', message);
-  input.value = '';
-  try {
-    const result = await runAssistant(message);
-    let extra = '';
-    if (result.type === 'usda') extra = usdaResultHtml(result.foods);
-    if (result.type === 'recipe') {
-      fillRecipeForm(result.recipe);
-      extra = '<p class="kitchen-note">Loaded into the form. Save when the costs and yields look right.</p>';
-    }
-    if (result.type === 'trip') {
-      renderTrip(result.trip);
-      extra = '<p class="kitchen-note">Open the Shopping tab to see the grouped list.</p>';
-    }
-    appendAssistant('bot', result.text, extra);
-    renderRecords();
-  } catch (error) {
-    appendAssistant('bot', error.message);
-  }
-});
-
-document.getElementById('assistant-log').addEventListener('click', async (event) => {
-  const button = event.target.closest('[data-apply-food]');
-  if (!button) return;
-  const recipe = readFormRecipe();
-  const ingredient = recipe.ingredients.find((item) => !item.fdcId) || recipe.ingredients[0] || blankIngredient();
-  if (!recipe.ingredients.includes(ingredient)) recipe.ingredients.push(ingredient);
-  ingredient.name = button.dataset.foodName;
-  ingredient.grams = ingredient.grams || 100;
-  ingredient.amount = ingredient.amount || ingredient.grams;
-  fillRecipeForm(recipe);
-  await applyUsdaToIngredient(ingredient.id, button.dataset.foodName);
 });
 
 document.getElementById('store-form').addEventListener('submit', (event) => {
@@ -564,7 +595,6 @@ window.addEventListener('storage', () => {
 
 document.getElementById('usda-key').value = getSettings().usdaApiKey || '';
 fillRecipeForm(getRecipes()[0] || newRecipeTemplate());
-appendAssistant('bot', assistantHelp());
 renderKitchen();
 renderOrders();
 renderStores();

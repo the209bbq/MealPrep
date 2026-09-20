@@ -613,6 +613,45 @@ body {
   margin-bottom: 1rem;
 }
 
+.usda-key-row {
+  max-width: 640px;
+  margin: 1rem auto;
+  text-align: left;
+  align-items: end;
+}
+
+.usda-hits .toggle-btn {
+  min-height: 44px;
+  margin: 0.25rem 0.25rem 0 0;
+}
+
+.nutrition-compare {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.nutrition-compare th,
+.nutrition-compare td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}
+
+.recipe-form.kitchen-card {
+  max-width: 900px;
+  margin: 1.5rem auto 0;
+  display: grid;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.recipe-form h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
 .recipe-pick,
 .usda-hits,
 .trip-recipe-pick {

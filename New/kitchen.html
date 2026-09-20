@@ -16,7 +16,7 @@
 
   <div class="kitchen-tabs">
     <button type="button" class="kitchen-tab is-active" data-tab="menu">Menu</button>
-    <button type="button" class="kitchen-tab" data-tab="lab">Recipe lab</button>
+    <button type="button" class="kitchen-tab" data-tab="lab">Recipes</button>
     <button type="button" class="kitchen-tab" data-tab="shopping">Shopping</button>
     <button type="button" class="kitchen-tab" data-tab="orders">Orders</button>
   </div>
@@ -33,69 +33,59 @@
     <div class="kitchen-list" id="kitchen-list"></div>
   </section>
 
-  <section class="section kitchen-lab" data-panel="lab" hidden>
-    <h1>Recipe &amp; nutrition lab</h1>
-    <p class="kitchen-note">Enter your own ingredients, costs, yields, and nutrition overrides. USDA lookups are stored as sourced records with citation and timestamp, separate from what you typed.</p>
-
-    <div class="lab-grid">
-      <div class="lab-main">
-        <div class="lab-toolbar">
-          <button type="button" class="btn-secondary" id="new-recipe">New recipe</button>
-          <button type="button" class="btn-secondary" id="export-workbook">Export CSV + xlsx</button>
-        </div>
-        <div class="recipe-pick" id="recipe-pick"></div>
-        <form id="recipe-form" class="recipe-form" novalidate>
-          <input type="hidden" id="recipe-id" />
-          <div class="form-row">
-            <label>Name <input type="text" id="recipe-name" required /></label>
-            <label>Tag <input type="text" id="recipe-tag" placeholder="Signature Smoked" /></label>
-          </div>
-          <label>Description <textarea id="recipe-description" rows="2"></textarea></label>
-          <label>Prep notes <textarea id="recipe-instructions" rows="2"></textarea></label>
-          <div class="form-row">
-            <label>Yield (portions) <input type="number" id="recipe-yield" min="1" step="1" /></label>
-            <label>Portion grams <input type="number" id="recipe-portion-grams" min="0" step="1" /></label>
-          </div>
-          <div class="nutrition-overrides">
-            <h3>Nutrition overrides (per portion)</h3>
-            <p class="kitchen-note">Leave blank to use sourced/ingredient totals. Filled boxes are your input and win over USDA.</p>
-            <div class="override-grid" id="override-grid"></div>
-          </div>
-          <div class="ingredient-head">
-            <h3>Ingredients</h3>
-            <button type="button" class="btn-secondary" id="add-ingredient">Add ingredient</button>
-          </div>
-          <div id="ingredient-list" class="ingredient-list"></div>
-          <div class="lab-totals" id="lab-totals"></div>
-          <div class="lab-actions">
-            <button type="submit" class="btn-primary">Save recipe</button>
-            <button type="button" class="btn-secondary" id="delete-recipe">Remove custom recipe</button>
-          </div>
-          <p class="order-success" id="lab-status" hidden></p>
-        </form>
-      </div>
-      <aside class="lab-side">
-        <div class="assistant-card">
-          <h2>209 kitchen bot</h2>
-          <p class="kitchen-note">Draft recipes, pull USDA numbers, plan shopping, or export workbooks. It uses your saved stores and records.</p>
-          <div class="assistant-log" id="assistant-log"></div>
-          <form id="assistant-form" class="assistant-form">
-            <input type="text" id="assistant-input" placeholder="Draft a bowl, lookup USDA, or shop this week" />
-            <button type="submit" class="btn-primary">Send</button>
-          </form>
-        </div>
-        <div class="settings-card">
-          <h2>USDA key</h2>
-          <p class="kitchen-note">Optional. Use env <code>USDA_FDC_API_KEY</code> with the local server, or paste a data.gov key here. Leave blank to try <code>DEMO_KEY</code> (rate limited). Never commit a key.</p>
-          <label>FoodData Central API key <input type="password" id="usda-key" autocomplete="off" /></label>
-          <button type="button" class="btn-secondary" id="save-usda-key">Save key on this device</button>
-        </div>
-        <div class="records-card">
-          <h2>Sourced &amp; input records</h2>
-          <div id="records-list" class="records-list"></div>
-        </div>
-      </aside>
+  <section class="section kitchen-header" data-panel="lab" hidden>
+    <h1>Recipes &amp; nutrition</h1>
+    <p>Build meals the same way you run the weekly menu: type ingredients, costs, and yields here. USDA numbers are stored as records next to your inputs — they do not overwrite what you typed.</p>
+    <p class="kitchen-note">Optional FoodData Central key (or env <code>USDA_FDC_API_KEY</code> with <code>node server.mjs</code>). Leave blank to try the public DEMO_KEY. Do not commit a secret.</p>
+    <div class="form-row usda-key-row">
+      <label>USDA API key <input type="password" id="usda-key" autocomplete="off" /></label>
+      <button type="button" class="btn-secondary" id="save-usda-key">Save key on this device</button>
     </div>
+    <div class="lab-toolbar">
+      <button type="button" class="btn-secondary" id="new-recipe">New recipe</button>
+      <button type="button" class="btn-secondary" id="export-workbook">Export CSV + xlsx</button>
+    </div>
+    <p class="order-success" id="lab-status" hidden></p>
+  </section>
+
+  <section class="section kitchen-list-wrap" data-panel="lab" hidden>
+    <div class="kitchen-list" id="recipe-lab-list"></div>
+    <form id="recipe-form" class="recipe-form kitchen-card is-on" novalidate>
+      <input type="hidden" id="recipe-id" />
+      <h2 id="recipe-form-title">Edit recipe</h2>
+      <div class="form-row">
+        <label>Name <input type="text" id="recipe-name" required /></label>
+        <label>Tag <input type="text" id="recipe-tag" placeholder="Signature Smoked" /></label>
+      </div>
+      <label>Description <textarea id="recipe-description" rows="2"></textarea></label>
+      <label>Prep notes <textarea id="recipe-instructions" rows="2"></textarea></label>
+      <div class="form-row">
+        <label>Yield (portions) <input type="number" id="recipe-yield" min="1" step="1" /></label>
+        <label>Portion grams <input type="number" id="recipe-portion-grams" min="0" step="1" /></label>
+      </div>
+      <div class="nutrition-overrides">
+        <h3>Your nutrition values (per portion)</h3>
+        <p class="kitchen-note">Blank fields use sourced/ingredient totals. A filled field is your input and is what the menu and spreadsheet “effective” column use.</p>
+        <div class="override-grid" id="override-grid"></div>
+      </div>
+      <div class="ingredient-head">
+        <h3>Ingredients</h3>
+        <button type="button" class="btn-secondary" id="add-ingredient">Add ingredient</button>
+      </div>
+      <div id="ingredient-list" class="ingredient-list"></div>
+      <div class="lab-totals" id="lab-totals"></div>
+      <div id="usda-hits" class="usda-hits"></div>
+      <div class="lab-actions">
+        <button type="submit" class="btn-primary">Save recipe</button>
+        <button type="button" class="btn-secondary" id="delete-recipe">Remove custom recipe</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="section kitchen-orders" data-panel="lab" hidden>
+    <h1>Sourced &amp; input records</h1>
+    <p class="kitchen-note">Every save and USDA lookup is stored with origin (input vs sourced), citation, and timestamp so the spreadsheet matches this board.</p>
+    <div class="orders-list" id="records-list"></div>
   </section>
 
   <section class="section kitchen-shopping" data-panel="shopping" hidden>
@@ -144,7 +134,6 @@
   <script src="orders.js"></script>
   <script src="stores.js"></script>
   <script src="workbook.js"></script>
-  <script src="assistant.js"></script>
   <script src="kitchen.js"></script>
 </body>
 </html>
