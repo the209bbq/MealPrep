@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>209 Meal Prep | Freshly Smoked & Prepared Meals</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="logo">209 Meal Prep</div>
+    <ul class="nav-links">
+      <li><a href="#hero">Home</a></li>
+      <li><a href="#menu">Weekly Menu</a></li>
+      <li><a href="#pricing">Plans</a></li>
+      <li><a href="#contact" class="btn-nav">Order Now</a></li>
+    </ul>
+  </nav>
+
+  <!-- Hero Section -->
+  <header id="hero" class="hero">
+    <div class="hero-content">
+      <h1>Chef-Crafted Meals, Ready When You Are</h1>
+      <p>Healthy, high-protein meal prep designed to save you time without sacrificing flavor.</p>
+      <a href="#contact" class="btn-primary">Build Your Order</a>
+    </div>
+  </header>
+
+  <!-- Weekly Menu Section -->
+  <section id="menu" class="section">
+    <h2>This Week's Menu</h2>
+    <div class="menu-grid" id="menu-grid"></div>
+  </section>
+
+  <!-- Interactive Plan Calculator -->
+  <section id="pricing" class="section bg-light">
+    <h2>Choose Your Plan</h2>
+    <div class="calculator-box">
+      <label for="meal-count">Select meals per week:</label>
+      <select id="meal-count">
+        <option value="5">5 Meals ($12.00 / meal)</option>
+        <option value="10" selected>10 Meals ($11.00 / meal)</option>
+        <option value="15">15 Meals ($10.00 / meal)</option>
+      </select>
+      <div class="total-display">
+        Estimated Weekly Total: <strong id="total-price">$110.00</strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- Order Processor -->
+  <section id="contact" class="section">
+    <h2>Place Your Order</h2>
+    <p class="order-intro">Pick this week's meals to match your plan, then send the order. Sold-out items stay off the list.</p>
+
+    <form id="order-form" class="form-container order-form" novalidate>
+      <input type="hidden" name="access_key" value="4af22d03-2af5-4e71-a375-25567a8f6926" />
+      <input type="hidden" name="subject" id="order-subject" value="209 Meal Prep Order" />
+      <input type="checkbox" name="botcheck" class="honeypot" tabindex="-1" autocomplete="off" />
+
+      <div class="order-picker" id="order-picker"></div>
+      <p class="order-count" id="order-count">0 of 10 meals selected</p>
+
+      <input type="text" name="Customer Name" id="customer-name" placeholder="Your Name" required />
+      <input type="email" name="Customer Email" id="customer-email" placeholder="Your Email Address" required />
+      <input type="tel" name="Customer Phone" id="customer-phone" placeholder="Phone Number" required />
+
+      <select name="Order Type" id="order-type" required>
+        <option value="" disabled selected>Select Pick-up / Delivery Option</option>
+        <option value="Local Pick-Up">Local Pick-Up</option>
+        <option value="Local Home Delivery">Local Home Delivery</option>
+      </select>
+
+      <input type="text" name="Delivery Address" id="delivery-address" placeholder="Delivery address" hidden />
+
+      <textarea name="Special Requests & Notes" id="order-notes" placeholder="Dietary restrictions or special requests..." rows="4"></textarea>
+
+      <div class="order-recap" id="order-recap"></div>
+      <p class="order-error" id="order-error" hidden></p>
+      <p class="order-success" id="order-success" hidden></p>
+
+      <input type="hidden" name="Order ID" id="field-order-id" />
+      <input type="hidden" name="Plan" id="field-plan" />
+      <input type="hidden" name="Order Total" id="field-total" />
+      <textarea name="Meal Selections" id="field-meals" hidden></textarea>
+
+      <button type="submit" class="btn-primary" id="submit-order">Submit Order</button>
+    </form>
+  </section>
+
+  <footer class="site-footer">
+    <p>209 Meal Prep</p>
+    <a href="kitchen.html">Kitchen board</a>
+  </footer>
+
+  <script src="recipes.js"></script>
+  <script src="orders.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

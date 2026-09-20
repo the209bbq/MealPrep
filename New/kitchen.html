@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kitchen Board | 209 Meal Prep</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="kitchen-page">
+  <nav class="navbar">
+    <div class="logo">209 Kitchen Board</div>
+    <ul class="nav-links">
+      <li><a href="index.html">View site</a></li>
+    </ul>
+  </nav>
+
+  <div class="kitchen-tabs">
+    <button type="button" class="kitchen-tab is-active" data-tab="menu">Menu</button>
+    <button type="button" class="kitchen-tab" data-tab="orders">Orders</button>
+  </div>
+
+  <section class="section kitchen-header" data-panel="menu">
+    <h1>Weekly menu controls</h1>
+    <p>Turn recipes on for the week. If you run out mid-week, tap Sold out — it stays on the menu but customers will see it as unavailable.</p>
+    <p class="kitchen-note">Toggles save on this device for now. When the site goes live, we can connect this board so the public menu updates for everyone.</p>
+    <div class="kitchen-summary" id="kitchen-summary"></div>
+    <button type="button" class="btn-secondary" id="clear-sold-out">Clear all sold-out flags</button>
+  </section>
+
+  <section class="section kitchen-list-wrap" data-panel="menu">
+    <div class="kitchen-list" id="kitchen-list"></div>
+  </section>
+
+  <section class="section kitchen-orders" data-panel="orders" hidden>
+    <h1>Order processor</h1>
+    <p class="kitchen-note">New orders appear here after checkout. Move each ticket from New to Packed as you work the week.</p>
+    <div class="prep-tally" id="prep-tally"></div>
+    <div class="orders-list" id="orders-list"></div>
+  </section>
+
+  <script src="recipes.js"></script>
+  <script src="orders.js"></script>
+  <script src="kitchen.js"></script>
+</body>
+</html>
