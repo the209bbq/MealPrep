@@ -11,6 +11,7 @@
     <div class="logo">209 Kitchen Board</div>
     <ul class="nav-links">
       <li><a href="index.html">View site</a></li>
+      <li><a href="#shopping">Shopping</a></li>
     </ul>
   </nav>
 
@@ -90,17 +91,21 @@
 
   <section class="section kitchen-shopping" data-panel="shopping" hidden>
     <h1>Shopping trips</h1>
-    <p class="kitchen-note">Save the local store websites you actually use. The bot groups ingredient lists by store when a recipe line is assigned or the item matches the store’s typical products. It does not scrape those sites.</p>
+    <p class="kitchen-note">Save the local store websites you actually use. Ingredient lists group by assigned store or typical-item keywords. Sites are opened as search/home links — this board does not scrape them. Stores and trips save on this kitchen device.</p>
 
     <div class="lab-grid">
       <form id="store-form" class="store-form">
         <h2>Add a store / website</h2>
+        <input type="hidden" id="store-id" />
         <label>Store name <input type="text" id="store-name" placeholder="WinCo, Costco, restaurant depot…" required /></label>
         <label>Website URL <input type="url" id="store-url" placeholder="https://" required /></label>
         <label>Search URL template (optional, use {query}) <input type="text" id="store-search" placeholder="https://store.example/search?q={query}" /></label>
         <label>Typical items / keywords <input type="text" id="store-typical" placeholder="chicken, rice, produce" /></label>
         <label>Notes <textarea id="store-notes" rows="2"></textarea></label>
-        <button type="submit" class="btn-primary">Save store</button>
+        <div class="lab-toolbar">
+          <button type="submit" class="btn-primary" id="store-submit">Save store</button>
+          <button type="button" class="btn-secondary" id="store-cancel-edit" hidden>Cancel edit</button>
+        </div>
       </form>
       <div>
         <h2>Saved stores</h2>
@@ -109,8 +114,11 @@
     </div>
 
     <div class="trip-builder">
+      <h2>Saved trips</h2>
+      <div id="trip-history" class="trip-history"></div>
       <h2>Plan a trip</h2>
-      <p class="kitchen-note">Choose recipes to shop for. Costs and grams come from what you entered on each recipe.</p>
+      <p class="kitchen-note">Choose recipes to shop for. Ingredient lines from the Recipes tab win when present; otherwise the planner uses this week’s menu copy so you can still build a list.</p>
+      <label class="trip-label-field">Trip name <input type="text" id="trip-label" placeholder="Saturday Costco + WinCo run" /></label>
       <div id="trip-recipe-pick" class="trip-recipe-pick"></div>
       <div class="lab-toolbar">
         <button type="button" class="btn-secondary" id="plan-week-trip">Shop this week’s menu</button>
@@ -135,5 +143,6 @@
   <script src="stores.js"></script>
   <script src="workbook.js"></script>
   <script src="kitchen.js"></script>
+  <script src="shopping.js"></script>
 </body>
 </html>
