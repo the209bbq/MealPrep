@@ -784,6 +784,79 @@ body {
   padding-left: 1.1rem;
 }
 
+.trip-label-field {
+  display: grid;
+  gap: 0.3rem;
+  text-align: left;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  max-width: 420px;
+  margin-bottom: 1rem;
+}
+
+.trip-label-field input {
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.trip-history {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.trip-history-card,
+.trip-item {
+  display: grid;
+  gap: 0.45rem;
+  text-align: left;
+}
+
+.trip-history-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem;
+  background: var(--cream);
+}
+
+.trip-history-card.is-active {
+  border-color: var(--smoke);
+}
+
+.trip-item-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.trip-item {
+  border-top: 1px solid var(--border);
+  padding: 0.7rem 0;
+}
+
+.trip-item.is-checked span {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.trip-check,
+.trip-assign {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-weight: 500;
+}
+
+.trip-assign select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
 .kitchen-lab h1,
 .kitchen-shopping h1 {
   margin-bottom: 0.6rem;
