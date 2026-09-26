@@ -33,4 +33,13 @@ node server.mjs
 ```
 
 Or paste the key on the Recipes tab (this device only). Empty key tries USDA `DEMO_KEY` (rate limited).
+
+## Daily report (separate app)
+
+Field daily reports live in `daily-report/` and do **not** replace the kitchen board. See [daily-report/README.md](daily-report/README.md).
+
+```bash
+node daily-report/serve.mjs
+# http://localhost:4174/
+```
 # OakdaleMensSoftball
