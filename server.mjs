@@ -3,8 +3,11 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dailyReportConfigFromEnv, dailyReportConfigHasEnv, dailyReportConfigScript } from './daily-report/config-from-env.mjs';
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'New');
+const repoRoot = path.dirname(fileURLToPath(import.meta.url));
+const root = path.join(repoRoot, 'New');
+const dailyRoot = path.join(repoRoot, 'daily-report');
 const port = Number(process.env.PORT) || 4173;
 const usdaKey = (process.env.USDA_FDC_API_KEY || process.env.USDA_API_KEY || '').trim();
 
@@ -15,7 +18,8 @@ const types = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json'
 };
 
 function send(res, status, body, headers) {
@@ -48,10 +52,9 @@ async function proxyUsda(reqUrl, res) {
   send(res, response.status, text, { 'Content-Type': 'application/json' });
 }
 
-function serveFile(req, res) {
-  const url = new URL(req.url, 'http://localhost');
-  const filePath = path.join(root, url.pathname === '/' ? '/index.html' : url.pathname);
-  if (!filePath.startsWith(root)) {
+function serveFrom(base, relPath, res) {
+  const filePath = path.join(base, relPath);
+  if (!filePath.startsWith(base)) {
     send(res, 403, 'Forbidden', { 'Content-Type': 'text/plain' });
     return;
   }
@@ -62,6 +65,29 @@ function serveFile(req, res) {
     }
     send(res, 200, data, { 'Content-Type': types[path.extname(filePath)] || 'application/octet-stream' });
   });
+}
+
+function serveFile(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/daily-report' || url.pathname === '/daily-report/') {
+    serveFrom(dailyRoot, '/index.html', res);
+    return;
+  }
+  if (url.pathname === '/daily-report/config.js') {
+    const cfg = dailyReportConfigFromEnv();
+    if (dailyReportConfigHasEnv(cfg)) {
+      send(res, 200, dailyReportConfigScript(cfg), {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'no-store'
+      });
+      return;
+    }
+  }
+  if (url.pathname.startsWith('/daily-report/')) {
+    serveFrom(dailyRoot, url.pathname.slice('/daily-report'.length), res);
+    return;
+  }
+  serveFrom(root, url.pathname === '/' ? '/index.html' : url.pathname, res);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -78,6 +104,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, () => {
   console.log(`209 Meal Prep at http://localhost:${port}/`);
+  console.log(`Daily report at http://localhost:${port}/daily-report/`);
   if (!usdaKey) {
     console.log('USDA_FDC_API_KEY is unset; USDA proxy will use DEMO_KEY.');
   }
