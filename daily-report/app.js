@@ -2,21 +2,16 @@ window.DailyReportApp = (function () {
   const model = window.DailyReportModel;
   const db = window.DailyReportDB;
   const auth = window.DailyReportAuth;
-  const sync = window.DailyReportSync;
-  const excel = window.DailyReportExcel;
 
   const appEl = () => document.getElementById('app');
+  let listening = false;
   let state = {
     session: null,
     users: [],
     reports: [],
     report: null,
-    outbox: [],
     toast: '',
-    view: 'list',
-    linked: null,
-    folderName: '',
-    drive: excel.driveConfig()
+    filter: ''
   };
 
   function $(sel, root) {
@@ -45,7 +40,6 @@ window.DailyReportApp = (function () {
     const hash = location.hash.replace(/^#/, '') || '/';
     const parts = hash.split('/').filter(Boolean);
     if (!state.session) return { name: 'auth' };
-    if (parts[0] === 'settings') return { name: 'settings' };
     if (parts[0] === 'accounts') return { name: 'accounts' };
     if (parts[0] === 'report' && parts[1] === 'new') return { name: 'edit', id: 'new' };
     if (parts[0] === 'report' && parts[1]) return { name: 'edit', id: parts[1] };
@@ -60,7 +54,7 @@ window.DailyReportApp = (function () {
       .replace(/"/g, '&quot;');
   }
 
-  function header(title, extra) {
+  function header(title) {
     const user = state.session?.user;
     return `
       <header class="topbar">
@@ -78,14 +72,11 @@ window.DailyReportApp = (function () {
                 </option>`).join('')}
             </select>
           </label>
-          <a class="btn ghost" href="#/settings">Excel &amp; folders</a>
+          <a class="btn ghost" href="#/accounts">Accounts</a>
           <button type="button" class="btn ghost" id="sign-out">Sign out</button>
         </div>
       </header>
-      <p class="status-line">
-        ${navigator.onLine ? 'Online' : 'Offline'} · ${state.outbox.length} waiting to sync
-        ${extra ? ` · ${extra}` : ''}
-      </p>
+      <p class="status-line">${navigator.onLine ? 'Online' : 'Offline'} · saved on this device</p>
       <div class="toast" ${state.toast ? '' : 'hidden'}>${escapeHtml(state.toast)}</div>
     `;
   }
@@ -126,8 +117,20 @@ window.DailyReportApp = (function () {
     `;
   }
 
+  function filteredReports() {
+    const q = state.filter.trim().toLowerCase();
+    if (!q) return state.reports;
+    return state.reports.filter((report) => {
+      const blob = [
+        report.jobName, report.jobNumber, report.locationText, report.weather,
+        report.supervisor, report.reportDate
+      ].join(' ').toLowerCase();
+      return blob.includes(q);
+    });
+  }
+
   function listView() {
-    const rows = state.reports.map((report) => `
+    const rows = filteredReports().map((report) => `
       <a class="report-row" href="#/report/${escapeHtml(report.id)}">
         <div>
           <strong>${escapeHtml(model.reportTitle(report))}</strong>
@@ -139,13 +142,42 @@ window.DailyReportApp = (function () {
     return `
       ${header('Reports')}
       <main class="page">
-        <div class="toolbar">
+        <div class="toolbar wrap">
           <a class="btn primary" href="#/report/new">New daily report</a>
-          <button type="button" class="btn" id="export-all">Export all .xlsx</button>
+          <label class="filter">
+            Search
+            <input id="report-filter" type="search" value="${escapeHtml(state.filter)}" placeholder="Job, number, site…">
+          </label>
         </div>
         <section class="card list-card">
-          ${rows || '<p class="empty">No reports yet. Start one even if you are offline — it saves here first.</p>'}
+          ${rows || '<p class="empty">No reports yet. Start one — it saves on this device.</p>'}
         </section>
+      </main>
+    `;
+  }
+
+  function accountsView() {
+    return `
+      ${header('Accounts')}
+      <main class="page">
+        <section class="card">
+          <h2>Switch or add</h2>
+          <ul class="account-list">
+            ${state.users.map((u) => `
+              <li>
+                <button type="button" class="btn wide" data-switch="${escapeHtml(u.id)}">
+                  ${escapeHtml(u.name)} <span>${escapeHtml(u.email || u.provider)}</span>
+                </button>
+              </li>`).join('')}
+          </ul>
+          <form id="local-account" class="stack">
+            <h2>New local account</h2>
+            <label>Name <input name="name" required autocomplete="name"></label>
+            <label>Email <input name="email" type="email" autocomplete="email"></label>
+            <button type="submit" class="btn primary">Add &amp; switch</button>
+          </form>
+        </section>
+        <p><a class="btn ghost" href="#/">Back to reports</a></p>
       </main>
     `;
   }
@@ -191,8 +223,21 @@ window.DailyReportApp = (function () {
     return `
       ${header(r.jobName || 'New report')}
       <main class="page">
+        <nav class="form-jump" aria-label="Report sections">
+          ${[
+            ['sec-job', 'Job'],
+            ['sec-site', 'Weather'],
+            ['sec-hours', 'Hours'],
+            ['sec-crew', 'Crew'],
+            ['sec-materials', 'Materials'],
+            ['sec-equipment', 'Equipment'],
+            ['sec-notes', 'Delays'],
+            ['sec-photos', 'Photos'],
+            ['sec-sign', 'Sign']
+          ].map(([id, label]) => `<button type="button" class="btn ghost" data-jump="${id}">${label}</button>`).join('')}
+        </nav>
         <form id="report-form" class="report-form">
-          <section class="card">
+          <section class="card" id="sec-job">
             <h2>Job</h2>
             <div class="grid">
               <label>Job name <input name="jobName" required value="${escapeHtml(r.jobName)}"></label>
@@ -201,7 +246,7 @@ window.DailyReportApp = (function () {
               <label>Time <input name="reportTime" type="time" value="${escapeHtml(r.reportTime)}"></label>
             </div>
           </section>
-          <section class="card">
+          <section class="card" id="sec-site">
             <h2>Weather &amp; location</h2>
             <div class="grid">
               <label>Weather
@@ -215,14 +260,14 @@ window.DailyReportApp = (function () {
                 <input name="locationText" value="${escapeHtml(r.locationText)}" placeholder="Jobsite / address">
               </label>
             </div>
-            <div class="toolbar">
+            <div class="toolbar wrap">
               <button type="button" class="btn" id="use-location">Use device location</button>
               <p class="hint" id="geo-status">
-                ${r.lat != null ? `Pinned ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)} (±${Math.round(r.locationAccuracy || 0)}m)` : 'Location optional. Reverse geocode can use a Maps key later.'}
+                ${r.lat != null ? `Pinned ${Number(r.lat).toFixed(5)}, ${Number(r.lng).toFixed(5)} (±${Math.round(r.locationAccuracy || 0)}m)` : 'Optional pin. Maps reverse-geocode can land later.'}
               </p>
             </div>
           </section>
-          <section class="card">
+          <section class="card" id="sec-hours">
             <h2>Hours</h2>
             <div class="grid">
               <label>Start <input name="hoursStart" type="time" value="${escapeHtml(r.hoursStart)}"></label>
@@ -231,35 +276,42 @@ window.DailyReportApp = (function () {
               <label>Overtime <input name="hoursOvertime" inputmode="decimal" value="${escapeHtml(r.hoursOvertime)}"></label>
             </div>
           </section>
-          <section class="card">
+          <section class="card" id="sec-crew">
             <h2>Crew</h2>
             ${lineEditor('crew', r.crew)}
           </section>
-          <section class="card">
+          <section class="card" id="sec-materials">
             <h2>Materials</h2>
             ${lineEditor('materials', r.materials)}
           </section>
-          <section class="card">
+          <section class="card" id="sec-equipment">
             <h2>Equipment</h2>
             ${lineEditor('equipment', r.equipment)}
           </section>
-          <section class="card">
+          <section class="card" id="sec-notes">
             <h2>Delays &amp; safety</h2>
             <label>Delays <textarea name="delays" rows="3">${escapeHtml(r.delays)}</textarea></label>
             <label>Safety notes <textarea name="safetyNotes" rows="3">${escapeHtml(r.safetyNotes)}</textarea></label>
           </section>
-          <section class="card">
+          <section class="card" id="sec-photos">
             <h2>Photos &amp; attachments</h2>
-            <input id="photo-input" type="file" accept="image/*,.pdf,.heic" multiple>
-            <div class="photos">${photos || '<p class="hint">Photos stay in IndexedDB on this device until Excel/Drive sync is wired.</p>'}</div>
+            <div class="toolbar wrap">
+              <label class="btn">Add photos
+                <input id="photo-input" type="file" accept="image/*,.pdf,.heic" multiple>
+              </label>
+              <label class="btn">Take photo
+                <input id="photo-camera" type="file" accept="image/*" capture="environment">
+              </label>
+            </div>
+            <div class="photos">${photos || '<p class="hint">Photos stay with this report on the device.</p>'}</div>
           </section>
-          <section class="card">
+          <section class="card" id="sec-sign">
             <h2>Supervisor &amp; signature</h2>
             <div class="grid">
               <label>Supervisor <input name="supervisor" value="${escapeHtml(r.supervisor)}"></label>
               <label>Printed name / signature <input name="signatureName" value="${escapeHtml(r.signatureName)}"></label>
             </div>
-            <p class="hint">Sign with your finger, then save. Name above is the billing signature line.</p>
+            <p class="hint">Sign with your finger, then save.</p>
             <canvas id="sign-pad" width="640" height="180" aria-label="Signature pad"></canvas>
             <div class="toolbar">
               <button type="button" class="btn ghost" id="clear-sign">Clear mark</button>
@@ -271,7 +323,7 @@ window.DailyReportApp = (function () {
           </section>
           <div class="sticky-actions">
             <button type="submit" class="btn primary">Save on this device</button>
-            <button type="button" class="btn" id="export-one">Export this report .xlsx</button>
+            ${r._fresh ? '' : '<button type="button" class="btn danger" id="delete-report">Delete</button>'}
             <a class="btn ghost" href="#/">Back to list</a>
           </div>
         </form>
@@ -279,54 +331,10 @@ window.DailyReportApp = (function () {
     `;
   }
 
-  function settingsView() {
-    const drive = state.drive;
-    const linked = state.linked;
-    return `
-      ${header('Excel &amp; folders')}
-      <main class="page">
-        <section class="card">
-          <h2>Workbook (system of record)</h2>
-          <p>Billing, bids, and reports live in Excel. This screen links a workbook on the device and can export/import <code>.xlsx</code> via SheetJS. Google Drive upload is a placeholder until API keys exist.</p>
-          <p class="hint">Linked: ${linked ? escapeHtml(linked.name) : 'none yet'}</p>
-          <div class="toolbar wrap">
-            <button type="button" class="btn" id="pick-workbook">Pick / link workbook</button>
-            <button type="button" class="btn" id="import-xlsx">Import .xlsx</button>
-            <button type="button" class="btn" id="export-all">Export all reports</button>
-            <button type="button" class="btn" id="save-linked" ${linked?.handle ? '' : 'disabled'}>Write to linked file</button>
-          </div>
-          <input id="xlsx-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-        </section>
-        <section class="card">
-          <h2>Local folder</h2>
-          <p>File System Access API (Chromium) can keep a job folder. Other browsers use file pickers.</p>
-          <p class="hint">Folder: ${escapeHtml(state.folderName || 'not granted')}</p>
-          <div class="toolbar wrap">
-            <button type="button" class="btn" id="pick-folder">Grant folder access</button>
-            <button type="button" class="btn" id="list-folder">List .xlsx in folder</button>
-          </div>
-          <ul id="folder-list" class="account-list"></ul>
-        </section>
-        <section class="card">
-          <h2>Google Drive / Sheets (stub)</h2>
-          <p>Later: OAuth client + Drive/Sheets APIs. No secrets are stored in the repo.</p>
-          <dl class="kv">
-            <dt>GOOGLE_CLIENT_ID</dt><dd>${escapeHtml(auth.googleClientId() || '(empty — mock sign-in)')}</dd>
-            <dt>GOOGLE_API_KEY</dt><dd>${drive.apiKey ? '(set in config)' : '(empty)'}</dd>
-            <dt>GOOGLE_DRIVE_FOLDER_ID</dt><dd>${escapeHtml(drive.folderId || '(empty)')}</dd>
-            <dt>GOOGLE_SHEETS_SPREADSHEET_ID</dt><dd>${escapeHtml(drive.spreadsheetId || '(empty)')}</dd>
-          </dl>
-          <button type="button" class="btn" id="drive-placeholder" disabled>Connect Drive (not wired)</button>
-        </section>
-        <section class="card">
-          <h2>Sync outbox</h2>
-          <p>Saves queue here and flush when online. Flush currently writes a local mirror (no network Excel/Drive yet).</p>
-          <p>${state.outbox.length} pending</p>
-          <button type="button" class="btn" id="flush-outbox">Flush outbox now</button>
-        </section>
-        <p><a class="btn ghost" href="#/">Back to reports</a></p>
-      </main>
-    `;
+  async function enterAs(user) {
+    state.session = await auth.setSession(user);
+    location.hash = '/';
+    await render();
   }
 
   function bindAuth() {
@@ -334,20 +342,18 @@ window.DailyReportApp = (function () {
       event.preventDefault();
       const data = new FormData(event.target);
       const user = await auth.createLocalUser(String(data.get('name') || ''), String(data.get('email') || ''));
-      state.session = await auth.setSession(user);
-      location.hash = '/';
-      await boot();
+      await enterAs(user);
     });
     $('#google-mock')?.addEventListener('click', async () => {
       state.session = await auth.signInWithGoogleMock();
       location.hash = '/';
-      await boot();
+      await render();
     });
     document.querySelectorAll('[data-switch]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         state.session = await auth.switchTo(btn.dataset.switch);
         location.hash = '/';
-        await boot();
+        await render();
       });
     });
     const slot = $('#google-btn-slot');
@@ -355,7 +361,7 @@ window.DailyReportApp = (function () {
       auth.loadGis(async (response) => {
         state.session = await auth.signInWithGoogleCredential(response.credential);
         location.hash = '/';
-        await boot();
+        await render();
       }).then((ok) => {
         if (ok && window.google?.accounts?.id) {
           window.google.accounts.id.renderButton(slot, { theme: 'filled_black', size: 'large', width: 320 });
@@ -379,9 +385,20 @@ window.DailyReportApp = (function () {
       location.hash = '/';
       await render();
     });
-    $('#export-all')?.addEventListener('click', async () => {
-      await excel.exportReports(state.reports);
-      toast('Workbook downloaded');
+    $('#report-filter')?.addEventListener('input', (event) => {
+      state.filter = event.target.value;
+      const card = document.querySelector('.list-card');
+      if (!card) return;
+      const rows = filteredReports().map((report) => `
+        <a class="report-row" href="#/report/${escapeHtml(report.id)}">
+          <div>
+            <strong>${escapeHtml(model.reportTitle(report))}</strong>
+            <p>${escapeHtml(report.reportDate || 'No date')} · ${escapeHtml(report.locationText || 'No location')} · ${escapeHtml(report.weather || 'Weather not set')}</p>
+          </div>
+          <span class="pill ${report.status}">${escapeHtml(report.status)}</span>
+        </a>
+      `).join('');
+      card.innerHTML = rows || '<p class="empty">No matching reports.</p>';
     });
   }
 
@@ -393,6 +410,16 @@ window.DailyReportApp = (function () {
       });
       return row;
     });
+  }
+
+  function hoursBetween(start, end) {
+    if (!start || !end) return '';
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    let mins = (eh * 60 + em) - (sh * 60 + sm);
+    if (mins < 0) mins += 24 * 60;
+    const hours = mins / 60;
+    return String(Math.round(hours * 100) / 100);
   }
 
   function formToReport() {
@@ -427,10 +454,10 @@ window.DailyReportApp = (function () {
   }
 
   async function persistReport(report) {
+    delete report._fresh;
     await db.put('reports', report);
-    await sync.enqueue('upsert-report', model.reportToSummaryRow(report));
     state.report = report;
-    toast(navigator.onLine ? 'Saved · queued for sync' : 'Saved offline');
+    toast('Saved on this device');
   }
 
   function setupSignature() {
@@ -444,10 +471,25 @@ window.DailyReportApp = (function () {
     const pos = (event) => {
       const rect = canvas.getBoundingClientRect();
       const src = event.touches ? event.touches[0] : event;
-      return { x: (src.clientX - rect.left) * (canvas.width / rect.width), y: (src.clientY - rect.top) * (canvas.height / rect.height) };
+      return {
+        x: (src.clientX - rect.left) * (canvas.width / rect.width),
+        y: (src.clientY - rect.top) * (canvas.height / rect.height)
+      };
     };
-    const start = (event) => { drawing = true; const p = pos(event); ctx.beginPath(); ctx.moveTo(p.x, p.y); event.preventDefault(); };
-    const move = (event) => { if (!drawing) return; const p = pos(event); ctx.lineTo(p.x, p.y); ctx.stroke(); event.preventDefault(); };
+    const start = (event) => {
+      drawing = true;
+      const p = pos(event);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      event.preventDefault();
+    };
+    const move = (event) => {
+      if (!drawing) return;
+      const p = pos(event);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      event.preventDefault();
+    };
     const end = () => { drawing = false; };
     canvas.addEventListener('mousedown', start);
     canvas.addEventListener('mousemove', move);
@@ -465,10 +507,35 @@ window.DailyReportApp = (function () {
     }
   }
 
+  async function addFiles(files) {
+    for (const file of files) {
+      const id = model.uid('att');
+      await db.put('attachments', { id, reportId: state.report.id, blob: file, name: file.name, mime: file.type });
+      state.report.photos.push({ id, name: file.name, mime: file.type, size: file.size });
+    }
+    await persistReport(formToReport());
+    await render();
+  }
+
   function bindEdit() {
     bindChrome();
     setupSignature();
     loadPhotoThumbs();
+    document.querySelectorAll('[data-jump]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.getElementById(btn.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    const start = document.querySelector('[name="hoursStart"]');
+    const end = document.querySelector('[name="hoursEnd"]');
+    const total = document.querySelector('[name="hoursTotal"]');
+    const fillTotal = () => {
+      if (!start || !end || !total) return;
+      const computed = hoursBetween(start.value, end.value);
+      if (computed) total.value = computed;
+    };
+    start?.addEventListener('change', fillTotal);
+    end?.addEventListener('change', fillTotal);
     $('#report-form')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const report = formToReport();
@@ -487,6 +554,18 @@ window.DailyReportApp = (function () {
       await persistReport(report);
       location.hash = `#/report/${report.id}`;
       await loadReports();
+    });
+    $('#delete-report')?.addEventListener('click', async () => {
+      if (!confirm('Delete this report from this device?')) return;
+      const report = state.report;
+      for (const photo of report.photos || []) {
+        await db.del('attachments', photo.id);
+      }
+      await db.del('reports', report.id);
+      state.report = null;
+      toast('Deleted');
+      location.hash = '/';
+      await render();
     });
     $('#use-location')?.addEventListener('click', () => {
       const status = $('#geo-status');
@@ -532,110 +611,16 @@ window.DailyReportApp = (function () {
         render();
       });
     });
-    $('#photo-input')?.addEventListener('change', async (event) => {
-      const files = [...event.target.files];
-      for (const file of files) {
-        const id = model.uid('att');
-        await db.put('attachments', { id, reportId: state.report.id, blob: file, name: file.name, mime: file.type });
-        state.report.photos.push({ id, name: file.name, mime: file.type, size: file.size });
-      }
-      await persistReport(state.report);
-      await render();
-    });
+    $('#photo-input')?.addEventListener('change', (event) => addFiles([...event.target.files]));
+    $('#photo-camera')?.addEventListener('change', (event) => addFiles([...event.target.files]));
     document.querySelectorAll('[data-del-photo]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const id = btn.dataset.delPhoto;
         await db.del('attachments', id);
         state.report.photos = state.report.photos.filter((p) => p.id !== id);
-        await persistReport(state.report);
+        await persistReport(formToReport());
         await render();
       });
-    });
-    $('#export-one')?.addEventListener('click', async () => {
-      const report = formToReport();
-      await excel.exportReports([report], `${report.jobNumber || 'report'}-${report.reportDate || 'day'}.xlsx`);
-      toast('Report workbook downloaded');
-    });
-  }
-
-  async function importFromFile(file) {
-    const wb = await excel.readWorkbook(file);
-    const incoming = excel.importWorkbook(wb);
-    for (const report of incoming) {
-      report.userId = report.userId || state.session.user.id;
-      await db.put('reports', model.normalizeReport(report, report.userId));
-      await sync.enqueue('upsert-report', model.reportToSummaryRow(report));
-    }
-    await excel.saveLinkedMeta({ name: file.name, importedAt: new Date().toISOString() });
-    toast(`Imported ${incoming.length} report(s)`);
-    await loadReports();
-    await render();
-  }
-
-  function bindSettings() {
-    bindChrome();
-    $('#xlsx-file')?.addEventListener('change', async (event) => {
-      const file = event.target.files?.[0];
-      if (file) await importFromFile(file);
-    });
-    $('#import-xlsx')?.addEventListener('click', () => $('#xlsx-file').click());
-    $('#pick-workbook')?.addEventListener('click', async () => {
-      if (window.showOpenFilePicker) {
-        const [handle] = await window.showOpenFilePicker({
-          types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }]
-        });
-        await excel.saveLinkedMeta({ name: handle.name, handle, linkedAt: new Date().toISOString() });
-        state.linked = await excel.linkedMeta();
-        toast(`Linked ${handle.name}`);
-        await render();
-        return;
-      }
-      $('#xlsx-file').click();
-    });
-    $('#save-linked')?.addEventListener('click', async () => {
-      const linked = await excel.linkedMeta();
-      if (!linked?.handle) return;
-      const wb = excel.workbookFromReports(state.reports);
-      await excel.writeToHandle(linked.handle, wb, linked.name);
-      toast('Wrote reports into linked workbook');
-    });
-    $('#pick-folder')?.addEventListener('click', async () => {
-      if (!window.showDirectoryPicker) {
-        toast('Folder access needs a Chromium browser');
-        return;
-      }
-      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      await excel.saveFolderHandle(handle);
-      state.folderName = handle.name;
-      toast(`Folder granted: ${handle.name}`);
-      await render();
-    });
-    $('#list-folder')?.addEventListener('click', async () => {
-      const handle = await excel.folderHandle();
-      const list = $('#folder-list');
-      if (!handle || !list) {
-        toast('No folder granted yet');
-        return;
-      }
-      const names = [];
-      for await (const entry of handle.values()) {
-        if (entry.name.toLowerCase().endsWith('.xlsx')) names.push(entry.name);
-      }
-      list.innerHTML = names.length
-        ? names.map((name) => `<li><button type="button" class="btn wide" data-open-xlsx="${escapeHtml(name)}">${escapeHtml(name)}</button></li>`).join('')
-        : '<li class="hint">No .xlsx files in this folder</li>';
-      list.querySelectorAll('[data-open-xlsx]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const fileHandle = await handle.getFileHandle(btn.dataset.openXlsx);
-          await importFromFile(await fileHandle.getFile());
-        });
-      });
-    });
-    $('#flush-outbox')?.addEventListener('click', async () => {
-      await sync.flush();
-      state.outbox = await sync.pending();
-      toast('Outbox flushed to local mirror');
-      await render();
     });
   }
 
@@ -645,9 +630,6 @@ window.DailyReportApp = (function () {
       return;
     }
     state.reports = await db.reportsForUser(state.session.user.id);
-    state.linked = await excel.linkedMeta();
-    state.folderName = (await db.getKv('folderName')) || state.linked?.name || '';
-    state.outbox = await sync.pending();
   }
 
   async function render() {
@@ -665,10 +647,10 @@ window.DailyReportApp = (function () {
       bindChrome();
       return;
     }
-    if (r.name === 'settings') {
-      await loadReports();
-      root.innerHTML = settingsView();
-      bindSettings();
+    if (r.name === 'accounts') {
+      root.innerHTML = accountsView();
+      bindChrome();
+      bindAuth();
       return;
     }
     if (r.name === 'edit') {
@@ -693,21 +675,24 @@ window.DailyReportApp = (function () {
     await db.openDb();
     state.session = await auth.getSession();
     state.users = await auth.listUsers();
-    state.drive = excel.driveConfig();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('SW skip', err));
     }
-    sync.watch(async (pending) => {
-      state.outbox = pending;
-      const line = document.querySelector('.status-line');
-      if (line) {
-        line.innerHTML = `${navigator.onLine ? 'Online' : 'Offline'} · ${pending.length} waiting to sync`;
-      }
-    });
-    window.addEventListener('hashchange', () => {
-      if (route().name !== 'edit') state.report = null;
-      render();
-    });
+    if (!listening) {
+      listening = true;
+      window.addEventListener('hashchange', () => {
+        if (route().name !== 'edit') state.report = null;
+        render();
+      });
+      window.addEventListener('online', () => {
+        const line = document.querySelector('.status-line');
+        if (line) line.textContent = 'Online · saved on this device';
+      });
+      window.addEventListener('offline', () => {
+        const line = document.querySelector('.status-line');
+        if (line) line.textContent = 'Offline · saved on this device';
+      });
+    }
     await render();
   }
 

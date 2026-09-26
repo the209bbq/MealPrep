@@ -16,10 +16,6 @@ window.DailyReportDB = (function () {
           store.createIndex('byDate', 'reportDate');
         }
         if (!db.objectStoreNames.contains('attachments')) db.createObjectStore('attachments', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('outbox')) {
-          const outbox = db.createObjectStore('outbox', { keyPath: 'id' });
-          outbox.createIndex('byStatus', 'status');
-        }
         if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'key' });
       };
       req.onsuccess = () => resolve(req.result);

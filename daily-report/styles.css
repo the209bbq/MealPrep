@@ -199,6 +199,26 @@ textarea { min-height: 90px; resize: vertical; }
 
 .google-slot { min-height: 44px; margin: 1rem 0; }
 
+.form-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+  position: sticky;
+  top: 4.5rem;
+  z-index: 4;
+  background: linear-gradient(180deg, #161411 70%, transparent);
+  padding: 0.35rem 0;
+}
+
+.form-jump .btn { min-height: 38px; padding: 0.35rem 0.65rem; font-size: 0.85rem; }
+
+.filter { flex: 1; min-width: 12rem; }
+.filter input { width: 100%; }
+
+#photo-input, #photo-camera { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+label.btn { position: relative; cursor: pointer; }
+
 @media (max-width: 720px) {
   .grid, .line, .lines[data-kind="materials"] .line { grid-template-columns: 1fr; }
   .topbar { flex-direction: column; }

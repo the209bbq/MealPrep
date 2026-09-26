@@ -1,4 +1,4 @@
-const CACHE = 'daily-report-v1';
+const CACHE = 'daily-report-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,8 +7,6 @@ const ASSETS = [
   './model.js',
   './idb.js',
   './auth.js',
-  './sync.js',
-  './excel.js',
   './config.js',
   './manifest.json',
   './icon.svg'
@@ -28,7 +26,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
   if (event.request.method !== 'GET') return;
   event.respondWith((async () => {
     const cached = await caches.match(event.request);
@@ -40,7 +37,8 @@ self.addEventListener('fetch', (event) => {
     }
     try {
       const response = await fetch(event.request);
-      if (response.ok && (url.origin === location.origin || url.hostname.includes('cdn.sheetjs.com'))) {
+      const url = new URL(event.request.url);
+      if (response.ok && url.origin === location.origin) {
         const copy = response.clone();
         caches.open(CACHE).then((cache) => cache.put(event.request, copy));
       }
