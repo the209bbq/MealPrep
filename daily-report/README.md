@@ -2,7 +2,7 @@
 
 Field daily reports with local accounts, IndexedDB, a service worker, and Excel import/export. This is **not** the MealPrep kitchen board (`New/kitchen.html` is unchanged).
 
-Excel remains the system of record for billing, bids, and reports. This PR is UI + local data only. Google Drive/Sheets calls are stubbed.
+Excel is the system of record for **billing, bids, and reports**. Import/export uses SheetJS (`Billing`, `Bids`, `Reports`, `Crew`, `Materials`, `Equipment` sheets). Chromium can link a workbook, create one, and grant a job folder (File System Access API). Google Drive/Sheets upload is a stub unless env keys exist — and even then this client does not call Google without a real OAuth token.
 
 ## Run
 
@@ -37,18 +37,19 @@ Do not put secrets in git. Copy `config.example.js` over local edits to `config.
 | `GOOGLE_SHEETS_SPREADSHEET_ID` | Spreadsheet that is the cloud copy of the billing book (`googleSheetsSpreadsheetId`). |
 | `GOOGLE_MAPS_API_KEY` | Optional later reverse-geocode of the pin. |
 
-`.env.example` in this folder lists the same names. The current UI never invents or requires a live client secret.
+The Node servers inject those values into `config.js` **only when the env vars are set**. Empty env keeps the checked-in empty `config.js`. Never commit secrets.
 
 ## What works offline
 
-- Multiple device accounts (local + mock Google; real GIS button when a client ID is present)
+- Multiple device accounts (`#/accounts`): local + mock Google; real GIS button when a client ID is present
 - Create/edit reports: weather, geolocation (when allowed), date/time, job name/number, crew, hours, materials, equipment, delays, safety, photos, supervisor, signature
 - Saves to IndexedDB without a network
-- Outbox queues upserts and flushes to a **local mirror** when online (Drive upload not wired)
-- Export / import `.xlsx` (SheetJS). Chromium can link a workbook and grant a folder.
+- Outbox queues report/billing/bid upserts and auto-flushes when online (Background Sync when available). Without Google keys the remote is a **local IndexedDB mirror**
+- Export / import `.xlsx` including billing + bids. Chromium can link/create a workbook and save into a granted folder.
 
 ## Tests
 
 ```bash
 node daily-report/model.test.js
+node daily-report/config-from-env.test.mjs
 ```

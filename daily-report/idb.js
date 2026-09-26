@@ -1,26 +1,33 @@
 window.DailyReportDB = (function () {
   const DB_NAME = 'daily-report';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   let opened;
+
+  function ensureStores(db) {
+    if (!db.objectStoreNames.contains('users')) db.createObjectStore('users', { keyPath: 'id' });
+    if (!db.objectStoreNames.contains('reports')) {
+      const store = db.createObjectStore('reports', { keyPath: 'id' });
+      store.createIndex('byUser', 'userId');
+      store.createIndex('byDate', 'reportDate');
+    }
+    if (!db.objectStoreNames.contains('attachments')) db.createObjectStore('attachments', { keyPath: 'id' });
+    if (!db.objectStoreNames.contains('outbox')) {
+      const outbox = db.createObjectStore('outbox', { keyPath: 'id' });
+      outbox.createIndex('byStatus', 'status');
+    }
+    if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'key' });
+    if (!db.objectStoreNames.contains('bids')) {
+      const bids = db.createObjectStore('bids', { keyPath: 'id' });
+      bids.createIndex('byUser', 'userId');
+    }
+  }
 
   function openDb() {
     if (opened) return opened;
     opened = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains('users')) db.createObjectStore('users', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('reports')) {
-          const store = db.createObjectStore('reports', { keyPath: 'id' });
-          store.createIndex('byUser', 'userId');
-          store.createIndex('byDate', 'reportDate');
-        }
-        if (!db.objectStoreNames.contains('attachments')) db.createObjectStore('attachments', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('outbox')) {
-          const outbox = db.createObjectStore('outbox', { keyPath: 'id' });
-          outbox.createIndex('byStatus', 'status');
-        }
-        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'key' });
+        ensureStores(req.result);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -76,15 +83,25 @@ window.DailyReportDB = (function () {
     return put('kv', { key, value });
   }
 
-  async function reportsForUser(userId) {
+  async function byUser(storeName, userId) {
     const db = await openDb();
-    const tx = db.transaction('reports', 'readonly');
-    const index = tx.objectStore('reports').index('byUser');
+    const tx = db.transaction(storeName, 'readonly');
+    const index = tx.objectStore(storeName).index('byUser');
     const rows = await request(index.getAll(userId));
     await txDone(tx);
+    return rows;
+  }
+
+  async function reportsForUser(userId) {
+    const rows = await byUser('reports', userId);
     return rows.sort((a, b) => String(b.reportDate).localeCompare(String(a.reportDate))
       || String(b.updatedAt).localeCompare(String(a.updatedAt)));
   }
 
-  return { openDb, get, getAll, put, del, getKv, setKv, reportsForUser };
+  async function bidsForUser(userId) {
+    const rows = await byUser('bids', userId);
+    return rows.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  }
+
+  return { openDb, get, getAll, put, del, getKv, setKv, reportsForUser, bidsForUser };
 })();

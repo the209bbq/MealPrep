@@ -183,6 +183,113 @@
     }));
   }
 
+  function sumHours(rows) {
+    return (rows || []).reduce((total, row) => total + (Number(row.hours) || 0), 0);
+  }
+
+  function billingRow(report) {
+    const materials = (report.materials || []).filter((row) => row.name);
+    return {
+      reportId: report.id,
+      userId: report.userId || '',
+      jobNumber: report.jobNumber || '',
+      jobName: report.jobName || '',
+      reportDate: report.reportDate || '',
+      status: report.status || 'draft',
+      hoursTotal: report.hoursTotal || '',
+      hoursOvertime: report.hoursOvertime || '',
+      crewHours: sumHours(report.crew),
+      equipmentHours: sumHours(report.equipment),
+      materialLines: materials.length,
+      materialSummary: materials.map((row) => `${row.qty || ''} ${row.unit || ''} ${row.name}`.trim()).join('; '),
+      supervisor: report.supervisor || '',
+      signatureName: report.signatureName || '',
+      updatedAt: report.updatedAt || ''
+    };
+  }
+
+  function billingRows(reports) {
+    return (reports || []).map(billingRow);
+  }
+
+  function emptyBid(userId) {
+    return {
+      id: uid('bid'),
+      userId: userId || '',
+      jobName: '',
+      jobNumber: '',
+      customer: '',
+      amount: '',
+      status: 'draft',
+      notes: '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  function normalizeBid(input, userId) {
+    const src = input && typeof input === 'object' ? input : {};
+    const status = ['draft', 'submitted', 'won', 'lost'].includes(src.status) ? src.status : 'draft';
+    return {
+      id: src.id || uid('bid'),
+      userId: src.userId || userId || '',
+      jobName: String(src.jobName || src.job || '').trim(),
+      jobNumber: String(src.jobNumber || src.number || '').trim(),
+      customer: String(src.customer || '').trim(),
+      amount: String(src.amount ?? '').trim(),
+      status,
+      notes: String(src.notes || '').trim(),
+      createdAt: src.createdAt || new Date().toISOString(),
+      updatedAt: src.updatedAt || new Date().toISOString()
+    };
+  }
+
+  function bidsFromSheetRows(rows, userId) {
+    return (rows || []).map((row) => normalizeBid(row, row.userId || userId));
+  }
+
+  function bidToSheetRow(bid) {
+    return {
+      id: bid.id,
+      userId: bid.userId || '',
+      jobName: bid.jobName || '',
+      jobNumber: bid.jobNumber || '',
+      customer: bid.customer || '',
+      amount: bid.amount || '',
+      status: bid.status || 'draft',
+      notes: bid.notes || '',
+      updatedAt: bid.updatedAt || ''
+    };
+  }
+
+  function describeRemote(cfg) {
+    const config = cfg && typeof cfg === 'object' ? cfg : {};
+    const clientId = String(config.googleClientId || '').trim();
+    const apiKey = String(config.googleApiKey || '').trim();
+    const folderId = String(config.googleDriveFolderId || '').trim();
+    const spreadsheetId = String(config.googleSheetsSpreadsheetId || '').trim();
+    const hasAuth = Boolean(clientId || apiKey);
+    if (spreadsheetId && hasAuth) {
+      return {
+        transport: 'sheets-placeholder',
+        ready: false,
+        reason: 'Spreadsheet id is set; Sheets upload waits on OAuth token (not wired).'
+      };
+    }
+    if (folderId && hasAuth) {
+      return {
+        transport: 'drive-placeholder',
+        ready: false,
+        reason: 'Drive folder id is set; Drive upload waits on OAuth token (not wired).'
+      };
+    }
+    return {
+      transport: 'stub',
+      ready: true,
+      reason: 'No Google keys; outbox flushes to the local IndexedDB mirror.'
+    };
+  }
+
   function reportsFromSheetRows(rows) {
     return (rows || []).map((row) => normalizeReport({
       id: row.id || uid('rpt'),
@@ -260,6 +367,13 @@
     crewRows,
     materialRows,
     equipmentRows,
+    billingRow,
+    billingRows,
+    emptyBid,
+    normalizeBid,
+    bidsFromSheetRows,
+    bidToSheetRow,
+    describeRemote,
     reportsFromSheetRows,
     attachChildRows
   };

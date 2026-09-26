@@ -3,6 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dailyReportConfigFromEnv, dailyReportConfigHasEnv, dailyReportConfigScript } from './config-from-env.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.DAILY_REPORT_PORT || process.env.PORT || 4174);
@@ -18,6 +19,14 @@ const types = {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/config.js') {
+    const cfg = dailyReportConfigFromEnv();
+    if (dailyReportConfigHasEnv(cfg)) {
+      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(dailyReportConfigScript(cfg));
+      return;
+    }
+  }
   const filePath = path.join(root, url.pathname === '/' ? '/index.html' : url.pathname);
   if (!filePath.startsWith(root)) {
     res.writeHead(403);

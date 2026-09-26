@@ -68,6 +68,12 @@ window.DailyReportAuth = (function () {
     return setSession(user);
   }
 
+  async function removeUser(userId) {
+    const session = await getSession();
+    await db.del('users', userId);
+    if (session?.userId === userId) await clearSession();
+  }
+
   function decodeJwtPayload(credential) {
     const parts = String(credential || '').split('.');
     if (parts.length < 2) return null;
@@ -142,6 +148,7 @@ window.DailyReportAuth = (function () {
     upsertUser,
     createLocalUser,
     switchTo,
+    removeUser,
     signInWithGoogleCredential,
     signInWithGoogleMock,
     loadGis

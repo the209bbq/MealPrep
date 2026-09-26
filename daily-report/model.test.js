@@ -36,4 +36,19 @@ assert.strictEqual(withKids[0].crew[0].name, 'Alex');
 assert.strictEqual(withKids[0].materials[0].name, 'Cold patch');
 assert.strictEqual(withKids[0].equipment[0].name, 'Roller');
 
+const billing = model.billingRow(normalized);
+assert.strictEqual(billing.jobNumber, 'J-1042');
+assert.strictEqual(billing.crewHours, 8);
+assert.strictEqual(billing.materialLines, 1);
+
+const bid = model.normalizeBid({ jobName: 'Hwy overlay', amount: '125000', status: 'submitted' }, 'user-1');
+assert.strictEqual(bid.userId, 'user-1');
+assert.strictEqual(bid.status, 'submitted');
+const fromBids = model.bidsFromSheetRows([model.bidToSheetRow(bid)]);
+assert.strictEqual(fromBids[0].jobName, 'Hwy overlay');
+
+assert.strictEqual(model.describeRemote({}).transport, 'stub');
+assert.strictEqual(model.describeRemote({ googleApiKey: 'x', googleDriveFolderId: 'folder' }).transport, 'drive-placeholder');
+assert.strictEqual(model.describeRemote({ googleClientId: 'id', googleSheetsSpreadsheetId: 'sheet' }).transport, 'sheets-placeholder');
+
 console.log('daily-report model tests ok');

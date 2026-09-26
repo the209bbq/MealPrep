@@ -16,7 +16,10 @@ window.DailyReportApp = (function () {
     view: 'list',
     linked: null,
     folderName: '',
-    drive: excel.driveConfig()
+    folderFiles: [],
+    bids: [],
+    drive: excel.driveConfig(),
+    remote: excel.remotePlan()
   };
 
   function $(sel, root) {
@@ -78,12 +81,13 @@ window.DailyReportApp = (function () {
                 </option>`).join('')}
             </select>
           </label>
+          <a class="btn ghost" href="#/accounts">Accounts</a>
           <a class="btn ghost" href="#/settings">Excel &amp; folders</a>
           <button type="button" class="btn ghost" id="sign-out">Sign out</button>
         </div>
       </header>
       <p class="status-line">
-        ${navigator.onLine ? 'Online' : 'Offline'} · ${state.outbox.length} waiting to sync
+        ${navigator.onLine ? 'Online' : 'Offline'} · ${state.outbox.length} waiting to sync · ${escapeHtml(state.remote?.transport || 'stub')}
         ${extra ? ` · ${extra}` : ''}
       </p>
       <div class="toast" ${state.toast ? '' : 'hidden'}>${escapeHtml(state.toast)}</div>
@@ -282,47 +286,164 @@ window.DailyReportApp = (function () {
   function settingsView() {
     const drive = state.drive;
     const linked = state.linked;
+    const remote = state.remote || excel.remotePlan();
+    const billing = model.billingRows(state.reports);
+    const folderFiles = state.folderFiles || [];
     return `
       ${header('Excel &amp; folders')}
       <main class="page">
         <section class="card">
           <h2>Workbook (system of record)</h2>
-          <p>Billing, bids, and reports live in Excel. This screen links a workbook on the device and can export/import <code>.xlsx</code> via SheetJS. Google Drive upload is a placeholder until API keys exist.</p>
+          <p>Billing, bids, and reports live in one <code>.xlsx</code> book (SheetJS). Link a file, import, or export. Drive upload waits on env keys + OAuth — never committed here.</p>
           <p class="hint">Linked: ${linked ? escapeHtml(linked.name) : 'none yet'}</p>
           <div class="toolbar wrap">
             <button type="button" class="btn" id="pick-workbook">Pick / link workbook</button>
+            <button type="button" class="btn" id="create-workbook">Create new workbook</button>
             <button type="button" class="btn" id="import-xlsx">Import .xlsx</button>
-            <button type="button" class="btn" id="export-all">Export all reports</button>
+            <button type="button" class="btn" id="export-all">Export billing, bids, reports</button>
             <button type="button" class="btn" id="save-linked" ${linked?.handle ? '' : 'disabled'}>Write to linked file</button>
           </div>
           <input id="xlsx-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
         </section>
         <section class="card">
+          <h2>Billing (from reports)</h2>
+          <p class="hint">${billing.length} row(s) derived from this account’s reports. Hours, materials, and job numbers export on the Billing sheet.</p>
+          ${billing.length ? `
+            <div class="table-wrap">
+              <table class="grid-table">
+                <thead><tr><th>Job</th><th>Date</th><th>Hours</th><th>OT</th><th>Crew hrs</th><th>Materials</th></tr></thead>
+                <tbody>
+                  ${billing.map((row) => `
+                    <tr>
+                      <td>${escapeHtml(row.jobName || row.jobNumber || row.reportId)}</td>
+                      <td>${escapeHtml(row.reportDate)}</td>
+                      <td>${escapeHtml(row.hoursTotal)}</td>
+                      <td>${escapeHtml(row.hoursOvertime)}</td>
+                      <td>${escapeHtml(row.crewHours)}</td>
+                      <td>${escapeHtml(row.materialLines)}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>` : '<p class="empty">No billing rows yet.</p>'}
+        </section>
+        <section class="card">
+          <h2>Bids</h2>
+          <form id="bid-form" class="stack">
+            <div class="grid">
+              <label>Job name <input name="jobName" required></label>
+              <label>Job number <input name="jobNumber"></label>
+              <label>Customer <input name="customer"></label>
+              <label>Amount <input name="amount" inputmode="decimal"></label>
+              <label>Status
+                <select name="status">
+                  <option value="draft">draft</option>
+                  <option value="submitted">submitted</option>
+                  <option value="won">won</option>
+                  <option value="lost">lost</option>
+                </select>
+              </label>
+              <label class="wide">Notes <input name="notes"></label>
+            </div>
+            <button type="submit" class="btn primary">Save bid on this device</button>
+          </form>
+          <ul class="account-list">
+            ${(state.bids || []).map((bid) => `
+              <li>
+                <div>
+                  <strong>${escapeHtml(bid.jobName || 'Untitled bid')}</strong>
+                  <span> ${escapeHtml(bid.jobNumber)} · ${escapeHtml(bid.customer)} · ${escapeHtml(bid.amount)} · ${escapeHtml(bid.status)}</span>
+                </div>
+                <button type="button" class="btn ghost danger" data-del-bid="${escapeHtml(bid.id)}">Remove</button>
+              </li>`).join('') || '<li class="hint">No bids yet.</li>'}
+          </ul>
+        </section>
+        <section class="card">
           <h2>Local folder</h2>
-          <p>File System Access API (Chromium) can keep a job folder. Other browsers use file pickers.</p>
+          <p>${excel.supportsFolderAccess()
+            ? 'File System Access API can keep a job folder on this device.'
+            : 'This browser has no directory picker. Use import/export file buttons; Drive folder is a placeholder below.'}</p>
           <p class="hint">Folder: ${escapeHtml(state.folderName || 'not granted')}</p>
           <div class="toolbar wrap">
-            <button type="button" class="btn" id="pick-folder">Grant folder access</button>
+            <button type="button" class="btn" id="pick-folder" ${excel.supportsFolderAccess() ? '' : 'disabled'}>Grant folder access</button>
             <button type="button" class="btn" id="list-folder">List .xlsx in folder</button>
+            <button type="button" class="btn" id="save-folder-xlsx">Save workbook into folder</button>
           </div>
-          <ul id="folder-list" class="account-list"></ul>
+          <ul id="folder-list" class="account-list">
+            ${folderFiles.length
+              ? folderFiles.map((name) => `<li><button type="button" class="btn wide" data-open-xlsx="${escapeHtml(name)}">${escapeHtml(name)}</button></li>`).join('')
+              : '<li class="hint">No folder listing yet</li>'}
+          </ul>
         </section>
         <section class="card">
           <h2>Google Drive / Sheets (stub)</h2>
-          <p>Later: OAuth client + Drive/Sheets APIs. No secrets are stored in the repo.</p>
+          <p>${escapeHtml(remote.reason)}</p>
+          <p>Set env vars on the static server (never commit secrets). Empty values stay empty.</p>
           <dl class="kv">
             <dt>GOOGLE_CLIENT_ID</dt><dd>${escapeHtml(auth.googleClientId() || '(empty — mock sign-in)')}</dd>
-            <dt>GOOGLE_API_KEY</dt><dd>${drive.apiKey ? '(set in config)' : '(empty)'}</dd>
+            <dt>GOOGLE_API_KEY</dt><dd>${drive.apiKey ? '(set from env/config)' : '(empty)'}</dd>
             <dt>GOOGLE_DRIVE_FOLDER_ID</dt><dd>${escapeHtml(drive.folderId || '(empty)')}</dd>
             <dt>GOOGLE_SHEETS_SPREADSHEET_ID</dt><dd>${escapeHtml(drive.spreadsheetId || '(empty)')}</dd>
           </dl>
-          <button type="button" class="btn" id="drive-placeholder" disabled>Connect Drive (not wired)</button>
+          <div class="toolbar wrap">
+            <button type="button" class="btn" id="drive-placeholder">Queue Drive/Sheets upload (stub)</button>
+          </div>
         </section>
         <section class="card">
           <h2>Sync outbox</h2>
-          <p>Saves queue here and flush when online. Flush currently writes a local mirror (no network Excel/Drive yet).</p>
+          <p>Saves queue here and auto-flush when the browser comes online (service worker background sync when available). Without Google keys the remote is a local IndexedDB mirror.</p>
           <p>${state.outbox.length} pending</p>
+          <ul class="account-list">
+            ${state.outbox.slice(0, 12).map((item) => `
+              <li>
+                <span>${escapeHtml(item.action)} · ${escapeHtml(item.payload?.jobName || item.payload?.id || item.id)}</span>
+                <span>${item.lastError ? escapeHtml(item.lastError) : escapeHtml(item.status)}</span>
+              </li>`).join('') || '<li class="hint">Outbox empty</li>'}
+          </ul>
           <button type="button" class="btn" id="flush-outbox">Flush outbox now</button>
+        </section>
+        <p><a class="btn ghost" href="#/">Back to reports</a></p>
+      </main>
+    `;
+  }
+
+  function accountsView() {
+    const hasGoogle = Boolean(auth.googleClientId());
+    const currentId = state.session?.user?.id;
+    return `
+      ${header('Accounts')}
+      <main class="page">
+        <section class="card">
+          <h2>On this device</h2>
+          <p>Reports stay per account in IndexedDB. Switch without losing the others.</p>
+          <ul class="account-list">
+            ${state.users.map((u) => `
+              <li>
+                <div>
+                  <strong>${escapeHtml(u.name)}</strong>
+                  <span> ${escapeHtml(u.email || 'no email')} · ${escapeHtml(u.provider)}${u.id === currentId ? ' · active' : ''}</span>
+                </div>
+                <div class="toolbar wrap">
+                  <button type="button" class="btn" data-switch="${escapeHtml(u.id)}" ${u.id === currentId ? 'disabled' : ''}>Switch</button>
+                  <button type="button" class="btn ghost danger" data-remove-user="${escapeHtml(u.id)}">Remove</button>
+                </div>
+              </li>`).join('') || '<li class="hint">No saved accounts.</li>'}
+          </ul>
+        </section>
+        <section class="card">
+          <h2>Add local account</h2>
+          <form id="add-local-account" class="stack">
+            <label>Name <input name="name" required autocomplete="name"></label>
+            <label>Email <input name="email" type="email" autocomplete="email"></label>
+            <button type="submit" class="btn primary">Add &amp; switch</button>
+          </form>
+        </section>
+        <section class="card">
+          <h2>Google</h2>
+          <div id="google-btn-slot" class="google-slot" ${hasGoogle ? '' : 'hidden'}></div>
+          ${hasGoogle ? '<p class="hint">GIS button uses GOOGLE_CLIENT_ID from env/config. No client secret is stored in the app.</p>' : `
+            <button type="button" class="btn primary" id="google-mock">Add Google demo session</button>
+            <p class="hint">No <code>GOOGLE_CLIENT_ID</code>. This mock does not call Google.</p>
+          `}
         </section>
         <p><a class="btn ghost" href="#/">Back to reports</a></p>
       </main>
@@ -380,7 +501,7 @@ window.DailyReportApp = (function () {
       await render();
     });
     $('#export-all')?.addEventListener('click', async () => {
-      await excel.exportReports(state.reports);
+      await excel.exportReports(state.reports, undefined, state.bids);
       toast('Workbook downloaded');
     });
   }
@@ -429,8 +550,10 @@ window.DailyReportApp = (function () {
   async function persistReport(report) {
     await db.put('reports', report);
     await sync.enqueue('upsert-report', model.reportToSummaryRow(report));
+    await sync.enqueue('upsert-billing', model.billingRow(report));
     state.report = report;
     toast(navigator.onLine ? 'Saved · queued for sync' : 'Saved offline');
+    sync.requestBackgroundSync();
   }
 
   function setupSignature() {
@@ -560,16 +683,85 @@ window.DailyReportApp = (function () {
 
   async function importFromFile(file) {
     const wb = await excel.readWorkbook(file);
-    const incoming = excel.importWorkbook(wb);
-    for (const report of incoming) {
+    const incoming = excel.importWorkbook(wb, state.session.user.id);
+    const reports = incoming.reports || incoming;
+    const bids = incoming.bids || [];
+    for (const report of reports) {
       report.userId = report.userId || state.session.user.id;
       await db.put('reports', model.normalizeReport(report, report.userId));
       await sync.enqueue('upsert-report', model.reportToSummaryRow(report));
+      await sync.enqueue('upsert-billing', model.billingRow(report));
+    }
+    for (const bid of bids) {
+      const next = model.normalizeBid(bid, bid.userId || state.session.user.id);
+      await db.put('bids', next);
+      await sync.enqueue('upsert-bid', model.bidToSheetRow(next));
     }
     await excel.saveLinkedMeta({ name: file.name, importedAt: new Date().toISOString() });
-    toast(`Imported ${incoming.length} report(s)`);
+    toast(`Imported ${reports.length} report(s), ${bids.length} bid(s)`);
     await loadReports();
     await render();
+  }
+
+  async function currentWorkbook() {
+    return excel.workbookFromSystem(state.reports, state.bids);
+  }
+
+  async function writeLinkedWorkbook() {
+    const linked = await excel.linkedMeta();
+    if (!linked?.handle) throw new Error('No linked workbook');
+    const ok = await excel.ensurePermission(linked.handle, 'readwrite');
+    if (!ok) throw new Error('Workbook permission was not granted');
+    const wb = await currentWorkbook();
+    await excel.writeToHandle(linked.handle, wb, linked.name);
+  }
+
+  function bindAccounts() {
+    bindChrome();
+    $('#add-local-account')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const data = new FormData(event.target);
+      const user = await auth.createLocalUser(String(data.get('name') || ''), String(data.get('email') || ''));
+      state.session = await auth.setSession(user);
+      toast(`Switched to ${user.name}`);
+      await boot();
+    });
+    $('#google-mock')?.addEventListener('click', async () => {
+      state.session = await auth.signInWithGoogleMock();
+      toast('Google demo session active');
+      await boot();
+    });
+    document.querySelectorAll('[data-switch]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        state.session = await auth.switchTo(btn.dataset.switch);
+        toast('Switched account');
+        await loadReports();
+        await render();
+      });
+    });
+    document.querySelectorAll('[data-remove-user]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await auth.removeUser(btn.dataset.removeUser);
+        state.session = await auth.getSession();
+        if (!state.session) {
+          location.hash = '/';
+        }
+        toast('Account removed from this device');
+        await render();
+      });
+    });
+    const slot = $('#google-btn-slot');
+    if (slot && auth.googleClientId()) {
+      auth.loadGis(async (response) => {
+        state.session = await auth.signInWithGoogleCredential(response.credential);
+        toast('Google account saved');
+        await boot();
+      }).then((ok) => {
+        if (ok && window.google?.accounts?.id) {
+          window.google.accounts.id.renderButton(slot, { theme: 'filled_black', size: 'large', width: 320 });
+        }
+      });
+    }
   }
 
   function bindSettings() {
@@ -580,10 +772,8 @@ window.DailyReportApp = (function () {
     });
     $('#import-xlsx')?.addEventListener('click', () => $('#xlsx-file').click());
     $('#pick-workbook')?.addEventListener('click', async () => {
-      if (window.showOpenFilePicker) {
-        const [handle] = await window.showOpenFilePicker({
-          types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }]
-        });
+      const handle = await excel.pickExistingWorkbook();
+      if (handle) {
         await excel.saveLinkedMeta({ name: handle.name, handle, linkedAt: new Date().toISOString() });
         state.linked = await excel.linkedMeta();
         toast(`Linked ${handle.name}`);
@@ -592,19 +782,34 @@ window.DailyReportApp = (function () {
       }
       $('#xlsx-file').click();
     });
+    $('#create-workbook')?.addEventListener('click', async () => {
+      const handle = await excel.pickNewWorkbook();
+      if (!handle) {
+        await excel.exportReports(state.reports, undefined, state.bids);
+        toast('Workbook downloaded (no file picker)');
+        return;
+      }
+      const wb = await currentWorkbook();
+      await excel.writeToHandle(handle, wb, handle.name);
+      await excel.saveLinkedMeta({ name: handle.name, handle, linkedAt: new Date().toISOString() });
+      state.linked = await excel.linkedMeta();
+      toast(`Created ${handle.name}`);
+      await render();
+    });
     $('#save-linked')?.addEventListener('click', async () => {
-      const linked = await excel.linkedMeta();
-      if (!linked?.handle) return;
-      const wb = excel.workbookFromReports(state.reports);
-      await excel.writeToHandle(linked.handle, wb, linked.name);
-      toast('Wrote reports into linked workbook');
+      try {
+        await writeLinkedWorkbook();
+        toast('Wrote billing, bids, and reports into linked workbook');
+      } catch (error) {
+        toast(error.message || 'Could not write linked workbook');
+      }
     });
     $('#pick-folder')?.addEventListener('click', async () => {
-      if (!window.showDirectoryPicker) {
+      const handle = await excel.pickFolder();
+      if (!handle) {
         toast('Folder access needs a Chromium browser');
         return;
       }
-      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
       await excel.saveFolderHandle(handle);
       state.folderName = handle.name;
       toast(`Folder granted: ${handle.name}`);
@@ -612,29 +817,90 @@ window.DailyReportApp = (function () {
     });
     $('#list-folder')?.addEventListener('click', async () => {
       const handle = await excel.folderHandle();
-      const list = $('#folder-list');
-      if (!handle || !list) {
+      if (!handle) {
         toast('No folder granted yet');
         return;
       }
-      const names = [];
-      for await (const entry of handle.values()) {
-        if (entry.name.toLowerCase().endsWith('.xlsx')) names.push(entry.name);
+      try {
+        state.folderFiles = await excel.listXlsx(handle);
+        await render();
+      } catch (error) {
+        toast(error.message || 'Could not list folder');
       }
-      list.innerHTML = names.length
-        ? names.map((name) => `<li><button type="button" class="btn wide" data-open-xlsx="${escapeHtml(name)}">${escapeHtml(name)}</button></li>`).join('')
-        : '<li class="hint">No .xlsx files in this folder</li>';
-      list.querySelectorAll('[data-open-xlsx]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const fileHandle = await handle.getFileHandle(btn.dataset.openXlsx);
-          await importFromFile(await fileHandle.getFile());
-        });
+    });
+    document.querySelectorAll('[data-open-xlsx]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const handle = await excel.folderHandle();
+        if (!handle) return;
+        const fileHandle = await handle.getFileHandle(btn.dataset.openXlsx);
+        await importFromFile(await fileHandle.getFile());
       });
     });
+    $('#save-folder-xlsx')?.addEventListener('click', async () => {
+      const handle = await excel.folderHandle();
+      if (!handle) {
+        toast('Grant a folder first');
+        return;
+      }
+      const name = (state.linked?.name && state.linked.name.endsWith('.xlsx'))
+        ? state.linked.name
+        : `daily-reports-${model.todayIso()}.xlsx`;
+      try {
+        await excel.writeToFolder(handle, await currentWorkbook(), name);
+        toast(`Saved ${name} into folder`);
+        state.folderFiles = await excel.listXlsx(handle);
+        await render();
+      } catch (error) {
+        toast(error.message || 'Could not write folder');
+      }
+    });
+    $('#bid-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const data = new FormData(event.target);
+      const bid = model.normalizeBid({
+        jobName: data.get('jobName'),
+        jobNumber: data.get('jobNumber'),
+        customer: data.get('customer'),
+        amount: data.get('amount'),
+        status: data.get('status'),
+        notes: data.get('notes')
+      }, state.session.user.id);
+      await db.put('bids', bid);
+      await sync.enqueue('upsert-bid', model.bidToSheetRow(bid));
+      toast('Bid saved · queued for sync');
+      event.target.reset();
+      await loadReports();
+      await render();
+    });
+    document.querySelectorAll('[data-del-bid]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await db.del('bids', btn.dataset.delBid);
+        await loadReports();
+        await render();
+      });
+    });
+    $('#drive-placeholder')?.addEventListener('click', async () => {
+      await sync.enqueue('upload-workbook', {
+        name: state.linked?.name || `daily-reports-${model.todayIso()}.xlsx`,
+        transport: state.remote?.transport,
+        reportCount: state.reports.length,
+        bidCount: state.bids.length
+      });
+      if (navigator.onLine) await sync.flush();
+      state.outbox = await sync.pending();
+      toast(state.remote?.transport === 'stub'
+        ? 'Queued stub upload (no Google keys)'
+        : 'Queued Drive/Sheets placeholder (OAuth not wired)');
+      await render();
+    });
     $('#flush-outbox')?.addEventListener('click', async () => {
+      if (!navigator.onLine) {
+        toast('Still offline — outbox will flush when you reconnect');
+        return;
+      }
       await sync.flush();
       state.outbox = await sync.pending();
-      toast('Outbox flushed to local mirror');
+      toast('Outbox flushed');
       await render();
     });
   }
@@ -645,9 +911,12 @@ window.DailyReportApp = (function () {
       return;
     }
     state.reports = await db.reportsForUser(state.session.user.id);
+    state.bids = await db.bidsForUser(state.session.user.id);
     state.linked = await excel.linkedMeta();
-    state.folderName = (await db.getKv('folderName')) || state.linked?.name || '';
+    state.folderName = (await db.getKv('folderName')) || '';
     state.outbox = await sync.pending();
+    state.remote = excel.remotePlan();
+    state.drive = excel.driveConfig();
   }
 
   async function render() {
@@ -663,6 +932,12 @@ window.DailyReportApp = (function () {
       await loadReports();
       root.innerHTML = listView();
       bindChrome();
+      return;
+    }
+    if (r.name === 'accounts') {
+      await loadReports();
+      root.innerHTML = accountsView();
+      bindAccounts();
       return;
     }
     if (r.name === 'settings') {
@@ -694,6 +969,7 @@ window.DailyReportApp = (function () {
     state.session = await auth.getSession();
     state.users = await auth.listUsers();
     state.drive = excel.driveConfig();
+    state.remote = excel.remotePlan();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('SW skip', err));
     }
@@ -701,7 +977,7 @@ window.DailyReportApp = (function () {
       state.outbox = pending;
       const line = document.querySelector('.status-line');
       if (line) {
-        line.innerHTML = `${navigator.onLine ? 'Online' : 'Offline'} · ${pending.length} waiting to sync`;
+        line.innerHTML = `${navigator.onLine ? 'Online' : 'Offline'} · ${pending.length} waiting to sync · ${escapeHtml(state.remote?.transport || 'stub')}`;
       }
     });
     window.addEventListener('hashchange', () => {

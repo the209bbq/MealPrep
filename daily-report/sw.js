@@ -1,4 +1,4 @@
-const CACHE = 'daily-report-v1';
+const CACHE = 'daily-report-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,23 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
+});
+
+async function askClientsToFlush() {
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  clients.forEach((client) => client.postMessage({ type: 'flush-outbox' }));
+}
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'daily-report-outbox') {
+    event.waitUntil(askClientsToFlush());
+  }
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'flush-outbox') {
+    event.waitUntil(askClientsToFlush());
+  }
 });
 
 self.addEventListener('fetch', (event) => {

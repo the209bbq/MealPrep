@@ -3,6 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dailyReportConfigFromEnv, dailyReportConfigHasEnv, dailyReportConfigScript } from './daily-report/config-from-env.mjs';
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(repoRoot, 'New');
@@ -71,6 +72,16 @@ function serveFile(req, res) {
   if (url.pathname === '/daily-report' || url.pathname === '/daily-report/') {
     serveFrom(dailyRoot, '/index.html', res);
     return;
+  }
+  if (url.pathname === '/daily-report/config.js') {
+    const cfg = dailyReportConfigFromEnv();
+    if (dailyReportConfigHasEnv(cfg)) {
+      send(res, 200, dailyReportConfigScript(cfg), {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'no-store'
+      });
+      return;
+    }
   }
   if (url.pathname.startsWith('/daily-report/')) {
     serveFrom(dailyRoot, url.pathname.slice('/daily-report'.length), res);
