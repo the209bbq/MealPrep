@@ -101,6 +101,8 @@ export interface RecipeDiscoverySearchFilters {
   mealType?: RecipeApiMealType;
   difficulty?: RecipeApiDifficulty;
   dietaryTag?: RecipeApiDietaryTag;
+  /** Upper bound on prep + cook time (minutes), applied via API time filters when set. */
+  maxTotalMinutes?: number;
   page?: number;
   perPage?: number;
 }

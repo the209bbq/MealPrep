@@ -31,7 +31,6 @@ export const THEME: ThemeTokens = {
 
 export const TABS: TabConfig[] = [
   { name: 'index', title: 'Home', href: '/', icon: 'home-outline', iconActive: 'home' },
-  { name: 'pantry', title: 'Pantry', href: '/pantry', icon: 'leaf-outline', iconActive: 'leaf' },
   {
     name: 'recipes',
     title: 'Recipes',
@@ -39,6 +38,7 @@ export const TABS: TabConfig[] = [
     icon: 'restaurant-outline',
     iconActive: 'restaurant',
   },
+  { name: 'pantry', title: 'Pantry', href: '/pantry', icon: 'leaf-outline', iconActive: 'leaf' },
   {
     name: 'grocery',
     title: 'Grocery List',

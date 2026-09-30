@@ -1,0 +1,306 @@
+import { router } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Card } from './Card';
+import { FilterChips } from './FilterChips';
+import { RecipePantryMatchBadge } from './RecipePantryMatch';
+import { isRecipeDiscoveryConfigured, RECIPE_DISCOVERY, THEME } from '../config/appConfig';
+import { useApp } from '../context/AppContext';
+import {
+  debouncedSearch,
+  RecipeDiscoveryAuthError,
+  RecipeDiscoveryNotConfiguredError,
+  searchDiscoveryRecipes,
+} from '../lib/recipeDiscovery/client';
+import {
+  RECIPE_DISCOVERY_CUISINES,
+  RECIPE_DISCOVERY_DIFFICULTIES,
+  RECIPE_DISCOVERY_DIETARY,
+  RECIPE_DISCOVERY_MAX_MINUTES,
+  RECIPE_DISCOVERY_MEAL_TYPES,
+} from '../lib/recipeDiscovery/filters';
+import { scoreDiscoveryRecipeAgainstPantry } from '../lib/recipeDiscovery/scorePantry';
+import type {
+  RecipeApiCuisine,
+  RecipeApiDietaryTag,
+  RecipeApiDifficulty,
+  RecipeApiMealType,
+} from '../lib/recipeDiscovery/types';
+
+interface DiscoverRecipesPanelProps {
+  onToggleMealPlan: (item: Awaited<ReturnType<typeof searchDiscoveryRecipes>>['items'][number]) => void;
+  isOnMealPlan: (recipeApiId: number) => boolean;
+}
+
+export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: DiscoverRecipesPanelProps) {
+  const { session, demoMode, pantry } = useApp();
+  const accessToken = session?.access_token ?? null;
+
+  const [search, setSearch] = useState('');
+  const [cuisine, setCuisine] = useState<RecipeApiCuisine | ''>('');
+  const [difficulty, setDifficulty] = useState<RecipeApiDifficulty | ''>('');
+  const [mealType, setMealType] = useState<RecipeApiMealType | ''>('');
+  const [dietaryTag, setDietaryTag] = useState<RecipeApiDietaryTag | ''>('');
+  const [maxMinutes, setMaxMinutes] = useState<number | ''>('');
+  const [matchPantryOnly, setMatchPantryOnly] = useState(false);
+  const [minPantryPercent, setMinPantryPercent] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notConfigured, setNotConfigured] = useState(false);
+  const [items, setItems] = useState<Awaited<ReturnType<typeof searchDiscoveryRecipes>>['items']>([]);
+  const [total, setTotal] = useState(0);
+
+  const filters = useMemo(
+    () => ({
+      search,
+      cuisine: cuisine || undefined,
+      difficulty: difficulty || undefined,
+      mealType: mealType || undefined,
+      dietaryTag: dietaryTag || undefined,
+      maxTotalMinutes: maxMinutes === '' ? undefined : maxMinutes,
+      page: 1,
+      perPage: RECIPE_DISCOVERY.defaultPerPage,
+    }),
+    [cuisine, difficulty, dietaryTag, maxMinutes, mealType, search],
+  );
+
+  const runSearch = useCallback(async () => {
+    if (!RECIPE_DISCOVERY.enabled) return;
+    setLoading(true);
+    setError(null);
+    setNotConfigured(false);
+    try {
+      const result = await searchDiscoveryRecipes(filters, accessToken);
+      setItems(result.items);
+      setTotal(result.meta?.total ?? result.items.length);
+    } catch (err) {
+      if (err instanceof RecipeDiscoveryNotConfiguredError) {
+        setNotConfigured(true);
+        setItems([]);
+        setTotal(0);
+      } else if (err instanceof RecipeDiscoveryAuthError) {
+        setError(err.message);
+        setItems([]);
+      } else {
+        setError(err instanceof Error ? err.message : 'Search failed');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken, filters]);
+
+  useEffect(() => {
+    if (!RECIPE_DISCOVERY.enabled) return;
+    if (demoMode) {
+      void runSearch();
+      return;
+    }
+    if (!accessToken) {
+      setError('Sign in from Admin/Profile to search external recipes.');
+      return;
+    }
+    setLoading(true);
+    debouncedSearch(
+      filters,
+      accessToken,
+      (result) => {
+        setItems(result.items);
+        setTotal(result.meta?.total ?? result.items.length);
+        setLoading(false);
+        setError(null);
+        setNotConfigured(false);
+      },
+      (err) => {
+        if (err instanceof RecipeDiscoveryNotConfiguredError) {
+          setNotConfigured(true);
+          setItems([]);
+        } else {
+          setError(err.message);
+        }
+        setLoading(false);
+      },
+    );
+  }, [accessToken, demoMode, filters, runSearch]);
+
+  const displayItems = useMemo(() => {
+    let list = items.map((recipe) => ({
+      recipe,
+      match: scoreDiscoveryRecipeAgainstPantry(recipe, pantry),
+    }));
+    if (matchPantryOnly || minPantryPercent > 0) {
+      list = list.filter((row) => row.match.percentMatch >= (matchPantryOnly ? Math.max(minPantryPercent, 1) : minPantryPercent));
+    }
+    if (matchPantryOnly) {
+      list.sort((a, b) => b.match.percentMatch - a.match.percentMatch);
+    }
+    return list;
+  }, [items, matchPantryOnly, minPantryPercent, pantry]);
+
+  const showSetupHint = notConfigured || (!demoMode && !isRecipeDiscoveryConfigured());
+
+  if (!RECIPE_DISCOVERY.enabled) return null;
+
+  return (
+    <View className="mt-4 overflow-hidden rounded-2xl border border-emerald bg-card px-4 py-5">
+      <Text className="text-2xl font-bold text-ink">Discover recipes</Text>
+      <Text className="mt-1 text-sm text-muted">Search RecipeAPI.io — results show how well each recipe fits your pantry.</Text>
+
+      {demoMode ? (
+        <View className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <Text className="text-xs font-semibold text-amber-900">Demo mode</Text>
+          <Text className="mt-1 text-xs text-amber-800">Sample results only until Supabase + recipeapi-proxy are connected.</Text>
+        </View>
+      ) : null}
+
+      {showSetupHint ? (
+        <Card className="mt-3 border-dashed">
+          <Text className="text-sm font-semibold text-ink">Not set up yet</Text>
+          <Text className="mt-2 text-sm text-muted">
+            Add RECIPEAPI_KEY in Supabase and deploy recipeapi-proxy. See mobile/docs/RECIPE_DISCOVERY.md.
+          </Text>
+        </Card>
+      ) : null}
+
+      <TextInput
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search recipes (e.g. chicken, pasta…)"
+        placeholderTextColor={THEME.muted}
+        className="mt-4 rounded-2xl border-2 border-emerald/30 bg-paper px-5 py-4 text-lg text-ink"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+
+      <Text className="mt-4 text-xs font-semibold uppercase text-muted">Cuisine</Text>
+      <FilterChips
+        options={RECIPE_DISCOVERY_CUISINES.map((c) => ({ id: c.value, label: c.label }))}
+        selectedId={cuisine || null}
+        onSelect={(id) => setCuisine((id as RecipeApiCuisine) || '')}
+      />
+
+      <Text className="mt-3 text-xs font-semibold uppercase text-muted">Meal type</Text>
+      <FilterChips
+        options={RECIPE_DISCOVERY_MEAL_TYPES.map((c) => ({ id: c.value, label: c.label }))}
+        selectedId={mealType || null}
+        onSelect={(id) => setMealType((id as RecipeApiMealType) || '')}
+      />
+
+      <Text className="mt-3 text-xs font-semibold uppercase text-muted">Diet</Text>
+      <FilterChips
+        options={RECIPE_DISCOVERY_DIETARY.map((c) => ({ id: c.value, label: c.label }))}
+        selectedId={dietaryTag || null}
+        onSelect={(id) => setDietaryTag((id as RecipeApiDietaryTag) || '')}
+      />
+
+      <Text className="mt-3 text-xs font-semibold uppercase text-muted">Difficulty</Text>
+      <FilterChips
+        options={RECIPE_DISCOVERY_DIFFICULTIES.map((c) => ({ id: c.value, label: c.label }))}
+        selectedId={difficulty || null}
+        onSelect={(id) => setDifficulty((id as RecipeApiDifficulty) || '')}
+      />
+
+      <Text className="mt-3 text-xs font-semibold uppercase text-muted">Max time</Text>
+      <View className="mt-1 flex-row flex-wrap gap-2">
+        {RECIPE_DISCOVERY_MAX_MINUTES.map((mins) => {
+          const active = maxMinutes === mins;
+          return (
+            <Pressable
+              key={mins}
+              onPress={() => setMaxMinutes(active ? '' : mins)}
+              className={`rounded-full px-3 py-1.5 ${active ? 'bg-emerald' : 'border border-border bg-paper'}`}
+            >
+              <Text className={`text-xs font-semibold ${active ? 'text-on-emerald' : 'text-muted'}`}>
+                {mins} min
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text className="mt-3 text-xs font-semibold uppercase text-muted">Pantry match</Text>
+      <View className="mt-1 flex-row flex-wrap items-center gap-2">
+        <Pressable
+          onPress={() => setMatchPantryOnly((v) => !v)}
+          className={`rounded-full px-3 py-1.5 ${matchPantryOnly ? 'bg-emerald' : 'border border-border bg-paper'}`}
+        >
+          <Text className={`text-xs font-semibold ${matchPantryOnly ? 'text-on-emerald' : 'text-muted'}`}>
+            Match my pantry
+          </Text>
+        </Pressable>
+        {[0, 50, 70].map((pct) => {
+          const active = minPantryPercent === pct;
+          return (
+            <Pressable
+              key={pct}
+              onPress={() => setMinPantryPercent(pct)}
+              className={`rounded-full px-3 py-1.5 ${active ? 'bg-emerald-light' : 'border border-border bg-paper'}`}
+            >
+              <Text className={`text-xs font-semibold ${active ? 'text-emerald-dark' : 'text-muted'}`}>
+                {pct === 0 ? 'Any %' : `${pct}%+`}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {error ? <Text className="mt-4 text-sm text-danger">{error}</Text> : null}
+
+      <View className="mt-4 flex-row items-center justify-between">
+        <Text className="text-sm font-semibold text-ink">
+          {loading ? 'Searching…' : `${displayItems.length} result${displayItems.length === 1 ? '' : 's'}`}
+          {!loading && total > displayItems.length ? ` (of ${total})` : ''}
+        </Text>
+        {loading ? <ActivityIndicator color={THEME.emerald} /> : null}
+      </View>
+
+      {displayItems.length === 0 && !loading ? (
+        <Text className="mt-3 text-sm text-muted">No recipes match these filters. Try a broader search or lower pantry %.</Text>
+      ) : null}
+
+      {displayItems.map(({ recipe, match }) => {
+        const onPlan = isOnMealPlan(recipe.id);
+        return (
+          <Pressable
+            key={recipe.id}
+            onPress={() => router.push(`/discover-recipes/${recipe.id}`)}
+            className="mt-3"
+          >
+            <Card>
+              {recipe.isDemoSample ? (
+                <Text className="mb-1 text-[10px] font-bold uppercase text-amber-700">Demo sample</Text>
+              ) : null}
+              <View className="flex-row items-start justify-between">
+                <View className="flex-1 pr-2">
+                  <Text className="text-xs font-semibold uppercase text-emerald">{recipe.cuisine}</Text>
+                  <Text className="text-base font-bold text-ink">{recipe.name}</Text>
+                  <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{recipe.description}</Text>
+                  <RecipePantryMatchBadge match={match} />
+                  <Text className="mt-2 text-xs text-muted">
+                    {recipe.servings} servings · {recipe.prep_time + recipe.cook_time} min · {recipe.calories_per_serving} cal
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    onToggleMealPlan(recipe);
+                  }}
+                  className={`rounded-full px-3 py-2 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                >
+                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
+                    {onPlan ? 'In meals' : 'Add to meals'}
+                  </Text>
+                </Pressable>
+              </View>
+            </Card>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}

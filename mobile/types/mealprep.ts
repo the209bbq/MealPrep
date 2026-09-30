@@ -141,6 +141,17 @@ export interface GroceryListItem {
   sourceRecipeIds: string[];
 }
 
+/** User meal plan row (kitchen slug and/or RecipeAPI id with display snapshot). */
+export interface MealPlanItem {
+  id: string;
+  recipeSlug: string | null;
+  recipeApiId: number | null;
+  title: string;
+  imageUrl: string | null;
+  made: boolean;
+  addedAt: string;
+}
+
 export interface MealPrepSummary {
   date: string;
   mealsPlanned: number;

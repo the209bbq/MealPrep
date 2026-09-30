@@ -6,6 +6,8 @@ export interface PantryVisionDetection {
   unit: string;
   category: PantryCategory;
   confidence: number;
+  /** From pantry-vision Edge Function when deployed; client falls back to keyword mapping. */
+  storage?: PantryStorageLocation | string;
 }
 
 export interface PantryVisionResponse {

@@ -10,8 +10,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card } from '../../components/Card';
+import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
+import { scoreDiscoveryRecipeAgainstPantry } from '../../lib/recipeDiscovery/scorePantry';
 import {
   fetchDiscoveryRecipeDetail,
   RecipeDiscoveryAuthError,
@@ -24,7 +26,16 @@ export default function DiscoverRecipeDetailScreen() {
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const recipeId = Number.parseInt(String(idParam), 10);
   const insets = useSafeAreaInsets();
-  const { session, isAdmin, importDiscoveredRecipe, recipes, profile } = useApp();
+  const {
+    session,
+    isAdmin,
+    importDiscoveredRecipe,
+    recipes,
+    profile,
+    pantry,
+    toggleMealPlanDiscoveryRecipe,
+    isOnMealPlan,
+  } = useApp();
   const accessToken = session?.access_token ?? null;
 
   const [recipe, setRecipe] = useState<RecipeDiscoveryListItem | null>(null);
@@ -116,6 +127,7 @@ export default function DiscoverRecipeDetailScreen() {
             {recipe.carbs != null ? ` · ${recipe.carbs}g carbs` : ''}
             {recipe.fat != null ? ` · ${recipe.fat}g fat` : ''}
           </Text>
+          <RecipePantryMatchBadge match={scoreDiscoveryRecipeAgainstPantry(recipe, pantry)} />
 
           <Card title="Ingredients" className="mt-4">
             {recipe.ingredients.map((ing) => (
@@ -146,9 +158,18 @@ export default function DiscoverRecipeDetailScreen() {
           {error ? <Text className="mt-3 text-sm text-danger">{error}</Text> : null}
 
           <Pressable
+            onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
+            className={`mt-6 rounded-xl px-4 py-4 ${isOnMealPlan({ recipeApiId: recipeId }) ? 'bg-sand' : 'bg-slate'}`}
+          >
+            <Text className="text-center text-base font-bold text-on-emerald">
+              {isOnMealPlan({ recipeApiId: recipeId }) ? 'Remove from meals to make' : 'Add to meals'}
+            </Text>
+          </Pressable>
+
+          <Pressable
             onPress={() => void onImport()}
             disabled={importing || imported || alreadyInLibrary}
-            className={`mt-6 rounded-xl px-4 py-4 ${imported || alreadyInLibrary ? 'bg-sand' : 'bg-emerald'}`}
+            className={`mt-3 rounded-xl px-4 py-4 ${imported || alreadyInLibrary ? 'bg-sand' : 'bg-emerald'}`}
           >
             <Text className={`text-center text-base font-bold ${imported || alreadyInLibrary ? 'text-muted' : 'text-on-emerald'}`}>
               {importing

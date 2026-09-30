@@ -22,7 +22,7 @@ export default function GroceryScreen() {
     grocery,
     recipes,
     toggleGroceryItem,
-    selectedRecipeIds,
+    plannedRecipeIds,
     featureFlags,
     refreshGrocery,
     addManualGroceryItem,
@@ -95,7 +95,7 @@ export default function GroceryScreen() {
             <View className="h-full rounded-full bg-emerald-accent" style={{ width: `${progressPct}%` }} />
           </View>
           <Text className="mt-2 text-sm text-emerald-light">
-            {selectedRecipeIds.length} recipe(s) in your meal plan
+            {plannedRecipeIds.length} recipe(s) in your meal plan
             {featureFlags.grocerySync ? ' · syncs with pantry' : ' · grocery sync is off'}
           </Text>
           <View className="mt-4 flex-row flex-wrap gap-2">
