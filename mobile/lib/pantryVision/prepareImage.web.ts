@@ -55,8 +55,16 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
     throw new Error('Photo is still too large after resizing. Try a closer crop.');
   }
 
+  const previewBlob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Could not encode preview image'))),
+      'image/jpeg',
+      quality,
+    );
+  });
+
   return {
-    uri: dataUrl,
+    uri: URL.createObjectURL(previewBlob),
     mimeType: 'image/jpeg',
     base64,
     byteLength,

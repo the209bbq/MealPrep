@@ -104,6 +104,9 @@ export const PHOTO_SCAN = {
   notConfiguredMessage:
     'Pantry photo scan is not set up yet. Deploy the pantry-vision Edge Function and add GEMINI_API_KEY in Supabase secrets.',
   rateLimitMessage: 'Too many scans — wait a minute and try again.',
+  /** Max wait for saving reviewed scan items to Supabase (web/PWA). */
+  saveTimeoutMs: 15_000,
+  saveTimeoutMessage: 'Saving pantry items timed out. Check your connection and try again.',
 } as const;
 
 export const getPantryVisionUrl = (): string => {

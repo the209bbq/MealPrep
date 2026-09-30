@@ -71,6 +71,7 @@ export default function PantryScreen() {
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [modelLabel, setModelLabel] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
 
@@ -173,15 +174,20 @@ export default function PantryScreen() {
 
   async function handleSaveReview() {
     setSaving(true);
+    setSaveError(null);
     try {
       await savePantryScanReview(reviewItems);
       setPhase('idle');
       setReviewItems([]);
       setPreviewUri(null);
       setScanError(null);
+      setSaveError(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not save pantry items';
-      Alert.alert('Save failed', message);
+      setSaveError(message);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Save failed', message);
+      }
     } finally {
       setSaving(false);
     }
@@ -389,6 +395,7 @@ export default function PantryScreen() {
               onCancel={handleCancelReview}
               saving={saving}
               modelLabel={modelLabel}
+              saveError={saveError}
             />
           ) : null}
 

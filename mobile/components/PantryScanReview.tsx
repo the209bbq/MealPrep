@@ -21,6 +21,7 @@ interface PantryScanReviewProps {
   onCancel: () => void;
   saving: boolean;
   modelLabel?: string;
+  saveError?: string | null;
 }
 
 export function PantryScanReview({
@@ -30,6 +31,7 @@ export function PantryScanReview({
   onCancel,
   saving,
   modelLabel,
+  saveError,
 }: PantryScanReviewProps) {
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
   const [batchLocation, setBatchLocation] = useState<PantryStorageLocation>(DEFAULT_PANTRY_STORAGE_LOCATION);
@@ -179,6 +181,10 @@ export function PantryScanReview({
 
       {!PHOTO_SCAN.enabled ? (
         <Text className="mt-2 text-xs text-muted">Photo scan is disabled in feature flags.</Text>
+      ) : null}
+
+      {saveError ? (
+        <Text className="mt-2 text-xs font-semibold text-danger">{saveError}</Text>
       ) : null}
     </View>
   );
