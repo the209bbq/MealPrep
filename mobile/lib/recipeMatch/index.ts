@@ -16,6 +16,7 @@ export {
   scoreRecipeAgainstPantry,
   topPantryRecipeRecommendations,
   type MatchedIngredient,
+  type PantryMatchFilterOptions,
   type PantryMatchIndex,
   type RecipePantryFilterMode,
   type RecipePantryMatch,

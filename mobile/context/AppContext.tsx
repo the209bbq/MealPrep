@@ -24,7 +24,7 @@ import {
 } from '../lib/recipeMatch';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
-import { readJson, writeJson } from '../lib/storage';
+import { readJson, removeStorageKey, writeJson } from '../lib/storage';
 import { getSupabase } from '../lib/supabase';
 import { recipeApiToAppRecipe } from '../lib/recipeDiscovery/mapToAppRecipe';
 import { isRecipeApiInLibrary, recipeApiMasterSlug, recipeApiPersonalSlug } from '../lib/recipeDiscovery/slugs';
@@ -159,7 +159,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [role, setRole] = useState<UserRole>(() => readJson(STORAGE_KEYS.role, 'admin'));
   const [pantry, setPantry] = useState<PantryItem[]>(() =>
-    normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY)),
+    demoMode
+      ? normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY))
+      : [],
   );
   const [recipes, setRecipes] = useState<Recipe[]>(() => readJson(STORAGE_KEYS.recipes, MOCK_RECIPES));
   const [grocery, setGrocery] = useState<GroceryListItem[]>(() => readJson(STORAGE_KEYS.grocery, []));
@@ -204,6 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!supabase || !userId) return;
     const bundle = await fetchLiveBundle(supabase, userId);
     if (bundle.profile) setLiveProfile(bundle.profile);
+    removeStorageKey(STORAGE_KEYS.pantry);
     setPantry(normalizePantryItemList(bundle.pantry));
     setRecipes(bundle.recipes.length > 0 ? bundle.recipes : []);
     setGrocery(bundle.grocery);
@@ -238,6 +241,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!demoMode && !userId) {
         setLiveProfile(null);
         setLiveAnalytics(null);
+        setPantry([]);
       }
       return;
     }
@@ -376,6 +380,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     setLiveProfile(null);
     setLiveAnalytics(null);
+    removeStorageKey(STORAGE_KEYS.pantry);
+    setPantry([]);
   }, [supabase]);
 
   const isOnMealPlan = useCallback(
@@ -762,6 +768,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const clearAllPantry = useCallback(async () => {
     if (pantry.length === 0) return;
     if (demoMode) {
+      removeStorageKey(STORAGE_KEYS.pantry);
       setPantry([]);
       return;
     }
@@ -769,6 +776,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Sign in to update pantry.');
     }
     await deleteAllPantryItems(supabase, userId);
+    removeStorageKey(STORAGE_KEYS.pantry);
     setPantry([]);
   }, [demoMode, pantry.length, supabase, userId]);
 

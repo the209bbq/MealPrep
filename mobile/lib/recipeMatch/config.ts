@@ -18,6 +18,7 @@ export const PANTRY_STAPLES = [
 export const INGREDIENT_SYNONYMS: Record<string, string[]> = {
   'green onion': ['scallion', 'scallions', 'spring onion', 'spring onions'],
   'peanut butter': ['skippy peanut butter', 'jif peanut butter', 'creamy peanut butter'],
+  'ranch dressing': ['kraft ranch', 'ranch', 'ranch drizzle'],
   broccoli: ['broccoli florets', 'fresh broccoli'],
   rice: ['jasmine rice', 'white rice', 'steamed rice'],
   chicken: ['chicken breast', 'boneless chicken breast', 'grilled chicken'],
