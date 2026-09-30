@@ -5,6 +5,7 @@ import type {
   ThemeTokens,
   UserRole,
 } from '../types/mealprep';
+import { SMART_SHOP_STORES } from './smartShop';
 
 export const APP_NAME = '209 Meal Prep';
 export const APP_SHORT_NAME = 'Meal Prep';
@@ -66,14 +67,11 @@ export const FEATURE_FLAG_DEFAULTS: FeatureFlags = {
 
 /** Smart Shop / store pricing (no secrets in repo — use env + optional Supabase Edge Function). */
 export const SMART_SHOP = {
-  defaultRadiusMiles: 15,
-  maxSavedStores: 5,
-  krogerClientId: process.env.EXPO_PUBLIC_KROGER_CLIENT_ID ?? '',
-  /** Override full URL; default is `${SUPABASE_URL}/functions/v1/kroger-deals` when Supabase is configured. */
+  defaultRadiusMiles: SMART_SHOP_STORES.defaultRadiusMiles,
+  maxSavedStores: SMART_SHOP_STORES.maxSavedStores,
+  /** Optional override; default is `${SUPABASE_URL}/functions/v1/kroger-deals`. */
   krogerProxyUrl: process.env.EXPO_PUBLIC_KROGER_PROXY_URL ?? '',
 } as const;
-
-export const isKrogerConfigured = (): boolean => SMART_SHOP.krogerClientId.trim().length > 0;
 
 /** RecipeAPI.io discovery (secret stays on Supabase Edge Function `recipeapi-proxy`). */
 export const RECIPE_DISCOVERY = {

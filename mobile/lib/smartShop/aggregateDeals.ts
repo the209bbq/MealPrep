@@ -23,7 +23,13 @@ export function formatMoney(value: number): string {
 
 export function dealsSummaryLabel(result: DealsSearchResult): string {
   if (result.mode === 'sample') {
-    return `Sample deals · ${result.providerLabel}`;
+    return `SAMPLE deals · ${result.providerLabel}`;
   }
-  return `Live prices · ${result.providerLabel}`;
+  return `Live Kroger prices · ${result.providerLabel}`;
+}
+
+export function pricingBadgeForStore(store: import('../deals/types').StoreLocation): string {
+  if (store.pricingSource === 'kroger') return 'Kroger prices';
+  if (store.pricingSource === 'sample') return 'Sample prices';
+  return 'Prices not available';
 }

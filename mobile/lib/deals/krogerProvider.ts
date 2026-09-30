@@ -1,57 +1,60 @@
-import { getKrogerProxyUrl, isKrogerConfigured, SMART_SHOP, SUPABASE_ANON_KEY } from '../../config/appConfig';
-import type { FetchDealsParams, NearbyStoresParams, PricingProvider, StoreLocation } from './types';
+import { callKrogerProxy, fetchKrogerLocations, isKrogerServerConfigured, toKrogerStoreLocation } from './krogerClient';
+import { isKrogerProxyAvailable } from './krogerAvailability';
+import type { FetchDealsParams, NearbyStoresParams, PricingProvider } from './types';
 
-interface KrogerProxyResponse {
-  stores?: StoreLocation[];
-  result?: Omit<import('./types').DealsSearchResult, 'mode' | 'providerId' | 'providerLabel'>;
-  error?: string;
-}
-
-async function callKrogerProxy(body: Record<string, unknown>): Promise<KrogerProxyResponse> {
-  const url = getKrogerProxyUrl();
-  if (!url) throw new Error('Kroger proxy URL is not configured');
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (SUPABASE_ANON_KEY.trim()) {
-    headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      clientId: SMART_SHOP.krogerClientId.trim(),
-      ...body,
-    }),
+export async function fetchKrogerNearbyStores(params: NearbyStoresParams) {
+  return fetchKrogerLocations({
+    lat: params.lat,
+    lng: params.lng,
+    zip: params.zip,
+    radiusMiles: params.radiusMiles,
   });
-
-  const payload = (await response.json()) as KrogerProxyResponse;
-  if (!response.ok) {
-    throw new Error(payload.error ?? `Kroger proxy failed (${response.status})`);
-  }
-  return payload;
 }
 
 export const krogerPricingProvider: PricingProvider = {
   id: 'kroger',
   label: 'Kroger',
-  isConfigured: () => isKrogerConfigured() && getKrogerProxyUrl().length > 0,
-  async findNearbyStores(params: NearbyStoresParams): Promise<StoreLocation[]> {
-    const data = await callKrogerProxy({
-      action: 'stores',
-      lat: params.lat,
-      lng: params.lng,
-      zip: params.zip,
-      radiusMiles: params.radiusMiles ?? SMART_SHOP.defaultRadiusMiles,
-    });
-    return data.stores ?? [];
-  },
+  isConfigured: () => isKrogerProxyAvailable(),
   async fetchDeals(params: FetchDealsParams) {
+    const krogerStores = params.stores
+      .filter((s) => s.pricingSource === 'kroger' && (s.krogerLocationId || s.id))
+      .map(toKrogerStoreLocation);
+
+    if (krogerStores.length === 0) {
+      return {
+        stores: params.stores,
+        deals: [],
+        storeTotals: params.stores.map((s) => ({
+          storeId: s.id,
+          subtotal: 0,
+          itemCount: 0,
+          missingCount: params.items.length,
+          pricesAvailable: false,
+        })),
+        suggestion: {
+          kind: 'single_store',
+          label: 'No Kroger locations selected',
+          storeIds: [],
+          estimatedTotal: 0,
+          note: 'Pick a Kroger-family store for live prices.',
+        },
+      };
+    }
+
     const data = await callKrogerProxy({
       action: 'deals',
-      stores: params.stores,
+      stores: krogerStores.map((s) => ({
+        id: s.krogerLocationId ?? s.id,
+        name: s.name,
+        chain: s.chain,
+        addressLine: s.addressLine,
+        city: s.city,
+        state: s.state,
+        zip: s.zip,
+        lat: s.lat,
+        lng: s.lng,
+        url: s.url,
+      })),
       items: params.items.map((item) => ({
         id: item.id,
         name: item.name,
@@ -59,6 +62,10 @@ export const krogerPricingProvider: PricingProvider = {
         unit: item.unit,
       })),
     });
+
+    if (!isKrogerServerConfigured(data)) {
+      throw new Error(data.error ?? 'Kroger not configured on server');
+    }
     if (!data.result) throw new Error('Kroger proxy returned no deal data');
     return data.result;
   },

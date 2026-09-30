@@ -1,57 +1,23 @@
 # Smart Shop (store deals)
 
-Smart Shop compares prices for items on your grocery list. Without Kroger credentials it runs in **sample deals** mode (clearly labeled in the UI).
+Smart Shop finds **nearby grocery stores** (OpenStreetMap) and compares prices for your grocery list. Kroger weekly specials run through the **`kroger-deals` Supabase Edge Function** (no Kroger keys in the web build). If that function returns **503 not configured**, the app shows clearly labeled **SAMPLE deals** and plain OSM stores.
 
-## Turn on live Kroger deals (free)
+## Owner setup (no Supabase CLI)
 
-1. **Kroger Developer account (free)**  
-   - Sign up at [https://developer.kroger.com/](https://developer.kroger.com/)  
-   - Create an application and note the **Client ID** and **Client Secret**.  
-   - Kroger covers Kroger-family banners (Kroger, Ralphs, Fred Meyer, etc.). It does **not** include Save Mart, FoodMaxx, or other non-Kroger chains.
+1. **SQL** — run in Supabase SQL editor:
 
-2. **App environment (public, safe in the client)**  
-   In `mobile/.env` (or your CI/GitHub Pages build secrets):
+   `mobile/supabase/migrations/20260930400000_smart_shop_location_stores.sql`
 
-   ```env
-   EXPO_PUBLIC_KROGER_CLIENT_ID=your_kroger_client_id
-   EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-   ```
+2. **Kroger Developer (free)** — [https://developer.kroger.com/](https://developer.kroger.com/) → app with **Product** + **Location** scopes.
 
-   Optional override if the function URL differs:
+3. **Supabase secrets** — `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`
 
-   ```env
-   EXPO_PUBLIC_KROGER_PROXY_URL=https://your-project.supabase.co/functions/v1/kroger-deals
-   ```
+4. **Paste-deploy** `mobile/supabase/functions/kroger-deals/index.ts` as function `kroger-deals` with **Verify JWT ON**.
 
-   Never commit the **client secret** to the repo or expose it in the web bundle.
-
-3. **Supabase Edge Function (keeps the secret server-side)**  
-   From the repo root (with [Supabase CLI](https://supabase.com/docs/guides/cli) installed and logged in):
-
-   ```bash
-   cd mobile
-   supabase secrets set KROGER_CLIENT_ID=your_kroger_client_id KROGER_CLIENT_SECRET=your_kroger_client_secret
-   supabase functions deploy kroger-deals --project-ref YOUR_PROJECT_REF
-   ```
-
-   The function source is `mobile/supabase/functions/kroger-deals/index.ts`.  
-   The mobile app calls it with the anon key in the `Authorization` header (standard Supabase pattern).
-
-4. **Feature flag**  
-   Smart Shop is enabled by default (`smartShop` in `config/appConfig.ts`). Admins can toggle it in the Admin tab when using Supabase feature flags.
-
-5. **Rebuild / redeploy web**  
-
-   ```bash
-   cd mobile && npm run export:web
-   ```
-
-   Deploy the `dist/` output to GitHub Pages (or your host) so the PWA picks up env vars from the build.
+No GitHub Pages env changes beyond existing `EXPO_PUBLIC_SUPABASE_URL` / anon key.
 
 ## Architecture
 
-- Typed providers live in `lib/deals/` (`PricingProvider` interface).  
-- `sampleProvider` is always available for demos.  
-- `krogerProvider` calls the Edge Function when `EXPO_PUBLIC_KROGER_CLIENT_ID` and Supabase URL are set.  
-- Saved ZIP, GPS coords, and “My stores” persist locally via `lib/smartShop/storage.ts`.
+- `lib/stores/` — Nominatim (ZIP + `email` param on web), Overpass (graceful fallback on rate limits).
+- `lib/deals/` — always calls `kroger-deals` for Kroger **locations** and **deals** when Supabase is configured; 503 → SAMPLE mode.
+- `config/smartShop.ts` — radius, endpoints, contact email for Nominatim.
