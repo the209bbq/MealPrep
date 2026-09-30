@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
-import { APP_NAME, APP_TAGLINE, isDemoMode } from '../../config/appConfig';
+import { APP_NAME, APP_TAGLINE, THEME, isDemoMode } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 
 const HIGHLIGHTS = [
@@ -36,7 +36,7 @@ export default function HomeScreen() {
             onPress={() => router.push(action.route)}
             className="flex-1 items-center rounded-2xl border border-border bg-card py-4"
           >
-            <Ionicons name={action.icon} size={24} color="#047857" />
+            <Ionicons name={action.icon} size={24} color={THEME.emerald} />
             <Text className="mt-2 text-sm font-bold text-ink">{action.label}</Text>
           </Pressable>
         ))}
@@ -62,7 +62,7 @@ export default function HomeScreen() {
       {HIGHLIGHTS.map((item) => (
         <Card key={item.title} className="mb-3">
           <View className="flex-row items-start gap-3">
-            <Ionicons name={item.icon} size={22} color="#334155" />
+            <Ionicons name={item.icon} size={22} color={THEME.slate} />
             <View className="flex-1">
               <Text className="font-bold text-ink">{item.title}</Text>
               <Text className="mt-1 text-sm text-muted">{item.body}</Text>

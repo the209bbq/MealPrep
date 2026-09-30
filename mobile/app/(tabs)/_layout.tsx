@@ -3,7 +3,7 @@ import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { AppHeader } from '../../components/AppHeader';
 import { MaintenanceScreen } from '../../components/MaintenanceScreen';
-import { TABS } from '../../config/appConfig';
+import { TABS, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 
 export default function TabsLayout() {
@@ -24,11 +24,11 @@ export default function TabsLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#047857',
-          tabBarInactiveTintColor: '#64748B',
+          tabBarActiveTintColor: THEME.emerald,
+          tabBarInactiveTintColor: THEME.slateMuted,
           tabBarStyle: {
-            backgroundColor: '#FFFcf7',
-            borderTopColor: '#E7E0D6',
+            backgroundColor: THEME.card,
+            borderTopColor: THEME.border,
             height: 60,
             paddingBottom: 6,
             paddingTop: 6,

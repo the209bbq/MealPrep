@@ -77,14 +77,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const maintenanceActive = featureFlags.maintenanceMode && !isAdmin;
 
   const refreshGrocery = useCallback(() => {
-    const next = buildGroceryList(recipes, selectedRecipeIds, pantry, servingOverrides, grocery);
-    setGrocery(next);
-    writeJson(STORAGE_KEYS.grocery, next);
-  }, [grocery, pantry, recipes, selectedRecipeIds, servingOverrides]);
+    if (!featureFlags.grocerySync) return;
+    setGrocery((prev) => {
+      const next = buildGroceryList(recipes, selectedRecipeIds, pantry, servingOverrides, prev);
+      writeJson(STORAGE_KEYS.grocery, next);
+      return next;
+    });
+  }, [featureFlags.grocerySync, pantry, recipes, selectedRecipeIds, servingOverrides]);
 
   useEffect(() => {
     refreshGrocery();
-  }, [pantry, recipes, selectedRecipeIds, servingOverrides]);
+  }, [pantry, recipes, selectedRecipeIds, servingOverrides, featureFlags.grocerySync, refreshGrocery]);
 
   useEffect(() => {
     writeJson(STORAGE_KEYS.role, role);
