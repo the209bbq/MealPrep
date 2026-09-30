@@ -189,11 +189,23 @@ create policy feature_flags_admin_write on public.feature_flags
 
 drop policy if exists pantry_owner on public.pantry_items;
 create policy pantry_owner on public.pantry_items
-  for all using (auth.uid() = user_id);
+  for all
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 drop policy if exists pantry_admin_read on public.pantry_items;
 create policy pantry_admin_read on public.pantry_items
-  for select using (public.is_admin());
+  for select
+  to authenticated
+  using (public.is_admin());
+
+drop policy if exists pantry_admin_write on public.pantry_items;
+create policy pantry_admin_write on public.pantry_items
+  for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
 
 drop policy if exists recipes_read on public.recipes;
 create policy recipes_read on public.recipes
