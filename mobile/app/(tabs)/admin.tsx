@@ -11,7 +11,14 @@ export default function AdminScreen() {
     profile,
     isAdmin,
     demoMode,
+    session,
+    authReady,
+    authError,
     setDemoRole,
+    signInWithPassword,
+    signUpWithPassword,
+    signInWithMagicLink,
+    signOut,
     featureFlags,
     setFeatureFlag,
     seedPantry,
@@ -23,6 +30,28 @@ export default function AdminScreen() {
   const recipe = recipes.find((r) => r.id === editId) ?? recipes[0];
   const [editName, setEditName] = useState(recipe?.name ?? '');
   const [editDesc, setEditDesc] = useState(recipe?.description ?? '');
+
+  if (!demoMode && !session) {
+    if (!authReady) {
+      return (
+        <ScrollView className="flex-1 bg-paper px-4 pb-8">
+          <Card className="mt-4" title="Sign in" subtitle="Connecting to Supabase…">
+            <Text className="mt-2 text-sm text-muted">Loading authentication.</Text>
+          </Card>
+        </ScrollView>
+      );
+    }
+    return (
+      <ScrollView className="flex-1 bg-paper px-4 pb-8">
+        <AuthPanel
+          authError={authError}
+          onSignIn={signInWithPassword}
+          onSignUp={signUpWithPassword}
+          onMagicLink={signInWithMagicLink}
+        />
+      </ScrollView>
+    );
+  }
 
   if (!isAdmin) {
     return (
@@ -41,7 +70,13 @@ export default function AdminScreen() {
           <Card className="mt-4" title="Demo mode" subtitle="Switch role without Supabase">
             <RoleToggle current={profile.role} onChange={setDemoRole} />
           </Card>
-        ) : null}
+        ) : (
+          <Card className="mt-4" title="Account">
+            <Pressable onPress={() => void signOut()} className="mt-2 rounded-xl border border-border bg-card px-4 py-3">
+              <Text className="text-center font-bold text-slate">Sign out</Text>
+            </Pressable>
+          </Card>
+        )}
       </ScrollView>
     );
   }
@@ -52,6 +87,12 @@ export default function AdminScreen() {
         <Text className="mt-2 text-sm text-muted">
           Kitchen admin tools mirror the softball app&apos;s league admin pattern — global data, seeds, and toggles.
         </Text>
+        {!demoMode ? (
+          <Pressable onPress={() => void signOut()} className="mt-3 self-start rounded-full border border-border px-4 py-2">
+            <Text className="text-xs font-bold text-muted">Sign out</Text>
+          </Pressable>
+        ) : null}
+        {authError ? <Text className="mt-2 text-sm text-danger">{authError}</Text> : null}
       </Card>
 
       {demoMode || isDemoMode() ? (
@@ -60,7 +101,7 @@ export default function AdminScreen() {
         </Card>
       ) : null}
 
-      <Card className="mt-4" title="Recipe master table" subtitle="Edit global recipes (demo/local)">
+      <Card className="mt-4" title="Recipe master table" subtitle={demoMode ? 'Edit global recipes (demo/local)' : 'Edit global recipes in Supabase'}>
         <Text className="mb-2 text-sm text-muted">Select recipe</Text>
         <View className="mb-3 flex-row flex-wrap gap-2">
           {recipes.map((r) => (
@@ -128,7 +169,7 @@ export default function AdminScreen() {
         ))}
       </Card>
 
-      <Card className="mt-4" title="User analytics" subtitle="Basic counts (demo)">
+      <Card className="mt-4" title="User analytics" subtitle={demoMode ? 'Basic counts (demo)' : 'Live Supabase counts'}>
         <Text className="mt-2 text-sm text-muted">Users: {analytics.userCount} ({analytics.adminCount} admin)</Text>
         <Text className="text-sm text-muted">Pantry items: {analytics.pantryItems}</Text>
         <Text className="text-sm text-muted">Recipes: {analytics.recipes}</Text>
@@ -136,6 +177,105 @@ export default function AdminScreen() {
         <Text className="text-sm text-muted">Last active: {new Date(analytics.lastActiveAt).toLocaleString()}</Text>
       </Card>
     </ScrollView>
+  );
+}
+
+function AuthPanel({
+  authError,
+  onSignIn,
+  onSignUp,
+  onMagicLink,
+}: {
+  authError: string | null;
+  onSignIn: (email: string, password: string) => Promise<void>;
+  onSignUp: (email: string, password: string, name: string) => Promise<void>;
+  onMagicLink: (email: string) => Promise<void>;
+  }) {
+  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function run(action: () => Promise<void>, success: string) {
+    setBusy(true);
+    setStatus(null);
+    try {
+      await action();
+      setStatus(success);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="mt-4" title="Sign in" subtitle="Supabase auth for your kitchen data">
+      <Text className="mt-2 text-sm text-muted">
+        Use email + password or request a magic link. Redirects return to this Admin tab on GitHub Pages.
+      </Text>
+      <View className="mt-4 flex-row gap-2">
+        {(['sign-in', 'sign-up'] as const).map((tab) => (
+          <Pressable
+            key={tab}
+            onPress={() => setMode(tab)}
+            className={`flex-1 rounded-xl px-3 py-2 ${mode === tab ? 'bg-emerald' : 'border border-border bg-card'}`}
+          >
+            <Text className={`text-center text-sm font-bold ${mode === tab ? 'text-on-emerald' : 'text-muted'}`}>
+              {tab === 'sign-in' ? 'Sign in' : 'Create account'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      {mode === 'sign-up' ? (
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+          className="mt-3 rounded-xl border border-border bg-card px-3 py-2 text-ink"
+          placeholder="Display name"
+        />
+      ) : null}
+      <TextInput
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        className="mt-3 rounded-xl border border-border bg-card px-3 py-2 text-ink"
+        placeholder="Email"
+      />
+      <TextInput
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        className="mt-3 rounded-xl border border-border bg-card px-3 py-2 text-ink"
+        placeholder={mode === 'sign-up' ? 'Password (min 6 chars)' : 'Password'}
+      />
+      <Pressable
+        disabled={busy || !email.trim()}
+        onPress={() =>
+          void run(
+            () =>
+              mode === 'sign-in'
+                ? onSignIn(email.trim(), password)
+                : onSignUp(email.trim(), password, name.trim()),
+            mode === 'sign-in' ? 'Signed in.' : 'Check your email if confirmation is required.',
+          )
+        }
+        className={`mt-4 rounded-xl px-4 py-3 ${busy ? 'opacity-60 bg-emerald' : 'bg-emerald'}`}
+      >
+        <Text className="text-center font-bold text-on-emerald">{mode === 'sign-in' ? 'Sign in' : 'Create account'}</Text>
+      </Pressable>
+      <Pressable
+        disabled={busy || !email.trim()}
+        onPress={() => void run(() => onMagicLink(email.trim()), 'Magic link sent — check your email.')}
+        className="mt-3 rounded-xl border border-border bg-card px-4 py-3"
+      >
+        <Text className="text-center font-bold text-slate">Email magic link</Text>
+      </Pressable>
+      {authError ? <Text className="mt-3 text-sm text-danger">{authError}</Text> : null}
+      {status ? <Text className="mt-2 text-sm text-emerald-dark">{status}</Text> : null}
+    </Card>
   );
 }
 
