@@ -59,8 +59,28 @@ export const FEATURE_FLAG_DEFAULTS: FeatureFlags = {
   photoScan: true,
   batchCalculator: true,
   grocerySync: true,
+  smartShop: true,
   maintenanceMode: false,
   recipeMasterEdit: true,
+};
+
+/** Smart Shop / store pricing (no secrets in repo — use env + optional Supabase Edge Function). */
+export const SMART_SHOP = {
+  defaultRadiusMiles: 15,
+  maxSavedStores: 5,
+  krogerClientId: process.env.EXPO_PUBLIC_KROGER_CLIENT_ID ?? '',
+  /** Override full URL; default is `${SUPABASE_URL}/functions/v1/kroger-deals` when Supabase is configured. */
+  krogerProxyUrl: process.env.EXPO_PUBLIC_KROGER_PROXY_URL ?? '',
+} as const;
+
+export const isKrogerConfigured = (): boolean => SMART_SHOP.krogerClientId.trim().length > 0;
+
+export const getKrogerProxyUrl = (): string => {
+  const override = SMART_SHOP.krogerProxyUrl.trim();
+  if (override) return override;
+  const base = SUPABASE_URL.trim().replace(/\/$/, '');
+  if (!base) return '';
+  return `${base}/functions/v1/kroger-deals`;
 };
 
 export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; blurb: string }> = {
@@ -75,6 +95,10 @@ export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; bl
   grocerySync: {
     title: 'Grocery aggregation',
     blurb: 'Build the grocery list from selected recipes minus pantry stock.',
+  },
+  smartShop: {
+    title: 'Smart Shop deals',
+    blurb: 'Compare prices at nearby stores from the Grocery List tab.',
   },
   maintenanceMode: {
     title: 'Maintenance mode',
