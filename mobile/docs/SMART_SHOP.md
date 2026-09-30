@@ -1,57 +1,45 @@
 # Smart Shop (store deals)
 
-Smart Shop compares prices for items on your grocery list. Without Kroger credentials it runs in **sample deals** mode (clearly labeled in the UI).
+Smart Shop finds **real nearby grocery stores** (OpenStreetMap Overpass) and compares prices for your grocery list. Without Kroger API credentials it runs in **SAMPLE deals** mode (clearly labeled in the UI).
 
-## Turn on live Kroger deals (free)
+## Owner setup (no Supabase CLI)
 
-1. **Kroger Developer account (free)**  
-   - Sign up at [https://developer.kroger.com/](https://developer.kroger.com/)  
-   - Create an application and note the **Client ID** and **Client Secret**.  
-   - Kroger covers Kroger-family banners (Kroger, Ralphs, Fred Meyer, etc.). It does **not** include Save Mart, FoodMaxx, or other non-Kroger chains.
+1. **Run SQL** in the Supabase SQL editor (idempotent):
 
-2. **App environment (public, safe in the client)**  
-   In `mobile/.env` (or your CI/GitHub Pages build secrets):
+   `mobile/supabase/migrations/20260930400000_smart_shop_location_stores.sql`
+
+   Adds home location columns on `profiles` and `user_favorite_stores` with RLS.
+
+2. **Kroger Developer account (free)**  
+   - [https://developer.kroger.com/](https://developer.kroger.com/)  
+   - Create an app with **Product** and **Location** scopes.  
+   - Note **Client ID** and **Client Secret**.
+
+3. **Supabase Edge Function secrets**  
+   In Dashboard → Edge Functions → Secrets:
+
+   - `KROGER_CLIENT_ID`
+   - `KROGER_CLIENT_SECRET`
+
+4. **Deploy `kroger-deals`**  
+   Paste the full contents of `mobile/supabase/functions/kroger-deals/index.ts` into the dashboard editor.  
+   Name: `kroger-deals`. Leave **Verify JWT** ON.
+
+5. **Web/PWA env** (GitHub Pages build or `mobile/.env`):
 
    ```env
-   EXPO_PUBLIC_KROGER_CLIENT_ID=your_kroger_client_id
-   EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   EXPO_PUBLIC_SUPABASE_URL=https://okkwapgyadpaifpmkcex.supabase.co
    EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   EXPO_PUBLIC_KROGER_CLIENT_ID=your_kroger_client_id
    ```
 
-   Optional override if the function URL differs:
+   Never put the client **secret** in the repo or web bundle.
 
-   ```env
-   EXPO_PUBLIC_KROGER_PROXY_URL=https://your-project.supabase.co/functions/v1/kroger-deals
-   ```
-
-   Never commit the **client secret** to the repo or expose it in the web bundle.
-
-3. **Supabase Edge Function (keeps the secret server-side)**  
-   From the repo root (with [Supabase CLI](https://supabase.com/docs/guides/cli) installed and logged in):
-
-   ```bash
-   cd mobile
-   supabase secrets set KROGER_CLIENT_ID=your_kroger_client_id KROGER_CLIENT_SECRET=your_kroger_client_secret
-   supabase functions deploy kroger-deals --project-ref YOUR_PROJECT_REF
-   ```
-
-   The function source is `mobile/supabase/functions/kroger-deals/index.ts`.  
-   The mobile app calls it with the anon key in the `Authorization` header (standard Supabase pattern).
-
-4. **Feature flag**  
-   Smart Shop is enabled by default (`smartShop` in `config/appConfig.ts`). Admins can toggle it in the Admin tab when using Supabase feature flags.
-
-5. **Rebuild / redeploy web**  
-
-   ```bash
-   cd mobile && npm run export:web
-   ```
-
-   Deploy the `dist/` output to GitHub Pages (or your host) so the PWA picks up env vars from the build.
+6. **Rebuild web**: `cd mobile && npm run export:web`
 
 ## Architecture
 
-- Typed providers live in `lib/deals/` (`PricingProvider` interface).  
-- `sampleProvider` is always available for demos.  
-- `krogerProvider` calls the Edge Function when `EXPO_PUBLIC_KROGER_CLIENT_ID` and Supabase URL are set.  
-- Saved ZIP, GPS coords, and “My stores” persist locally via `lib/smartShop/storage.ts`.
+- `lib/stores/` — Nominatim (ZIP → coords), Overpass (nearby supermarkets), optional Kroger location merge.  
+- `lib/deals/` — `PricingProvider` interface; Kroger live prices + sample fallback.  
+- `config/smartShop.ts` — radius, endpoints, User-Agent (OSM policy).  
+- Location and favorite stores sync to Supabase when signed in; local cache for guests/demo.

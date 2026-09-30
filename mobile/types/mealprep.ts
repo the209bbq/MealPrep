@@ -36,6 +36,10 @@ export interface UserProfile {
   photoUrl: string | null;
   householdSize: number;
   dietaryNotes: string;
+  homeZip?: string;
+  homeLat?: number;
+  homeLng?: number;
+  homeLocationUpdatedAt?: string;
   createdAt: string;
 }
 

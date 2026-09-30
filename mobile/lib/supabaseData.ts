@@ -26,6 +26,10 @@ type ProfileRow = {
   photo_url: string | null;
   household_size: number;
   dietary_notes: string | null;
+  home_zip: string | null;
+  home_lat: number | null;
+  home_lng: number | null;
+  home_location_updated_at: string | null;
   created_at: string;
 };
 
@@ -110,6 +114,10 @@ export function mapProfile(row: ProfileRow): UserProfile {
     photoUrl: row.photo_url,
     householdSize: row.household_size,
     dietaryNotes: row.dietary_notes ?? '',
+    homeZip: row.home_zip ?? undefined,
+    homeLat: row.home_lat ?? undefined,
+    homeLng: row.home_lng ?? undefined,
+    homeLocationUpdatedAt: row.home_location_updated_at ?? undefined,
     createdAt: row.created_at,
   };
 }
