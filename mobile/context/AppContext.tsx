@@ -170,7 +170,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       imageUrl: null,
       made: false,
       addedAt: now,
-    }));
+    };
+    });
   });
   const [servingOverrides, setServingOverrides] = useState<Record<string, number>>(() =>
     readJson(STORAGE_KEYS.servingOverrides, {}),
