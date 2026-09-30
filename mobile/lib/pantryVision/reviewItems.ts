@@ -1,3 +1,7 @@
+import {
+  DEFAULT_PANTRY_STORAGE_LOCATION,
+  suggestStorageLocationForCategory,
+} from '../../config/pantryStorage';
 import type { PantryItem, Recipe } from '../../types/mealprep';
 import { buildIngredientCatalog, matchDetectionToCatalog } from './matchIngredients';
 import type { PantryScanReviewItem, PantryVisionDetection } from './types';
@@ -13,16 +17,17 @@ export function detectionsToReviewItems(
   const stamp = Date.now();
   return detections.map((detection, index) => {
     const match = matchDetectionToCatalog(detection, catalog);
+    const category = match.category;
     return {
       key: `review-${stamp}-${index}`,
       enabled: true,
       name: match.name,
       quantity: detection.quantity,
       unit: match.unit,
-      category: match.category,
+      category,
       confidence: detection.confidence,
       ingredientId: match.ingredientId,
-      location: 'Pantry scan',
+      location: suggestStorageLocationForCategory(category),
       photoUri,
       isDemoSample,
     };
@@ -40,9 +45,23 @@ export function reviewItemsToPantryItems(items: PantryScanReviewItem[]): PantryI
       category: item.category,
       quantity: item.quantity,
       unit: item.unit.trim() || 'each',
-      location: item.location.trim() || 'Pantry scan',
+      location: item.location ?? DEFAULT_PANTRY_STORAGE_LOCATION,
       photoUri: item.photoUri,
       expiresOn: null,
       updatedAt: now,
     }));
+}
+
+export function applyBatchStorageLocation(
+  items: PantryScanReviewItem[],
+  location: PantryScanReviewItem['location'],
+): PantryScanReviewItem[] {
+  return items.map((item) => ({ ...item, location }));
+}
+
+export function applyCategoryDefaultsToReviewLocations(items: PantryScanReviewItem[]): PantryScanReviewItem[] {
+  return items.map((item) => ({
+    ...item,
+    location: suggestStorageLocationForCategory(item.category),
+  }));
 }

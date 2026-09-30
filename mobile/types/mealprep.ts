@@ -1,6 +1,9 @@
 export const USER_ROLES = ['admin', 'member'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+import type { PantryStorageLocation } from '../config/pantryStorage';
+export type { PantryStorageLocation } from '../config/pantryStorage';
+
 export const PANTRY_CATEGORIES = [
   'spices',
   'meats',
@@ -50,7 +53,7 @@ export interface PantryItem {
   category: PantryCategory;
   quantity: number;
   unit: string;
-  location: string;
+  location: PantryStorageLocation;
   photoUri: string | null;
   expiresOn: string | null;
   updatedAt: string;
