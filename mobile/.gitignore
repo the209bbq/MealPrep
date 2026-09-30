@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# generated PWA assets (see npm run generate:pwa)
+/public/icons/
+/public/manifest.webmanifest

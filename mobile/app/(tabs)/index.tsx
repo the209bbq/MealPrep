@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
+import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { APP_NAME, APP_TAGLINE, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 
@@ -16,6 +17,8 @@ export default function HomeScreen() {
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8" contentContainerStyle={{ paddingBottom: 24 }}>
+      <InstallAppBanner />
+
       <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-8">
         <Text className="text-xs font-bold uppercase tracking-widest text-emerald-light">{APP_NAME}</Text>
         <Text className="mt-2 text-3xl font-bold leading-tight text-on-emerald">Your smart kitchen command center</Text>

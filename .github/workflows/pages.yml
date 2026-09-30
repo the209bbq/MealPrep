@@ -38,7 +38,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_PCMqSfDjdX6J55lc97km1g_I7U5n-pD
         run: |
           npm ci
-          npx expo export -p web
+          npm run export:web
       - name: Assemble site artifact
         run: |
           set -euo pipefail
