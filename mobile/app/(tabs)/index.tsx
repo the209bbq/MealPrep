@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
+import { MealsToMakePanel } from '../../components/MealsToMakePanel';
 import { CookFromPantryCard } from '../../components/RecipePantryMatch';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { APP_NAME, APP_TAGLINE, THEME } from '../../config/appConfig';
@@ -14,7 +15,16 @@ const HIGHLIGHTS = [
 ];
 
 export default function HomeScreen() {
-  const { summary, demoMode, profile, pantryRecipeRecommendations } = useApp();
+  const {
+    summary,
+    demoMode,
+    profile,
+    pantryRecipeRecommendations,
+    mealPlan,
+    removeMealPlanItem,
+    setMealPlanItemMade,
+    addMissingForPlannedMealsToGrocery,
+  } = useApp();
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8" contentContainerStyle={{ paddingBottom: 24 }}>
@@ -61,6 +71,13 @@ export default function HomeScreen() {
           ))}
         </View>
       </Card>
+
+      <MealsToMakePanel
+        items={mealPlan}
+        onRemove={(id) => void removeMealPlanItem(id)}
+        onToggleMade={(id, made) => void setMealPlanItemMade(id, made)}
+        onAddMissingToGrocery={addMissingForPlannedMealsToGrocery}
+      />
 
       <CookFromPantryCard
         recommendations={pantryRecipeRecommendations}

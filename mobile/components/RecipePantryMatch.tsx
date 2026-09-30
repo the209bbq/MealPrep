@@ -49,7 +49,7 @@ export function RecipePantryMatchBadge({ match }: { match: RecipePantryMatch | u
   return (
     <View className={`mt-2 self-start rounded-full px-2.5 py-1 ${ready ? 'bg-emerald-light' : 'bg-sand'}`}>
       <Text className={`text-xs font-bold ${ready ? 'text-emerald-dark' : 'text-slate'}`}>
-        {match.matchedCount}/{match.totalIngredients} ingredients · {match.percentMatch}%
+        {match.matchedCount}/{match.totalIngredients} · {match.percentMatch}%
       </Text>
     </View>
   );

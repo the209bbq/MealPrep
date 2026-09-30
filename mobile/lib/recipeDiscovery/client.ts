@@ -54,6 +54,10 @@ function filtersToQuery(filters: RecipeDiscoverySearchFilters): Record<string, s
   if (filters.mealType) query.meal_type = filters.mealType;
   if (filters.difficulty) query.difficulty = filters.difficulty;
   if (filters.dietaryTag) query.dietary_tags = filters.dietaryTag;
+  if (filters.maxTotalMinutes != null && filters.maxTotalMinutes > 0) {
+    query.prep_time_max = filters.maxTotalMinutes;
+    query.cook_time_max = filters.maxTotalMinutes;
+  }
   return query;
 }
 

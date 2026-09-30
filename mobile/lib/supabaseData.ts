@@ -13,6 +13,7 @@ import type {
   Recipe,
   RecipeIngredient,
   UserAnalytics,
+  MealPlanItem,
   UserProfile,
   UserRole,
 } from '../types/mealprep';
@@ -74,6 +75,17 @@ type GroceryRow = {
 };
 
 type FlagRow = { key: string; enabled: boolean };
+
+type MealPlanRow = {
+  id: string;
+  user_id: string;
+  recipe_slug: string | null;
+  recipe_api_id: number | null;
+  title: string;
+  image_url: string | null;
+  made: boolean;
+  added_at: string;
+};
 
 function asCategory(value: string): PantryCategory {
   const categories: PantryCategory[] = [
@@ -152,6 +164,18 @@ export function mapGrocery(row: GroceryRow): GroceryListItem {
   };
 }
 
+export function mapMealPlanItem(row: MealPlanRow): MealPlanItem {
+  return {
+    id: row.id,
+    recipeSlug: row.recipe_slug,
+    recipeApiId: row.recipe_api_id,
+    title: row.title,
+    imageUrl: row.image_url,
+    made: row.made,
+    addedAt: row.added_at,
+  };
+}
+
 export function mapFeatureFlags(rows: FlagRow[]): FeatureFlags {
   const merged = { ...FEATURE_FLAG_DEFAULTS };
   for (const row of rows) {
@@ -163,7 +187,7 @@ export function mapFeatureFlags(rows: FlagRow[]): FeatureFlags {
 }
 
 export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
-  const [profileRes, pantryRes, recipesRes, groceryRes, flagsRes, countsRes] = await Promise.all([
+  const [profileRes, pantryRes, recipesRes, groceryRes, flagsRes, countsRes, mealPlanRes] = await Promise.all([
     client.from('profiles').select('*').eq('id', userId).maybeSingle(),
     client.from('pantry_items').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
     client
@@ -174,6 +198,11 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
     client.from('grocery_list_items').select('*').eq('user_id', userId).order('name'),
     client.from('feature_flags').select('key, enabled'),
     client.from('profiles').select('role', { count: 'exact', head: false }),
+    client
+      .from('meal_plan_items')
+      .select('*')
+      .eq('user_id', userId)
+      .order('added_at', { ascending: false }),
   ]);
 
   if (profileRes.error) throw profileRes.error;
@@ -181,6 +210,7 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
   if (recipesRes.error) throw recipesRes.error;
   if (groceryRes.error) throw groceryRes.error;
   if (flagsRes.error) throw flagsRes.error;
+  if (mealPlanRes.error && mealPlanRes.error.code !== 'PGRST205') throw mealPlanRes.error;
 
   const profiles = (countsRes.data ?? []) as { role: UserRole }[];
   const adminCount = profiles.filter((p) => p.role === 'admin').length;
@@ -201,6 +231,7 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
     recipes: (recipesRes.data ?? []).map((row) => mapRecipe(row as RecipeRow)),
     grocery: (groceryRes.data ?? []).map((row) => mapGrocery(row as GroceryRow)),
     featureFlags: mapFeatureFlags((flagsRes.data ?? []) as FlagRow[]),
+    mealPlan: (mealPlanRes.data ?? []).map((row) => mapMealPlanItem(row as MealPlanRow)),
     analytics,
   };
 }
@@ -449,5 +480,53 @@ export async function deleteGroceryItems(
 ): Promise<void> {
   if (ids.length === 0) return;
   const { error } = await client.from('grocery_list_items').delete().eq('user_id', userId).in('id', ids);
+  if (error) throw error;
+}
+
+export async function insertMealPlanItem(
+  client: SupabaseClient,
+  userId: string,
+  item: Omit<MealPlanItem, 'id'>,
+): Promise<MealPlanItem> {
+  const { data, error } = await client
+    .from('meal_plan_items')
+    .insert({
+      user_id: userId,
+      recipe_slug: item.recipeSlug,
+      recipe_api_id: item.recipeApiId,
+      title: item.title,
+      image_url: item.imageUrl,
+      made: item.made,
+      added_at: item.addedAt,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapMealPlanItem(data as MealPlanRow);
+}
+
+export async function updateMealPlanItem(
+  client: SupabaseClient,
+  userId: string,
+  id: string,
+  patch: Partial<Pick<MealPlanItem, 'made'>>,
+): Promise<MealPlanItem> {
+  const { data, error } = await client
+    .from('meal_plan_items')
+    .update({ made: patch.made })
+    .eq('user_id', userId)
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapMealPlanItem(data as MealPlanRow);
+}
+
+export async function deleteMealPlanItem(
+  client: SupabaseClient,
+  userId: string,
+  id: string,
+): Promise<void> {
+  const { error } = await client.from('meal_plan_items').delete().eq('user_id', userId).eq('id', id);
   if (error) throw error;
 }

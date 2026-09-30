@@ -40,3 +40,5 @@ export const RECIPE_DISCOVERY_DIETARY: { value: RecipeApiDietaryTag; label: stri
   { value: 'gluten_free', label: 'Gluten free' },
   { value: 'dairy_free', label: 'Dairy free' },
 ];
+
+export const RECIPE_DISCOVERY_MAX_MINUTES = [30, 45, 60, 90] as const;
