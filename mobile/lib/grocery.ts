@@ -1,4 +1,49 @@
-import type { GroceryListItem, PantryItem, Recipe } from '../types/mealprep';
+import { CATEGORY_LABELS } from '../config/appConfig';
+import type { GroceryListItem, PantryCategory, PantryItem, Recipe } from '../types/mealprep';
+
+/** Store aisle order for grouped grocery UI. */
+export const GROCERY_AISLE_ORDER: PantryCategory[] = [
+  'produce',
+  'meats',
+  'dairy',
+  'frozen',
+  'dry_goods',
+  'condiments',
+  'spices',
+  'cookware',
+];
+
+export function isManualGroceryItem(item: GroceryListItem): boolean {
+  return item.ingredientId.startsWith('manual-');
+}
+
+export function groupGroceryByAisle(items: GroceryListItem[]): { category: PantryCategory; label: string; items: GroceryListItem[] }[] {
+  const byCat = new Map<PantryCategory, GroceryListItem[]>();
+  for (const item of items) {
+    const list = byCat.get(item.category) ?? [];
+    list.push(item);
+    byCat.set(item.category, list);
+  }
+  const sections: { category: PantryCategory; label: string; items: GroceryListItem[] }[] = [];
+  for (const category of GROCERY_AISLE_ORDER) {
+    const aisleItems = byCat.get(category);
+    if (!aisleItems?.length) continue;
+    sections.push({
+      category,
+      label: CATEGORY_LABELS[category],
+      items: aisleItems.sort((a, b) => a.name.localeCompare(b.name)),
+    });
+    byCat.delete(category);
+  }
+  for (const [category, aisleItems] of byCat) {
+    sections.push({
+      category,
+      label: CATEGORY_LABELS[category],
+      items: aisleItems.sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  }
+  return sections;
+}
 
 function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
@@ -44,6 +89,8 @@ export function buildGroceryList(
 
   const checked = new Map(previous.map((item) => [item.ingredientId + '::' + item.unit, item.checked]));
 
+  const manualItems = previous.filter((item) => isManualGroceryItem(item));
+
   const list: GroceryListItem[] = [];
   for (const [key, value] of needed) {
     const ingredientId = key.split('::')[0] ?? key;
@@ -62,5 +109,26 @@ export function buildGroceryList(
     });
   }
 
-  return list.sort((a, b) => a.name.localeCompare(b.name));
+  const recipeItems = list.sort((a, b) => a.name.localeCompare(b.name));
+  const manuals = manualItems.sort((a, b) => a.name.localeCompare(b.name));
+  return [...recipeItems, ...manuals];
+}
+
+export function createManualGroceryItem(input: {
+  name: string;
+  quantity: number;
+  unit: string;
+  category: PantryCategory;
+}): GroceryListItem {
+  const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+  return {
+    id: `manual-${Date.now()}-${slug}`,
+    ingredientId: `manual-${slug}-${Date.now()}`,
+    name: input.name.trim(),
+    category: input.category,
+    quantity: input.quantity,
+    unit: input.unit.trim() || 'each',
+    checked: false,
+    sourceRecipeIds: [],
+  };
 }

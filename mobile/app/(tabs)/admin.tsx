@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
+import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 import { UsdaNutritionPanel } from '../../components/UsdaNutritionPanel';
@@ -85,6 +86,7 @@ export default function AdminScreen() {
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8">
+      <InstallAppBanner />
       <Card className="mt-4" title="Admin panel" subtitle={`Signed in as ${profile.name}`}>
         <Text className="mt-2 text-sm text-muted">
           Kitchen admin tools mirror the softball app&apos;s league admin pattern — global data, seeds, and toggles.

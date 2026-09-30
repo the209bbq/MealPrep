@@ -17,6 +17,7 @@ export const FEATURE_FLAG_KEYS = [
   'photoScan',
   'batchCalculator',
   'grocerySync',
+  'smartShop',
   'maintenanceMode',
   'recipeMasterEdit',
 ] as const;

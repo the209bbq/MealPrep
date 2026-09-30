@@ -30,7 +30,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Meal Prep to use your location to find nearby grocery stores and deals."
+        }
+      ]
     ]
   }
 }

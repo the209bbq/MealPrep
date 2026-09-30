@@ -285,3 +285,36 @@ export async function updateGroceryChecked(
   const { error } = await client.from('grocery_list_items').update({ checked }).eq('id', id);
   if (error) throw error;
 }
+
+export async function insertGroceryItem(
+  client: SupabaseClient,
+  userId: string,
+  item: GroceryListItem,
+): Promise<GroceryListItem> {
+  const { data, error } = await client
+    .from('grocery_list_items')
+    .insert({
+      user_id: userId,
+      ingredient_id: item.ingredientId,
+      name: item.name,
+      category: item.category,
+      quantity: item.quantity,
+      unit: item.unit,
+      checked: item.checked,
+      source_recipe_ids: item.sourceRecipeIds,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapGrocery(data as GroceryRow);
+}
+
+export async function deleteGroceryItems(
+  client: SupabaseClient,
+  userId: string,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await client.from('grocery_list_items').delete().eq('user_id', userId).in('id', ids);
+  if (error) throw error;
+}
