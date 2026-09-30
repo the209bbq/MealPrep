@@ -1,9 +1,18 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { CATEGORY_LABELS, PHOTO_SCAN } from '../config/appConfig';
+import {
+  DEFAULT_PANTRY_STORAGE_LOCATION,
+  PANTRY_SCAN_TIP,
+  suggestStorageLocationForCategory,
+  type PantryStorageLocation,
+} from '../config/pantryStorage';
 import { mergeReviewItems } from '../lib/pantryVision/matchIngredients';
+import { applyBatchStorageLocation } from '../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
 import { PANTRY_CATEGORIES, type PantryCategory } from '../types/mealprep';
+import { PantryScanTip } from './PantryScanTip';
+import { PantryStorageLocationChips } from './PantryStorageLocationChips';
 
 interface PantryScanReviewProps {
   items: PantryScanReviewItem[];
@@ -25,11 +34,18 @@ export function PantryScanReview({
   saveError,
 }: PantryScanReviewProps) {
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
+  const [batchLocation, setBatchLocation] = useState<PantryStorageLocation>(DEFAULT_PANTRY_STORAGE_LOCATION);
 
   const enabledCount = useMemo(() => items.filter((item) => item.enabled).length, [items]);
+  const showFewItemsTip = items.length > 0 && items.length <= PANTRY_SCAN_TIP.fewItemsThreshold;
 
   function updateItem(key: string, patch: Partial<PantryScanReviewItem>) {
     onChange(items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  }
+
+  function setBatchLocationForAll(location: PantryStorageLocation) {
+    setBatchLocation(location);
+    onChange(applyBatchStorageLocation(items, location));
   }
 
   function toggleMerge(key: string) {
@@ -49,6 +65,17 @@ export function PantryScanReview({
         Edit names and quantities, turn off items you do not want, or merge duplicates before saving.
         {modelLabel ? ` Model: ${modelLabel}.` : ''}
       </Text>
+
+      {showFewItemsTip ? <PantryScanTip className="mt-2" /> : null}
+
+      <View className="mt-3 rounded-lg border border-border bg-paper p-2">
+        <PantryStorageLocationChips
+          label="Storage for all items"
+          selected={batchLocation}
+          onSelect={setBatchLocationForAll}
+        />
+        <Text className="mt-1 text-[10px] text-muted">Override storage per item below.</Text>
+      </View>
 
       {items.map((item) => (
         <View key={item.key} className="mt-3 border-t border-border pt-3">
@@ -99,12 +126,26 @@ export function PantryScanReview({
             {PANTRY_CATEGORIES.map((category) => (
               <Pressable
                 key={category}
-                onPress={() => updateItem(item.key, { category: category as PantryCategory })}
+                onPress={() =>
+                  updateItem(item.key, {
+                    category: category as PantryCategory,
+                    location: suggestStorageLocationForCategory(category),
+                  })
+                }
                 className={`rounded-full px-2 py-1 ${item.category === category ? 'bg-emerald-light' : 'bg-paper'}`}
               >
                 <Text className="text-[10px] font-semibold text-slate">{CATEGORY_LABELS[category]}</Text>
               </Pressable>
             ))}
+          </View>
+
+          <View className="mt-2">
+            <PantryStorageLocationChips
+              label="Storage"
+              compact
+              selected={item.location}
+              onSelect={(location) => updateItem(item.key, { location })}
+            />
           </View>
 
           <Text className="mt-1 text-[10px] text-muted">

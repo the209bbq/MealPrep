@@ -6,9 +6,16 @@ import {
   FEATURE_FLAG_DEFAULTS,
   isDemoMode,
 } from '../config/appConfig';
+import { DEFAULT_PANTRY_STORAGE_LOCATION, normalizePantryItemList } from '../config/pantryStorage';
 import { DEFAULT_FEATURE_FLAGS, MOCK_PANTRY, MOCK_RECIPES, profileForRole } from '../data/mockData';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
+import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
+import {
+  buildPantryMatchIndex,
+  topPantryRecipeRecommendations,
+  type PantryMatchIndex,
+} from '../lib/recipeMatch';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
 import { readJson, writeJson } from '../lib/storage';
@@ -19,9 +26,12 @@ import {
   insertGroceryItem,
   insertPantryItem,
   insertPantryItems,
+  deleteAllPantryItems,
+  deletePantryItemsByIds,
   replaceGroceryList,
   updateGroceryChecked,
   updateMasterRecipe,
+  updatePantryItem,
   upsertFeatureFlag,
   upsertImportedRecipe,
 } from '../lib/supabaseData';
@@ -31,6 +41,7 @@ import type {
   MealPrepSummary,
   PantryItem,
   PantryCategory,
+  PantryStorageLocation,
   Recipe,
   UserAnalytics,
   UserProfile,
@@ -92,9 +103,23 @@ interface AppContextValue {
     options: { asMaster: boolean; recipeApiId: number },
   ) => Promise<void>;
   addPantryFromScan: (name: string, photoUri: string | null) => void;
+  addManualPantryItem: (input: {
+    name: string;
+    quantity: number;
+    unit: string;
+    category: PantryCategory;
+    location: PantryStorageLocation;
+  }) => Promise<void>;
+  updatePantryItemEntry: (item: PantryItem) => Promise<void>;
+  deletePantryItemEntry: (id: string) => Promise<void>;
+  clearPantryLocation: (location: PantryStorageLocation) => Promise<void>;
+  clearAllPantry: () => Promise<void>;
   savePantryScanReview: (items: PantryScanReviewItem[]) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
+  pantryRecipeMatches: PantryMatchIndex;
+  pantryRecipeRecommendations: ReturnType<typeof topPantryRecipeRecommendations>;
+  addMissingRecipeIngredientsToGrocery: (recipeId: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -109,7 +134,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
 
   const [role, setRole] = useState<UserRole>(() => readJson(STORAGE_KEYS.role, 'admin'));
-  const [pantry, setPantry] = useState<PantryItem[]>(() => readJson(STORAGE_KEYS.pantry, MOCK_PANTRY));
+  const [pantry, setPantry] = useState<PantryItem[]>(() =>
+    normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY)),
+  );
   const [recipes, setRecipes] = useState<Recipe[]>(() => readJson(STORAGE_KEYS.recipes, MOCK_RECIPES));
   const [grocery, setGrocery] = useState<GroceryListItem[]>(() => readJson(STORAGE_KEYS.grocery, []));
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<string[]>(() =>
@@ -132,7 +159,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!supabase || !userId) return;
     const bundle = await fetchLiveBundle(supabase, userId);
     if (bundle.profile) setLiveProfile(bundle.profile);
-    setPantry(bundle.pantry);
+    setPantry(normalizePantryItemList(bundle.pantry));
     setRecipes(bundle.recipes.length > 0 ? bundle.recipes : []);
     setGrocery(bundle.grocery);
     setFeatureFlags(bundle.featureFlags);
@@ -237,6 +264,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       lastActiveAt: new Date().toISOString(),
     };
   }, [demoMode, grocery, liveAnalytics, pantry.length, recipes.length]);
+
+  const pantryRecipeMatches = useMemo(
+    () => buildPantryMatchIndex(recipes, pantry),
+    [pantry, recipes],
+  );
+
+  const pantryRecipeRecommendations = useMemo(
+    () => topPantryRecipeRecommendations(recipes, pantry, 3),
+    [pantry, recipes],
+  );
 
   const setDemoRole = useCallback((next: UserRole) => {
     setRole(next);
@@ -422,7 +459,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         category: 'produce',
         quantity: 1,
         unit: 'each',
-        location: 'Pending recognition',
+        location: DEFAULT_PANTRY_STORAGE_LOCATION,
         photoUri,
         expiresOn: null,
         updatedAt: new Date().toISOString(),
@@ -440,6 +477,100 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [demoMode, supabase, userId],
   );
+
+  const addManualPantryItem = useCallback(
+    async (input: {
+      name: string;
+      quantity: number;
+      unit: string;
+      category: PantryCategory;
+      location: PantryStorageLocation;
+    }) => {
+      const slug = input.name.toLowerCase().replace(/\s+/g, '-');
+      const item: PantryItem = {
+        id: `manual-${Date.now()}`,
+        ingredientId: `manual-${slug}-${Date.now()}`,
+        name: input.name.trim(),
+        category: input.category,
+        quantity: input.quantity,
+        unit: input.unit.trim() || 'each',
+        location: input.location,
+        photoUri: null,
+        expiresOn: null,
+        updatedAt: new Date().toISOString(),
+      };
+      if (demoMode) {
+        setPantry((prev) => [item, ...prev]);
+        return;
+      }
+      if (!supabase || !userId) {
+        throw new Error('Sign in to add pantry items.');
+      }
+      const saved = await insertPantryItem(supabase, userId, item);
+      setPantry((prev) => [saved, ...prev]);
+    },
+    [demoMode, supabase, userId],
+  );
+
+  const updatePantryItemEntry = useCallback(
+    async (item: PantryItem) => {
+      if (demoMode) {
+        setPantry((prev) => prev.map((row) => (row.id === item.id ? { ...item, updatedAt: new Date().toISOString() } : row)));
+        return;
+      }
+      if (!supabase || !userId) {
+        throw new Error('Sign in to update pantry items.');
+      }
+      const saved = await updatePantryItem(supabase, userId, item);
+      setPantry((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
+    },
+    [demoMode, supabase, userId],
+  );
+
+  const deletePantryItemEntry = useCallback(
+    async (id: string) => {
+      if (demoMode) {
+        setPantry((prev) => prev.filter((row) => row.id !== id));
+        return;
+      }
+      if (!supabase || !userId) {
+        throw new Error('Sign in to update pantry.');
+      }
+      await deletePantryItemsByIds(supabase, userId, [id]);
+      setPantry((prev) => prev.filter((row) => row.id !== id));
+    },
+    [demoMode, supabase, userId],
+  );
+
+  const clearPantryLocation = useCallback(
+    async (location: PantryStorageLocation) => {
+      const ids = pantry.filter((item) => item.location === location).map((item) => item.id);
+      if (ids.length === 0) return;
+      if (demoMode) {
+        setPantry((prev) => prev.filter((item) => item.location !== location));
+        return;
+      }
+      if (!supabase || !userId) {
+        throw new Error('Sign in to update pantry.');
+      }
+      await deletePantryItemsByIds(supabase, userId, ids);
+      setPantry((prev) => prev.filter((item) => item.location !== location));
+    },
+    [demoMode, pantry, supabase, userId],
+  );
+
+  const clearAllPantry = useCallback(async () => {
+    if (pantry.length === 0) return;
+    if (demoMode) {
+      setPantry([]);
+      return;
+    }
+    if (!supabase || !userId) {
+      throw new Error('Sign in to update pantry.');
+    }
+    await deleteAllPantryItems(supabase, userId);
+    setPantry([]);
+  }, [demoMode, pantry.length, supabase, userId]);
 
   const savePantryScanReview = useCallback(
     async (items: PantryScanReviewItem[]) => {
@@ -470,6 +601,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [demoMode, isAdmin, supabase],
+  );
+
+  const addMissingRecipeIngredientsToGrocery = useCallback(
+    (recipeId: string) => {
+      const recipe = recipes.find((r) => r.id === recipeId);
+      const match = pantryRecipeMatches.byRecipeId.get(recipeId);
+      if (!recipe || !match || match.missing.length === 0) return;
+
+      setGrocery((prev) => {
+        const next = mergeMissingIntoGrocery({
+          missing: match.missing,
+          recipeId,
+          pantry,
+          previous: prev,
+        });
+        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        if (supabase && userId) {
+          void replaceGroceryList(supabase, userId, next)
+            .then((persisted) => setGrocery(persisted))
+            .catch((error: unknown) => {
+              setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
+            });
+        }
+        return next;
+      });
+    },
+    [demoMode, pantry, pantryRecipeMatches.byRecipeId, recipes, supabase, userId],
   );
 
   const value = useMemo(
@@ -504,12 +662,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateRecipe,
       importDiscoveredRecipe,
       addPantryFromScan,
+      addManualPantryItem,
+      updatePantryItemEntry,
+      deletePantryItemEntry,
+      clearPantryLocation,
+      clearAllPantry,
       savePantryScanReview,
       setFeatureFlag,
       refreshGrocery,
+      pantryRecipeMatches,
+      pantryRecipeRecommendations,
+      addMissingRecipeIngredientsToGrocery,
     }),
     [
       addPantryFromScan,
+      addManualPantryItem,
+      updatePantryItemEntry,
+      deletePantryItemEntry,
+      clearPantryLocation,
+      clearAllPantry,
       savePantryScanReview,
       analytics,
       authError,
@@ -541,6 +712,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleRecipeSelection,
       updateRecipe,
       importDiscoveredRecipe,
+      pantryRecipeMatches,
+      pantryRecipeRecommendations,
+      addMissingRecipeIngredientsToGrocery,
     ],
   );
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FEATURE_FLAG_DEFAULTS, PHOTO_SCAN } from '../config/appConfig';
+import { normalizePantryStorageLocation } from '../config/pantryStorage';
 import { pantryPhotoUrlForStorage } from './pantryPhotoStorage';
 import { withTimeout } from './withTimeout';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
@@ -109,7 +110,7 @@ export function mapPantry(row: PantryRow): PantryItem {
     category: asCategory(row.category),
     quantity: Number(row.quantity),
     unit: row.unit,
-    location: row.location ?? '',
+    location: normalizePantryStorageLocation(row.location),
     photoUri: row.photo_url,
     expiresOn: row.expires_on,
     updatedAt: row.updated_at,
@@ -261,6 +262,47 @@ export async function insertPantryItems(
     );
   }
   return rows.map((row) => mapPantry(row as PantryRow));
+}
+
+export async function updatePantryItem(
+  client: SupabaseClient,
+  userId: string,
+  item: PantryItem,
+): Promise<PantryItem> {
+  const { data, error } = await client
+    .from('pantry_items')
+    .update({
+      ingredient_id: item.ingredientId,
+      name: item.name,
+      category: item.category,
+      quantity: item.quantity,
+      unit: item.unit,
+      location: item.location,
+      photo_url: pantryPhotoUrlForStorage(item.photoUri),
+      expires_on: item.expiresOn,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', item.id)
+    .eq('user_id', userId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapPantry(data as PantryRow);
+}
+
+export async function deletePantryItemsByIds(
+  client: SupabaseClient,
+  userId: string,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await client.from('pantry_items').delete().eq('user_id', userId).in('id', ids);
+  if (error) throw error;
+}
+
+export async function deleteAllPantryItems(client: SupabaseClient, userId: string): Promise<void> {
+  const { error } = await client.from('pantry_items').delete().eq('user_id', userId);
+  if (error) throw error;
 }
 
 export async function upsertImportedRecipe(

@@ -1,4 +1,4 @@
-import type { PantryCategory } from '../../types/mealprep';
+import type { PantryCategory, PantryStorageLocation } from '../../types/mealprep';
 
 export interface PantryVisionDetection {
   name: string;
@@ -28,7 +28,7 @@ export interface PantryScanReviewItem {
   category: PantryCategory;
   confidence: number;
   ingredientId: string;
-  location: string;
+  location: PantryStorageLocation;
   /** Local preview URI (not sent to Supabase unless you upload separately). */
   photoUri: string | null;
   isDemoSample: boolean;
