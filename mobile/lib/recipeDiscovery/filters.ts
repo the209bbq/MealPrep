@@ -3,7 +3,19 @@ import type {
   RecipeApiDietaryTag,
   RecipeApiDifficulty,
   RecipeApiMealType,
+  RecipeDiscoverySearchFilters,
 } from './types';
+
+/** True when the user has started a discover search (not the default empty catalog). */
+export function isActiveRecipeDiscoverySearch(filters: RecipeDiscoverySearchFilters): boolean {
+  if (filters.search?.trim()) return true;
+  if (filters.cuisine) return true;
+  if (filters.difficulty) return true;
+  if (filters.mealType) return true;
+  if (filters.dietaryTag) return true;
+  if (filters.maxTotalMinutes != null && filters.maxTotalMinutes > 0) return true;
+  return false;
+}
 
 export const RECIPE_DISCOVERY_CUISINES: { value: RecipeApiCuisine; label: string }[] = [
   { value: 'american', label: 'American' },

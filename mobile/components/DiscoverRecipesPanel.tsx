@@ -10,7 +10,7 @@ import {
 import { Card } from './Card';
 import { FilterChips } from './FilterChips';
 import { RecipePantryMatchBadge } from './RecipePantryMatch';
-import { isRecipeDiscoveryConfigured, RECIPE_DISCOVERY, THEME } from '../config/appConfig';
+import { isRecipeDiscoveryConfigured, RECIPE_DISCOVERY, RECIPES_TAB, THEME } from '../config/appConfig';
 import { useApp } from '../context/AppContext';
 import {
   debouncedSearch,
@@ -19,12 +19,14 @@ import {
   searchDiscoveryRecipes,
 } from '../lib/recipeDiscovery/client';
 import {
+  isActiveRecipeDiscoverySearch,
   RECIPE_DISCOVERY_CUISINES,
   RECIPE_DISCOVERY_DIFFICULTIES,
   RECIPE_DISCOVERY_DIETARY,
   RECIPE_DISCOVERY_MAX_MINUTES,
   RECIPE_DISCOVERY_MEAL_TYPES,
 } from '../lib/recipeDiscovery/filters';
+import { compareRecipePantryMatches } from '../lib/recipeMatch';
 import { scoreDiscoveryRecipeAgainstPantry } from '../lib/recipeDiscovery/scorePantry';
 import type {
   RecipeApiCuisine,
@@ -95,14 +97,25 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
     }
   }, [accessToken, filters]);
 
+  const discoveryQueryActive = isActiveRecipeDiscoverySearch(filters);
+
   useEffect(() => {
     if (!RECIPE_DISCOVERY.enabled) return;
+    if (RECIPES_TAB.discoverRequiresActiveQuery && !discoveryQueryActive) {
+      setItems([]);
+      setTotal(0);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     if (demoMode) {
       void runSearch();
       return;
     }
     if (!accessToken) {
       setError('Sign in from Admin/Profile to search external recipes.');
+      setItems([]);
+      setTotal(0);
       return;
     }
     setLoading(true);
@@ -126,7 +139,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
         setLoading(false);
       },
     );
-  }, [accessToken, demoMode, filters, runSearch]);
+  }, [accessToken, demoMode, discoveryQueryActive, filters, runSearch]);
 
   const displayItems = useMemo(() => {
     let list = items.map((recipe) => ({
@@ -137,8 +150,9 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
       list = list.filter((row) => row.match.percentMatch >= (matchPantryOnly ? Math.max(minPantryPercent, 1) : minPantryPercent));
     }
     if (matchPantryOnly) {
-      list.sort((a, b) => b.match.percentMatch - a.match.percentMatch);
+      list = list.filter((row) => row.match.matchedCount > 0);
     }
+    list.sort((a, b) => compareRecipePantryMatches(a.match, b.match));
     return list;
   }, [items, matchPantryOnly, minPantryPercent, pantry]);
 
@@ -149,7 +163,9 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
   return (
     <View className="mt-4 overflow-hidden rounded-2xl border border-emerald bg-card px-4 py-5">
       <Text className="text-2xl font-bold text-ink">Discover recipes</Text>
-      <Text className="mt-1 text-sm text-muted">Search RecipeAPI.io — results show how well each recipe fits your pantry.</Text>
+      <Text className="mt-1 text-sm text-muted">
+        Search RecipeAPI.io when you want new ideas — results rank by pantry ingredient matches.
+      </Text>
 
       {demoMode ? (
         <View className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
@@ -251,56 +267,64 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
 
       {error ? <Text className="mt-4 text-sm text-danger">{error}</Text> : null}
 
-      <View className="mt-4 flex-row items-center justify-between">
-        <Text className="text-sm font-semibold text-ink">
-          {loading ? 'Searching…' : `${displayItems.length} result${displayItems.length === 1 ? '' : 's'}`}
-          {!loading && total > displayItems.length ? ` (of ${total})` : ''}
+      {RECIPES_TAB.discoverRequiresActiveQuery && !discoveryQueryActive ? (
+        <Text className="mt-4 text-sm text-muted">
+          Type a search or pick a filter to load discover results. Your pantry-ranked kitchen recipes are listed below.
         </Text>
-        {loading ? <ActivityIndicator color={THEME.emerald} /> : null}
-      </View>
+      ) : (
+        <>
+          <View className="mt-4 flex-row items-center justify-between">
+            <Text className="text-sm font-semibold text-ink">
+              {loading ? 'Searching…' : `${displayItems.length} result${displayItems.length === 1 ? '' : 's'}`}
+              {!loading && total > displayItems.length ? ` (of ${total})` : ''}
+            </Text>
+            {loading ? <ActivityIndicator color={THEME.emerald} /> : null}
+          </View>
 
-      {displayItems.length === 0 && !loading ? (
-        <Text className="mt-3 text-sm text-muted">No recipes match these filters. Try a broader search or lower pantry %.</Text>
-      ) : null}
+          {displayItems.length === 0 && !loading ? (
+            <Text className="mt-3 text-sm text-muted">No recipes match these filters. Try a broader search or lower pantry %.</Text>
+          ) : null}
 
-      {displayItems.map(({ recipe, match }) => {
-        const onPlan = isOnMealPlan(recipe.id);
-        return (
-          <Pressable
-            key={recipe.id}
-            onPress={() => router.push(`/discover-recipes/${recipe.id}`)}
-            className="mt-3"
-          >
-            <Card>
-              {recipe.isDemoSample ? (
-                <Text className="mb-1 text-[10px] font-bold uppercase text-amber-700">Demo sample</Text>
-              ) : null}
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1 pr-2">
-                  <Text className="text-xs font-semibold uppercase text-emerald">{recipe.cuisine}</Text>
-                  <Text className="text-base font-bold text-ink">{recipe.name}</Text>
-                  <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{recipe.description}</Text>
-                  <RecipePantryMatchBadge match={match} />
-                  <Text className="mt-2 text-xs text-muted">
-                    {recipe.servings} servings · {recipe.prep_time + recipe.cook_time} min · {recipe.calories_per_serving} cal
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    onToggleMealPlan(recipe);
-                  }}
-                  className={`rounded-full px-3 py-2 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
-                >
-                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
-                    {onPlan ? 'In meals' : 'Add to meals'}
-                  </Text>
-                </Pressable>
-              </View>
-            </Card>
-          </Pressable>
-        );
-      })}
+          {displayItems.map(({ recipe, match }) => {
+            const onPlan = isOnMealPlan(recipe.id);
+            return (
+              <Pressable
+                key={recipe.id}
+                onPress={() => router.push(`/discover-recipes/${recipe.id}`)}
+                className="mt-3"
+              >
+                <Card>
+                  {recipe.isDemoSample ? (
+                    <Text className="mb-1 text-[10px] font-bold uppercase text-amber-700">Demo sample</Text>
+                  ) : null}
+                  <View className="flex-row items-start justify-between">
+                    <View className="flex-1 pr-2">
+                      <Text className="text-xs font-semibold uppercase text-emerald">{recipe.cuisine}</Text>
+                      <Text className="text-base font-bold text-ink">{recipe.name}</Text>
+                      <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{recipe.description}</Text>
+                      <RecipePantryMatchBadge match={match} />
+                      <Text className="mt-2 text-xs text-muted">
+                        {recipe.servings} servings · {recipe.prep_time + recipe.cook_time} min · {recipe.calories_per_serving} cal
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        onToggleMealPlan(recipe);
+                      }}
+                      className={`rounded-full px-3 py-2 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                    >
+                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
+                        {onPlan ? 'In meals' : 'Add to meals'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </Card>
+              </Pressable>
+            );
+          })}
+        </>
+      )}
     </View>
   );
 }
