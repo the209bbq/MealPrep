@@ -45,3 +45,7 @@ When you are ready for store builds (Apple Developer / Google Play accounts):
 Expo Go cannot load arbitrary native modules; a dev build replaces Expo Go for full native feature testing. OTA updates use `eas update` after the first store build.
 
 This repo does not configure EAS or paid developer accounts yet.
+
+## Smart Shop / live store prices
+
+See [docs/SMART_SHOP.md](./docs/SMART_SHOP.md) for free Kroger API setup, Supabase Edge Function deploy, and env vars.

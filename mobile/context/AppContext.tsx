@@ -8,11 +8,13 @@ import {
 } from '../config/appConfig';
 import { DEFAULT_FEATURE_FLAGS, MOCK_PANTRY, MOCK_RECIPES, profileForRole } from '../data/mockData';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
-import { buildGroceryList } from '../lib/grocery';
+import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
 import { readJson, writeJson } from '../lib/storage';
 import { getSupabase } from '../lib/supabase';
 import {
   fetchLiveBundle,
+  deleteGroceryItems,
+  insertGroceryItem,
   insertPantryItem,
   replaceGroceryList,
   updateGroceryChecked,
@@ -24,6 +26,7 @@ import type {
   GroceryListItem,
   MealPrepSummary,
   PantryItem,
+  PantryCategory,
   Recipe,
   UserAnalytics,
   UserProfile,
@@ -76,6 +79,8 @@ interface AppContextValue {
   toggleRecipeSelection: (recipeId: string) => void;
   setServingOverride: (recipeId: string, servings: number) => void;
   toggleGroceryItem: (id: string) => void;
+  addManualGroceryItem: (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => void;
+  clearCheckedGroceryItems: () => void;
   seedPantry: () => void;
   updateRecipe: (recipe: Recipe) => void;
   addPantryFromScan: (name: string, photoUri: string | null) => void;
@@ -305,6 +310,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, supabase, userId],
   );
 
+  const addManualGroceryItem = useCallback(
+    (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => {
+      const trimmed = input.name.trim();
+      if (!trimmed) return;
+      const item = createManualGroceryItem({ ...input, name: trimmed });
+      setGrocery((prev) => {
+        const next = [...prev, item];
+        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        if (supabase && userId) {
+          void insertGroceryItem(supabase, userId, item)
+            .then((saved) => setGrocery((current) => [...current.filter((g) => g.id !== item.id), saved]))
+            .catch((error: unknown) => {
+              setAuthError(error instanceof Error ? error.message : 'Failed to add grocery item');
+            });
+        }
+        return next;
+      });
+    },
+    [demoMode, supabase, userId],
+  );
+
+  const clearCheckedGroceryItems = useCallback(() => {
+    setGrocery((prev) => {
+      const removedIds = prev.filter((item) => item.checked).map((item) => item.id);
+      const next = prev.filter((item) => !item.checked);
+      if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+      if (supabase && userId && removedIds.length > 0) {
+        void deleteGroceryItems(supabase, userId, removedIds)
+          .then(() => setGrocery(next))
+          .catch((error: unknown) => {
+            setAuthError(error instanceof Error ? error.message : 'Failed to clear checked items');
+          });
+      }
+      return next;
+    });
+  }, [demoMode, supabase, userId]);
+
   const seedPantry = useCallback(() => {
     if (demoMode) {
       setPantry(MOCK_PANTRY);
@@ -400,6 +442,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleRecipeSelection,
       setServingOverride,
       toggleGroceryItem,
+      addManualGroceryItem,
+      clearCheckedGroceryItems,
       seedPantry,
       updateRecipe,
       addPantryFromScan,
@@ -433,6 +477,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       signUpWithPassword,
       summary,
       toggleGroceryItem,
+      addManualGroceryItem,
+      clearCheckedGroceryItems,
       toggleRecipeSelection,
       updateRecipe,
     ],
