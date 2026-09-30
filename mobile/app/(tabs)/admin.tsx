@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
-import { FEATURE_FLAG_LABELS, ROLE_LABELS, isDemoMode } from '../../config/appConfig';
+import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 import { initials } from '../../lib/initials';
 import type { FeatureFlagKey, UserRole } from '../../types/mealprep';
@@ -122,7 +122,7 @@ export default function AdminScreen() {
             <Switch
               value={featureFlags[key]}
               onValueChange={(value) => setFeatureFlag(key, value)}
-              trackColor={{ true: '#047857', false: '#E7E0D6' }}
+              trackColor={{ true: THEME.emerald, false: THEME.border }}
             />
           </View>
         ))}

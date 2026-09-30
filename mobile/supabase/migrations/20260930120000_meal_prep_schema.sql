@@ -117,7 +117,35 @@ create policy recipes_admin_write on public.recipes
 create policy grocery_owner on public.grocery_list_items
   for all using (auth.uid() = user_id);
 
--- Sync role to JWT metadata on profile change (optional hook for clients)
+-- Block self-promotion: role is stored on profiles and checked by is_admin(), not client JWT user_metadata.
+create or replace function public.enforce_profile_role_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.role = 'admin' and not public.is_admin() then
+      new.role := 'member';
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' and new.role is distinct from old.role and not public.is_admin() then
+    raise exception 'Only admins can change user roles';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_profile_role_change on public.profiles;
+create trigger enforce_profile_role_change
+  before insert or update on public.profiles
+  for each row execute function public.enforce_profile_role_change();
+
+-- Sync role to JWT app_metadata on profile change (server-side only; clients must not trust JWT for authorization)
 create or replace function public.sync_role_to_jwt()
 returns trigger
 language plpgsql
