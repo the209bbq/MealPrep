@@ -69,12 +69,9 @@ export const FEATURE_FLAG_DEFAULTS: FeatureFlags = {
 export const SMART_SHOP = {
   defaultRadiusMiles: SMART_SHOP_STORES.defaultRadiusMiles,
   maxSavedStores: SMART_SHOP_STORES.maxSavedStores,
-  krogerClientId: process.env.EXPO_PUBLIC_KROGER_CLIENT_ID ?? '',
-  /** Override full URL; default is `${SUPABASE_URL}/functions/v1/kroger-deals` when Supabase is configured. */
+  /** Optional override; default is `${SUPABASE_URL}/functions/v1/kroger-deals`. */
   krogerProxyUrl: process.env.EXPO_PUBLIC_KROGER_PROXY_URL ?? '',
 } as const;
-
-export const isKrogerConfigured = (): boolean => SMART_SHOP.krogerClientId.trim().length > 0;
 
 /** RecipeAPI.io discovery (secret stays on Supabase Edge Function `recipeapi-proxy`). */
 export const RECIPE_DISCOVERY = {

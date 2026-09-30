@@ -47,6 +47,7 @@ export default function SmartShopScreen() {
   const [loadingDeals, setLoadingDeals] = useState(false);
   const [locationHint, setLocationHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [storeSearchWarning, setStoreSearchWarning] = useState<string | null>(null);
   const [manualName, setManualName] = useState('');
   const [manualAddress, setManualAddress] = useState('');
 
@@ -71,7 +72,7 @@ export default function SmartShopScreen() {
       setError(null);
       try {
         const zipCode = isValidUsZip(zip) ? zip.trim() : undefined;
-        const { stores, originLabel: label } = await searchNearbyStores({
+        const { stores, originLabel: label, storeSearchWarning: warning } = await searchNearbyStores({
           lat: coords?.lat,
           lng: coords?.lng,
           zip: coords ? undefined : zipCode,
@@ -79,6 +80,7 @@ export default function SmartShopScreen() {
         });
         setNearbyStores(stores);
         setOriginLabel(label);
+        setStoreSearchWarning(warning ?? null);
         const favorites = await loadFavoriteStoreIds();
         if (favorites.length > 0) {
           setSavedStoreIds(favorites);
@@ -242,6 +244,9 @@ export default function SmartShopScreen() {
               <ActivityIndicator color={THEME.emerald} />
               <Text className="text-sm text-muted">Finding stores via OpenStreetMap…</Text>
             </View>
+          ) : null}
+          {storeSearchWarning ? (
+            <Text className="mt-2 text-xs text-muted">{storeSearchWarning}</Text>
           ) : null}
         </View>
 

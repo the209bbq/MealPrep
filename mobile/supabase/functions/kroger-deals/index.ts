@@ -192,7 +192,7 @@ serve(async (req) => {
     }
 
     const body = (await req.json()) as {
-      action: 'stores' | 'deals';
+      action: 'stores' | 'locations' | 'deals';
       lat?: number;
       lng?: number;
       zip?: string;
@@ -203,7 +203,7 @@ serve(async (req) => {
 
     const token = await getKrogerToken(clientId, clientSecret);
 
-    if (body.action === 'stores') {
+    if (body.action === 'stores' || body.action === 'locations') {
       const stores = await fetchNearbyStores(token, body);
       return new Response(JSON.stringify({ stores, configured: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

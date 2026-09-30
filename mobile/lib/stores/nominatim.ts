@@ -1,5 +1,6 @@
 import { SMART_SHOP_STORES } from '../../config/smartShop';
 import { readCache, writeCache } from './cache';
+import { isRateLimitedStatus, nominatimSearchParams, osmRequestHeaders } from './osmHttp';
 
 export interface GeocodedPoint {
   lat: number;
@@ -7,40 +8,50 @@ export interface GeocodedPoint {
   displayName?: string;
 }
 
-export async function geocodeUsZip(zip: string): Promise<GeocodedPoint | null> {
+export type GeocodeResult =
+  | { ok: true; point: GeocodedPoint }
+  | { ok: false; reason: 'invalid_zip' | 'not_found' | 'rate_limited' | 'network' };
+
+export async function geocodeUsZip(zip: string): Promise<GeocodeResult> {
   const normalized = zip.trim().slice(0, 5);
-  if (!/^\d{5}$/.test(normalized)) return null;
+  if (!/^\d{5}$/.test(normalized)) return { ok: false, reason: 'invalid_zip' };
 
   const cacheKey = `nominatim:zip:${normalized}`;
   const cached = readCache<GeocodedPoint>(cacheKey);
-  if (cached) return cached;
+  if (cached) return { ok: true, point: cached };
 
-  const url = `${SMART_SHOP_STORES.nominatimBaseUrl}/search?${new URLSearchParams({
+  const url = `${SMART_SHOP_STORES.nominatimBaseUrl}/search?${nominatimSearchParams({
     postalcode: normalized,
     country: 'us',
     format: 'json',
     limit: '1',
   }).toString()}`;
 
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': SMART_SHOP_STORES.httpUserAgent,
-      Accept: 'application/json',
-    },
-  });
-  if (!response.ok) return null;
+  try {
+    const response = await fetch(url, { headers: osmRequestHeaders() });
+    if (isRateLimitedStatus(response.status)) return { ok: false, reason: 'rate_limited' };
+    if (!response.ok) return { ok: false, reason: 'network' };
 
-  const rows = (await response.json()) as { lat?: string; lon?: string; display_name?: string }[];
-  const hit = rows[0];
-  if (!hit?.lat || !hit.lon) return null;
+    const rows = (await response.json()) as { lat?: string; lon?: string; display_name?: string }[];
+    const hit = rows[0];
+    if (!hit?.lat || !hit.lon) return { ok: false, reason: 'not_found' };
 
-  const point: GeocodedPoint = {
-    lat: Number(hit.lat),
-    lng: Number(hit.lon),
-    displayName: hit.display_name,
-  };
-  if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return null;
+    const point: GeocodedPoint = {
+      lat: Number(hit.lat),
+      lng: Number(hit.lon),
+      displayName: hit.display_name,
+    };
+    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return { ok: false, reason: 'not_found' };
 
-  writeCache(cacheKey, point, SMART_SHOP_STORES.cacheTtlMs);
-  return point;
+    writeCache(cacheKey, point, SMART_SHOP_STORES.cacheTtlMs);
+    return { ok: true, point };
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+}
+
+/** @deprecated Prefer geocodeUsZip — kept for callers expecting null. */
+export async function geocodeUsZipOrNull(zip: string): Promise<GeocodedPoint | null> {
+  const result = await geocodeUsZip(zip);
+  return result.ok ? result.point : null;
 }

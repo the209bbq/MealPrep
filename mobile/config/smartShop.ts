@@ -4,8 +4,10 @@ export const SMART_SHOP_STORES = {
   defaultRadiusMiles: 15,
   maxSavedStores: 8,
   maxOverpassResults: 40,
-  /** Nominatim / Overpass usage policy: identify the app. */
-  httpUserAgent: '209MealPrep/1.0 Smart Shop (https://github.com/209mealprep/mobile)',
+  /** Native clients: Nominatim / Overpass usage policy User-Agent. */
+  httpUserAgent: '209MealPrep/1.0 Smart Shop (https://github.com/the209bbq/MealPrep)',
+  /** Web / fallback: Nominatim requires a contact email in the request (cannot set User-Agent in browsers). */
+  nominatimContactEmail: 'smartshop@209mealprep.local',
   nominatimBaseUrl: 'https://nominatim.openstreetmap.org',
   overpassApiUrl: 'https://overpass-api.de/api/interpreter',
   /** In-memory cache TTL for geocode / Overpass (ms). */

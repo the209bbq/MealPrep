@@ -1,23 +1,20 @@
-import { getKrogerProxyUrl, isKrogerConfigured } from '../../config/appConfig';
-import { callKrogerProxy, toKrogerStoreLocation, type KrogerProxyStoreRow } from './krogerClient';
-import type { FetchDealsParams, NearbyStoresParams, PricingProvider, StoreLocation } from './types';
+import { callKrogerProxy, fetchKrogerLocations, isKrogerServerConfigured, toKrogerStoreLocation } from './krogerClient';
+import { isKrogerProxyAvailable } from './krogerAvailability';
+import type { FetchDealsParams, NearbyStoresParams, PricingProvider } from './types';
 
-export async function fetchKrogerNearbyStores(params: NearbyStoresParams): Promise<KrogerProxyStoreRow[]> {
-  if (!isKrogerConfigured() || !getKrogerProxyUrl()) return [];
-  const data = await callKrogerProxy({
-    action: 'stores',
+export async function fetchKrogerNearbyStores(params: NearbyStoresParams) {
+  return fetchKrogerLocations({
     lat: params.lat,
     lng: params.lng,
     zip: params.zip,
     radiusMiles: params.radiusMiles,
   });
-  return data.stores ?? [];
 }
 
 export const krogerPricingProvider: PricingProvider = {
   id: 'kroger',
   label: 'Kroger',
-  isConfigured: () => isKrogerConfigured() && getKrogerProxyUrl().length > 0,
+  isConfigured: () => isKrogerProxyAvailable(),
   async fetchDeals(params: FetchDealsParams) {
     const krogerStores = params.stores
       .filter((s) => s.pricingSource === 'kroger' && (s.krogerLocationId || s.id))
@@ -39,7 +36,7 @@ export const krogerPricingProvider: PricingProvider = {
           label: 'No Kroger locations selected',
           storeIds: [],
           estimatedTotal: 0,
-          note: 'Pick a Kroger-family store for live prices, or use sample mode.',
+          note: 'Pick a Kroger-family store for live prices.',
         },
       };
     }
@@ -66,6 +63,9 @@ export const krogerPricingProvider: PricingProvider = {
       })),
     });
 
+    if (!isKrogerServerConfigured(data)) {
+      throw new Error(data.error ?? 'Kroger not configured on server');
+    }
     if (!data.result) throw new Error('Kroger proxy returned no deal data');
     return data.result;
   },
