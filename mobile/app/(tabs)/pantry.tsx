@@ -16,7 +16,7 @@ import { Card } from '../../components/Card';
 import { CategoryChips } from '../../components/CategoryChips';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { PantryLocationSections } from '../../components/PantryLocationSections';
-import { PantryPhotoCapture } from '../../components/PantryPhotoCapture';
+import { PantryStorageScanButtons } from '../../components/PantryStorageScanButtons';
 import { PantryScanReview } from '../../components/PantryScanReview';
 import { PantryScanTip } from '../../components/PantryScanTip';
 import {
@@ -28,6 +28,7 @@ import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   labelForPantryStorageLocation,
   PANTRY_STORAGE_LOCATIONS,
+  previewResortFromDefaultPantry,
   suggestStorageLocationForCategory,
   type PantryStorageLocation,
 } from '../../config/pantryStorage';
@@ -49,7 +50,8 @@ type ScanPhase = 'idle' | 'loading' | 'review';
 type PantryConfirmAction =
   | { kind: 'delete-item'; item: PantryItem }
   | { kind: 'clear-location'; location: PantryStorageLocation; count: number }
-  | { kind: 'clear-all'; count: number };
+  | { kind: 'clear-all'; count: number }
+  | { kind: 'resort'; toFridge: number; toSpiceRack: number };
 
 export default function PantryScreen() {
   const {
@@ -64,6 +66,7 @@ export default function PantryScreen() {
     deletePantryItemEntry,
     clearPantryLocation,
     clearAllPantry,
+    resortPantryItemsInDefaultLocation,
   } = useApp();
   const [filter, setFilter] = useState<PantryCategory | 'all'>('all');
   const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>('all');
@@ -86,6 +89,9 @@ export default function PantryScreen() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [scanLocationHint, setScanLocationHint] = useState<PantryStorageLocation>(
+    DEFAULT_PANTRY_STORAGE_LOCATION,
+  );
 
   const visionReady = isPantryVisionConfigured();
   const accessToken = session?.access_token ?? null;
@@ -98,19 +104,32 @@ export default function PantryScreen() {
     [pantry],
   );
 
-  async function runVisionFromPrepared(prepared: PreparedPantryImage) {
+  const resortPreview = useMemo(() => previewResortFromDefaultPantry(pantry), [pantry]);
+
+  async function runVisionFromPrepared(
+    prepared: PreparedPantryImage,
+    scanLocation: PantryStorageLocation,
+  ) {
     if (!featureFlags.photoScan) {
       Alert.alert('Feature off', 'Photo scan is disabled in feature toggles.');
       return;
     }
 
+    setScanLocationHint(scanLocation);
     setScanError(null);
     setPhase('loading');
     setPreviewUri(prepared.uri);
 
     try {
-      const result = await analyzePantryPhoto(prepared, accessToken);
-      const rows = detectionsToReviewItems(result.items, pantry, recipes, prepared.uri, demoMode);
+      const result = await analyzePantryPhoto(prepared, accessToken, { scanLocation });
+      const rows = detectionsToReviewItems(
+        result.items,
+        pantry,
+        recipes,
+        prepared.uri,
+        demoMode,
+        scanLocation,
+      );
       if (rows.length === 0) {
         setScanError('No pantry items were detected. Try a clearer photo with labels visible.');
         setPhase('idle');
@@ -135,13 +154,13 @@ export default function PantryScreen() {
     }
   }
 
-  async function runVisionFromUri(uri: string) {
+  async function runVisionFromUri(uri: string, scanLocation: PantryStorageLocation) {
     setScanError(null);
     setPhase('loading');
     setPreviewUri(uri);
     try {
       const prepared = await preparePantryImage(uri);
-      await runVisionFromPrepared(prepared);
+      await runVisionFromPrepared(prepared, scanLocation);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Pantry scan failed';
       setScanError(message);
@@ -149,27 +168,27 @@ export default function PantryScreen() {
     }
   }
 
-  async function handleNativeCamera() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Camera', 'Camera permission is required for pantry scanning.');
+  async function handleNativeScan(scanLocation: PantryStorageLocation, source: 'camera' | 'library') {
+    if (source === 'camera') {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Camera', 'Camera permission is required for pantry scanning.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: PHOTO_SCAN.jpegQuality,
+      });
+      if (result.canceled || !result.assets[0]) return;
+      await runVisionFromUri(result.assets[0].uri, scanLocation);
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: PHOTO_SCAN.jpegQuality,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    await runVisionFromUri(result.assets[0].uri);
-  }
-
-  async function handleNativeLibrary() {
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsEditing: true,
       quality: PHOTO_SCAN.jpegQuality,
     });
     if (result.canceled || !result.assets[0]) return;
-    await runVisionFromUri(result.assets[0].uri);
+    await runVisionFromUri(result.assets[0].uri, scanLocation);
   }
 
   async function handleSaveReview() {
@@ -197,6 +216,7 @@ export default function PantryScreen() {
     setPhase('idle');
     setReviewItems([]);
     setPreviewUri(null);
+    setScanLocationHint(DEFAULT_PANTRY_STORAGE_LOCATION);
   }
 
   function resetManualForm() {
@@ -279,6 +299,8 @@ export default function PantryScreen() {
         closeManualModal();
       } else if (confirmAction.kind === 'clear-location') {
         await clearPantryLocation(confirmAction.location);
+      } else if (confirmAction.kind === 'resort') {
+        await resortPantryItemsInDefaultLocation();
       } else {
         await clearAllPantry();
       }
@@ -310,6 +332,21 @@ export default function PantryScreen() {
         destructive: true,
       };
     }
+    if (confirmAction.kind === 'resort') {
+      const parts: string[] = [];
+      if (confirmAction.toFridge > 0) {
+        parts.push(`${confirmAction.toFridge} to ${labelForPantryStorageLocation('fridge')}`);
+      }
+      if (confirmAction.toSpiceRack > 0) {
+        parts.push(`${confirmAction.toSpiceRack} to ${labelForPantryStorageLocation('spice_rack')}`);
+      }
+      return {
+        title: 'Re-sort items?',
+        message: `Move ${parts.join(' and ')} from the default Pantry section. Items already in Fridge or Spice rack stay put.`,
+        confirmLabel: 'Re-sort',
+        destructive: false,
+      };
+    }
     return {
       title: 'Clear entire pantry?',
       message: `Remove all ${confirmAction.count} item(s) from every storage location? This cannot be undone.`,
@@ -327,33 +364,11 @@ export default function PantryScreen() {
         <Card className="mt-4" title="Pantry inventory" subtitle="Filter by category or scan new items">
           {scanControlsVisible ? (
             <>
-              {Platform.OS === 'web' ? (
-                <PantryPhotoCapture
-                  disabled={phase === 'loading' || !featureFlags.photoScan}
-                  onImagePrepared={(prepared) => void runVisionFromPrepared(prepared)}
-                  onError={(message) => {
-                    setScanError(message);
-                    setPhase('idle');
-                  }}
-                />
-              ) : (
-                <View className="mt-3 flex-row gap-2">
-                  <Pressable
-                    disabled={phase === 'loading' || !featureFlags.photoScan}
-                    onPress={() => void handleNativeCamera()}
-                    className={`flex-1 rounded-xl px-3 py-3 ${phase === 'loading' || !featureFlags.photoScan ? 'bg-slate/40' : 'bg-emerald'}`}
-                  >
-                    <Text className="text-center text-sm font-bold text-on-emerald">Scan shelf</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={phase === 'loading' || !featureFlags.photoScan}
-                    onPress={() => void handleNativeLibrary()}
-                    className="flex-1 rounded-xl border border-border bg-card px-3 py-3"
-                  >
-                    <Text className="text-center text-sm font-bold text-slate">Pick photo</Text>
-                  </Pressable>
-                </View>
-              )}
+              <PantryStorageScanButtons
+                disabled={phase === 'loading' || !featureFlags.photoScan}
+                onImagePrepared={(location, prepared) => void runVisionFromPrepared(prepared, location)}
+                onRequestNativeScan={(location, source) => void handleNativeScan(location, source)}
+              />
 
               {featureFlags.photoScan ? <PantryScanTip className="mt-2" /> : null}
             </>
@@ -396,6 +411,7 @@ export default function PantryScreen() {
               saving={saving}
               modelLabel={modelLabel}
               saveError={saveError}
+              defaultBatchLocation={scanLocationHint}
             />
           ) : null}
 
@@ -420,6 +436,44 @@ export default function PantryScreen() {
           locationFilter={locationFilter}
           onPressItem={openEditModal}
         />
+
+        {pantry.length > 0 ? (
+          <Card className="mt-4" title="Storage helper" subtitle="Auto-place items still listed under Pantry">
+            <Text className="mt-1 text-sm text-muted">
+              Uses the same rules as photo scan: spices to the rack, perishables to the fridge, shelf-stable goods in the pantry.
+            </Text>
+            {resortPreview.total > 0 ? (
+              <Text className="mt-2 text-sm font-semibold text-ink">
+                {resortPreview.toFridge > 0
+                  ? `${resortPreview.toFridge} → ${labelForPantryStorageLocation('fridge')}`
+                  : null}
+                {resortPreview.toFridge > 0 && resortPreview.toSpiceRack > 0 ? ' · ' : null}
+                {resortPreview.toSpiceRack > 0
+                  ? `${resortPreview.toSpiceRack} → ${labelForPantryStorageLocation('spice_rack')}`
+                  : null}
+              </Text>
+            ) : (
+              <Text className="mt-2 text-sm text-muted">No default-pantry items need re-sorting.</Text>
+            )}
+            <Pressable
+              disabled={resortPreview.total === 0}
+              onPress={() =>
+                setConfirmAction({
+                  kind: 'resort',
+                  toFridge: resortPreview.toFridge,
+                  toSpiceRack: resortPreview.toSpiceRack,
+                })
+              }
+              className={`mt-3 rounded-xl px-3 py-3 ${resortPreview.total === 0 ? 'bg-sand' : 'bg-emerald'}`}
+            >
+              <Text
+                className={`text-center text-sm font-bold ${resortPreview.total === 0 ? 'text-muted' : 'text-on-emerald'}`}
+              >
+                Re-sort items
+              </Text>
+            </Pressable>
+          </Card>
+        ) : null}
 
         {pantry.length > 0 ? (
           <Card className="mb-6" title="Clear inventory" subtitle="Remove items you no longer track">

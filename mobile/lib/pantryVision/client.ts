@@ -1,4 +1,5 @@
 import { getPantryVisionUrl, isDemoMode, PHOTO_SCAN } from '../../config/appConfig';
+import { DEFAULT_PANTRY_STORAGE_LOCATION, type PantryStorageLocation } from '../../config/pantryStorage';
 import { getDemoPantryDetections } from './demoSamples';
 import type { PantryVisionErrorEnvelope, PantryVisionResponse, PreparedPantryImage } from './types';
 
@@ -51,10 +52,16 @@ async function parseErrorResponse(
   throw new Error(json.error ?? `Pantry scan failed (${response.status})`);
 }
 
+export interface AnalyzePantryPhotoOptions {
+  scanLocation?: PantryStorageLocation;
+}
+
 export async function analyzePantryPhoto(
   prepared: PreparedPantryImage,
   accessToken: string | null,
+  options?: AnalyzePantryPhotoOptions,
 ): Promise<PantryVisionResponse> {
+  const scanLocation = options?.scanLocation ?? DEFAULT_PANTRY_STORAGE_LOCATION;
   if (isDemoMode()) {
     return { items: getDemoPantryDetections(), model: 'demo-samples' };
   }
@@ -76,6 +83,7 @@ export async function analyzePantryPhoto(
     body: JSON.stringify({
       imageBase64: prepared.base64,
       mimeType: prepared.mimeType,
+      location: scanLocation,
     }),
   });
 

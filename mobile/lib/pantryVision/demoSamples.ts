@@ -8,6 +8,7 @@ export function getDemoPantryDetections(): PantryVisionDetection[] {
       quantity: 2,
       unit: 'lb',
       category: 'dry_goods',
+      storage: 'pantry',
       confidence: 0.92,
     },
     {
@@ -15,6 +16,7 @@ export function getDemoPantryDetections(): PantryVisionDetection[] {
       quantity: 1,
       unit: 'jar',
       category: 'spices',
+      storage: 'spice_rack',
       confidence: 0.88,
     },
     {
@@ -22,6 +24,7 @@ export function getDemoPantryDetections(): PantryVisionDetection[] {
       quantity: 1,
       unit: 'bag',
       category: 'produce',
+      storage: 'fridge',
       confidence: 0.81,
     },
   ];

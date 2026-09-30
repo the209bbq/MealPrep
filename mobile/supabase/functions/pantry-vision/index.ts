@@ -31,6 +31,8 @@ const PANTRY_CATEGORIES = [
   'condiments',
 ] as const;
 
+const PANTRY_STORAGE = ['pantry', 'fridge', 'spice_rack'] as const;
+
 const RESPONSE_JSON_SCHEMA = {
   type: 'object',
   properties: {
@@ -43,9 +45,10 @@ const RESPONSE_JSON_SCHEMA = {
           quantity: { type: 'number' },
           unit: { type: 'string' },
           category: { type: 'string', enum: [...PANTRY_CATEGORIES] },
+          storage: { type: 'string', enum: [...PANTRY_STORAGE] },
           confidence: { type: 'number' },
         },
-        required: ['name', 'quantity', 'unit', 'category', 'confidence'],
+        required: ['name', 'quantity', 'unit', 'category', 'storage', 'confidence'],
       },
     },
   },
@@ -61,6 +64,7 @@ type DetectedPantryItem = {
   quantity: number;
   unit: string;
   category: (typeof PANTRY_CATEGORIES)[number];
+  storage: (typeof PANTRY_STORAGE)[number];
   confidence: number;
 };
 
@@ -103,7 +107,23 @@ function normalizeMime(value: string | null | undefined): string {
   return mime === 'image/jpg' ? 'image/jpeg' : mime;
 }
 
-async function readImageFromRequest(req: Request): Promise<{ bytes: Uint8Array; mimeType: string } | Response> {
+function parseScanLocationHint(raw: unknown): (typeof PANTRY_STORAGE)[number] {
+  if (typeof raw !== 'string') return 'pantry';
+  const trimmed = raw.trim().toLowerCase().replace(/\s+/g, '_');
+  if (trimmed === 'spice_rack' || trimmed === 'spice-rack' || trimmed === 'spicerack') return 'spice_rack';
+  if ((PANTRY_STORAGE as readonly string[]).includes(trimmed)) {
+    return trimmed as (typeof PANTRY_STORAGE)[number];
+  }
+  return 'pantry';
+}
+
+type ImageFromRequest = {
+  bytes: Uint8Array;
+  mimeType: string;
+  scanLocation: (typeof PANTRY_STORAGE)[number];
+};
+
+async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Response> {
   const contentType = req.headers.get('Content-Type') ?? '';
 
   if (contentType.includes('multipart/form-data')) {
@@ -120,15 +140,21 @@ async function readImageFromRequest(req: Request): Promise<{ bytes: Uint8Array; 
     if (buffer.byteLength > MAX_IMAGE_BYTES) {
       return jsonResponse({ error: 'Image too large. Resize on the client and try again.', code: 'PAYLOAD_TOO_LARGE' }, 413);
     }
-    return { bytes: buffer, mimeType };
+    const locationField = form.get('location');
+    const scanLocation = parseScanLocationHint(
+      typeof locationField === 'string' ? locationField : undefined,
+    );
+    return { bytes: buffer, mimeType, scanLocation };
   }
 
-  let body: { imageBase64?: string; mimeType?: string };
+  let body: { imageBase64?: string; mimeType?: string; location?: string };
   try {
-    body = (await req.json()) as { imageBase64?: string; mimeType?: string };
+    body = (await req.json()) as { imageBase64?: string; mimeType?: string; location?: string };
   } catch {
     return jsonResponse({ error: 'Invalid JSON body', code: 'BAD_REQUEST' }, 400);
   }
+
+  const scanLocation = parseScanLocationHint(body.location);
 
   const raw = body.imageBase64?.trim() ?? '';
   if (!raw) {
@@ -148,7 +174,7 @@ async function readImageFromRequest(req: Request): Promise<{ bytes: Uint8Array; 
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    return { bytes, mimeType };
+    return { bytes, mimeType, scanLocation };
   } catch {
     return jsonResponse({ error: 'Invalid base64 image data', code: 'BAD_REQUEST' }, 400);
   }
@@ -188,15 +214,40 @@ function sanitizeItems(raw: unknown): DetectedPantryItem[] {
       ? (categoryRaw as (typeof PANTRY_CATEGORIES)[number])
       : 'dry_goods';
     const confidence = Number(row.confidence);
+    const storageRaw = typeof row.storage === 'string' ? row.storage.trim().toLowerCase() : 'pantry';
+    const storage = (PANTRY_STORAGE as readonly string[]).includes(storageRaw)
+      ? (storageRaw as (typeof PANTRY_STORAGE)[number])
+      : 'pantry';
     out.push({
       name: name.slice(0, 120),
       quantity: Number.isFinite(quantity) && quantity > 0 ? Math.min(quantity, 9999) : 1,
       unit: unit.slice(0, 32),
       category,
+      storage,
       confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0.5,
     });
   }
   return out.slice(0, 40);
+}
+
+function scanLocationPromptHint(scanLocation: (typeof PANTRY_STORAGE)[number]): string {
+  switch (scanLocation) {
+    case 'fridge':
+      return (
+        'The user is scanning their refrigerator. Expect chilled items: dairy, eggs, fresh meat and fish, produce, ' +
+        'opened condiments, and leftovers. Still assign correct storage if something shelf-stable appears.'
+      );
+    case 'spice_rack':
+      return (
+        'The user is scanning their spice rack. Expect dried spices, dried herbs, and seasonings. ' +
+        'Still assign correct storage if a non-spice item appears.'
+      );
+    default:
+      return (
+        'The user is scanning pantry shelves. Expect dry goods, canned goods, snacks, cereal, baking supplies, ' +
+        'shelf-stable sauces, bread, and similar room-temperature items. Still assign correct storage for perishables if visible.'
+      );
+  }
 }
 
 async function callGemini(
@@ -204,14 +255,20 @@ async function callGemini(
   model: string,
   mimeType: string,
   imageBase64: string,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
 ): Promise<DetectedPantryItem[]> {
   const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const prompt =
     'You analyze photos of pantry shelves, refrigerators, or kitchen storage. ' +
-    'List distinct food or kitchen items visible. Use realistic quantities and units (oz, lb, cups, each, bottle, jar). ' +
-    'Pick the best pantry category for each item. Set confidence between 0 and 1. ' +
-    'Do not invent items that are not visible. Return JSON only.';
+    scanLocationPromptHint(scanLocation) +
+    ' List distinct food or kitchen items visible. Use realistic quantities and units (oz, lb, cups, each, bottle, jar). ' +
+    'Pick the best pantry category for each item. ' +
+    'For each item set storage to exactly one of: pantry, fridge, spice_rack. ' +
+    'Put dried spices, dried herbs, and seasonings (e.g. garlic powder, cumin, paprika) in spice_rack. ' +
+    'Put dairy, eggs, fresh meat and fish, most fresh produce, opened condiments that need refrigeration, and leftovers in fridge. ' +
+    'Put dry goods, canned goods, snacks, cereal, baking supplies, shelf-stable sauces and dressings (unopened), syrup, peanut butter, and bread in pantry. ' +
+    'Set confidence between 0 and 1. Do not invent items that are not visible. Return JSON only.';
 
   const payload = {
     contents: [
@@ -306,9 +363,15 @@ Deno.serve(async (req) => {
     if (imageResult instanceof Response) return imageResult;
 
     const imageBase64 = bytesToBase64(imageResult.bytes);
-    const items = await callGemini(apiKey, model, imageResult.mimeType, imageBase64);
+    const items = await callGemini(
+      apiKey,
+      model,
+      imageResult.mimeType,
+      imageBase64,
+      imageResult.scanLocation,
+    );
 
-    return jsonResponse({ items, model }, 200);
+    return jsonResponse({ items, model, scanLocation: imageResult.scanLocation }, 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Pantry vision error';
     return jsonResponse({ error: message, code: 'UPSTREAM_ERROR' }, 502);

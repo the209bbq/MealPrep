@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { CATEGORY_LABELS, PHOTO_SCAN } from '../config/appConfig';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   PANTRY_SCAN_TIP,
-  suggestStorageLocationForCategory,
+  suggestStorageLocationForPantryItem,
   type PantryStorageLocation,
 } from '../config/pantryStorage';
 import { mergeReviewItems } from '../lib/pantryVision/matchIngredients';
@@ -22,6 +22,7 @@ interface PantryScanReviewProps {
   saving: boolean;
   modelLabel?: string;
   saveError?: string | null;
+  defaultBatchLocation?: PantryStorageLocation;
 }
 
 export function PantryScanReview({
@@ -32,12 +33,17 @@ export function PantryScanReview({
   saving,
   modelLabel,
   saveError,
+  defaultBatchLocation = DEFAULT_PANTRY_STORAGE_LOCATION,
 }: PantryScanReviewProps) {
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
-  const [batchLocation, setBatchLocation] = useState<PantryStorageLocation>(DEFAULT_PANTRY_STORAGE_LOCATION);
+  const [batchLocation, setBatchLocation] = useState<PantryStorageLocation>(defaultBatchLocation);
 
   const enabledCount = useMemo(() => items.filter((item) => item.enabled).length, [items]);
   const showFewItemsTip = items.length > 0 && items.length <= PANTRY_SCAN_TIP.fewItemsThreshold;
+
+  useEffect(() => {
+    setBatchLocation(defaultBatchLocation);
+  }, [defaultBatchLocation]);
 
   function updateItem(key: string, patch: Partial<PantryScanReviewItem>) {
     onChange(items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
@@ -129,7 +135,7 @@ export function PantryScanReview({
                 onPress={() =>
                   updateItem(item.key, {
                     category: category as PantryCategory,
-                    location: suggestStorageLocationForCategory(category),
+                    location: suggestStorageLocationForPantryItem(item.name, category as PantryCategory),
                   })
                 }
                 className={`rounded-full px-2 py-1 ${item.category === category ? 'bg-emerald-light' : 'bg-paper'}`}

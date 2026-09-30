@@ -6,7 +6,13 @@ import {
   FEATURE_FLAG_DEFAULTS,
   isDemoMode,
 } from '../config/appConfig';
-import { DEFAULT_PANTRY_STORAGE_LOCATION, normalizePantryItemList } from '../config/pantryStorage';
+import {
+  DEFAULT_PANTRY_STORAGE_LOCATION,
+  normalizePantryItemList,
+  previewResortFromDefaultPantry,
+  resortPantryItemIfDefault,
+  type PantryResortPreview,
+} from '../config/pantryStorage';
 import { DEFAULT_FEATURE_FLAGS, MOCK_PANTRY, MOCK_RECIPES, profileForRole } from '../data/mockData';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
@@ -130,6 +136,8 @@ interface AppContextValue {
   deletePantryItemEntry: (id: string) => Promise<void>;
   clearPantryLocation: (location: PantryStorageLocation) => Promise<void>;
   clearAllPantry: () => Promise<void>;
+  previewPantryResort: () => PantryResortPreview;
+  resortPantryItemsInDefaultLocation: () => Promise<PantryResortPreview>;
   savePantryScanReview: (items: PantryScanReviewItem[]) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
@@ -727,6 +735,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, pantry, supabase, userId],
   );
 
+  const previewPantryResort = useCallback(() => previewResortFromDefaultPantry(pantry), [pantry]);
+
+  const resortPantryItemsInDefaultLocation = useCallback(async () => {
+    const preview = previewResortFromDefaultPantry(pantry);
+    if (preview.total === 0) return preview;
+
+    const next = pantry.map((item) => resortPantryItemIfDefault(item));
+    const changed = next.filter((item, index) => item.location !== pantry[index].location);
+
+    if (demoMode) {
+      setPantry(next);
+      return preview;
+    }
+    if (!supabase || !userId) {
+      throw new Error('Sign in to update pantry items.');
+    }
+
+    for (const item of changed) {
+      await updatePantryItem(supabase, userId, item);
+    }
+    setPantry(next);
+    return preview;
+  }, [demoMode, pantry, supabase, userId]);
+
   const clearAllPantry = useCallback(async () => {
     if (pantry.length === 0) return;
     if (demoMode) {
@@ -841,6 +873,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deletePantryItemEntry,
       clearPantryLocation,
       clearAllPantry,
+      previewPantryResort,
+      resortPantryItemsInDefaultLocation,
       savePantryScanReview,
       setFeatureFlag,
       refreshGrocery,
@@ -855,6 +889,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deletePantryItemEntry,
       clearPantryLocation,
       clearAllPantry,
+      previewPantryResort,
+      resortPantryItemsInDefaultLocation,
       savePantryScanReview,
       analytics,
       authError,
@@ -895,6 +931,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pantryRecipeMatches,
       pantryRecipeRecommendations,
       addMissingRecipeIngredientsToGrocery,
+      previewPantryResort,
+      resortPantryItemsInDefaultLocation,
     ],
   );
 

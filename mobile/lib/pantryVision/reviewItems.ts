@@ -1,10 +1,26 @@
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
-  suggestStorageLocationForCategory,
+  parseVisionStorageField,
+  suggestStorageLocationForPantryItem,
+  type PantryStorageLocation,
 } from '../../config/pantryStorage';
-import type { PantryItem, Recipe } from '../../types/mealprep';
+import type { PantryCategory, PantryItem, Recipe } from '../../types/mealprep';
 import { buildIngredientCatalog, matchDetectionToCatalog } from './matchIngredients';
 import type { PantryScanReviewItem, PantryVisionDetection } from './types';
+
+/** Per-item storage: vision field, then keyword auto-sort (can differ from scan hint), else scan hint. */
+export function resolveReviewItemStorage(
+  detection: PantryVisionDetection,
+  name: string,
+  category: PantryCategory,
+  scanHint: PantryStorageLocation,
+): PantryStorageLocation {
+  const fromVision = parseVisionStorageField(detection.storage);
+  if (fromVision) return fromVision;
+  const auto = suggestStorageLocationForPantryItem(name, category);
+  if (auto !== scanHint) return auto;
+  return scanHint;
+}
 
 export function detectionsToReviewItems(
   detections: PantryVisionDetection[],
@@ -12,6 +28,7 @@ export function detectionsToReviewItems(
   recipes: Recipe[],
   photoUri: string | null,
   isDemoSample: boolean,
+  scanHint: PantryStorageLocation = DEFAULT_PANTRY_STORAGE_LOCATION,
 ): PantryScanReviewItem[] {
   const catalog = buildIngredientCatalog(pantry, recipes);
   const stamp = Date.now();
@@ -27,7 +44,7 @@ export function detectionsToReviewItems(
       category,
       confidence: detection.confidence,
       ingredientId: match.ingredientId,
-      location: suggestStorageLocationForCategory(category),
+      location: resolveReviewItemStorage(detection, match.name, category, scanHint),
       photoUri,
       isDemoSample,
     };
@@ -62,6 +79,6 @@ export function applyBatchStorageLocation(
 export function applyCategoryDefaultsToReviewLocations(items: PantryScanReviewItem[]): PantryScanReviewItem[] {
   return items.map((item) => ({
     ...item,
-    location: suggestStorageLocationForCategory(item.category),
+    location: suggestStorageLocationForPantryItem(item.name, item.category),
   }));
 }
