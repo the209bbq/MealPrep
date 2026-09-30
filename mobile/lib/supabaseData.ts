@@ -226,6 +226,32 @@ export async function insertPantryItem(
   return mapPantry(data as PantryRow);
 }
 
+export async function insertPantryItems(
+  client: SupabaseClient,
+  userId: string,
+  items: PantryItem[],
+): Promise<PantryItem[]> {
+  if (items.length === 0) return [];
+  const { data, error } = await client
+    .from('pantry_items')
+    .insert(
+      items.map((item) => ({
+        user_id: userId,
+        ingredient_id: item.ingredientId,
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity,
+        unit: item.unit,
+        location: item.location,
+        photo_url: item.photoUri,
+        expires_on: item.expiresOn,
+      })),
+    )
+    .select('*');
+  if (error) throw error;
+  return (data ?? []).map((row) => mapPantry(row as PantryRow));
+}
+
 export async function upsertImportedRecipe(
   client: SupabaseClient,
   userId: string,

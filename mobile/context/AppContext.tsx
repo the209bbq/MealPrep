@@ -9,6 +9,8 @@ import {
 import { DEFAULT_FEATURE_FLAGS, MOCK_PANTRY, MOCK_RECIPES, profileForRole } from '../data/mockData';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
+import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
+import type { PantryScanReviewItem } from '../lib/pantryVision/types';
 import { readJson, writeJson } from '../lib/storage';
 import { getSupabase } from '../lib/supabase';
 import {
@@ -16,6 +18,7 @@ import {
   deleteGroceryItems,
   insertGroceryItem,
   insertPantryItem,
+  insertPantryItems,
   replaceGroceryList,
   updateGroceryChecked,
   updateMasterRecipe,
@@ -89,6 +92,7 @@ interface AppContextValue {
     options: { asMaster: boolean; recipeApiId: number },
   ) => Promise<void>;
   addPantryFromScan: (name: string, photoUri: string | null) => void;
+  savePantryScanReview: (items: PantryScanReviewItem[]) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
 }
@@ -437,6 +441,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, supabase, userId],
   );
 
+  const savePantryScanReview = useCallback(
+    async (items: PantryScanReviewItem[]) => {
+      const toSave = reviewItemsToPantryItems(items);
+      if (toSave.length === 0) return;
+
+      if (demoMode) {
+        setPantry((prev) => [...toSave, ...prev]);
+        return;
+      }
+      if (!supabase || !userId) {
+        throw new Error('Sign in to save pantry items.');
+      }
+
+      const saved = await insertPantryItems(supabase, userId, toSave);
+      setPantry((prev) => [...saved, ...prev]);
+    },
+    [demoMode, supabase, userId],
+  );
+
   const setFeatureFlag = useCallback(
     (key: keyof FeatureFlags, value: boolean) => {
       setFeatureFlags((prev) => ({ ...prev, [key]: value }));
@@ -481,11 +504,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateRecipe,
       importDiscoveredRecipe,
       addPantryFromScan,
+      savePantryScanReview,
       setFeatureFlag,
       refreshGrocery,
     }),
     [
       addPantryFromScan,
+      savePantryScanReview,
       analytics,
       authError,
       authReady,

@@ -92,6 +92,31 @@ export const getRecipeApiProxyUrl = (): string => {
   return `${base}/functions/v1/recipeapi-proxy`;
 };
 
+/** Pantry shelf photo recognition (Gemini key stays on Supabase Edge Function `pantry-vision`). */
+export const PHOTO_SCAN = {
+  enabled: true,
+  maxImageDimension: 1280,
+  jpegQuality: 0.72,
+  maxPayloadBytes: 2_000_000,
+  /** Documented default for the Edge Function secret GEMINI_MODEL (not sent from the client). */
+  defaultGeminiModel: 'gemini-2.5-flash',
+  proxyUrl: process.env.EXPO_PUBLIC_PANTRY_VISION_URL ?? '',
+  notConfiguredMessage:
+    'Pantry photo scan is not set up yet. Deploy the pantry-vision Edge Function and add GEMINI_API_KEY in Supabase secrets.',
+  rateLimitMessage: 'Too many scans — wait a minute and try again.',
+} as const;
+
+export const getPantryVisionUrl = (): string => {
+  const override = PHOTO_SCAN.proxyUrl.trim();
+  if (override) return override;
+  const base = SUPABASE_URL.trim().replace(/\/$/, '');
+  if (!base) return '';
+  return `${base}/functions/v1/pantry-vision`;
+};
+
+export const isPantryVisionConfigured = (): boolean =>
+  PHOTO_SCAN.enabled && (isDemoMode() || getPantryVisionUrl().length > 0);
+
 export const isRecipeDiscoveryConfigured = (): boolean =>
   RECIPE_DISCOVERY.enabled && (isDemoMode() || getRecipeApiProxyUrl().length > 0);
 
@@ -106,7 +131,7 @@ export const getKrogerProxyUrl = (): string => {
 export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; blurb: string }> = {
   photoScan: {
     title: 'Photo pantry scan',
-    blurb: 'Show the camera/image-picker flow on Pantry. Recognition is stubbed until an API is wired.',
+    blurb: 'Camera or gallery flow on Pantry with Gemini vision via the pantry-vision Edge Function.',
   },
   batchCalculator: {
     title: 'Batch meal-prep calculator',
