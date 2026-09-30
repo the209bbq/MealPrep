@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { FEATURE_FLAG_DEFAULTS } from '../config/appConfig';
+import { FEATURE_FLAG_DEFAULTS, PHOTO_SCAN } from '../config/appConfig';
+import { pantryPhotoUrlForStorage } from './pantryPhotoStorage';
+import { withTimeout } from './withTimeout';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
 import type {
   FeatureFlagKey,
@@ -202,27 +204,35 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
   };
 }
 
+function pantryInsertRow(userId: string, item: PantryItem) {
+  return {
+    user_id: userId,
+    ingredient_id: item.ingredientId,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    unit: item.unit,
+    location: item.location,
+    photo_url: pantryPhotoUrlForStorage(item.photoUri),
+    expires_on: item.expiresOn,
+  };
+}
+
 export async function insertPantryItem(
   client: SupabaseClient,
   userId: string,
   item: PantryItem,
 ): Promise<PantryItem> {
-  const { data, error } = await client
-    .from('pantry_items')
-    .insert({
-      user_id: userId,
-      ingredient_id: item.ingredientId,
-      name: item.name,
-      category: item.category,
-      quantity: item.quantity,
-      unit: item.unit,
-      location: item.location,
-      photo_url: item.photoUri,
-      expires_on: item.expiresOn,
-    })
-    .select('*')
-    .single();
+  const request = client.from('pantry_items').insert(pantryInsertRow(userId, item)).select('*').single();
+  const { data, error } = await withTimeout(
+    request,
+    PHOTO_SCAN.saveTimeoutMs,
+    PHOTO_SCAN.saveTimeoutMessage,
+  );
   if (error) throw error;
+  if (!data) {
+    throw new Error('Pantry item was not saved. Check that you are signed in and try again.');
+  }
   return mapPantry(data as PantryRow);
 }
 
@@ -232,24 +242,25 @@ export async function insertPantryItems(
   items: PantryItem[],
 ): Promise<PantryItem[]> {
   if (items.length === 0) return [];
-  const { data, error } = await client
+  const request = client
     .from('pantry_items')
-    .insert(
-      items.map((item) => ({
-        user_id: userId,
-        ingredient_id: item.ingredientId,
-        name: item.name,
-        category: item.category,
-        quantity: item.quantity,
-        unit: item.unit,
-        location: item.location,
-        photo_url: item.photoUri,
-        expires_on: item.expiresOn,
-      })),
-    )
+    .insert(items.map((item) => pantryInsertRow(userId, item)))
     .select('*');
+  const { data, error } = await withTimeout(
+    request,
+    PHOTO_SCAN.saveTimeoutMs,
+    PHOTO_SCAN.saveTimeoutMessage,
+  );
   if (error) throw error;
-  return (data ?? []).map((row) => mapPantry(row as PantryRow));
+  const rows = data ?? [];
+  if (rows.length !== items.length) {
+    throw new Error(
+      rows.length === 0
+        ? 'Could not save pantry items. Check that you are signed in and try again.'
+        : `Only ${rows.length} of ${items.length} pantry items were saved.`,
+    );
+  }
+  return rows.map((row) => mapPantry(row as PantryRow));
 }
 
 export async function upsertImportedRecipe(
