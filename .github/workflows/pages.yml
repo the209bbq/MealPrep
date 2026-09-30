@@ -25,10 +25,33 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Build Expo web app
+        working-directory: mobile
+        run: |
+          npm ci
+          npx expo export -p web
+      - name: Assemble site artifact
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -a New/. _site/
+          cp -a mobile/dist/. _site/app/
+          touch _site/.nojekyll
+          cd _site/app
+          for route in admin pantry grocery recipes; do
+            mkdir -p "$route"
+            cp "$route.html" "$route/index.html"
+          done
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: New
+          path: _site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
