@@ -33,6 +33,9 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
       - name: Build Expo web app
         working-directory: mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://okkwapgyadpaifpmkcex.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_PCMqSfDjdX6J55lc97km1g_I7U5n-pD
         run: |
           npm ci
           npx expo export -p web

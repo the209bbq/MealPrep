@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
-import { APP_NAME, APP_TAGLINE, THEME, isDemoMode } from '../../config/appConfig';
+import { APP_NAME, APP_TAGLINE, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 
 const HIGHLIGHTS = [
@@ -20,7 +20,7 @@ export default function HomeScreen() {
         <Text className="text-xs font-bold uppercase tracking-widest text-emerald-light">{APP_NAME}</Text>
         <Text className="mt-2 text-3xl font-bold leading-tight text-on-emerald">Your smart kitchen command center</Text>
         <Text className="mt-3 text-base text-emerald-light">{APP_TAGLINE}</Text>
-        {(demoMode || isDemoMode()) && (
+        {demoMode && (
           <Text className="mt-3 text-xs text-sand">Demo mode — Supabase env vars are empty. Data is local mock storage.</Text>
         )}
       </View>
