@@ -144,25 +144,36 @@ export function scoreRecipeAgainstPantry(recipe: Recipe, pantry: PantryItem[]): 
   };
 }
 
+export function compareRecipePantryMatches(a: RecipePantryMatch, b: RecipePantryMatch): number {
+  if (b.matchedCount !== a.matchedCount) return b.matchedCount - a.matchedCount;
+  if (b.percentMatch !== a.percentMatch) return b.percentMatch - a.percentMatch;
+  if (a.missingCount !== b.missingCount) return a.missingCount - b.missingCount;
+  return a.recipeName.localeCompare(b.recipeName);
+}
+
 export function buildPantryMatchIndex(recipes: Recipe[], pantry: PantryItem[]): PantryMatchIndex {
   const ranked = recipes.map((recipe) => scoreRecipeAgainstPantry(recipe, pantry));
-  ranked.sort((a, b) => {
-    if (b.percentMatch !== a.percentMatch) return b.percentMatch - a.percentMatch;
-    if (a.missingCount !== b.missingCount) return a.missingCount - b.missingCount;
-    return a.recipeName.localeCompare(b.recipeName);
-  });
+  ranked.sort(compareRecipePantryMatches);
   const byRecipeId = new Map(ranked.map((m) => [m.recipeId, m]));
   return { byRecipeId, ranked };
 }
 
 export type RecipePantryFilterMode = 'all' | 'have_all' | 'missing_1_2' | 'best_match';
 
+export interface FilterRankedMatchesOptions {
+  /** Exclude recipes with no pantry ingredient matches (non-staple). */
+  minMatchedCount?: number;
+}
+
 export function filterRankedMatches(
   ranked: RecipePantryMatch[],
   mode: RecipePantryFilterMode,
   minPercent: number,
+  options?: FilterRankedMatchesOptions,
 ): RecipePantryMatch[] {
+  const minMatched = options?.minMatchedCount ?? 0;
   return ranked.filter((m) => {
+    if (m.matchedCount < minMatched) return false;
     if (m.percentMatch < minPercent) return false;
     if (mode === 'have_all') return m.missingCount === 0;
     if (mode === 'missing_1_2') return m.missingCount >= 1 && m.missingCount <= 2;

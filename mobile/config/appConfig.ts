@@ -84,6 +84,14 @@ export const RECIPE_DISCOVERY = {
   proxyUrl: process.env.EXPO_PUBLIC_RECIPEAPI_PROXY_URL ?? '',
 } as const;
 
+/** Recipes tab: pantry-ranked kitchen list + optional discover search. */
+export const RECIPES_TAB = {
+  /** Do not load discover/catalog results until the user searches or applies filters. */
+  discoverRequiresActiveQuery: true,
+  /** Default kitchen list hides recipes with zero pantry ingredient matches. */
+  hideZeroPantryMatches: true,
+} as const;
+
 export const getRecipeApiProxyUrl = (): string => {
   const override = RECIPE_DISCOVERY.proxyUrl.trim();
   if (override) return override;

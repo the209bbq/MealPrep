@@ -12,9 +12,11 @@ export {
 } from './normalize';
 export {
   buildPantryMatchIndex,
+  compareRecipePantryMatches,
   filterRankedMatches,
   scoreRecipeAgainstPantry,
   topPantryRecipeRecommendations,
+  type FilterRankedMatchesOptions,
   type MatchedIngredient,
   type PantryMatchIndex,
   type RecipePantryFilterMode,
