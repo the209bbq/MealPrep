@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
+import { CookFromPantryCard } from '../../components/RecipePantryMatch';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { APP_NAME, APP_TAGLINE, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
@@ -13,7 +14,7 @@ const HIGHLIGHTS = [
 ];
 
 export default function HomeScreen() {
-  const { summary, demoMode, profile } = useApp();
+  const { summary, demoMode, profile, pantryRecipeRecommendations } = useApp();
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8" contentContainerStyle={{ paddingBottom: 24 }}>
@@ -60,6 +61,11 @@ export default function HomeScreen() {
           ))}
         </View>
       </Card>
+
+      <CookFromPantryCard
+        recommendations={pantryRecipeRecommendations}
+        onOpenRecipe={(recipeId) => router.push({ pathname: '/recipes', params: { recipeId } })}
+      />
 
       <Text className="mb-2 mt-6 text-lg font-bold text-ink">Why Meal Prep</Text>
       {HIGHLIGHTS.map((item) => (

@@ -10,6 +10,12 @@ import { DEFAULT_PANTRY_STORAGE_LOCATION, normalizePantryItemList } from '../con
 import { DEFAULT_FEATURE_FLAGS, MOCK_PANTRY, MOCK_RECIPES, profileForRole } from '../data/mockData';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
+import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
+import {
+  buildPantryMatchIndex,
+  topPantryRecipeRecommendations,
+  type PantryMatchIndex,
+} from '../lib/recipeMatch';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
 import { readJson, writeJson } from '../lib/storage';
@@ -111,6 +117,9 @@ interface AppContextValue {
   savePantryScanReview: (items: PantryScanReviewItem[]) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
+  pantryRecipeMatches: PantryMatchIndex;
+  pantryRecipeRecommendations: ReturnType<typeof topPantryRecipeRecommendations>;
+  addMissingRecipeIngredientsToGrocery: (recipeId: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -255,6 +264,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       lastActiveAt: new Date().toISOString(),
     };
   }, [demoMode, grocery, liveAnalytics, pantry.length, recipes.length]);
+
+  const pantryRecipeMatches = useMemo(
+    () => buildPantryMatchIndex(recipes, pantry),
+    [pantry, recipes],
+  );
+
+  const pantryRecipeRecommendations = useMemo(
+    () => topPantryRecipeRecommendations(recipes, pantry, 3),
+    [pantry, recipes],
+  );
 
   const setDemoRole = useCallback((next: UserRole) => {
     setRole(next);
@@ -584,6 +603,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, isAdmin, supabase],
   );
 
+  const addMissingRecipeIngredientsToGrocery = useCallback(
+    (recipeId: string) => {
+      const recipe = recipes.find((r) => r.id === recipeId);
+      const match = pantryRecipeMatches.byRecipeId.get(recipeId);
+      if (!recipe || !match || match.missing.length === 0) return;
+
+      setGrocery((prev) => {
+        const next = mergeMissingIntoGrocery({
+          missing: match.missing,
+          recipeId,
+          pantry,
+          previous: prev,
+        });
+        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        if (supabase && userId) {
+          void replaceGroceryList(supabase, userId, next)
+            .then((persisted) => setGrocery(persisted))
+            .catch((error: unknown) => {
+              setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
+            });
+        }
+        return next;
+      });
+    },
+    [demoMode, pantry, pantryRecipeMatches.byRecipeId, recipes, supabase, userId],
+  );
+
   const value = useMemo(
     () => ({
       appName: APP_NAME,
@@ -624,6 +670,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       savePantryScanReview,
       setFeatureFlag,
       refreshGrocery,
+      pantryRecipeMatches,
+      pantryRecipeRecommendations,
+      addMissingRecipeIngredientsToGrocery,
     }),
     [
       addPantryFromScan,
@@ -663,6 +712,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleRecipeSelection,
       updateRecipe,
       importDiscoveredRecipe,
+      pantryRecipeMatches,
+      pantryRecipeRecommendations,
+      addMissingRecipeIngredientsToGrocery,
     ],
   );
 
