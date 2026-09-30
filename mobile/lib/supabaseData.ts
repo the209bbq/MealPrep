@@ -47,6 +47,11 @@ type RecipeRow = {
   minutes: number;
   calories: number;
   protein: number;
+  carbs: number | null;
+  fat: number | null;
+  nutrition_source: string | null;
+  nutrition_citation: string | null;
+  nutrition_sourced_at: string | null;
   ingredients: RecipeIngredient[] | null;
   steps: string[] | null;
   is_master: boolean;
@@ -118,10 +123,15 @@ export function mapRecipe(row: RecipeRow): Recipe {
     minutes: row.minutes,
     calories: row.calories,
     protein: row.protein,
+    carbs: row.carbs ?? 0,
+    fat: row.fat ?? 0,
     ingredients: row.ingredients ?? [],
     steps: row.steps ?? [],
     isMaster: row.is_master,
     createdAt: row.created_at,
+    nutritionSource: row.nutrition_source ?? undefined,
+    nutritionCitation: row.nutrition_citation ?? undefined,
+    nutritionSourcedAt: row.nutrition_sourced_at ?? undefined,
   };
 }
 
@@ -220,8 +230,13 @@ export async function updateMasterRecipe(client: SupabaseClient, recipe: Recipe)
     minutes: recipe.minutes,
     calories: recipe.calories,
     protein: recipe.protein,
+    carbs: recipe.carbs,
+    fat: recipe.fat,
     ingredients: recipe.ingredients,
     steps: recipe.steps,
+    nutrition_source: recipe.nutritionSource ?? '',
+    nutrition_citation: recipe.nutritionCitation ?? '',
+    nutrition_sourced_at: recipe.nutritionSourcedAt ?? null,
   };
   const bySlug = await client.from('recipes').update(payload).eq('slug', recipe.id).select('id');
   if (bySlug.error) throw bySlug.error;

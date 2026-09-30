@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { useApp } from '../../context/AppContext';
+import { nutritionLabel } from '../../lib/nutrition';
 
 export default function RecipesScreen() {
   const {
@@ -32,7 +33,7 @@ export default function RecipesScreen() {
                   <Text className="text-base font-bold text-ink">{recipe.name}</Text>
                   <Text className="mt-1 text-sm text-muted">{recipe.description}</Text>
                   <Text className="mt-2 text-xs text-muted">
-                    {recipe.servings} servings · {recipe.minutes} min · {recipe.protein}g protein
+                    {recipe.servings} servings · {recipe.minutes} min · {nutritionLabel(recipe)}
                   </Text>
                 </View>
                 <Pressable

@@ -118,6 +118,13 @@ export const DEMO_USERS: Record<UserRole, { id: string; email: string; name: str
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
+/** USDA FoodData Central — same endpoints as New/nutrition.js */
+export const USDA_FDC_SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
+export const USDA_FDC_FOOD_URL = 'https://api.nal.usda.gov/fdc/v1/food';
+export const USDA_DEMO_API_KEY = 'DEMO_KEY';
+export const USDA_FDC_API_KEY = (process.env.EXPO_PUBLIC_USDA_FDC_API_KEY ?? '').trim();
+export const USDA_SETTINGS_STORAGE_KEY = 'mealprep.usdaApiKey';
+
 export const isSupabaseConfigured = (): boolean =>
   SUPABASE_URL.trim().length > 0 && SUPABASE_ANON_KEY.trim().length > 0;
 
