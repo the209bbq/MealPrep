@@ -14,6 +14,8 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="smart-shop" options={{ presentation: 'card' }} />
+            <Stack.Screen name="discover-recipes" options={{ presentation: 'card' }} />
+            <Stack.Screen name="discover-recipes/[id]" options={{ presentation: 'card' }} />
           </Stack>
         </AppProvider>
       </SafeAreaProvider>

@@ -162,7 +162,11 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
   const [profileRes, pantryRes, recipesRes, groceryRes, flagsRes, countsRes] = await Promise.all([
     client.from('profiles').select('*').eq('id', userId).maybeSingle(),
     client.from('pantry_items').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
-    client.from('recipes').select('*').order('created_at', { ascending: true }),
+    client
+      .from('recipes')
+      .select('*')
+      .or(`is_master.eq.true,created_by.eq.${userId}`)
+      .order('created_at', { ascending: true }),
     client.from('grocery_list_items').select('*').eq('user_id', userId).order('name'),
     client.from('feature_flags').select('key, enabled'),
     client.from('profiles').select('role', { count: 'exact', head: false }),
@@ -219,6 +223,41 @@ export async function insertPantryItem(
     .single();
   if (error) throw error;
   return mapPantry(data as PantryRow);
+}
+
+export async function upsertImportedRecipe(
+  client: SupabaseClient,
+  userId: string,
+  recipe: Recipe,
+  options: { asMaster: boolean },
+): Promise<Recipe> {
+  const payload = {
+    slug: recipe.id,
+    name: recipe.name,
+    description: recipe.description,
+    tag: recipe.tag,
+    servings: recipe.servings,
+    minutes: recipe.minutes,
+    calories: recipe.calories,
+    protein: recipe.protein,
+    carbs: recipe.carbs,
+    fat: recipe.fat,
+    ingredients: recipe.ingredients,
+    steps: recipe.steps,
+    is_master: options.asMaster,
+    created_by: userId,
+    nutrition_source: recipe.nutritionSource ?? 'RecipeAPI.io',
+    nutrition_citation: recipe.nutritionCitation ?? '',
+    nutrition_sourced_at: recipe.nutritionSourcedAt ?? new Date().toISOString(),
+  };
+
+  const { data, error } = await client
+    .from('recipes')
+    .upsert(payload, { onConflict: 'slug' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapRecipe(data as RecipeRow);
 }
 
 export async function updateMasterRecipe(client: SupabaseClient, recipe: Recipe) {

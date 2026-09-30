@@ -1,5 +1,7 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { RECIPE_DISCOVERY } from '../../config/appConfig';
 import { Card } from '../../components/Card';
 import { useApp } from '../../context/AppContext';
 import { nutritionLabel } from '../../lib/nutrition';
@@ -21,7 +23,17 @@ export default function RecipesScreen() {
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8">
-      <Text className="mt-4 text-lg font-bold text-ink">Recipe library</Text>
+      <View className="mt-4 flex-row items-center justify-between">
+        <Text className="text-lg font-bold text-ink">Recipe library</Text>
+        {RECIPE_DISCOVERY.enabled ? (
+          <Pressable
+            onPress={() => router.push('/discover-recipes')}
+            className="rounded-full border border-emerald bg-emerald-light px-3 py-1.5"
+          >
+            <Text className="text-xs font-bold text-emerald-dark">Discover recipes</Text>
+          </Pressable>
+        ) : null}
+      </View>
       {recipes.map((recipe) => {
         const selected = selectedRecipeIds.includes(recipe.id);
         return (
