@@ -1,6 +1,10 @@
 -- Allow members to save imported (non-master) recipes they own; keep master catalog admin-only.
+-- Personal RecipeAPI imports use slug recipeapi-{id}--{user_id} in app code (global slug stays unique).
 
 drop policy if exists recipes_read on public.recipes;
+drop policy if exists recipes_user_insert on public.recipes;
+drop policy if exists recipes_user_update on public.recipes;
+drop policy if exists recipes_user_delete on public.recipes;
 
 create policy recipes_read on public.recipes
   for select

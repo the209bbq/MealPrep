@@ -1,5 +1,6 @@
 import type { PantryCategory, Recipe, RecipeIngredient } from '../../types/mealprep';
 import type { RecipeApiRecipe } from './types';
+import { recipeApiMasterSlug, recipeApiPersonalSlug } from './slugs';
 
 function mapIngredientCategory(apiCategory: string): PantryCategory {
   const c = apiCategory.toLowerCase();
@@ -12,11 +13,13 @@ function mapIngredientCategory(apiCategory: string): PantryCategory {
   return 'dry_goods';
 }
 
-function slugForRecipeApi(id: number): string {
-  return `recipeapi-${id}`;
-}
-
-export function recipeApiToAppRecipe(api: RecipeApiRecipe, options?: { asMaster?: boolean }): Recipe {
+export function recipeApiToAppRecipe(
+  api: RecipeApiRecipe,
+  options: { asMaster: boolean; userId: string },
+): Recipe {
+  const slug = options.asMaster
+    ? recipeApiMasterSlug(api.id)
+    : recipeApiPersonalSlug(api.id, options.userId);
   const ingredients: RecipeIngredient[] = api.ingredients.map((ing) => ({
     ingredientId: `recipeapi-ing-${ing.id}`,
     name: ing.optional ? `${ing.name} (optional)` : ing.name,
@@ -31,7 +34,7 @@ export function recipeApiToAppRecipe(api: RecipeApiRecipe, options?: { asMaster?
   const tag = tagParts.join(' · ');
 
   return {
-    id: slugForRecipeApi(api.id),
+    id: slug,
     name: api.name,
     tag,
     description: api.description,
@@ -43,7 +46,7 @@ export function recipeApiToAppRecipe(api: RecipeApiRecipe, options?: { asMaster?
     fat: Math.round(api.fat ?? 0),
     ingredients,
     steps: api.instructions ?? [],
-    isMaster: options?.asMaster ?? false,
+    isMaster: options.asMaster,
     createdAt: new Date().toISOString(),
     nutritionSource: 'RecipeAPI.io',
     nutritionCitation: 'Nutrition per serving from RecipeAPI.io',

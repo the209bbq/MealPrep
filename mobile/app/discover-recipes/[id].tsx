@@ -18,12 +18,13 @@ import {
   RecipeDiscoveryNotConfiguredError,
 } from '../../lib/recipeDiscovery/client';
 import { recipeApiToAppRecipe } from '../../lib/recipeDiscovery/mapToAppRecipe';
+import { isRecipeApiInLibrary } from '../../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 export default function DiscoverRecipeDetailScreen() {
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const recipeId = Number.parseInt(String(idParam), 10);
   const insets = useSafeAreaInsets();
-  const { session, isAdmin, importDiscoveredRecipe, recipes } = useApp();
+  const { session, isAdmin, importDiscoveredRecipe, recipes, profile } = useApp();
   const accessToken = session?.access_token ?? null;
 
   const [recipe, setRecipe] = useState<RecipeDiscoveryListItem | null>(null);
@@ -32,8 +33,9 @@ export default function DiscoverRecipeDetailScreen() {
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);
 
-  const slug = Number.isFinite(recipeId) ? `recipeapi-${recipeId}` : '';
-  const alreadyInLibrary = recipes.some((r) => r.id === slug);
+  const ownerId = profile.id || 'demo-user';
+  const alreadyInLibrary =
+    Number.isFinite(recipeId) && isRecipeApiInLibrary(recipes, recipeId, ownerId);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(recipeId)) {
@@ -68,8 +70,8 @@ export default function DiscoverRecipeDetailScreen() {
     setImporting(true);
     setError(null);
     try {
-      const mapped = recipeApiToAppRecipe(recipe, { asMaster: isAdmin });
-      await importDiscoveredRecipe(mapped, { asMaster: isAdmin });
+      const mapped = recipeApiToAppRecipe(recipe, { asMaster: isAdmin, userId: ownerId });
+      await importDiscoveredRecipe(mapped, { asMaster: isAdmin, recipeApiId: recipeId });
       setImported(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');

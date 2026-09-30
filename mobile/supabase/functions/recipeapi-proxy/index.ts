@@ -1,9 +1,10 @@
-// Supabase Edge Function: RecipeAPI.io proxy (keeps RECIPEAPI_KEY server-side).
-// Deploy: supabase functions deploy recipeapi-proxy --project-ref <ref>
-// Secrets: RECIPEAPI_KEY (Dashboard → Edge Functions → Secrets)
-
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
-import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+// RecipeAPI.io proxy — paste this ENTIRE file into Supabase Dashboard:
+// Edge Functions → Deploy a new function → Via Editor → name: recipeapi-proxy
+//
+// Settings: leave "Verify JWT" ENABLED (default). The gateway rejects anonymous calls;
+// this function reads the user id from the JWT for rate limiting.
+//
+// Secrets (Edge Functions → Secrets): RECIPEAPI_KEY = your sk_live_... key
 
 const RECIPE_API_BASE = 'https://recipeapi.io/api/v1';
 
@@ -87,10 +88,6 @@ function pickQuery(
   return params;
 }
 
-function cacheKey(url: string): string {
-  return url;
-}
-
 function readCache(key: string): CacheEntry | null {
   const hit = responseCache.get(key);
   if (!hit) return null;
@@ -121,46 +118,24 @@ function checkUserRateLimit(userId: string): boolean {
   return true;
 }
 
-async function verifyUser(req: Request): Promise<{ userId: string } | Response> {
+/** With Verify JWT enabled, only authenticated requests reach this handler. */
+function userIdFromJwt(req: Request): string | null {
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return new Response(JSON.stringify({ error: 'Sign in required', code: 'UNAUTHENTICATED' }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.slice('Bearer '.length);
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded)) as { sub?: string };
+    return typeof payload.sub === 'string' && payload.sub.length > 0 ? payload.sub : null;
+  } catch {
+    return null;
   }
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return new Response(JSON.stringify({ error: 'Supabase env not configured' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) {
-    return new Response(JSON.stringify({ error: 'Invalid or expired session', code: 'UNAUTHENTICATED' }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  if (!checkUserRateLimit(data.user.id)) {
-    return new Response(JSON.stringify({ error: 'Too many recipe searches. Try again in a minute.', code: 'RATE_LIMIT' }), {
-      status: 429,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  return { userId: data.user.id };
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -170,6 +145,24 @@ serve(async (req) => {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+  }
+
+  const userId = userIdFromJwt(req);
+  if (!userId) {
+    return new Response(JSON.stringify({ error: 'Sign in required', code: 'UNAUTHENTICATED' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!checkUserRateLimit(userId)) {
+    return new Response(
+      JSON.stringify({ error: 'Too many recipe searches. Try again in a minute.', code: 'RATE_LIMIT' }),
+      {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      },
+    );
   }
 
   const apiKey = Deno.env.get('RECIPEAPI_KEY') ?? '';
@@ -185,9 +178,6 @@ serve(async (req) => {
       },
     );
   }
-
-  const verified = await verifyUser(req);
-  if (verified instanceof Response) return verified;
 
   try {
     const body = (await req.json()) as ProxyRequest;
@@ -217,7 +207,7 @@ serve(async (req) => {
       });
     }
 
-    const key = cacheKey(upstreamUrl);
+    const key = upstreamUrl;
     const cached = readCache(key);
     if (cached) {
       return new Response(cached.body, {

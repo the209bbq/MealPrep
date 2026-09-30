@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FEATURE_FLAG_DEFAULTS } from '../config/appConfig';
+import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
 import type {
   FeatureFlagKey,
   FeatureFlags,
@@ -229,10 +230,24 @@ export async function upsertImportedRecipe(
   client: SupabaseClient,
   userId: string,
   recipe: Recipe,
-  options: { asMaster: boolean },
+  options: { asMaster: boolean; recipeApiId: number },
 ): Promise<Recipe> {
+  const masterSlug = recipeApiMasterSlug(options.recipeApiId);
+  const storageSlug = options.asMaster ? masterSlug : recipeApiPersonalSlug(options.recipeApiId, userId);
+
+  if (!options.asMaster) {
+    const { data: existingMaster, error: masterLookupError } = await client
+      .from('recipes')
+      .select('*')
+      .eq('slug', masterSlug)
+      .eq('is_master', true)
+      .maybeSingle();
+    if (masterLookupError) throw masterLookupError;
+    if (existingMaster) return mapRecipe(existingMaster as RecipeRow);
+  }
+
   const payload = {
-    slug: recipe.id,
+    slug: storageSlug,
     name: recipe.name,
     description: recipe.description,
     tag: recipe.tag,

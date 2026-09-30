@@ -84,7 +84,10 @@ interface AppContextValue {
   clearCheckedGroceryItems: () => void;
   seedPantry: () => void;
   updateRecipe: (recipe: Recipe) => void;
-  importDiscoveredRecipe: (recipe: Recipe, options: { asMaster: boolean }) => Promise<void>;
+  importDiscoveredRecipe: (
+    recipe: Recipe,
+    options: { asMaster: boolean; recipeApiId: number },
+  ) => Promise<void>;
   addPantryFromScan: (name: string, photoUri: string | null) => void;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
@@ -379,7 +382,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const importDiscoveredRecipe = useCallback(
-    async (recipe: Recipe, options: { asMaster: boolean }) => {
+    async (recipe: Recipe, options: { asMaster: boolean; recipeApiId: number }) => {
       if (options.asMaster && !isAdmin) {
         throw new Error('Only admins can add recipes to the shared kitchen catalog.');
       }
