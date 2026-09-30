@@ -4,7 +4,9 @@ import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
+import { UsdaNutritionPanel } from '../../components/UsdaNutritionPanel';
 import { initials } from '../../lib/initials';
+import { nutritionLabel } from '../../lib/nutrition';
 import type { FeatureFlagKey, UserRole } from '../../types/mealprep';
 
 export default function AdminScreen() {
@@ -137,12 +139,19 @@ export default function AdminScreen() {
               className="mb-3 rounded-xl border border-border bg-card px-3 py-2 text-ink"
               placeholder="Description"
             />
+            <Text className="mb-2 text-xs text-muted">{nutritionLabel(recipe)}</Text>
             <Pressable
               onPress={() => updateRecipe({ ...recipe, name: editName, description: editDesc })}
               className="rounded-xl bg-emerald px-4 py-3"
             >
               <Text className="text-center font-bold text-on-emerald">Save master recipe</Text>
             </Pressable>
+            <UsdaNutritionPanel
+              recipe={recipe}
+              onSave={(next) => {
+                updateRecipe({ ...next, name: editName, description: editDesc });
+              }}
+            />
           </>
         ) : (
           <Text className="text-sm text-muted">Recipe master edit is disabled.</Text>

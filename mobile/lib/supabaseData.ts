@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FEATURE_FLAG_DEFAULTS } from '../config/appConfig';
+import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
 import type {
   FeatureFlagKey,
   FeatureFlags,
@@ -47,6 +48,11 @@ type RecipeRow = {
   minutes: number;
   calories: number;
   protein: number;
+  carbs: number | null;
+  fat: number | null;
+  nutrition_source: string | null;
+  nutrition_citation: string | null;
+  nutrition_sourced_at: string | null;
   ingredients: RecipeIngredient[] | null;
   steps: string[] | null;
   is_master: boolean;
@@ -118,10 +124,15 @@ export function mapRecipe(row: RecipeRow): Recipe {
     minutes: row.minutes,
     calories: row.calories,
     protein: row.protein,
+    carbs: row.carbs ?? 0,
+    fat: row.fat ?? 0,
     ingredients: row.ingredients ?? [],
     steps: row.steps ?? [],
     isMaster: row.is_master,
     createdAt: row.created_at,
+    nutritionSource: row.nutrition_source ?? undefined,
+    nutritionCitation: row.nutrition_citation ?? undefined,
+    nutritionSourcedAt: row.nutrition_sourced_at ?? undefined,
   };
 }
 
@@ -152,7 +163,11 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
   const [profileRes, pantryRes, recipesRes, groceryRes, flagsRes, countsRes] = await Promise.all([
     client.from('profiles').select('*').eq('id', userId).maybeSingle(),
     client.from('pantry_items').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
-    client.from('recipes').select('*').order('created_at', { ascending: true }),
+    client
+      .from('recipes')
+      .select('*')
+      .or(`is_master.eq.true,created_by.eq.${userId}`)
+      .order('created_at', { ascending: true }),
     client.from('grocery_list_items').select('*').eq('user_id', userId).order('name'),
     client.from('feature_flags').select('key, enabled'),
     client.from('profiles').select('role', { count: 'exact', head: false }),
@@ -211,6 +226,55 @@ export async function insertPantryItem(
   return mapPantry(data as PantryRow);
 }
 
+export async function upsertImportedRecipe(
+  client: SupabaseClient,
+  userId: string,
+  recipe: Recipe,
+  options: { asMaster: boolean; recipeApiId: number },
+): Promise<Recipe> {
+  const masterSlug = recipeApiMasterSlug(options.recipeApiId);
+  const storageSlug = options.asMaster ? masterSlug : recipeApiPersonalSlug(options.recipeApiId, userId);
+
+  if (!options.asMaster) {
+    const { data: existingMaster, error: masterLookupError } = await client
+      .from('recipes')
+      .select('*')
+      .eq('slug', masterSlug)
+      .eq('is_master', true)
+      .maybeSingle();
+    if (masterLookupError) throw masterLookupError;
+    if (existingMaster) return mapRecipe(existingMaster as RecipeRow);
+  }
+
+  const payload = {
+    slug: storageSlug,
+    name: recipe.name,
+    description: recipe.description,
+    tag: recipe.tag,
+    servings: recipe.servings,
+    minutes: recipe.minutes,
+    calories: recipe.calories,
+    protein: recipe.protein,
+    carbs: recipe.carbs,
+    fat: recipe.fat,
+    ingredients: recipe.ingredients,
+    steps: recipe.steps,
+    is_master: options.asMaster,
+    created_by: userId,
+    nutrition_source: recipe.nutritionSource ?? 'RecipeAPI.io',
+    nutrition_citation: recipe.nutritionCitation ?? '',
+    nutrition_sourced_at: recipe.nutritionSourcedAt ?? new Date().toISOString(),
+  };
+
+  const { data, error } = await client
+    .from('recipes')
+    .upsert(payload, { onConflict: 'slug' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapRecipe(data as RecipeRow);
+}
+
 export async function updateMasterRecipe(client: SupabaseClient, recipe: Recipe) {
   const payload = {
     name: recipe.name,
@@ -220,8 +284,13 @@ export async function updateMasterRecipe(client: SupabaseClient, recipe: Recipe)
     minutes: recipe.minutes,
     calories: recipe.calories,
     protein: recipe.protein,
+    carbs: recipe.carbs,
+    fat: recipe.fat,
     ingredients: recipe.ingredients,
     steps: recipe.steps,
+    nutrition_source: recipe.nutritionSource ?? '',
+    nutrition_citation: recipe.nutritionCitation ?? '',
+    nutrition_sourced_at: recipe.nutritionSourcedAt ?? null,
   };
   const bySlug = await client.from('recipes').update(payload).eq('slug', recipe.id).select('id');
   if (bySlug.error) throw bySlug.error;

@@ -56,12 +56,44 @@ export interface PantryItem {
   updatedAt: string;
 }
 
+export const NUTRITION_FIELDS = [
+  'calories',
+  'protein',
+  'carbs',
+  'fat',
+  'fiber',
+  'sodium',
+  'potassium',
+  'calcium',
+  'iron',
+] as const;
+
+export type NutritionField = (typeof NUTRITION_FIELDS)[number];
+
+export interface NutritionValues {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sodium: number;
+  potassium: number;
+  calcium: number;
+  iron: number;
+}
+
 export interface RecipeIngredient {
   ingredientId: string;
   name: string;
   quantity: number;
   unit: string;
   notes?: string;
+  grams?: number;
+  fdcId?: string;
+  nutrition?: NutritionValues;
+  nutritionSource?: string;
+  nutritionCitation?: string;
+  nutritionSourcedAt?: string;
 }
 
 export interface Recipe {
@@ -73,10 +105,26 @@ export interface Recipe {
   minutes: number;
   calories: number;
   protein: number;
+  carbs: number;
+  fat: number;
   ingredients: RecipeIngredient[];
   steps: string[];
   isMaster: boolean;
   createdAt: string;
+  nutritionSource?: string;
+  nutritionCitation?: string;
+  nutritionSourcedAt?: string;
+}
+
+export interface UsdaFoodMatch {
+  fdcId: number;
+  name: string;
+  dataType: string;
+  brand: string;
+  nutritionPer100g: NutritionValues;
+  source: string;
+  citation: string;
+  url: string;
 }
 
 export interface GroceryListItem {

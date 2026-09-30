@@ -75,6 +75,26 @@ export const SMART_SHOP = {
 
 export const isKrogerConfigured = (): boolean => SMART_SHOP.krogerClientId.trim().length > 0;
 
+/** RecipeAPI.io discovery (secret stays on Supabase Edge Function `recipeapi-proxy`). */
+export const RECIPE_DISCOVERY = {
+  enabled: true,
+  searchDebounceMs: 450,
+  cacheTtlMs: 10 * 60 * 1000,
+  defaultPerPage: 10,
+  proxyUrl: process.env.EXPO_PUBLIC_RECIPEAPI_PROXY_URL ?? '',
+} as const;
+
+export const getRecipeApiProxyUrl = (): string => {
+  const override = RECIPE_DISCOVERY.proxyUrl.trim();
+  if (override) return override;
+  const base = SUPABASE_URL.trim().replace(/\/$/, '');
+  if (!base) return '';
+  return `${base}/functions/v1/recipeapi-proxy`;
+};
+
+export const isRecipeDiscoveryConfigured = (): boolean =>
+  RECIPE_DISCOVERY.enabled && (isDemoMode() || getRecipeApiProxyUrl().length > 0);
+
 export const getKrogerProxyUrl = (): string => {
   const override = SMART_SHOP.krogerProxyUrl.trim();
   if (override) return override;
@@ -141,6 +161,13 @@ export const DEMO_USERS: Record<UserRole, { id: string; email: string; name: str
 
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+/** USDA FoodData Central — same endpoints as New/nutrition.js */
+export const USDA_FDC_SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
+export const USDA_FDC_FOOD_URL = 'https://api.nal.usda.gov/fdc/v1/food';
+export const USDA_DEMO_API_KEY = 'DEMO_KEY';
+export const USDA_FDC_API_KEY = (process.env.EXPO_PUBLIC_USDA_FDC_API_KEY ?? '').trim();
+export const USDA_SETTINGS_STORAGE_KEY = 'mealprep.usdaApiKey';
 
 export const isSupabaseConfigured = (): boolean =>
   SUPABASE_URL.trim().length > 0 && SUPABASE_ANON_KEY.trim().length > 0;

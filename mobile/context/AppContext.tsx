@@ -20,6 +20,7 @@ import {
   updateGroceryChecked,
   updateMasterRecipe,
   upsertFeatureFlag,
+  upsertImportedRecipe,
 } from '../lib/supabaseData';
 import type {
   FeatureFlags,
@@ -83,6 +84,10 @@ interface AppContextValue {
   clearCheckedGroceryItems: () => void;
   seedPantry: () => void;
   updateRecipe: (recipe: Recipe) => void;
+  importDiscoveredRecipe: (
+    recipe: Recipe,
+    options: { asMaster: boolean; recipeApiId: number },
+  ) => Promise<void>;
   addPantryFromScan: (name: string, photoUri: string | null) => void;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
@@ -376,6 +381,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, isAdmin, supabase],
   );
 
+  const importDiscoveredRecipe = useCallback(
+    async (recipe: Recipe, options: { asMaster: boolean; recipeApiId: number }) => {
+      if (options.asMaster && !isAdmin) {
+        throw new Error('Only admins can add recipes to the shared kitchen catalog.');
+      }
+      if (demoMode) {
+        setRecipes((prev) => {
+          const exists = prev.some((r) => r.id === recipe.id);
+          const next = exists
+            ? prev.map((r) => (r.id === recipe.id ? { ...recipe, isMaster: options.asMaster } : r))
+            : [{ ...recipe, isMaster: options.asMaster }, ...prev];
+          writeJson(STORAGE_KEYS.recipes, next);
+          return next;
+        });
+        return;
+      }
+      if (!supabase || !userId) {
+        throw new Error('Sign in to save recipes.');
+      }
+      const saved = await upsertImportedRecipe(supabase, userId, recipe, options);
+      setRecipes((prev) => {
+        const exists = prev.some((r) => r.id === saved.id);
+        return exists ? prev.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...prev];
+      });
+    },
+    [demoMode, isAdmin, supabase, userId],
+  );
+
   const addPantryFromScan = useCallback(
     (name: string, photoUri: string | null) => {
       const item: PantryItem = {
@@ -446,6 +479,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearCheckedGroceryItems,
       seedPantry,
       updateRecipe,
+      importDiscoveredRecipe,
       addPantryFromScan,
       setFeatureFlag,
       refreshGrocery,
@@ -481,6 +515,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearCheckedGroceryItems,
       toggleRecipeSelection,
       updateRecipe,
+      importDiscoveredRecipe,
     ],
   );
 
