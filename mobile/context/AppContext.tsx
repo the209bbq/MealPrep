@@ -145,6 +145,7 @@ const GUEST_PROFILE: UserProfile = {
   email: '',
   name: 'Guest',
   role: 'member',
+  plan: 'free',
   photoUrl: null,
   householdSize: 2,
   dietaryNotes: '',
@@ -174,6 +175,8 @@ interface AppContextValue {
   demoMode: boolean;
   /** Signed-out user on a live Supabase build (local pantry/grocery). */
   isGuest: boolean;
+  /** Signed-in user's profile row loaded from Supabase (always true in demo / guest). */
+  profileReady: boolean;
   authReady: boolean;
   authError: string | null;
   session: Session | null;
@@ -302,6 +305,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const maintenanceActive = featureFlags.maintenanceMode && !isAdmin;
   const userId = session?.user.id ?? null;
   const isGuest = !demoMode && !userId;
+  const profileReady = demoMode || isGuest || liveDataLoaded;
   const ownerId = userId ?? (demoMode ? profile.id || 'demo-user' : GUEST_OWNER_ID);
 
   const onboarding = useOnboarding({ session, authReady });
@@ -1446,6 +1450,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       appName: APP_NAME,
       demoMode,
       isGuest,
+      profileReady,
       authReady,
       authError,
       session,
@@ -1523,6 +1528,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       authReady,
       demoMode,
       isGuest,
+      profileReady,
       featureFlags,
       grocery,
       isAdmin,

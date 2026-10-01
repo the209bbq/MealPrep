@@ -5,6 +5,7 @@ import { Card } from '../../components/Card';
 import { TourReplayCard } from '../../components/onboarding/TourReplayCard';
 import { APP_BRAND } from '../../config/appBrand';
 import { ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
+import { PLAN_LABELS } from '../../config/plans';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
 import { initials } from '../../lib/initials';
@@ -56,7 +57,8 @@ export default function ProfileScreen() {
       <ScrollView className="flex-1 bg-paper px-4 pb-8">
         <Card className="mt-4" title="Your profile" subtitle="Kitchen admin">
           <Text className="mt-2 text-sm text-muted">
-            Signed in as {profile.name}. Open the Admin tab for seeds, feature toggles, and analytics.
+            Signed in as {profile.name}. Plan: {PLAN_LABELS[profile.plan]}. Open the Admin tab for seeds,
+            feature toggles, and analytics.
           </Text>
           <Pressable onPress={() => void signOut()} className="mt-4 rounded-xl border border-border bg-card px-4 py-3">
             <Text className="text-center font-bold text-slate">Sign out</Text>
@@ -76,6 +78,7 @@ export default function ProfileScreen() {
         <Text className="mt-3 text-xl font-bold text-ink">{profile.name}</Text>
         <Text className="text-sm text-muted">{profile.email}</Text>
         <Text className="mt-1 text-xs font-bold uppercase text-emerald">{ROLE_LABELS[profile.role]}</Text>
+        <Text className="mt-1 text-xs font-semibold text-muted">Plan: {PLAN_LABELS[profile.plan]}</Text>
         <Text className="mt-4 text-sm text-muted">Household: {profile.householdSize}</Text>
         <Text className="mt-1 text-sm text-muted">{profile.dietaryNotes}</Text>
       </Card>

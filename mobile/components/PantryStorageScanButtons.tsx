@@ -3,6 +3,7 @@ import { Alert, Pressable, Text, View } from 'react-native';
 import { THEME } from '../config/appConfig';
 import { pantryStorageScanActions, type PantryStorageLocation } from '../config/pantryStorage';
 import type { PantryPhotoScanGateInput } from '../lib/guest/pantryPhotoScanGate';
+import type { PhotoScanAccessInput } from '../lib/plans/photoScanAccess';
 import type { PreparedPantryImage } from '../lib/pantryVision/types';
 import type { Session } from '@supabase/supabase-js';
 
@@ -13,6 +14,7 @@ export interface PantryStorageScanButtonsProps {
   /** Web: session restore in progress — avoid treating signed-in users as guests. */
   authPhotoScanPending?: boolean;
   photoScanGate?: PantryPhotoScanGateInput;
+  photoScanAccess?: PhotoScanAccessInput;
   contextSession?: Session | null;
   onPrepareError?: (message: string) => void;
   onImagePrepared: (location: PantryStorageLocation, prepared: PreparedPantryImage) => void;

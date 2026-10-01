@@ -5,11 +5,14 @@ import { Pressable, Text, View } from 'react-native';
 import { APP_ROUTES } from '../config/appRoutes';
 import { THEME } from '../config/appConfig';
 import { GUEST_MODE_COPY } from '../config/guestMode';
+import { resolvePhotoScanAccess } from '../lib/guest/resolvePhotoScanAccess';
 import { resolvePhotoScanSession } from '../lib/guest/resolvePhotoScanSession';
+import { photoScanAccessUserMessage } from '../lib/plans/photoScanAccess';
 import { pantryStorageScanActions, type PantryStorageLocation } from '../config/pantryStorage';
 import { PantryImageQualityError } from '../lib/pantryVision/prepareImageShared';
 import { preparePantryImageFromFile } from '../lib/pantryVision/prepareImage.web';
 import { pickWebImageFile } from '../lib/web/pickWebImageFile';
+import { PhotoScanPlusUpgradeCard } from './PhotoScanPlusUpgradeCard';
 import type { PantryStorageScanButtonsProps } from './PantryStorageScanButtons';
 
 export function PantryStorageScanButtons({
@@ -19,10 +22,12 @@ export function PantryStorageScanButtons({
   onPrepareError,
   onImagePrepared,
   photoScanGate,
+  photoScanAccess,
   contextSession,
 }: PantryStorageScanButtonsProps) {
   const actions = pantryStorageScanActions();
   const [guestGateLocation, setGuestGateLocation] = useState<PantryStorageLocation | null>(null);
+  const [plusGateLocation, setPlusGateLocation] = useState<PantryStorageLocation | null>(null);
   const [pickerBusy, setPickerBusy] = useState(false);
 
   const pickersDisabled = Boolean(disabled || pickerBusy);
@@ -30,7 +35,24 @@ export function PantryStorageScanButtons({
   async function onPressPicker(location: PantryStorageLocation, source: 'camera' | 'library') {
     if (disabled) return;
 
-    if (photoScanGate) {
+    if (photoScanAccess) {
+      const resolved = await resolvePhotoScanAccess(photoScanAccess, contextSession ?? null);
+      if (resolved.access !== 'allowed') {
+        const copy = photoScanAccessUserMessage(resolved.access);
+        if (resolved.access === 'guest_blocked') {
+          setGuestGateLocation(location);
+          return;
+        }
+        if (resolved.access === 'plan_blocked') {
+          setPlusGateLocation(location);
+          return;
+        }
+        if (copy) {
+          onPrepareError?.(copy.message);
+        }
+        return;
+      }
+    } else if (photoScanGate) {
       const resolved = await resolvePhotoScanSession(photoScanGate, contextSession ?? null);
       if (resolved.gate === 'auth_loading') {
         onPrepareError?.(GUEST_MODE_COPY.pantryScanAuthLoading);
@@ -124,6 +146,10 @@ export function PantryStorageScanButtons({
             </Pressable>
           </View>
         </View>
+      ) : null}
+
+      {plusGateLocation ? (
+        <PhotoScanPlusUpgradeCard onDismiss={() => setPlusGateLocation(null)} />
       ) : null}
     </View>
   );

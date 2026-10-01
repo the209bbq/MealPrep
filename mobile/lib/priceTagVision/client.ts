@@ -4,9 +4,11 @@ import type { PreparedPantryImage } from '../pantryVision/types';
 import {
   PantryVisionAuthError,
   PantryVisionNotConfiguredError,
+  PantryVisionPlanRequiredError,
   PantryVisionRateLimitError,
   PantryVisionScanError,
 } from '../pantryVision/client';
+import { PLANS_COPY } from '../../config/plans';
 import type { PriceTagVisionErrorEnvelope, PriceTagVisionResult } from './types';
 
 async function parseErrorResponse(response: Response, text: string): Promise<never> {
@@ -22,6 +24,11 @@ async function parseErrorResponse(response: Response, text: string): Promise<nev
   }
   if (response.status === 401 || json.code === 'UNAUTHENTICATED') {
     throw new PantryVisionAuthError(json.error ?? 'Sign in to scan a shelf tag.');
+  }
+  if (response.status === 403 && json.code === 'PLAN_REQUIRED') {
+    throw new PantryVisionPlanRequiredError(
+      json.error ?? PLANS_COPY.photoScanUpgradeBody,
+    );
   }
   if (response.status === 429 || json.code === 'RATE_LIMIT') {
     throw new PantryVisionRateLimitError(json.error ?? PHOTO_SCAN.rateLimitMessage);

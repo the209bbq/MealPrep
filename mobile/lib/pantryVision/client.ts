@@ -33,6 +33,14 @@ export class PantryVisionRateLimitError extends Error {
   }
 }
 
+export class PantryVisionPlanRequiredError extends Error {
+  code = 'PLAN_REQUIRED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'PantryVisionPlanRequiredError';
+  }
+}
+
 export class PantryVisionScanError extends Error {
   code: PantryScanFailureReason;
   constructor(message: string, code: PantryScanFailureReason = 'UNKNOWN') {
@@ -59,6 +67,12 @@ async function parseErrorResponse(response: Response, text: string): Promise<nev
   if (response.status === 401 || json.code === 'UNAUTHENTICATED') {
     logPantryScanFailure('UNAUTHENTICATED');
     throw new PantryVisionAuthError(json.error ?? 'Sign in to scan your pantry.');
+  }
+  if (response.status === 403 && json.code === 'PLAN_REQUIRED') {
+    logPantryScanFailure('PLAN_REQUIRED');
+    throw new PantryVisionPlanRequiredError(
+      json.error ?? 'Photo scanning requires MealPlanatic Plus.',
+    );
   }
   if (response.status === 429 || json.code === 'RATE_LIMIT') {
     logPantryScanFailure('RATE_LIMIT');

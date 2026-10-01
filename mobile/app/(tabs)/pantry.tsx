@@ -51,6 +51,7 @@ import {
   analyzePantryPhoto,
   PantryVisionAuthError,
   PantryVisionNotConfiguredError,
+  PantryVisionPlanRequiredError,
   PantryVisionRateLimitError,
   PantryVisionScanError,
 } from '../../lib/pantryVision/client';
@@ -66,7 +67,12 @@ import {
   shouldBlockGuestPantryPhotoScan,
   shouldDeferPantryPhotoScanForAuth,
 } from '../../lib/guest/pantryPhotoScanGate';
-import { resolvePhotoScanSession } from '../../lib/guest/resolvePhotoScanSession';
+import { resolvePhotoScanAccess } from '../../lib/guest/resolvePhotoScanAccess';
+import { PLANS_COPY } from '../../config/plans';
+import {
+  photoScanAccessUserMessage,
+  shouldDeferPhotoScanForProfile,
+} from '../../lib/plans/photoScanAccess';
 import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 import { TabEmptyState } from '../../components/onboarding/TabEmptyState';
 import { ViewScanPhotoButton } from '../../components/ViewScanPhotoButton';
@@ -95,6 +101,8 @@ export default function PantryScreen() {
     featureFlags,
     demoMode,
     authReady,
+    profile,
+    profileReady,
     session,
     savePantryScanReview,
     addManualPantryItem,
@@ -159,6 +167,16 @@ export default function PantryScreen() {
     [authReady, demoMode, session],
   );
 
+  const photoScanAccess = useMemo(
+    () => ({
+      ...photoScanGate,
+      plan: profile.plan,
+      role: profile.role,
+      profileReady,
+    }),
+    [photoScanGate, profile.plan, profile.role, profileReady],
+  );
+
   const locationCounts = useMemo(
     () =>
       Object.fromEntries(
@@ -220,19 +238,14 @@ export default function PantryScreen() {
       }
       return;
     }
-    const { gate, session: scanSession } = await resolvePhotoScanSession(photoScanGate, session);
-    if (gate === 'auth_loading') {
-      setScanFailure(
-        GUEST_MODE_COPY.pantryScanAuthLoading,
-        GUEST_MODE_COPY.pantryScanAuthLoadingTitle,
-        null,
-      );
-      return;
-    }
-    if (gate === 'guest_blocked') {
-      setScanFailure(GUEST_MODE_COPY.pantryScanSignIn, GUEST_MODE_COPY.pantryScanSignInTitle, null);
-      if (Platform.OS !== 'web') {
+    const { access, session: scanSession } = await resolvePhotoScanAccess(photoScanAccess, session);
+    if (access !== 'allowed') {
+      const copy = photoScanAccessUserMessage(access);
+      if (access === 'guest_blocked' && Platform.OS !== 'web') {
         promptGuestPhotoScanSignIn();
+      }
+      if (copy) {
+        setScanFailure(copy.message, copy.title, null);
       }
       return;
     }
@@ -287,19 +300,23 @@ export default function PantryScreen() {
           ? 'Too many scans'
           : error instanceof PantryVisionAuthError
             ? 'Sign in required'
-            : error instanceof PantryVisionNotConfiguredError
-              ? 'Scan not set up'
-              : PHOTO_SCAN.scanFailedTitle;
+            : error instanceof PantryVisionPlanRequiredError
+              ? PLANS_COPY.photoScanUpgradeTitle
+              : error instanceof PantryVisionNotConfiguredError
+                ? 'Scan not set up'
+                : PHOTO_SCAN.scanFailedTitle;
       const message =
         error instanceof PantryVisionNotConfiguredError
           ? error.message
           : error instanceof PantryVisionAuthError
             ? error.message
-            : error instanceof PantryVisionRateLimitError
+            : error instanceof PantryVisionPlanRequiredError
               ? error.message
-              : error instanceof PantryVisionScanError
+              : error instanceof PantryVisionRateLimitError
                 ? error.message
-                : PHOTO_SCAN.scanFailedMessage;
+                : error instanceof PantryVisionScanError
+                  ? error.message
+                  : PHOTO_SCAN.scanFailedMessage;
       const canRetry = !(error instanceof PantryVisionNotConfiguredError);
       setScanFailure(message, title, canRetry ? attempt : null);
       setPhase('idle');
@@ -373,18 +390,15 @@ export default function PantryScreen() {
   }
 
   async function handleNativeScan(scanLocation: PantryStorageLocation, source: 'camera' | 'library') {
-    const { gate } = await resolvePhotoScanSession(photoScanGate, session);
-    if (gate === 'auth_loading') {
-      setScanFailure(
-        GUEST_MODE_COPY.pantryScanAuthLoading,
-        GUEST_MODE_COPY.pantryScanAuthLoadingTitle,
-        null,
-      );
-      return;
-    }
-    if (gate === 'guest_blocked') {
-      setScanFailure(GUEST_MODE_COPY.pantryScanSignIn, GUEST_MODE_COPY.pantryScanSignInTitle, null);
-      promptGuestPhotoScanSignIn();
+    const { access } = await resolvePhotoScanAccess(photoScanAccess, session);
+    if (access !== 'allowed') {
+      const copy = photoScanAccessUserMessage(access);
+      if (access === 'guest_blocked') {
+        promptGuestPhotoScanSignIn();
+      }
+      if (copy) {
+        setScanFailure(copy.message, copy.title, null);
+      }
       return;
     }
     if (source === 'camera') {
@@ -647,8 +661,12 @@ export default function PantryScreen() {
               <PantryStorageScanButtons
                 disabled={phase === 'loading' || !featureFlags.photoScan}
                 guestPhotoScanBlocked={shouldBlockGuestPantryPhotoScan(photoScanGate)}
-                authPhotoScanPending={shouldDeferPantryPhotoScanForAuth(photoScanGate)}
+                authPhotoScanPending={
+                  shouldDeferPantryPhotoScanForAuth(photoScanGate) ||
+                  shouldDeferPhotoScanForProfile(photoScanAccess)
+                }
                 photoScanGate={photoScanGate}
+                photoScanAccess={photoScanAccess}
                 contextSession={session}
                 onPrepareError={handleWebPrepareError}
                 onImagePrepared={(location, prepared) => void runVisionFromPrepared(prepared, location)}
