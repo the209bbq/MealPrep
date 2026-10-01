@@ -121,6 +121,11 @@ export const PHOTO_SCAN = {
   scanFailedTitle: 'Couldn’t read that photo',
   scanFailedMessage:
     'Something went wrong while analyzing your photo. Check your connection and try again.',
+  analyzingPhotoMessage:
+    'This may take a few moments while we identify your pantry items.',
+  noItemsFoundTitle: 'No pantry items spotted',
+  noItemsFoundMessage:
+    'We didn’t spot any pantry items in that photo. Try a closer shot with labels facing the camera.',
   scanBusyMessage: 'Scanning is busy right now. Try again in a moment.',
   /** Client fetch timeout; keep above pantry-vision GEMINI_REQUEST_TOTAL_BUDGET_MS (~110s). */
   visionRequestTimeoutMs: 125_000,
