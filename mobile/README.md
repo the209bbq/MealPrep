@@ -31,7 +31,7 @@ The PWA uses a service worker for fast loads and basic offline access to the app
 npm run export:web
 ```
 
-Output is in `dist/`. The `export:web` script generates icons/manifest, runs `expo export -p web`, then patches the service worker precache list.
+Output is in `dist/`. The `export:web` script regenerates brand icons from `assets/mealplanatic-logo-source.png` (`npm run generate:brand`), writes PWA icons/manifest (`generate:pwa`), runs `expo export -p web`, then patches the service worker precache list.
 
 ## Future: App Store / Play Store builds (EAS)
 

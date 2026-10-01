@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { BrandLogo } from '../../components/BrandLogo';
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
+import { APP_BRAND } from '../../config/appBrand';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
@@ -203,10 +205,9 @@ function AuthPanel({
   }
 
   return (
-    <Card className="mt-4" title="Sign in" subtitle="Supabase auth for your kitchen data">
-      <Text className="mt-2 text-sm text-muted">
-        Use email + password or request a magic link. Redirects return to this Admin tab on GitHub Pages.
-      </Text>
+    <Card className="mt-4" title="Sign in" subtitle={APP_BRAND.copy.authCardSubtitle}>
+      <BrandLogo variant="auth" />
+      <Text className="mt-2 text-sm text-muted">{APP_BRAND.copy.authCardBlurb}</Text>
       <View className="mt-4 flex-row gap-2">
         {(['sign-in', 'sign-up'] as const).map((tab) => (
           <Pressable

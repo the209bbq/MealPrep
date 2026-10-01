@@ -1,5 +1,6 @@
 import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html';
-import { APP_NAME, APP_SHORT_NAME, THEME } from '../config/appConfig';
+import { APP_BRAND } from '../config/appBrand';
+import { APP_NAME, THEME } from '../config/appConfig';
 import { getWebBasePath, webAssetPath } from '../lib/webBasePath';
 
 export default function Root({ children }: { children: React.ReactNode }) {
@@ -19,10 +20,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
           content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
         <meta name="theme-color" content={THEME.emerald} />
-        <meta name="application-name" content={APP_SHORT_NAME} />
+        <meta name="application-name" content={APP_BRAND.shortName} />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content={APP_SHORT_NAME} />
+        <meta name="apple-mobile-web-app-title" content={APP_BRAND.shortName} />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="meal-prep-base" content={getWebBasePath() || '/'} />
         <link rel="manifest" href={manifestHref} />
