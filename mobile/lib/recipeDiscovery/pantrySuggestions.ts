@@ -1,5 +1,6 @@
 import {
   DEFAULT_MIN_MATCHED_INGREDIENTS,
+  DEFAULT_MIN_PANTRY_MATCH_PERCENT,
   PANTRY_DISCOVERY_PER_QUERY,
   RECIPE_MATCHING,
 } from '../../config/recipeMatching';
@@ -146,7 +147,7 @@ export async function fetchPantryDiscoverySuggestions(
     match: scoreDiscoveryRecipeAgainstPantry(recipe, pantry),
   }));
 
-  const minPercent = options?.minPercent ?? 0;
+  const minPercent = options?.minPercent ?? DEFAULT_MIN_PANTRY_MATCH_PERCENT;
   const ranked = rankSuggestions(scored).filter((row) => row.match.percentMatch >= minPercent);
 
   const errorMessage =

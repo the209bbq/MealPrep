@@ -9,7 +9,7 @@ import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
-import { DEFAULT_MIN_MATCHED_INGREDIENTS, DEFAULT_MIN_PANTRY_MATCH_PERCENT } from '../../config/recipeMatching';
+import { DEFAULT_MIN_MATCHED_INGREDIENTS } from '../../config/recipeMatching';
 import { RECIPES_COPY, type RecipesPantryFilterCopyId } from '../../config/recipesCopy';
 import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
 import { useApp } from '../../context/AppContext';
@@ -26,8 +26,6 @@ import type { Recipe } from '../../types/mealprep';
 const FILTER_OPTIONS: { id: RecipePantryFilterMode; label: string }[] = (
   ['best_match', 'have_all', 'missing_1_2', 'all'] as RecipesPantryFilterCopyId[]
 ).map((id) => ({ id, label: RECIPES_COPY.pantryFilterLabels[id] }));
-
-const MIN_PERCENT_CHIPS = [0, 50, 70, 90] as const;
 
 function DiscoveryRecipeListSection({
   title,
@@ -152,14 +150,14 @@ export default function RecipesScreen() {
   } = useApp();
   const [activeId, setActiveId] = useState('');
   const [pantryFilter, setPantryFilter] = useState<RecipePantryFilterMode>('best_match');
-  const [minPercent, setMinPercent] = useState(DEFAULT_MIN_PANTRY_MATCH_PERCENT);
+  const minPantryMatchPercent = RECIPES_TAB.defaultMinPercent;
   const pantryEmpty = pantry.length === 0;
   const discoveryEnabled = !pantryEmpty;
   const {
     suggestions: discoverySuggestions,
     loading: discoveryLoading,
     error: discoveryError,
-  } = usePantryDiscoverySuggestions(pantry, session, { enabled: discoveryEnabled, minPercent });
+  } = usePantryDiscoverySuggestions(pantry, session, { enabled: discoveryEnabled });
   const activeMealCount = mealPlan.filter((m) => !m.made).length;
 
   function selectRecipe(recipeId: string) {
@@ -176,7 +174,7 @@ export default function RecipesScreen() {
         : RECIPES_TAB.hideZeroPantryMatches
           ? DEFAULT_MIN_MATCHED_INGREDIENTS
           : 0;
-    const ranked = filterRankedMatches(pantryRecipeMatches.ranked, mode, minPercent, {
+    const ranked = filterRankedMatches(pantryRecipeMatches.ranked, mode, minPantryMatchPercent, {
       minMatchedCount,
       pantryItemCount: pantry.length,
     });
@@ -185,7 +183,7 @@ export default function RecipesScreen() {
     const list = recipes.filter((r) => idSet.has(r.id));
     list.sort((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
     return list;
-  }, [minPercent, pantry.length, pantryEmpty, pantryFilter, pantryRecipeMatches.ranked, recipes]);
+  }, [minPantryMatchPercent, pantry.length, pantryEmpty, pantryFilter, pantryRecipeMatches.ranked, recipes]);
 
   const cookNowRecipes = useMemo(
     () =>
@@ -203,13 +201,20 @@ export default function RecipesScreen() {
     if (pantryEmpty) return [];
     return discoverySuggestions.filter(
       (row) =>
-        row.match.percentMatch >= minPercent && row.match.matchedCount >= DEFAULT_MIN_MATCHED_INGREDIENTS,
+        row.match.percentMatch >= minPantryMatchPercent &&
+        row.match.matchedCount >= DEFAULT_MIN_MATCHED_INGREDIENTS,
     );
-  }, [discoverySuggestions, minPercent, pantryEmpty]);
+  }, [discoverySuggestions, minPantryMatchPercent, pantryEmpty]);
 
   const { cookNow: cookNowDiscovery, needItems: needItemsDiscovery } = useMemo(
-    () => splitDiscoveryCookNowLists(filteredDiscoverySuggestions, pantryFilter, minPercent, pantry.length),
-    [filteredDiscoverySuggestions, minPercent, pantry.length, pantryFilter],
+    () =>
+      splitDiscoveryCookNowLists(
+        filteredDiscoverySuggestions,
+        pantryFilter,
+        minPantryMatchPercent,
+        pantry.length,
+      ),
+    [filteredDiscoverySuggestions, minPantryMatchPercent, pantry.length, pantryFilter],
   );
 
   const hasCookNowMatches = cookNowRecipes.length > 0 || cookNowDiscovery.length > 0;
@@ -268,23 +273,6 @@ export default function RecipesScreen() {
           selectedId={pantryFilter}
           onSelect={(id) => setPantryFilter((id as RecipePantryFilterMode) ?? 'best_match')}
         />
-        <Text className="mt-3 text-xs font-semibold text-muted">{RECIPES_COPY.cookNowCard.pantryOverlapLabel}</Text>
-        <View className="mt-1 flex-row flex-wrap gap-2">
-          {MIN_PERCENT_CHIPS.map((pct) => {
-            const activeChip = minPercent === pct;
-            return (
-              <Pressable
-                key={pct}
-                onPress={() => setMinPercent(pct)}
-                className={`rounded-full px-3 py-1.5 ${activeChip ? 'bg-primary' : 'border border-border bg-paper'}`}
-              >
-                <Text className={`text-xs font-semibold ${activeChip ? 'text-on-primary' : 'text-muted'}`}>
-                  {RECIPES_COPY.minPantryOverlapChips[pct]}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
       </Card>
 
       {showKitchenEmpty ? <RecipesEmptyState pantryEmpty={pantryEmpty} /> : null}
