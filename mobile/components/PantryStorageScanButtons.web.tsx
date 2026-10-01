@@ -1,17 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { APP_ROUTES } from '../config/appRoutes';
 import { THEME } from '../config/appConfig';
+import { GUEST_MODE_COPY } from '../config/guestMode';
 import { pantryStorageScanActions, type PantryStorageLocation } from '../config/pantryStorage';
 import { preparePantryImageFromFile } from '../lib/pantryVision/prepareImage.web';
 import type { PantryStorageScanButtonsProps } from './PantryStorageScanButtons';
 
 export function PantryStorageScanButtons({
   disabled,
+  guestCameraBlocked,
   onImagePrepared,
 }: PantryStorageScanButtonsProps) {
   const actions = pantryStorageScanActions();
   const [pickLocation, setPickLocation] = useState<PantryStorageLocation | null>(null);
+  const [guestGateLocation, setGuestGateLocation] = useState<PantryStorageLocation | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const libraryRef = useRef<HTMLInputElement | null>(null);
 
@@ -54,6 +59,10 @@ export function PantryStorageScanButtons({
           <Pressable
             disabled={disabled}
             onPress={() => {
+              if (guestCameraBlocked) {
+                setGuestGateLocation(action.location);
+                return;
+              }
               setPickLocation(action.location);
               cameraRef.current?.click();
             }}
@@ -76,6 +85,26 @@ export function PantryStorageScanButtons({
         </View>
       ))}
 
+      {guestGateLocation ? (
+        <View className="mb-2 rounded-2xl border border-primary bg-primary-light px-4 py-4">
+          <Text className="text-sm font-bold text-ink">{GUEST_MODE_COPY.pantryScanSignInTitle}</Text>
+          <Text className="mt-1 text-sm leading-5 text-muted">{GUEST_MODE_COPY.pantryScanSignIn}</Text>
+          <View className="mt-3 flex-row gap-2">
+            <Pressable
+              onPress={() => router.push(APP_ROUTES.profile)}
+              className="flex-1 items-center rounded-xl bg-primary py-3"
+            >
+              <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setGuestGateLocation(null)}
+              className="items-center justify-center rounded-xl border border-border bg-paper px-4 py-3"
+            >
+              <Text className="text-sm font-semibold text-muted">Not now</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }

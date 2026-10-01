@@ -1,6 +1,7 @@
 import { HydrationSafeIonicon } from '../../components/HydrationSafeIonicon';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
+import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { CookFromPantryCard } from '../../components/RecipePantryMatch';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
@@ -33,9 +34,19 @@ export default function HomeScreen() {
     mealMadeBusy,
     addMissingForPlannedMealsToGrocery,
     addMissingRecipeIngredientsToGrocery,
+    session,
   } = useApp();
 
   const openGroceryCount = useMemo(() => grocery.filter((g) => !g.checked).length, [grocery]);
+
+  const pantryDiscoveryEnabled = pantry.length > 0 && pantryRecipeRecommendations.length === 0;
+  const { suggestions: pantryDiscoverySuggestions } = usePantryDiscoverySuggestions(pantry, session, {
+    enabled: pantryDiscoveryEnabled,
+  });
+  const cookFromPantryRecommendations = useMemo(() => {
+    if (pantryRecipeRecommendations.length > 0) return pantryRecipeRecommendations;
+    return pantryDiscoverySuggestions.slice(0, 3).map((row) => row.match);
+  }, [pantryDiscoverySuggestions, pantryRecipeRecommendations]);
 
   const nextStep = useMemo(
     () =>
@@ -125,8 +136,17 @@ export default function HomeScreen() {
         />
 
         <CookFromPantryCard
-          recommendations={pantryRecipeRecommendations}
-          onOpenRecipe={(recipeId) => router.push({ pathname: '/recipes', params: { recipeId } })}
+          recommendations={cookFromPantryRecommendations}
+          onOpenRecipe={(recipeId) => {
+            if (recipeId.startsWith('recipeapi-')) {
+              const apiId = Number.parseInt(recipeId.replace(/^recipeapi-(\d+).*/, '$1'), 10);
+              if (Number.isFinite(apiId)) {
+                router.push(`/discover-recipes/${apiId}`);
+                return;
+              }
+            }
+            router.push({ pathname: '/recipes', params: { recipeId } });
+          }}
           onAddMissing={(recipeId) => addMissingRecipeIngredientsToGrocery(recipeId)}
         />
       </ScrollView>
