@@ -22,3 +22,16 @@ export function isRecipeApiInLibrary(recipes: Recipe[], apiId: number, userId: s
   const personal = recipeApiPersonalSlug(apiId, userId);
   return recipes.some((r) => r.id === master || r.id === personal);
 }
+
+/** Recipe id used for grocery rows / meal-plan sync for a RecipeAPI item. */
+export function resolveDiscoveryGroceryRecipeId(
+  recipes: Recipe[],
+  apiId: number,
+  userId: string,
+): string {
+  const master = recipeApiMasterSlug(apiId);
+  if (recipes.some((r) => r.id === master)) return master;
+  const personal = recipeApiPersonalSlug(apiId, userId);
+  if (recipes.some((r) => r.id === personal)) return personal;
+  return master;
+}

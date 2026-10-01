@@ -43,9 +43,13 @@ import {
 import { scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
 import {
   buildPantryMatchIndex,
+  recipeServingScale,
+  scaleRecipeIngredients,
   topPantryRecipeRecommendations,
+  withServingScale,
   type PantryMatchIndex,
 } from '../lib/recipeMatch';
+import { scoreDiscoveryRecipeAgainstPantry } from '../lib/recipeDiscovery/scorePantry';
 import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
 import { fuzzyNameScore, ingredientMatchScore } from '../lib/recipeMatch/ingredientNormalize';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
@@ -73,6 +77,7 @@ import {
   parseRecipeApiNumericId,
   recipeApiMasterSlug,
   recipeApiPersonalSlug,
+  resolveDiscoveryGroceryRecipeId,
 } from '../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
 import { activeMealPlanRecipeIds, isRecipeOnMealPlan, resolveMealPlanRecipeId } from '../lib/mealPlan/resolve';
@@ -104,6 +109,7 @@ import type {
   PantryCategory,
   PantryStorageLocation,
   Recipe,
+  RecipeIngredient,
   UserAnalytics,
   UserPreferences,
   UserProfile,
@@ -252,6 +258,7 @@ interface AppContextValue {
   pantryRecipeMatches: PantryMatchIndex;
   pantryRecipeRecommendations: ReturnType<typeof topPantryRecipeRecommendations>;
   addMissingRecipeIngredientsToGrocery: (recipeId: string) => void;
+  addMissingDiscoveryRecipeIngredientsToGrocery: (item: RecipeDiscoveryListItem) => void;
   onboarding: ReturnType<typeof useOnboarding>;
 }
 
@@ -556,9 +563,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, grocery, liveAnalytics, pantry.length, recipes.length]);
 
   const pantryRecipeMatches = useMemo(() => {
-    const kitchenRecipes = kitchenRecipesForPantryMatch(recipes);
+    const kitchenRecipes = kitchenRecipesForPantryMatch(recipes).map((recipe) =>
+      withServingScale(recipe, servingOverrides),
+    );
     return buildPantryMatchIndex(kitchenRecipes, pantry);
-  }, [pantry, recipes]);
+  }, [pantry, recipes, servingOverrides]);
 
   const pantryRecipeRecommendations = useMemo(() => {
     const kitchenRecipes = kitchenRecipesForPantryMatch(recipes);
@@ -694,15 +703,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const appendMissingIngredientsForRecipe = useCallback(
-    (recipeId: string, options?: { showToast?: boolean }) => {
-      const match = pantryRecipeMatches.byRecipeId.get(recipeId);
-      if (!match || match.missing.length === 0) return 0;
+    (
+      recipeId: string,
+      missing: RecipeIngredient[],
+      options?: { showToast?: boolean },
+    ) => {
+      if (missing.length === 0) return 0;
 
       let addedCount = 0;
       const dismissals = readGroceryDismissals(ownerId);
       setGrocery((prev) => {
         const { items: next, added } = mergeMissingIntoGrocery({
-          missing: match.missing,
+          missing,
           recipeId,
           pantry,
           previous: prev,
@@ -713,7 +725,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (options?.showToast) {
           if (added.length > 0) {
             showGroceryAddedToast(added, prev);
-          } else if (match.missing.length > 0) {
+          } else if (missing.length > 0) {
             showGroceryAddedToast([], prev, { alreadyOnList: true });
           }
         }
@@ -721,7 +733,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       return addedCount;
     },
-    [ownerId, pantry, pantryRecipeMatches.byRecipeId, persistGroceryList, showGroceryAddedToast],
+    [ownerId, pantry, persistGroceryList, showGroceryAddedToast],
   );
 
   const removeMealPlanItem = useCallback(
@@ -907,7 +919,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const id = isGuest ? `guest-plan-${Date.now()}` : `demo-plan-${Date.now()}`;
         setMealPlan((prev) => [{ ...normalized, id }, ...prev]);
         if (userPreferences.autoAddMissingToGrocery && recipeId) {
-          appendMissingIngredientsForRecipe(recipeId, { showToast: true });
+          const missing = pantryRecipeMatches.byRecipeId.get(recipeId)?.missing ?? [];
+          appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
         }
         return;
       }
@@ -915,7 +928,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const saved = await insertMealPlanItem(supabase, userId, normalized);
       setMealPlan((prev) => [saved, ...prev]);
       if (userPreferences.autoAddMissingToGrocery && recipeId) {
-        appendMissingIngredientsForRecipe(recipeId, { showToast: true });
+        const missing = pantryRecipeMatches.byRecipeId.get(recipeId)?.missing ?? [];
+        appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
       }
     },
     [
@@ -923,6 +937,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       demoMode,
       isGuest,
       ownerId,
+      pantryRecipeMatches.byRecipeId,
       recipes,
       supabase,
       userId,
@@ -1424,9 +1439,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addMissingRecipeIngredientsToGrocery = useCallback(
     (recipeId: string) => {
-      appendMissingIngredientsForRecipe(recipeId, { showToast: true });
+      const match = pantryRecipeMatches.byRecipeId.get(recipeId);
+      if (!match) return;
+      appendMissingIngredientsForRecipe(recipeId, match.missing, { showToast: true });
     },
-    [appendMissingIngredientsForRecipe],
+    [appendMissingIngredientsForRecipe, pantryRecipeMatches.byRecipeId],
+  );
+
+  const addMissingDiscoveryRecipeIngredientsToGrocery = useCallback(
+    (item: RecipeDiscoveryListItem) => {
+      const recipeId = resolveDiscoveryGroceryRecipeId(recipes, item.id, ownerId);
+      const libraryRecipe = recipes.find((row) => row.id === recipeId);
+      let missing: RecipeIngredient[];
+      if (libraryRecipe) {
+        const scaled = withServingScale(libraryRecipe, servingOverrides);
+        missing = scoreRecipeAgainstPantry(scaled, pantry).missing;
+      } else {
+        const scale = recipeServingScale({ id: recipeId, servings: item.servings }, servingOverrides);
+        missing = scaleRecipeIngredients(
+          scoreDiscoveryRecipeAgainstPantry(item, pantry).missing,
+          scale,
+        );
+      }
+      appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
+    },
+    [appendMissingIngredientsForRecipe, ownerId, pantry, recipes, servingOverrides],
   );
 
   const setUserPreference = useCallback(
@@ -1526,6 +1563,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pantryRecipeMatches,
       pantryRecipeRecommendations,
       addMissingRecipeIngredientsToGrocery,
+      addMissingDiscoveryRecipeIngredientsToGrocery,
       onboarding,
     }),
     [
@@ -1592,6 +1630,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pantryRecipeMatches,
       pantryRecipeRecommendations,
       addMissingRecipeIngredientsToGrocery,
+      addMissingDiscoveryRecipeIngredientsToGrocery,
       previewPantryResort,
       resortPantryItemsInDefaultLocation,
       onboarding,

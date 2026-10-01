@@ -167,10 +167,12 @@ function AdminUserPlanCard() {
     setError(null);
     setStatus(null);
     try {
-      await adminSetUserPlan(client, selected.id, plan);
-      setSelected({ ...selected, plan });
-      setMatches((prev) => prev.map((row) => (row.id === selected.id ? { ...row, plan } : row)));
-      setStatus(`Set ${selected.email} to ${PLAN_LABELS[plan]}.`);
+      const applied = await adminSetUserPlan(client, selected.id, plan);
+      const refreshed = await adminLookupUserByEmail(client, selected.email);
+      const row = refreshed.find((r) => r.id === selected.id) ?? { ...selected, plan: applied };
+      setSelected(row);
+      setMatches((prev) => (refreshed.length > 0 ? refreshed : prev.map((r) => (r.id === selected.id ? row : r))));
+      setStatus(`Saved — ${row.email} is now on ${PLAN_LABELS[applied]}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update plan');
     } finally {

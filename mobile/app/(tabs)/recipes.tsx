@@ -34,6 +34,7 @@ function DiscoveryRecipeListSection({
   list,
   isOnMealPlan,
   toggleMealPlanDiscoveryRecipe,
+  onAddMissing,
 }: {
   title: string;
   subtitle: string;
@@ -42,6 +43,7 @@ function DiscoveryRecipeListSection({
   toggleMealPlanDiscoveryRecipe: (
     item: PantryDiscoverySuggestion['recipe'],
   ) => Promise<void>;
+  onAddMissing?: (item: PantryDiscoverySuggestion['recipe']) => void;
 }) {
   if (list.length === 0) return null;
   return (
@@ -50,9 +52,10 @@ function DiscoveryRecipeListSection({
       <Text className="mb-2 text-xs text-muted">{subtitle}</Text>
       {list.map(({ recipe, match }) => {
         const onPlan = isOnMealPlan(recipe.id);
+        const missingCount = match.missingCount;
         return (
-          <Pressable key={`discovery-${recipe.id}`} onPress={() => router.push(`/discover-recipes/${recipe.id}`)}>
-            <Card className="mb-3">
+          <Card key={`discovery-${recipe.id}`} className="mb-3">
+            <Pressable onPress={() => router.push(`/discover-recipes/${recipe.id}`)}>
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 pr-2">
                   <Text className="text-base font-bold text-ink">{recipe.name}</Text>
@@ -67,8 +70,16 @@ function DiscoveryRecipeListSection({
                   </Text>
                 </Pressable>
               </View>
-            </Card>
-          </Pressable>
+            </Pressable>
+            {missingCount > 0 && onAddMissing ? (
+              <Pressable
+                onPress={() => onAddMissing(recipe)}
+                className="mt-3 items-center rounded-xl bg-primary py-3"
+              >
+                <Text className="text-sm font-bold text-on-primary">{RECIPES_COPY.recipeCard.addMissingCta}</Text>
+              </Pressable>
+            ) : null}
+          </Card>
         );
       })}
     </>
@@ -154,6 +165,7 @@ export default function RecipesScreen() {
     featureFlags,
     pantryRecipeMatches,
     addMissingRecipeIngredientsToGrocery,
+    addMissingDiscoveryRecipeIngredientsToGrocery,
     mealPlan,
     toggleMealPlanDiscoveryRecipe,
     isOnMealPlan,
@@ -329,6 +341,7 @@ export default function RecipesScreen() {
         list={cookNowDiscovery}
         isOnMealPlan={(recipeApiId) => isOnMealPlan({ recipeApiId })}
         toggleMealPlanDiscoveryRecipe={toggleMealPlanDiscoveryRecipe}
+        onAddMissing={addMissingDiscoveryRecipeIngredientsToGrocery}
       />
 
       {hasNeedItemsMatches ? (
@@ -355,6 +368,7 @@ export default function RecipesScreen() {
         list={needItemsDiscovery}
         isOnMealPlan={(recipeApiId) => isOnMealPlan({ recipeApiId })}
         toggleMealPlanDiscoveryRecipe={toggleMealPlanDiscoveryRecipe}
+        onAddMissing={addMissingDiscoveryRecipeIngredientsToGrocery}
       />
 
       {!pantryEmpty ? (
@@ -377,13 +391,10 @@ export default function RecipesScreen() {
           ) : null}
           {filteredDiscoverySuggestions.map(({ recipe, match }) => {
             const onPlan = isOnMealPlan({ recipeApiId: recipe.id });
+            const missingCount = match.missingCount;
             return (
-              <Pressable
-                key={`api-${recipe.id}`}
-                onPress={() => router.push(`/discover-recipes/${recipe.id}`)}
-                className="mt-3"
-              >
-                <Card>
+              <Card key={`api-${recipe.id}`} className="mt-3">
+                <Pressable onPress={() => router.push(`/discover-recipes/${recipe.id}`)}>
                   <View className="flex-row items-start justify-between">
                     <View className="flex-1 pr-2">
                       <Text className="text-base font-bold text-ink">{recipe.name}</Text>
@@ -398,8 +409,16 @@ export default function RecipesScreen() {
                       </Text>
                     </Pressable>
                   </View>
-                </Card>
-              </Pressable>
+                </Pressable>
+                {missingCount > 0 ? (
+                  <Pressable
+                    onPress={() => addMissingDiscoveryRecipeIngredientsToGrocery(recipe)}
+                    className="mt-3 items-center rounded-xl bg-primary py-3"
+                  >
+                    <Text className="text-sm font-bold text-on-primary">{RECIPES_COPY.recipeCard.addMissingCta}</Text>
+                  </Pressable>
+                ) : null}
+              </Card>
             );
           })}
         </Card>
@@ -482,6 +501,7 @@ export default function RecipesScreen() {
       <DiscoverRecipesPanel
         onToggleMealPlan={(item) => void toggleMealPlanDiscoveryRecipe(item)}
         isOnMealPlan={(apiId) => isOnMealPlan({ recipeApiId: apiId })}
+        onAddMissing={addMissingDiscoveryRecipeIngredientsToGrocery}
       />
     </ScrollView>
   );

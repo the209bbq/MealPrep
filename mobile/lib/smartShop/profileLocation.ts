@@ -152,7 +152,11 @@ export async function persistFavoriteStores(stores: StoreLocation[]): Promise<vo
 }
 
 export function readInitialZip(profile: UserProfile): string {
-  return profile.homeZip ?? readSavedZip() ?? '';
+  const fromProfile = profile.homeZip;
+  if (typeof fromProfile === 'string' && fromProfile.trim()) {
+    return fromProfile.trim();
+  }
+  return readSavedZip();
 }
 
 export { coordsForStoreSearch } from './coordsResolve';

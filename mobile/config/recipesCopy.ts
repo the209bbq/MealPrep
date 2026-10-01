@@ -30,7 +30,7 @@ export const RECIPES_COPY = {
     title: 'Need a few items',
     subtitle: 'Add missing ingredients to your list, then Smart Shop',
     discoveryTitle: 'Almost there from Recipe List',
-    discoverySubtitle: 'A few groceries away — add to meals to fill your list',
+    discoverySubtitle: 'A few groceries away — add missing items to your list in one tap',
   },
 
   moreIdeasCard: {

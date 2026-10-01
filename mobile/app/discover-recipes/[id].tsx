@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card } from '../../components/Card';
 import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { THEME } from '../../config/appConfig';
+import { RECIPES_COPY } from '../../config/recipesCopy';
 import { useApp } from '../../context/AppContext';
 import { scoreDiscoveryRecipeAgainstPantry } from '../../lib/recipeDiscovery/scorePantry';
 import {
@@ -36,6 +37,7 @@ export default function DiscoverRecipeDetailScreen() {
     pantry,
     toggleMealPlanDiscoveryRecipe,
     isOnMealPlan,
+    addMissingDiscoveryRecipeIngredientsToGrocery,
     onboarding,
   } = useApp();
   const accessToken = getRecipeDiscoveryAccessToken(session);
@@ -49,6 +51,11 @@ export default function DiscoverRecipeDetailScreen() {
   const ownerId = profile.id || 'demo-user';
   const alreadyInLibrary =
     Number.isFinite(recipeId) && isRecipeApiInLibrary(recipes, recipeId, ownerId);
+
+  const pantryMatch = useMemo(
+    () => (recipe ? scoreDiscoveryRecipeAgainstPantry(recipe, pantry) : null),
+    [recipe, pantry],
+  );
 
   const load = useCallback(async () => {
     if (!Number.isFinite(recipeId)) {
@@ -130,7 +137,7 @@ export default function DiscoverRecipeDetailScreen() {
             {recipe.carbs != null ? ` · ${recipe.carbs}g carbs` : ''}
             {recipe.fat != null ? ` · ${recipe.fat}g fat` : ''}
           </Text>
-          <RecipePantryMatchBadge match={scoreDiscoveryRecipeAgainstPantry(recipe, pantry)} />
+          {pantryMatch ? <RecipePantryMatchBadge match={pantryMatch} /> : null}
 
           <Card title="Ingredients" className="mt-4">
             {recipe.ingredients.map((ing) => (
@@ -159,6 +166,17 @@ export default function DiscoverRecipeDetailScreen() {
           </Card>
 
           {error ? <Text className="mt-3 text-sm text-danger">{error}</Text> : null}
+
+          {pantryMatch && pantryMatch.missingCount > 0 ? (
+            <Pressable
+              onPress={() => addMissingDiscoveryRecipeIngredientsToGrocery(recipe)}
+              className="mt-6 items-center rounded-xl bg-primary px-4 py-4"
+            >
+              <Text className="text-center text-base font-bold text-on-primary">
+                {RECIPES_COPY.pantryCheck.addMissingCta}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <Pressable
             onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
