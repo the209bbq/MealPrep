@@ -14,19 +14,19 @@ export function RecipesEmptyState({ pantryEmpty }: RecipesEmptyStateProps) {
         <Ionicons name={pantryEmpty ? 'camera-outline' : 'restaurant-outline'} size={40} color={THEME.emerald} />
       </View>
       <Text className="text-center text-lg font-bold text-ink">
-        {pantryEmpty ? 'Add pantry items first' : 'No recipes match your pantry yet'}
+        {pantryEmpty ? 'Scan your pantry to save a store trip' : 'No strong matches yet'}
       </Text>
       <Text className="mt-2 text-center text-sm leading-5 text-muted">
         {pantryEmpty
-          ? 'Scan your shelves or add ingredients on the Pantry tab. We will rank kitchen recipes by how many ingredients you already have.'
-          : 'Try scanning more pantry items, loosen filters below, or use Discover search for ideas from RecipeAPI.io.'}
+          ? 'Photo scan takes minutes and unlocks recipes you can cook with what you already bought.'
+          : 'Add a few staples or loosen filters (defaults: 50%+ match, at least 2 ingredients).'}
       </Text>
       {pantryEmpty ? (
         <Pressable
           onPress={() => router.push('/pantry')}
           className="mt-5 items-center rounded-xl bg-emerald px-5 py-3"
         >
-          <Text className="text-sm font-bold text-on-emerald">Go to Pantry</Text>
+          <Text className="text-sm font-bold text-on-emerald">Scan pantry</Text>
         </Pressable>
       ) : null}
     </View>

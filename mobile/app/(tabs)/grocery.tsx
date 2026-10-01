@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -9,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GroceryEmptyState } from '../../components/grocery/GroceryEmptyState';
 import { GroceryItemRow } from '../../components/grocery/GroceryItemRow';
 import { CATEGORY_LABELS, THEME } from '../../config/appConfig';
@@ -29,6 +30,7 @@ export default function GroceryScreen() {
     clearCheckedGroceryItems,
   } = useApp();
 
+  const insets = useSafeAreaInsets();
   const [cartExpanded, setCartExpanded] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [manualName, setManualName] = useState('');
@@ -82,113 +84,121 @@ export default function GroceryScreen() {
   }
 
   const progressPct = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
+  const showShopCta = featureFlags.smartShop && open.length > 0;
 
   return (
     <>
-      <ScrollView className="flex-1 bg-paper px-4 pb-10" contentContainerStyle={{ paddingBottom: 32 }}>
-        <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-5">
-          <Text className="text-xs font-bold uppercase tracking-widest text-emerald-light">Grocery list</Text>
-          <Text className="mt-1 text-2xl font-bold text-on-emerald">
-            {checkedCount} of {totalCount} in cart
-          </Text>
-          <View className="mt-3 h-2 overflow-hidden rounded-full bg-slate-muted/40">
-            <View className="h-full rounded-full bg-emerald-accent" style={{ width: `${progressPct}%` }} />
-          </View>
-          <Text className="mt-2 text-sm text-emerald-light">
-            {plannedRecipeIds.length} recipe(s) in your meal plan
-            {featureFlags.grocerySync ? ' · syncs with pantry' : ' · grocery sync is off'}
-          </Text>
-          <View className="mt-4 flex-row flex-wrap gap-2">
-            {featureFlags.smartShop ? (
+      <View className="flex-1 bg-paper">
+        <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: showShopCta ? 100 + insets.bottom : 32 }}>
+          <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-5">
+            <Text className="text-xs font-bold uppercase tracking-widest text-emerald-light">Grocery list</Text>
+            <Text className="mt-1 text-2xl font-bold text-on-emerald">
+              {open.length} to buy · {checkedCount} in cart
+            </Text>
+            <View className="mt-3 h-2 overflow-hidden rounded-full bg-slate-muted/40">
+              <View className="h-full rounded-full bg-emerald-accent" style={{ width: `${progressPct}%` }} />
+            </View>
+            <Text className="mt-2 text-sm text-emerald-light">
+              {plannedRecipeIds.length} planned meal(s) · only buy what recipes still need
+            </Text>
+            <View className="mt-4 flex-row flex-wrap gap-2">
               <Pressable
-                onPress={() => router.push('/smart-shop')}
-                className="min-h-[48px] flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-emerald px-4 py-3"
+                onPress={() => setAddOpen(true)}
+                className="min-h-[48px] flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3"
               >
-                <Ionicons name="pricetags" size={20} color={THEME.onEmerald} />
-                <Text className="text-sm font-bold text-on-emerald">Smart Shop</Text>
+                <Ionicons name="add-circle-outline" size={20} color={THEME.emerald} />
+                <Text className="text-sm font-bold text-ink">Add item</Text>
               </Pressable>
-            ) : null}
-            <Pressable
-              onPress={() => setAddOpen(true)}
-              className="min-h-[48px] flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3"
-            >
-              <Ionicons name="add-circle-outline" size={20} color={THEME.emerald} />
-              <Text className="text-sm font-bold text-ink">Add item</Text>
-            </Pressable>
-            <Pressable
-              onPress={refreshGrocery}
-              className="min-h-[48px] rounded-2xl border border-emerald-light bg-emerald-light px-4 py-3"
-            >
-              <Text className="text-center text-sm font-bold text-emerald-dark">Refresh</Text>
-            </Pressable>
+              <Pressable
+                onPress={refreshGrocery}
+                className="min-h-[48px] rounded-2xl border border-emerald-light bg-emerald-light px-4 py-3"
+              >
+                <Text className="text-center text-sm font-bold text-emerald-dark">Refresh</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
 
-        {totalCount === 0 ? (
-          <View className="mt-6">
-            <GroceryEmptyState />
-          </View>
-        ) : (
-          <>
-            <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-muted">To buy ({open.length})</Text>
-            {open.length === 0 ? (
-              <View className="rounded-2xl border border-border bg-card px-4 py-5">
-                <Text className="text-center text-sm text-muted">Everything on your list is checked off. Clear checked items or add more.</Text>
-              </View>
-            ) : (
-              openSections.map((section) => (
-                <View key={section.category} className="mb-4">
-                  <View className="mb-2 flex-row items-center gap-2">
-                    <View className="h-8 w-1 rounded-full bg-emerald" />
-                    <Text className="text-base font-bold text-ink">{section.label}</Text>
-                    <Text className="text-sm text-muted">({section.items.length})</Text>
-                  </View>
-                  {section.items.map((item) => (
-                    <GroceryItemRow
-                      key={item.id}
-                      item={item}
-                      recipeLabels={recipeLabelFor(item)}
-                      onToggle={() => toggleGroceryItem(item.id)}
-                    />
-                  ))}
+          {totalCount === 0 ? (
+            <View className="mt-6">
+              <GroceryEmptyState />
+            </View>
+          ) : (
+            <>
+              <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-muted">To buy ({open.length})</Text>
+              {open.length === 0 ? (
+                <View className="rounded-2xl border border-border bg-card px-4 py-5">
+                  <Text className="text-center text-sm text-muted">All set — clear checked items or plan another meal.</Text>
                 </View>
-              ))
-            )}
-
-            {done.length > 0 ? (
-              <View className="mt-2">
-                <Pressable
-                  onPress={() => setCartExpanded((v) => !v)}
-                  className="mb-2 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3"
-                >
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name="bag-check-outline" size={22} color={THEME.emerald} />
-                    <Text className="text-base font-bold text-ink">In cart ({done.length})</Text>
-                  </View>
-                  <Ionicons name={cartExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={THEME.muted} />
-                </Pressable>
-                {cartExpanded
-                  ? done.map((item) => (
+              ) : (
+                openSections.map((section) => (
+                  <View key={section.category} className="mb-4">
+                    <View className="mb-2 flex-row items-center gap-2">
+                      <View className="h-8 w-1 rounded-full bg-emerald" />
+                      <Text className="text-base font-bold text-ink">{section.label}</Text>
+                      <Text className="text-sm text-muted">({section.items.length})</Text>
+                    </View>
+                    {section.items.map((item) => (
                       <GroceryItemRow
                         key={item.id}
                         item={item}
                         recipeLabels={recipeLabelFor(item)}
                         onToggle={() => toggleGroceryItem(item.id)}
-                        dimmed
                       />
-                    ))
-                  : null}
-                <Pressable
-                  onPress={handleClearChecked}
-                  className="mt-2 min-h-[48px] items-center justify-center rounded-2xl border border-danger/30 bg-card py-3"
-                >
-                  <Text className="text-sm font-bold text-danger">Clear checked items</Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </>
-        )}
-      </ScrollView>
+                    ))}
+                  </View>
+                ))
+              )}
+
+              {done.length > 0 ? (
+                <View className="mt-2">
+                  <Pressable
+                    onPress={() => setCartExpanded((v) => !v)}
+                    className="mb-2 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3"
+                  >
+                    <View className="flex-row items-center gap-2">
+                      <Ionicons name="bag-check-outline" size={22} color={THEME.emerald} />
+                      <Text className="text-base font-bold text-ink">In cart ({done.length})</Text>
+                    </View>
+                    <Ionicons name={cartExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={THEME.muted} />
+                  </Pressable>
+                  {cartExpanded
+                    ? done.map((item) => (
+                        <GroceryItemRow
+                          key={item.id}
+                          item={item}
+                          recipeLabels={recipeLabelFor(item)}
+                          onToggle={() => toggleGroceryItem(item.id)}
+                          dimmed
+                        />
+                      ))
+                    : null}
+                  <Pressable
+                    onPress={handleClearChecked}
+                    className="mt-2 min-h-[48px] items-center justify-center rounded-2xl border border-danger/30 bg-card py-3"
+                  >
+                    <Text className="text-sm font-bold text-danger">Clear checked items</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </>
+          )}
+        </ScrollView>
+
+        {showShopCta ? (
+          <View
+            className="absolute bottom-0 left-0 right-0 border-t border-border bg-card px-4 pt-3"
+            style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+          >
+            <Pressable
+              onPress={() => router.push('/smart-shop')}
+              className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-emerald px-4 py-3"
+            >
+              <Ionicons name="pricetags" size={22} color={THEME.onEmerald} />
+              <Text className="text-base font-bold text-on-emerald">Shop this list ({open.length})</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
 
       <Modal visible={addOpen} animationType="slide" transparent onRequestClose={() => setAddOpen(false)}>
         <View className="flex-1 justify-end bg-black/40">

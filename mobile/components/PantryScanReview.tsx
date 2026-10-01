@@ -23,6 +23,8 @@ interface PantryScanReviewProps {
   modelLabel?: string;
   saveError?: string | null;
   defaultBatchLocation?: PantryStorageLocation;
+  /** When true, omits bottom action row (parent renders sticky footer). */
+  stickyFooter?: boolean;
 }
 
 export function PantryScanReview({
@@ -34,9 +36,11 @@ export function PantryScanReview({
   modelLabel,
   saveError,
   defaultBatchLocation = DEFAULT_PANTRY_STORAGE_LOCATION,
+  stickyFooter = false,
 }: PantryScanReviewProps) {
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
   const [batchLocation, setBatchLocation] = useState<PantryStorageLocation>(defaultBatchLocation);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   const enabledCount = useMemo(() => items.filter((item) => item.enabled).length, [items]);
   const showFewItemsTip = items.length > 0 && items.length <= PANTRY_SCAN_TIP.fewItemsThreshold;
@@ -58,17 +62,43 @@ export function PantryScanReview({
     setMergeSelection((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   }
 
+  function toggleExpanded(key: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   function applyMerge() {
     if (mergeSelection.length < 2) return;
     onChange(mergeReviewItems(items, mergeSelection));
     setMergeSelection([]);
   }
 
+  const actionRow = (
+    <View className="flex-row gap-2">
+      <Pressable onPress={onCancel} className="flex-1 rounded-xl border border-border px-3 py-3">
+        <Text className="text-center text-sm font-bold text-slate">Cancel</Text>
+      </Pressable>
+      <Pressable
+        disabled={saving || enabledCount === 0}
+        onPress={onSave}
+        className={`flex-1 rounded-xl px-3 py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-emerald'}`}
+      >
+        <Text className="text-center text-sm font-bold text-on-emerald">
+          {saving ? 'Saving…' : `Save ${enabledCount} item${enabledCount === 1 ? '' : 's'}`}
+        </Text>
+      </Pressable>
+    </View>
+  );
+
   return (
     <View className="mt-3 rounded-xl border border-border bg-card p-3">
-      <Text className="text-base font-bold text-ink">Review detected items</Text>
+      <Text className="text-base font-bold text-ink">Review scan</Text>
       <Text className="mt-1 text-xs text-muted">
-        Edit names and quantities, turn off items you do not want, or merge duplicates before saving.
+        All items are included by default. Expand a row only if you need to edit.
         {modelLabel ? ` Model: ${modelLabel}.` : ''}
       </Text>
 
@@ -76,122 +106,141 @@ export function PantryScanReview({
 
       <View className="mt-3 rounded-lg border border-border bg-paper p-2">
         <PantryStorageLocationChips
-          label="Storage for all items"
+          label="Storage for all"
           selected={batchLocation}
           onSelect={setBatchLocationForAll}
         />
-        <Text className="mt-1 text-[10px] text-muted">Override storage per item below.</Text>
       </View>
 
-      {items.map((item) => (
-        <View key={item.key} className="mt-3 border-t border-border pt-3">
-          <View className="flex-row items-center justify-between">
-            <Pressable onPress={() => updateItem(item.key, { enabled: !item.enabled })} className="flex-row items-center gap-2">
-              <View
-                className={`h-5 w-5 rounded border ${item.enabled ? 'border-emerald bg-emerald' : 'border-muted bg-paper'}`}
-              />
-              <Text className="text-sm font-semibold text-ink">{item.enabled ? 'Include' : 'Skip'}</Text>
-            </Pressable>
-            <Pressable onPress={() => toggleMerge(item.key)}>
-              <Text className={`text-xs ${mergeSelection.includes(item.key) ? 'font-bold text-emerald' : 'text-muted'}`}>
-                {mergeSelection.includes(item.key) ? 'Selected to merge' : 'Select to merge'}
-              </Text>
-            </Pressable>
-          </View>
-
-          {item.isDemoSample ? (
-            <Text className="mt-1 text-xs font-semibold text-danger">Demo sample detection (not from your photo)</Text>
-          ) : null}
-
-          <TextInput
-            value={item.name}
-            onChangeText={(name) => updateItem(item.key, { name })}
-            className="mt-2 rounded-lg border border-border bg-paper px-3 py-2 text-sm text-ink"
-            placeholder="Item name"
-          />
-
-          <View className="mt-2 flex-row gap-2">
-            <TextInput
-              value={String(item.quantity)}
-              keyboardType="decimal-pad"
-              onChangeText={(text) => {
-                const quantity = Number(text);
-                updateItem(item.key, { quantity: Number.isFinite(quantity) ? quantity : 0 });
-              }}
-              className="w-20 rounded-lg border border-border bg-paper px-3 py-2 text-sm text-ink"
-            />
-            <TextInput
-              value={item.unit}
-              onChangeText={(unit) => updateItem(item.key, { unit })}
-              className="flex-1 rounded-lg border border-border bg-paper px-3 py-2 text-sm text-ink"
-              placeholder="Unit"
-            />
-          </View>
-
-          <View className="mt-2 flex-row flex-wrap gap-1">
-            {PANTRY_CATEGORIES.map((category) => (
+      {items.map((item) => {
+        const expanded = expandedKeys.has(item.key);
+        return (
+          <View key={item.key} className="mt-2 rounded-lg border border-border bg-paper px-3 py-2">
+            <View className="flex-row items-center justify-between gap-2">
               <Pressable
-                key={category}
-                onPress={() =>
-                  updateItem(item.key, {
-                    category: category as PantryCategory,
-                    location: suggestStorageLocationForPantryItem(item.name, category as PantryCategory),
-                  })
-                }
-                className={`rounded-full px-2 py-1 ${item.category === category ? 'bg-emerald-light' : 'bg-paper'}`}
+                onPress={() => updateItem(item.key, { enabled: !item.enabled })}
+                className="flex-row items-center gap-2"
               >
-                <Text className="text-[10px] font-semibold text-slate">{CATEGORY_LABELS[category]}</Text>
+                <View
+                  className={`h-5 w-5 rounded border ${item.enabled ? 'border-emerald bg-emerald' : 'border-muted bg-card'}`}
+                />
               </Pressable>
-            ))}
+              <Pressable onPress={() => toggleExpanded(item.key)} className="flex-1">
+                <Text className={`font-semibold text-ink ${item.enabled ? '' : 'text-muted line-through'}`} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text className="text-[10px] text-muted">
+                  {item.quantity} {item.unit} · {CATEGORY_LABELS[item.category]}
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => toggleExpanded(item.key)}>
+                <Text className="text-xs font-bold text-emerald-dark">{expanded ? 'Less' : 'Edit'}</Text>
+              </Pressable>
+            </View>
+
+            {expanded ? (
+              <View className="mt-2 border-t border-border pt-2">
+                {item.isDemoSample ? (
+                  <Text className="text-xs font-semibold text-danger">Demo sample (not from your photo)</Text>
+                ) : null}
+                <Pressable onPress={() => toggleMerge(item.key)} className="mt-1">
+                  <Text className={`text-xs ${mergeSelection.includes(item.key) ? 'font-bold text-emerald' : 'text-muted'}`}>
+                    {mergeSelection.includes(item.key) ? 'Selected to merge' : 'Select to merge duplicates'}
+                  </Text>
+                </Pressable>
+                <TextInput
+                  value={item.name}
+                  onChangeText={(name) => updateItem(item.key, { name })}
+                  className="mt-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+                  placeholder="Item name"
+                />
+                <View className="mt-2 flex-row gap-2">
+                  <TextInput
+                    value={String(item.quantity)}
+                    keyboardType="decimal-pad"
+                    onChangeText={(text) => {
+                      const quantity = Number(text);
+                      updateItem(item.key, { quantity: Number.isFinite(quantity) ? quantity : 0 });
+                    }}
+                    className="w-20 rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+                  />
+                  <TextInput
+                    value={item.unit}
+                    onChangeText={(unit) => updateItem(item.key, { unit })}
+                    className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+                    placeholder="Unit"
+                  />
+                </View>
+                <View className="mt-2 flex-row flex-wrap gap-1">
+                  {PANTRY_CATEGORIES.map((category) => (
+                    <Pressable
+                      key={category}
+                      onPress={() =>
+                        updateItem(item.key, {
+                          category: category as PantryCategory,
+                          location: suggestStorageLocationForPantryItem(item.name, category as PantryCategory),
+                        })
+                      }
+                      className={`rounded-full px-2 py-1 ${item.category === category ? 'bg-emerald-light' : 'bg-card'}`}
+                    >
+                      <Text className="text-[10px] font-semibold text-slate">{CATEGORY_LABELS[category]}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <View className="mt-2">
+                  <PantryStorageLocationChips
+                    label="Storage"
+                    compact
+                    selected={item.location}
+                    onSelect={(location) => updateItem(item.key, { location })}
+                  />
+                </View>
+              </View>
+            ) : null}
           </View>
+        );
+      })}
 
-          <View className="mt-2">
-            <PantryStorageLocationChips
-              label="Storage"
-              compact
-              selected={item.location}
-              onSelect={(location) => updateItem(item.key, { location })}
-            />
-          </View>
-
-          <Text className="mt-1 text-[10px] text-muted">
-            Confidence {(item.confidence * 100).toFixed(0)}% · matched id {item.ingredientId}
-          </Text>
-        </View>
-      ))}
-
-      <View className="mt-3 flex-row flex-wrap gap-2">
-        <Pressable
-          disabled={mergeSelection.length < 2}
-          onPress={applyMerge}
-          className={`rounded-xl border px-3 py-2 ${mergeSelection.length < 2 ? 'border-border opacity-50' : 'border-emerald'}`}
-        >
-          <Text className="text-xs font-bold text-slate">Merge selected ({mergeSelection.length})</Text>
+      {mergeSelection.length >= 2 ? (
+        <Pressable onPress={applyMerge} className="mt-3 rounded-xl border border-emerald px-3 py-2">
+          <Text className="text-center text-xs font-bold text-emerald-dark">Merge {mergeSelection.length} selected</Text>
         </Pressable>
-      </View>
+      ) : null}
 
-      <View className="mt-4 flex-row gap-2">
-        <Pressable onPress={onCancel} className="flex-1 rounded-xl border border-border px-3 py-3">
+      {!stickyFooter ? <View className="mt-4">{actionRow}</View> : null}
+
+      {!PHOTO_SCAN.enabled ? (
+        <Text className="mt-2 text-xs text-muted">Photo scan is disabled in feature flags.</Text>
+      ) : null}
+
+      {saveError ? <Text className="mt-2 text-xs font-semibold text-danger">{saveError}</Text> : null}
+    </View>
+  );
+}
+
+export function PantryScanReviewStickyFooter(props: {
+  saving: boolean;
+  enabledCount: number;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const { saving, enabledCount, onSave, onCancel } = props;
+  return (
+    <View className="border-t border-border bg-card px-4 py-3">
+      <View className="flex-row gap-2">
+        <Pressable onPress={onCancel} className="flex-1 rounded-xl border border-border py-3">
           <Text className="text-center text-sm font-bold text-slate">Cancel</Text>
         </Pressable>
         <Pressable
           disabled={saving || enabledCount === 0}
           onPress={onSave}
-          className={`flex-1 rounded-xl px-3 py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-emerald'}`}
+          className={`flex-[2] rounded-xl py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-emerald'}`}
         >
           <Text className="text-center text-sm font-bold text-on-emerald">
             {saving ? 'Saving…' : `Save ${enabledCount} item${enabledCount === 1 ? '' : 's'}`}
           </Text>
         </Pressable>
       </View>
-
-      {!PHOTO_SCAN.enabled ? (
-        <Text className="mt-2 text-xs text-muted">Photo scan is disabled in feature flags.</Text>
-      ) : null}
-
-      {saveError ? (
-        <Text className="mt-2 text-xs font-semibold text-danger">{saveError}</Text>
-      ) : null}
     </View>
   );
 }

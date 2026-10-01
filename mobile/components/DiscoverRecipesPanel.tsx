@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -43,6 +44,7 @@ interface DiscoverRecipesPanelProps {
 export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: DiscoverRecipesPanelProps) {
   const { session, demoMode, pantry } = useApp();
   const accessToken = session?.access_token ?? null;
+  const [expanded, setExpanded] = useState(false);
 
   const [search, setSearch] = useState('');
   const [cuisine, setCuisine] = useState<RecipeApiCuisine | ''>('');
@@ -113,7 +115,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
       return;
     }
     if (!accessToken) {
-      setError('Sign in from Admin/Profile to search external recipes.');
+      setError('Sign in from Profile to search external recipes.');
       setItems([]);
       setTotal(0);
       return;
@@ -160,9 +162,27 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
 
   if (!RECIPE_DISCOVERY.enabled) return null;
 
+  if (!expanded) {
+    return (
+      <Pressable
+        onPress={() => setExpanded(true)}
+        className="mb-4 mt-6 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-4"
+      >
+        <View className="flex-1 pr-3">
+          <Text className="text-base font-bold text-ink">Search more ideas</Text>
+          <Text className="mt-1 text-sm text-muted">Optional RecipeAPI search when you want new meals beyond your pantry matches.</Text>
+        </View>
+        <Ionicons name="chevron-down" size={22} color={THEME.muted} />
+      </Pressable>
+    );
+  }
+
   return (
-    <View className="mt-4 overflow-hidden rounded-2xl border border-emerald bg-card px-4 py-5">
-      <Text className="text-2xl font-bold text-ink">Discover recipes</Text>
+    <View className="mb-4 mt-6 overflow-hidden rounded-2xl border border-emerald bg-card px-4 py-5">
+      <Pressable onPress={() => setExpanded(false)} className="mb-2 flex-row items-center justify-between">
+        <Text className="text-2xl font-bold text-ink">Search more ideas</Text>
+        <Ionicons name="chevron-up" size={22} color={THEME.muted} />
+      </Pressable>
       <Text className="mt-1 text-sm text-muted">
         Search RecipeAPI.io when you want new ideas — results rank by pantry ingredient matches.
       </Text>

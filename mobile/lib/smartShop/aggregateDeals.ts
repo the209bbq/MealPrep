@@ -33,3 +33,35 @@ export function pricingBadgeForStore(store: import('../deals/types').StoreLocati
   if (store.pricingSource === 'sample') return 'Sample prices';
   return 'Prices not available';
 }
+
+export interface SmartShopSavingsEstimate {
+  /** Highest store subtotal minus cheapest (same items priced). */
+  savingsAmount: number;
+  pricedItemCount: number;
+  listItemCount: number;
+  isDemoPricing: boolean;
+}
+
+/** Estimated savings when comparing store subtotals (real for Kroger live mode). */
+export function estimateSmartShopSavings(
+  result: DealsSearchResult,
+  listItemCount: number,
+): SmartShopSavingsEstimate | null {
+  const pricedTotals = result.storeTotals.filter((t) => t.pricesAvailable && t.itemCount > 0);
+  if (pricedTotals.length < 2) return null;
+
+  const subtotals = pricedTotals.map((t) => t.subtotal);
+  const maxSubtotal = Math.max(...subtotals);
+  const minSubtotal = Math.min(...subtotals);
+  const savingsAmount = Math.round((maxSubtotal - minSubtotal) * 100) / 100;
+  if (savingsAmount <= 0) return null;
+
+  const pricedItemCount = Math.max(...pricedTotals.map((t) => t.itemCount));
+
+  return {
+    savingsAmount,
+    pricedItemCount,
+    listItemCount,
+    isDemoPricing: result.mode === 'sample',
+  };
+}

@@ -9,7 +9,7 @@ import { SMART_SHOP_STORES } from './smartShop';
 
 export const APP_NAME = '209 Meal Prep';
 export const APP_SHORT_NAME = 'Meal Prep';
-export const APP_TAGLINE = 'Chef-crafted kitchen, ready when you are.';
+export const APP_TAGLINE = 'Save time, effort, and money — cook what you have, shop only what you need.';
 export const APP_SCHEME = 'mealprep';
 
 export const THEME: ThemeTokens = {
@@ -49,7 +49,7 @@ export const TABS: TabConfig[] = [
   },
   {
     name: 'admin',
-    title: 'Admin/Profile',
+    title: 'Profile',
     href: '/admin',
     icon: 'person-circle-outline',
     iconActive: 'person-circle',
@@ -82,12 +82,16 @@ export const RECIPE_DISCOVERY = {
   proxyUrl: process.env.EXPO_PUBLIC_RECIPEAPI_PROXY_URL ?? '',
 } as const;
 
+import { RECIPE_MATCHING } from './recipeMatching';
+
 /** Recipes tab: pantry-ranked kitchen list + optional discover search. */
 export const RECIPES_TAB = {
   /** Do not load discover/catalog results until the user searches or applies filters. */
   discoverRequiresActiveQuery: true,
   /** Default kitchen list hides recipes with zero pantry ingredient matches. */
   hideZeroPantryMatches: true,
+  defaultMinPercent: RECIPE_MATCHING.defaultMinPercent,
+  defaultMinMatchedCount: RECIPE_MATCHING.defaultMinMatchedCount,
 } as const;
 
 export const getRecipeApiProxyUrl = (): string => {

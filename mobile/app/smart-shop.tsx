@@ -18,6 +18,7 @@ import {
   bestDealAcrossStores,
   bestDealPerStoreForItem,
   dealsSummaryLabel,
+  estimateSmartShopSavings,
   formatMoney,
   openGroceryItems,
   pricingBadgeForStore,
@@ -38,7 +39,7 @@ export default function SmartShopScreen() {
   const { grocery, featureFlags, profile } = useApp();
   const items = useMemo(() => openGroceryItems(grocery), [grocery]);
 
-  const [zip, setZip] = useState(() => readInitialZip(profile) || '95350');
+  const [zip, setZip] = useState(() => readInitialZip(profile) || '');
   const [savedStoreIds, setSavedStoreIds] = useState<string[]>([]);
   const [nearbyStores, setNearbyStores] = useState<StoreLocation[]>([]);
   const [originLabel, setOriginLabel] = useState<string | null>(null);
@@ -50,6 +51,17 @@ export default function SmartShopScreen() {
   const [storeSearchWarning, setStoreSearchWarning] = useState<string | null>(null);
   const [manualName, setManualName] = useState('');
   const [manualAddress, setManualAddress] = useState('');
+  const [autoCompared, setAutoCompared] = useState(false);
+
+  const hasLocation = useMemo(() => {
+    const coords = readInitialCoords(profile);
+    return Boolean(coords) || isValidUsZip(zip);
+  }, [profile, zip]);
+
+  const savingsEstimate = useMemo(
+    () => (dealsResult ? estimateSmartShopSavings(dealsResult, items.length) : null),
+    [dealsResult, items.length],
+  );
 
   const activeStores = useMemo(() => {
     const picked = nearbyStores.filter((s) => savedStoreIds.includes(s.krogerLocationId ?? s.id));
@@ -182,6 +194,13 @@ export default function SmartShopScreen() {
     }
   }
 
+  useEffect(() => {
+    if (autoCompared) return;
+    if (items.length === 0 || activeStores.length === 0 || !hasLocation || loadingStores || loadingDeals) return;
+    setAutoCompared(true);
+    void handleFetchDeals();
+  }, [activeStores.length, autoCompared, hasLocation, items.length, loadingDeals, loadingStores]);
+
   function openDirections(store: StoreLocation) {
     const url = store.url ?? mapsDirectionsUrl(store);
     void Linking.openURL(url);
@@ -214,6 +233,21 @@ export default function SmartShopScreen() {
       </View>
 
       <ScrollView className="flex-1 px-4 pb-12" contentContainerStyle={{ paddingBottom: 40 }}>
+        {!hasLocation ? (
+          <View className="mt-4 rounded-2xl border-2 border-amber-400 bg-amber-50 px-4 py-4">
+            <Text className="text-sm font-bold text-amber-950">Add your location</Text>
+            <Text className="mt-1 text-sm text-amber-900">
+              Smart Shop needs a ZIP or device location to find stores and compare prices.
+            </Text>
+          </View>
+        ) : null}
+
+        {dealsResult?.mode === 'sample' ? (
+          <View className="mt-4 rounded-2xl border-2 border-amber-500 bg-amber-100 px-4 py-3">
+            <Text className="text-center text-sm font-bold text-amber-950">Demo prices — not real savings</Text>
+          </View>
+        ) : null}
+
         <View className="mt-4 rounded-3xl border border-border bg-card p-4">
           <Text className="text-base font-bold text-ink">Your location</Text>
           <Text className="mt-1 text-sm text-muted">Saved to your profile when signed in. Used for nearby stores and Kroger specials.</Text>
@@ -330,6 +364,18 @@ export default function SmartShopScreen() {
             <View className="rounded-2xl border border-border bg-card p-4">
               <Text className="text-xs font-bold uppercase tracking-wide text-muted">{dealsSummaryLabel(dealsResult)}</Text>
               {dealsResult.pricingNote ? <Text className="mt-1 text-xs text-muted">{dealsResult.pricingNote}</Text> : null}
+              {savingsEstimate ? (
+                <View className="mt-3 rounded-xl bg-emerald-light px-3 py-2">
+                  <Text className="text-sm font-bold text-emerald-dark">
+                    {savingsEstimate.isDemoPricing ? 'Demo savings up to ' : 'Save up to '}
+                    {formatMoney(savingsEstimate.savingsAmount)} vs highest store
+                  </Text>
+                  <Text className="mt-1 text-xs text-emerald-dark">
+                    Priced {savingsEstimate.pricedItemCount} of {savingsEstimate.listItemCount} list items
+                    {savingsEstimate.isDemoPricing ? ' (sample mode)' : ''}
+                  </Text>
+                </View>
+              ) : null}
               <Text className="mt-2 text-lg font-bold text-ink">{dealsResult.suggestion.label}</Text>
               <Text className="mt-1 text-2xl font-bold text-emerald-dark">{formatMoney(dealsResult.suggestion.estimatedTotal)}</Text>
               {dealsResult.suggestion.note ? (

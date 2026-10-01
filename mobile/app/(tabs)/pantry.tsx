@@ -1,4 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,7 +19,8 @@ import { CategoryChips } from '../../components/CategoryChips';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { PantryLocationSections } from '../../components/PantryLocationSections';
 import { PantryStorageScanButtons } from '../../components/PantryStorageScanButtons';
-import { PantryScanReview } from '../../components/PantryScanReview';
+import { PantryScanReview, PantryScanReviewStickyFooter } from '../../components/PantryScanReview';
+import { PantryOverflowMenu } from '../../components/PantryOverflowMenu';
 import { PantryScanTip } from '../../components/PantryScanTip';
 import {
   PantryStorageLocationChips,
@@ -33,6 +36,9 @@ import {
   type PantryStorageLocation,
 } from '../../config/pantryStorage';
 import { useApp } from '../../context/AppContext';
+import { countDefaultKitchenMatches } from '../../config/recipeMatching';
+import { buildPantryMatchIndex } from '../../lib/recipeMatch';
+import { reviewItemsToPantryItems } from '../../lib/pantryVision/reviewItems';
 import { countPantryItemsInLocation } from '../../lib/pantryGrouping';
 import {
   analyzePantryPhoto,
@@ -92,6 +98,8 @@ export default function PantryScreen() {
   const [scanLocationHint, setScanLocationHint] = useState<PantryStorageLocation>(
     DEFAULT_PANTRY_STORAGE_LOCATION,
   );
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
 
   const visionReady = isPantryVisionConfigured();
   const accessToken = session?.access_token ?? null;
@@ -195,12 +203,15 @@ export default function PantryScreen() {
     setSaving(true);
     setSaveError(null);
     try {
+      const mergedPantry = [...reviewItemsToPantryItems(reviewItems), ...pantry];
+      const recipeCount = countDefaultKitchenMatches(buildPantryMatchIndex(recipes, mergedPantry).ranked);
       await savePantryScanReview(reviewItems);
       setPhase('idle');
       setReviewItems([]);
       setPreviewUri(null);
       setScanError(null);
       setSaveError(null);
+      setScanRecipeCount(recipeCount);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not save pantry items';
       setSaveError(message);
@@ -355,12 +366,45 @@ export default function PantryScreen() {
     };
   }, [confirmAction]);
 
+  const reviewEnabledCount = useMemo(() => reviewItems.filter((i) => i.enabled).length, [reviewItems]);
+
   const showSetupHint = !visionReady && !demoMode;
   const scanControlsVisible = phase !== 'review';
 
   return (
     <>
-      <ScrollView className="flex-1 bg-paper px-4 pb-8">
+      <View className="flex-1 bg-paper">
+        <ScrollView className="flex-1 px-4 pb-8" contentContainerStyle={{ paddingBottom: phase === 'review' ? 96 : 32 }}>
+        <View className="mt-4 flex-row items-start justify-between gap-2">
+          <View className="flex-1">
+            <Text className="text-lg font-bold text-ink">Pantry</Text>
+            <Text className="text-sm text-muted">Track what you own — fewer duplicate buys</Text>
+          </View>
+          {pantry.length > 0 ? (
+            <Pressable onPress={() => setOverflowOpen(true)} className="rounded-full border border-border bg-card p-2">
+              <Ionicons name="ellipsis-horizontal" size={22} color={THEME.ink} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {scanRecipeCount != null && scanRecipeCount > 0 ? (
+          <View className="mt-4 rounded-2xl border border-emerald bg-emerald-light px-4 py-4">
+            <Text className="font-bold text-emerald-dark">Pantry updated</Text>
+            <Text className="mt-1 text-sm text-emerald-dark">
+              See {scanRecipeCount} recipe{scanRecipeCount === 1 ? '' : 's'} you can make with default matches.
+            </Text>
+            <Pressable
+              onPress={() => {
+                setScanRecipeCount(null);
+                router.push('/recipes');
+              }}
+              className="mt-3 items-center rounded-xl bg-emerald py-3"
+            >
+              <Text className="text-sm font-bold text-on-emerald">See {scanRecipeCount} recipes</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <Card className="mt-4" title="Pantry inventory" subtitle="Filter by category or scan new items">
           {scanControlsVisible ? (
             <>
@@ -412,6 +456,7 @@ export default function PantryScreen() {
               modelLabel={modelLabel}
               saveError={saveError}
               defaultBatchLocation={scanLocationHint}
+              stickyFooter
             />
           ) : null}
 
@@ -436,72 +481,34 @@ export default function PantryScreen() {
           locationFilter={locationFilter}
           onPressItem={openEditModal}
         />
+        </ScrollView>
 
-        {pantry.length > 0 ? (
-          <Card className="mt-4" title="Storage helper" subtitle="Auto-place items still listed under Pantry">
-            <Text className="mt-1 text-sm text-muted">
-              Uses the same rules as photo scan: spices to the rack, perishables to the fridge, shelf-stable goods in the pantry.
-            </Text>
-            {resortPreview.total > 0 ? (
-              <Text className="mt-2 text-sm font-semibold text-ink">
-                {resortPreview.toFridge > 0
-                  ? `${resortPreview.toFridge} → ${labelForPantryStorageLocation('fridge')}`
-                  : null}
-                {resortPreview.toFridge > 0 && resortPreview.toSpiceRack > 0 ? ' · ' : null}
-                {resortPreview.toSpiceRack > 0
-                  ? `${resortPreview.toSpiceRack} → ${labelForPantryStorageLocation('spice_rack')}`
-                  : null}
-              </Text>
-            ) : (
-              <Text className="mt-2 text-sm text-muted">No default-pantry items need re-sorting.</Text>
-            )}
-            <Pressable
-              disabled={resortPreview.total === 0}
-              onPress={() =>
-                setConfirmAction({
-                  kind: 'resort',
-                  toFridge: resortPreview.toFridge,
-                  toSpiceRack: resortPreview.toSpiceRack,
-                })
-              }
-              className={`mt-3 rounded-xl px-3 py-3 ${resortPreview.total === 0 ? 'bg-sand' : 'bg-emerald'}`}
-            >
-              <Text
-                className={`text-center text-sm font-bold ${resortPreview.total === 0 ? 'text-muted' : 'text-on-emerald'}`}
-              >
-                Re-sort items
-              </Text>
-            </Pressable>
-          </Card>
+        {phase === 'review' ? (
+          <PantryScanReviewStickyFooter
+            saving={saving}
+            enabledCount={reviewEnabledCount}
+            onSave={() => void handleSaveReview()}
+            onCancel={handleCancelReview}
+          />
         ) : null}
+      </View>
 
-        {pantry.length > 0 ? (
-          <Card className="mb-6" title="Clear inventory" subtitle="Remove items you no longer track">
-            {PANTRY_STORAGE_LOCATIONS.map((location) => {
-              const count = locationCounts[location];
-              if (count === 0) return null;
-              const label = labelForPantryStorageLocation(location);
-              return (
-                <Pressable
-                  key={location}
-                  onPress={() => setConfirmAction({ kind: 'clear-location', location, count })}
-                  className="mt-2 rounded-xl border border-danger/20 bg-paper px-3 py-3"
-                >
-                  <Text className="text-center text-sm font-bold text-danger">
-                    Clear {label} ({count})
-                  </Text>
-                </Pressable>
-              );
-            })}
-            <Pressable
-              onPress={() => setConfirmAction({ kind: 'clear-all', count: pantry.length })}
-              className="mt-2 rounded-xl border border-danger/40 bg-card px-3 py-3"
-            >
-              <Text className="text-center text-sm font-bold text-danger">Clear everything ({pantry.length})</Text>
-            </Pressable>
-          </Card>
-        ) : null}
-      </ScrollView>
+      <PantryOverflowMenu
+        visible={overflowOpen}
+        onClose={() => setOverflowOpen(false)}
+        resortPreviewTotal={resortPreview.total}
+        onResort={() =>
+          setConfirmAction({
+            kind: 'resort',
+            toFridge: resortPreview.toFridge,
+            toSpiceRack: resortPreview.toSpiceRack,
+          })
+        }
+        locationCounts={locationCounts}
+        onClearLocation={(location, count) => setConfirmAction({ kind: 'clear-location', location, count })}
+        totalCount={pantry.length}
+        onClearAll={() => setConfirmAction({ kind: 'clear-all', count: pantry.length })}
+      />
 
       <Modal visible={addOpen} animationType="slide" transparent onRequestClose={closeManualModal}>
         <View className="flex-1 justify-end bg-black/40">
