@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useOnboarding } from '../hooks/useOnboarding';
 import type { Session } from '@supabase/supabase-js';
 import {
   APP_NAME,
@@ -217,6 +218,15 @@ interface AppContextValue {
   pantryRecipeMatches: PantryMatchIndex;
   pantryRecipeRecommendations: ReturnType<typeof topPantryRecipeRecommendations>;
   addMissingRecipeIngredientsToGrocery: (recipeId: string) => void;
+  onboarding: {
+    showWelcome: boolean;
+    showTour: boolean;
+    dismissWelcomeForBrowse: () => void;
+    dismissWelcomeForSignUp: () => void;
+    completeTour: () => void;
+    skipTour: () => void;
+    requestTourReplay: () => void;
+  };
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -1259,6 +1269,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const dismissUndoToast = useCallback(() => setUndoToast(null), []);
 
+  const onboarding = useOnboarding({ session, authReady });
+
   const mealMadeReviewTitle = useMemo(() => {
     if (!mealMadeReview) return null;
     return mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)?.title ?? null;
@@ -1337,6 +1349,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pantryRecipeMatches,
       pantryRecipeRecommendations,
       addMissingRecipeIngredientsToGrocery,
+      onboarding,
     }),
     [
       addPantryFromScan,
@@ -1401,6 +1414,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addMissingRecipeIngredientsToGrocery,
       previewPantryResort,
       resortPantryItemsInDefaultLocation,
+      onboarding,
     ],
   );
 

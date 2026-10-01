@@ -7,6 +7,7 @@ import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { MealMadeReviewSheet } from '../../components/MealMadeReviewSheet';
 import { MealsToMakePanel } from '../../components/MealsToMakePanel';
 import { NextStepCard } from '../../components/NextStepCard';
+import { TabEmptyState } from '../../components/onboarding/TabEmptyState';
 import { THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 import { resolveHomeNextStep } from '../../lib/home/nextStep';
@@ -92,7 +93,11 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        <NextStepCard step={nextStep} onPress={handleNextStep} />
+        {pantry.length === 0 ? (
+          <TabEmptyState tab="home" className="mt-4" />
+        ) : (
+          <NextStepCard step={nextStep} onPress={handleNextStep} />
+        )}
 
         <View className="mt-4 flex-row flex-wrap gap-2">
           {[

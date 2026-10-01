@@ -4,6 +4,7 @@ import { BrandLogo } from '../../components/BrandLogo';
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { APP_BRAND } from '../../config/appBrand';
+import { ONBOARDING_COPY } from '../../config/onboarding';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
@@ -32,6 +33,7 @@ export default function AdminScreen() {
     analytics,
     recipes,
     updateRecipe,
+    onboarding,
   } = useApp();
 
   if (!demoMode && !session) {
@@ -68,6 +70,18 @@ export default function AdminScreen() {
           <Text className="mt-1 text-xs font-bold uppercase text-emerald">{ROLE_LABELS[profile.role]}</Text>
           <Text className="mt-4 text-sm text-muted">Household: {profile.householdSize}</Text>
           <Text className="mt-1 text-sm text-muted">{profile.dietaryNotes}</Text>
+        </Card>
+        <Card
+          className="mt-4"
+          title={ONBOARDING_COPY.profile.showTourAgainTitle}
+          subtitle={ONBOARDING_COPY.profile.showTourAgainBlurb}
+        >
+          <Pressable
+            onPress={onboarding.requestTourReplay}
+            className="mt-2 min-h-[48px] items-center justify-center rounded-2xl border border-border bg-card px-4 py-3"
+          >
+            <Text className="font-bold text-primary">{ONBOARDING_COPY.profile.showTourAgainButton}</Text>
+          </Pressable>
         </Card>
         <Card className="mt-4" title="Kitchen preferences">
           {(Object.keys(USER_PREFERENCE_LABELS) as (keyof typeof USER_PREFERENCE_LABELS)[]).map((key) => (
@@ -129,6 +143,19 @@ export default function AdminScreen() {
       <Card className="mt-4" title="Seed test pantry" subtitle="Reset demo inventory">
         <Pressable onPress={seedPantry} className="mt-2 rounded-xl border border-border bg-card px-4 py-3">
           <Text className="text-center font-bold text-slate">Load sample pantry items</Text>
+        </Pressable>
+      </Card>
+
+      <Card
+        className="mt-4"
+        title={ONBOARDING_COPY.profile.showTourAgainTitle}
+        subtitle={ONBOARDING_COPY.profile.showTourAgainBlurb}
+      >
+        <Pressable
+          onPress={onboarding.requestTourReplay}
+          className="mt-2 min-h-[48px] items-center justify-center rounded-2xl border border-border bg-card px-4 py-3"
+        >
+          <Text className="font-bold text-primary">{ONBOARDING_COPY.profile.showTourAgainButton}</Text>
         </Pressable>
       </Card>
 
