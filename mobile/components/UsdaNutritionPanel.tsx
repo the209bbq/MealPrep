@@ -13,15 +13,17 @@ import {
 import { USDA_DEMO_API_KEY } from '../config/appConfig';
 
 interface UsdaNutritionPanelProps {
-  recipe: Recipe;
+  recipes: Recipe[];
   onSave: (recipe: Recipe) => void;
 }
 
-export function UsdaNutritionPanel({ recipe, onSave }: UsdaNutritionPanelProps) {
+export function UsdaNutritionPanel({ recipes, onSave }: UsdaNutritionPanelProps) {
+  const [selectedRecipeId, setSelectedRecipeId] = useState(recipes[0]?.id ?? '');
+  const recipe = recipes.find((r) => r.id === selectedRecipeId) ?? recipes[0];
   const [apiKey, setApiKey] = useState(() => getStoredUsdaApiKey());
   const [query, setQuery] = useState('');
   const [grams, setGrams] = useState('100');
-  const [targetIngredientId, setTargetIngredientId] = useState(recipe.ingredients[0]?.ingredientId ?? '');
+  const [targetIngredientId, setTargetIngredientId] = useState(recipe?.ingredients[0]?.ingredientId ?? '');
   const [matches, setMatches] = useState<UsdaFoodMatch[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,6 +50,7 @@ export function UsdaNutritionPanel({ recipe, onSave }: UsdaNutritionPanelProps) 
 
   const attachMatch = useCallback(
     async (match: UsdaFoodMatch) => {
+      if (!recipe) return;
       setBusy(true);
       setStatus(null);
       try {
@@ -80,6 +83,7 @@ export function UsdaNutritionPanel({ recipe, onSave }: UsdaNutritionPanelProps) 
 
   const applySearchToRecipe = useCallback(
     async (match: UsdaFoodMatch) => {
+      if (!recipe) return;
       setBusy(true);
       setStatus(null);
       try {
@@ -109,13 +113,46 @@ export function UsdaNutritionPanel({ recipe, onSave }: UsdaNutritionPanelProps) 
     [apiKey, grams, onSave, recipe],
   );
 
+  if (!recipe) {
+    return <Text className="text-sm text-muted">No recipes available for USDA lookup.</Text>;
+  }
+
   return (
-    <View className="mt-4 border-t border-border pt-4">
+    <View>
       <Text className="text-sm font-semibold text-ink">USDA nutrition lookup</Text>
       <Text className="mt-1 text-xs text-muted">
         Uses EXPO_PUBLIC_USDA_FDC_API_KEY, a key saved here, or the public {USDA_DEMO_API_KEY} fallback (same as the
         kitchen board).
       </Text>
+      {recipes.length > 1 ? (
+        <>
+          <Text className="mt-4 text-xs font-semibold text-muted">Recipe</Text>
+          <View className="mt-2 flex-row flex-wrap gap-2">
+            {recipes.map((r) => (
+              <Pressable
+                key={r.id}
+                onPress={() => {
+                  setSelectedRecipeId(r.id);
+                  setTargetIngredientId(r.ingredients[0]?.ingredientId ?? '');
+                  setMatches([]);
+                  setStatus(null);
+                }}
+                className={`rounded-full px-3 py-1 ${
+                  selectedRecipeId === r.id ? 'bg-emerald' : 'border border-border bg-paper'
+                }`}
+              >
+                <Text
+                  className={`text-xs font-semibold ${
+                    selectedRecipeId === r.id ? 'text-on-emerald' : 'text-muted'
+                  }`}
+                >
+                  {r.name.split(' ')[0]}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
       <TextInput
         value={apiKey}
         onChangeText={setApiKey}
