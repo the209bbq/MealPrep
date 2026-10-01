@@ -10,7 +10,6 @@ export {
   INGREDIENT_STRIP_TOKENS,
   INGREDIENT_SYNONYMS,
   PANTRY_STAPLES,
-  RECIPE_MATCHING_COPY,
 } from './recipeMatchingConfig';
 
 /** Default minimum match % chip on Recipes (0 = show best-ranked matches). */

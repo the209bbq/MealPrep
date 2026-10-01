@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { ONBOARDING_COPY } from '../config/onboarding';
+import { RECIPES_COPY } from '../config/recipesCopy';
 import { THEME } from '../config/appConfig';
 import { TabEmptyState } from './onboarding/TabEmptyState';
 
@@ -19,10 +20,8 @@ export function RecipesEmptyState({ pantryEmpty }: RecipesEmptyStateProps) {
       <View className="mb-4 rounded-full bg-primary-light p-4">
         <Ionicons name="restaurant-outline" size={40} color={THEME.primary} />
       </View>
-      <Text className="text-center text-lg font-bold text-ink">No strong matches yet</Text>
-      <Text className="mt-2 text-center text-sm leading-5 text-muted">
-        Add a few staples or loosen filters (defaults: 50%+ match, at least 2 ingredients).
-      </Text>
+      <Text className="text-center text-lg font-bold text-ink">{RECIPES_COPY.emptyState.title}</Text>
+      <Text className="mt-2 text-center text-sm leading-5 text-muted">{RECIPES_COPY.emptyState.body}</Text>
       <Pressable
         onPress={() => router.push('/pantry')}
         className="mt-5 min-h-[48px] items-center justify-center rounded-2xl border border-border bg-paper px-5 py-3"

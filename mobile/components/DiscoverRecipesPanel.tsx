@@ -12,6 +12,7 @@ import { Card } from './Card';
 import { FilterChips } from './FilterChips';
 import { RecipePantryMatchBadge } from './RecipePantryMatch';
 import { isRecipeDiscoveryConfigured, RECIPE_DISCOVERY, RECIPES_TAB, THEME } from '../config/appConfig';
+import { RECIPES_COPY } from '../config/recipesCopy';
 import { useApp } from '../context/AppContext';
 import {
   debouncedSearch,
@@ -115,7 +116,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
       return;
     }
     if (!accessToken) {
-      setError('Sign in from Profile to search external recipes.');
+      setError(RECIPES_COPY.discoveryPanel.signInToSearch);
       setItems([]);
       setTotal(0);
       return;
@@ -169,8 +170,8 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
         className="mb-4 mt-6 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-4"
       >
         <View className="flex-1 pr-3">
-          <Text className="text-base font-bold text-ink">Recipe List</Text>
-          <Text className="mt-1 text-sm text-muted">Optional recipe search when you want new meals beyond your pantry matches.</Text>
+          <Text className="text-base font-bold text-ink">{RECIPES_COPY.discoveryPanel.collapsedTitle}</Text>
+          <Text className="mt-1 text-sm text-muted">{RECIPES_COPY.discoveryPanel.collapsedSubtitle}</Text>
         </View>
         <Ionicons name="chevron-down" size={22} color={THEME.muted} />
       </Pressable>
@@ -180,33 +181,29 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
   return (
     <View className="mb-4 mt-6 overflow-hidden rounded-2xl border border-primary bg-card px-4 py-5">
       <Pressable onPress={() => setExpanded(false)} className="mb-2 flex-row items-center justify-between">
-        <Text className="text-2xl font-bold text-ink">Recipe List</Text>
+        <Text className="text-2xl font-bold text-ink">{RECIPES_COPY.discoveryPanel.collapsedTitle}</Text>
         <Ionicons name="chevron-up" size={22} color={THEME.muted} />
       </Pressable>
-      <Text className="mt-1 text-sm text-muted">
-        Search online recipes when you want new ideas — results rank by pantry ingredient matches.
-      </Text>
+      <Text className="mt-1 text-sm text-muted">{RECIPES_COPY.discoveryPanel.expandedIntro}</Text>
 
       {demoMode ? (
         <View className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-          <Text className="text-xs font-semibold text-amber-900">Demo mode</Text>
-          <Text className="mt-1 text-xs text-amber-800">Sample results only until you sign in with a connected account.</Text>
+          <Text className="text-xs font-semibold text-amber-900">{RECIPES_COPY.discoveryPanel.demoBannerTitle}</Text>
+          <Text className="mt-1 text-xs text-amber-800">{RECIPES_COPY.discoveryPanel.demoBannerBody}</Text>
         </View>
       ) : null}
 
       {showSetupHint ? (
         <Card className="mt-3 border-dashed">
-          <Text className="text-sm font-semibold text-ink">Not set up yet</Text>
-          <Text className="mt-2 text-sm text-muted">
-            Recipe search isn’t connected yet. Ask an admin to finish setup, then try again.
-          </Text>
+          <Text className="text-sm font-semibold text-ink">{RECIPES_COPY.discoveryPanel.notSetupTitle}</Text>
+          <Text className="mt-2 text-sm text-muted">{RECIPES_COPY.discoveryPanel.notSetupBody}</Text>
         </Card>
       ) : null}
 
       <TextInput
         value={search}
         onChangeText={setSearch}
-        placeholder="Search recipes (e.g. chicken, pasta…)"
+        placeholder={RECIPES_COPY.discoveryPanel.searchPlaceholder}
         placeholderTextColor={THEME.muted}
         className="mt-4 rounded-2xl border-2 border-primary/30 bg-paper px-5 py-4 text-lg text-ink"
         autoCapitalize="none"
@@ -259,17 +256,17 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
         })}
       </View>
 
-      <Text className="mt-3 text-xs font-semibold uppercase text-muted">Pantry match</Text>
+      <Text className="mt-3 text-xs font-semibold uppercase text-muted">{RECIPES_COPY.discoveryPanel.pantryOverlapSection}</Text>
       <View className="mt-1 flex-row flex-wrap items-center gap-2">
         <Pressable
           onPress={() => setMatchPantryOnly((v) => !v)}
           className={`rounded-full px-3 py-1.5 ${matchPantryOnly ? 'bg-primary' : 'border border-border bg-paper'}`}
         >
           <Text className={`text-xs font-semibold ${matchPantryOnly ? 'text-on-primary' : 'text-muted'}`}>
-            Match my pantry
+            {RECIPES_COPY.discoveryPanel.matchMyPantryChip}
           </Text>
         </Pressable>
-        {[0, 50, 70].map((pct) => {
+        {([0, 50, 70] as const).map((pct) => {
           const active = minPantryPercent === pct;
           return (
             <Pressable
@@ -278,7 +275,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
               className={`rounded-full px-3 py-1.5 ${active ? 'bg-primary-light' : 'border border-border bg-paper'}`}
             >
               <Text className={`text-xs font-semibold ${active ? 'text-primary-dark' : 'text-muted'}`}>
-                {pct === 0 ? 'Any %' : `${pct}%+`}
+                {RECIPES_COPY.discoveryPanel.discoverMinOverlapChips[pct]}
               </Text>
             </Pressable>
           );
@@ -288,21 +285,22 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
       {error ? <Text className="mt-4 text-sm text-danger">{error}</Text> : null}
 
       {RECIPES_TAB.discoverRequiresActiveQuery && !discoveryQueryActive ? (
-        <Text className="mt-4 text-sm text-muted">
-          Type a search or pick a filter to load discover results. Your pantry-ranked kitchen recipes are listed below.
-        </Text>
+        <Text className="mt-4 text-sm text-muted">{RECIPES_COPY.discoveryPanel.idleHint}</Text>
       ) : (
         <>
           <View className="mt-4 flex-row items-center justify-between">
             <Text className="text-sm font-semibold text-ink">
-              {loading ? 'Searching…' : `${displayItems.length} result${displayItems.length === 1 ? '' : 's'}`}
-              {!loading && total > displayItems.length ? ` (of ${total})` : ''}
+              {loading
+                ? RECIPES_COPY.discoveryPanel.searching
+                : !loading && total > displayItems.length
+                  ? RECIPES_COPY.discoveryPanel.resultCountOfTotal(displayItems.length, total)
+                  : RECIPES_COPY.discoveryPanel.resultCount(displayItems.length)}
             </Text>
             {loading ? <ActivityIndicator color={THEME.primary} /> : null}
           </View>
 
           {displayItems.length === 0 && !loading ? (
-            <Text className="mt-3 text-sm text-muted">No recipes match these filters. Try a broader search or lower pantry %.</Text>
+            <Text className="mt-3 text-sm text-muted">{RECIPES_COPY.discoveryPanel.noFilterResults}</Text>
           ) : null}
 
           {displayItems.map(({ recipe, match }) => {
@@ -335,7 +333,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
                       className={`rounded-full px-3 py-2 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
                     >
                       <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
-                        {onPlan ? 'In meals' : 'Add to meals'}
+                        {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
                       </Text>
                     </Pressable>
                   </View>
