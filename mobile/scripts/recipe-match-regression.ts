@@ -8,7 +8,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPantryDeductionLines, applyPantryDeductions } from '../lib/mealPlan/pantryDeduction';
 import { mergeGroceryWithMissing } from '../lib/recipeMatch/groceryFromMissing';
-import { buildPantryMatchIndex, filterRankedMatches, scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
+import { buildPantryMatchIndex, filterRankedMatches, filterRankedMatchesWithPartialFallback, scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
+import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
 import {
   canonicalIngredientPhrase,
   expandSynonymKeys,
@@ -249,5 +250,54 @@ const mergeTwice = mergeGroceryWithMissing(
 const broccoliRow = mergeTwice.items.find((g) => g.name.toLowerCase().includes('broccoli'));
 assert(broccoliRow && broccoliRow.quantity > 16, 'second recipe increases broccoli quantity');
 
+const scannedStaplesPantry = pantryFrom([
+  'canned beans',
+  'pasta',
+  'rice',
+  'tomato sauce',
+  'peanut butter',
+  'cereal',
+  'broth',
+  'tuna',
+  'oats',
+  'flour',
+  'sugar',
+]);
+const guestAccountRecipes: Recipe[] = [];
+const kitchenForGuest = kitchenRecipesForPantryMatch(guestAccountRecipes);
+assert(kitchenForGuest.length >= 12, 'guest kitchen match should include built-in catalog recipes');
+const guestScanIndex = buildPantryMatchIndex(kitchenForGuest, scannedStaplesPantry);
+const guestScanStrict = filterRankedMatches(guestScanIndex.ranked, 'all', 50, {
+  minMatchedCount: 2,
+  pantryItemCount: scannedStaplesPantry.length,
+});
+const guestScanVisible = filterRankedMatchesWithPartialFallback(
+  guestScanIndex.ranked,
+  'best_match',
+  50,
+  { minMatchedCount: 2, pantryItemCount: scannedStaplesPantry.length },
+);
+assert(
+  guestScanStrict.length === 0,
+  'realistic scan pantry rarely hits 50% + 2 matches on protein-forward catalog',
+);
+assert(
+  guestScanVisible.matches.length >= 1,
+  `scan pantry should show partial kitchen matches, got ${guestScanVisible.matches.length}`,
+);
+assert(guestScanVisible.usedPartialFallback, 'scan pantry should use partial-match fallback');
+assert(
+  guestScanVisible.matches.every((m) => m.matchedCount >= 1),
+  'partial fallback rows should have at least one pantry ingredient match',
+);
+assert(
+  ingredientMatchScore('Black beans', 'canned beans') >= 0.72,
+  'canned beans should satisfy black beans recipe line',
+);
+
 console.log('Flow pantry recipes shown:', shown.map((m) => m.recipeName).join(', '));
+console.log(
+  'Guest scan pantry partial matches:',
+  guestScanVisible.matches.map((m) => `${m.recipeName} (${m.matchedCount})`).join(', '),
+);
 console.log('All recipe-match regression checks passed.');

@@ -44,6 +44,7 @@ import {
   topPantryRecipeRecommendations,
   type PantryMatchIndex,
 } from '../lib/recipeMatch';
+import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
 import { fuzzyNameScore, ingredientMatchScore } from '../lib/recipeMatch/ingredientNormalize';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import { runScanPhotoRetentionCleanupIfDue } from '../lib/scanPhotos/cleanup';
@@ -550,15 +551,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [demoMode, grocery, liveAnalytics, pantry.length, recipes.length]);
 
-  const pantryRecipeMatches = useMemo(
-    () => buildPantryMatchIndex(recipes, pantry),
-    [pantry, recipes],
-  );
+  const pantryRecipeMatches = useMemo(() => {
+    const kitchenRecipes = kitchenRecipesForPantryMatch(recipes);
+    return buildPantryMatchIndex(kitchenRecipes, pantry);
+  }, [pantry, recipes]);
 
-  const pantryRecipeRecommendations = useMemo(
-    () => topPantryRecipeRecommendations(recipes, pantry, 3),
-    [pantry, recipes],
-  );
+  const pantryRecipeRecommendations = useMemo(() => {
+    const kitchenRecipes = kitchenRecipesForPantryMatch(recipes);
+    return topPantryRecipeRecommendations(kitchenRecipes, pantry, 3);
+  }, [pantry, recipes]);
 
   const setDemoRole = useCallback((next: UserRole) => {
     setRole(next);

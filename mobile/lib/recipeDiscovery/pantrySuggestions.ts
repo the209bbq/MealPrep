@@ -3,7 +3,10 @@ import {
   DEFAULT_MIN_PANTRY_MATCH_PERCENT,
   PANTRY_DISCOVERY_PER_QUERY,
   RECIPE_MATCHING,
+  RECIPES_TAB_PARTIAL_MATCH_LIMIT,
+  RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT,
 } from '../../config/recipeMatching';
+import { filterRankedMatchesWithPartialFallback } from '../recipeMatch/match';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
 import type { PantryItem } from '../../types/mealprep';
@@ -83,16 +86,39 @@ function buildPantrySearchPlans(pantry: PantryItem[]): { search: string; ingredi
 
 function rankSuggestions(rows: PantryDiscoverySuggestion[]): PantryDiscoverySuggestion[] {
   return rows
-    .filter((row) => row.match.matchedCount >= DEFAULT_MIN_MATCHED_INGREDIENTS)
+    .filter((row) => row.match.matchedCount >= RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT)
     .sort((a, b) => {
-      if (b.match.percentMatch !== a.match.percentMatch) {
-        return b.match.percentMatch - a.match.percentMatch;
-      }
       if (b.match.matchedCount !== a.match.matchedCount) {
         return b.match.matchedCount - a.match.matchedCount;
       }
+      if (b.match.percentMatch !== a.match.percentMatch) {
+        return b.match.percentMatch - a.match.percentMatch;
+      }
       return a.match.missingCount - b.match.missingCount;
     });
+}
+
+function filterDiscoveryByPantryOverlap(
+  rows: PantryDiscoverySuggestion[],
+  minPercent: number,
+  pantryItemCount: number,
+): PantryDiscoverySuggestion[] {
+  if (rows.length === 0 || pantryItemCount === 0) return [];
+  const { matches } = filterRankedMatchesWithPartialFallback(
+    rows.map((row) => row.match),
+    'all',
+    minPercent,
+    {
+      minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
+      pantryItemCount,
+      partialMinMatchedCount: RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT,
+      partialMatchMax: RECIPES_TAB_PARTIAL_MATCH_LIMIT,
+    },
+  );
+  const byId = new Map(rows.map((row) => [row.match.recipeId, row]));
+  return matches
+    .map((m) => byId.get(m.recipeId))
+    .filter((row): row is PantryDiscoverySuggestion => row != null);
 }
 
 export async function fetchPantryDiscoverySuggestions(
@@ -148,17 +174,18 @@ export async function fetchPantryDiscoverySuggestions(
   }));
 
   const minPercent = options?.minPercent ?? DEFAULT_MIN_PANTRY_MATCH_PERCENT;
-  const ranked = rankSuggestions(scored).filter((row) => row.match.percentMatch >= minPercent);
+  const ranked = rankSuggestions(scored);
+  const filtered = filterDiscoveryByPantryOverlap(ranked, minPercent, pantry.length);
 
   const errorMessage =
-    failures === plans.length && ranked.length === 0
+    failures === plans.length && filtered.length === 0
       ? accessToken
         ? RECIPES_COPY.discoveryErrors.pantrySuggestionsUnavailable
         : RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild
       : null;
 
   const result: PantryDiscoveryResult = {
-    suggestions: ranked.slice(0, RECIPE_MATCHING.homeRecommendationsLimit * 4),
+    suggestions: filtered.slice(0, RECIPE_MATCHING.homeRecommendationsLimit * 4),
     errorMessage,
     fromCache: false,
   };
