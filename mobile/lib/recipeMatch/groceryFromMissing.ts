@@ -2,6 +2,7 @@ import type { GroceryListItem, PantryCategory, PantryItem, RecipeIngredient } fr
 import { pantryCategoryForImportedIngredient } from '../recipeDiscovery/mapToAppRecipe';
 import { createManualGroceryItem } from '../grocery';
 import { convertQuantity, unitsAreConvertible } from '../units/conversion';
+import { isGroceryDismissed } from '../grocery/dismissals';
 import { normalizeIngredientName } from './normalize';
 
 function roundQty(value: number): number {
@@ -94,11 +95,16 @@ export function mergeGroceryWithMissing(
   missing: RecipeIngredient[],
   recipeId: string,
   pantry: PantryItem[],
+  options?: { groceryDismissals?: Set<string> },
 ): MergeMissingGroceryResult {
+  const dismissals = options?.groceryDismissals ?? new Set<string>();
   const merged = [...previous];
   const added: GroceryListItem[] = [];
 
   for (const ingredient of missing) {
+    if (isGroceryDismissed(dismissals, recipeId, ingredient.name, ingredient.unit)) {
+      continue;
+    }
     const idx = findMergeableGroceryIndex(merged, ingredient);
     if (idx >= 0) {
       const existing = merged[idx];
@@ -138,8 +144,11 @@ export function addMissingRecipeIngredientsToGrocery(input: {
   recipeId: string;
   pantry: PantryItem[];
   previous: GroceryListItem[];
+  groceryDismissals?: Set<string>;
 }): MergeMissingGroceryResult {
-  return mergeGroceryWithMissing(input.previous, input.missing, input.recipeId, input.pantry);
+  return mergeGroceryWithMissing(input.previous, input.missing, input.recipeId, input.pantry, {
+    groceryDismissals: input.groceryDismissals,
+  });
 }
 
 /** Manual one-off grocery row when ingredient id is unknown. */

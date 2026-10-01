@@ -7,42 +7,102 @@ const MASS_TO_GRAMS: Record<string, number> = {
   gram: 1,
   grams: 1,
   kg: 1000,
+  kilogram: 1000,
+  kilograms: 1000,
   oz: 28.3495,
+  ounce: 28.3495,
+  ounces: 28.3495,
   lb: 453.592,
   lbs: 453.592,
+  pound: 453.592,
+  pounds: 453.592,
 };
 
 const VOLUME_TO_ML: Record<string, number> = {
   ml: 1,
+  milliliter: 1,
+  milliliters: 1,
   l: 1000,
   liter: 1000,
+  liters: 1000,
   litre: 1000,
+  litres: 1000,
   tsp: 4.92892,
+  teaspoon: 4.92892,
+  teaspoons: 4.92892,
   tbsp: 14.7868,
+  tablespoon: 14.7868,
+  tablespoons: 14.7868,
   cup: 236.588,
   cups: 236.588,
+  pinch: 0.3,
 };
 
-const COUNT_UNITS = new Set(['each', 'ea', 'piece', 'pieces', 'bunch', 'can', 'jar', 'head', 'clove', 'cloves']);
+/** Count units that convert to “each” via a fixed multiplier (e.g. dozen → 12 each). */
+const COUNT_TO_EACH: Record<string, number> = {
+  each: 1,
+  ea: 1,
+  piece: 1,
+  pieces: 1,
+  item: 1,
+  items: 1,
+  dozen: 12,
+  doz: 12,
+};
+
+/** Distinct count units — not interchangeable without an explicit map entry above. */
+const COUNT_DISTINCT_UNITS = new Set([
+  'bunch',
+  'can',
+  'cans',
+  'jar',
+  'jars',
+  'head',
+  'heads',
+  'clove',
+  'cloves',
+  'pinch',
+  'pinches',
+]);
 
 export function normalizeUnit(unit: string): string {
   return unit.trim().toLowerCase();
 }
 
+function countUnitToEachFactor(unit: string): number | null {
+  const u = normalizeUnit(unit);
+  if (!u) return null;
+  if (u in COUNT_TO_EACH) return COUNT_TO_EACH[u];
+  if (COUNT_DISTINCT_UNITS.has(u)) return null;
+  return null;
+}
+
 export function unitKind(unit: string): UnitKind | null {
   const u = normalizeUnit(unit);
   if (!u) return null;
-  if (COUNT_UNITS.has(u)) return 'count';
+  if (countUnitToEachFactor(u) !== null || COUNT_DISTINCT_UNITS.has(u)) return 'count';
   if (u in MASS_TO_GRAMS) return 'mass';
   if (u in VOLUME_TO_ML) return 'volume';
   return null;
 }
 
 export function unitsAreConvertible(a: string, b: string): boolean {
-  const ka = unitKind(a);
-  const kb = unitKind(b);
-  if (ka === null || kb === null) return false;
-  return ka === kb;
+  const from = normalizeUnit(a);
+  const to = normalizeUnit(b);
+  if (from === to) return true;
+
+  const ka = unitKind(from);
+  const kb = unitKind(to);
+  if (ka === null || kb === null || ka !== kb) return false;
+
+  if (ka === 'count') {
+    const fa = countUnitToEachFactor(from);
+    const fb = countUnitToEachFactor(to);
+    if (fa !== null && fb !== null) return true;
+    return false;
+  }
+
+  return true;
 }
 
 export function convertQuantity(quantity: number, fromUnit: string, toUnit: string): number | null {
@@ -54,7 +114,10 @@ export function convertQuantity(quantity: number, fromUnit: string, toUnit: stri
   if (kind === null || kind !== unitKind(to)) return null;
 
   if (kind === 'count') {
-    return quantity;
+    const fromEach = countUnitToEachFactor(from);
+    const toEach = countUnitToEachFactor(to);
+    if (fromEach === null || toEach === null) return null;
+    return (quantity * fromEach) / toEach;
   }
 
   if (kind === 'mass') {

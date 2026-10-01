@@ -40,9 +40,10 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test:recipe-match": "npx tsx scripts/recipe-match-regression.ts",
+    "test:grocery": "npx tsx scripts/grocery-regression.ts",
     "test:smart-shop": "npx tsx scripts/smart-shop-filter-examples.ts",
     "test:package-pricing": "node --experimental-strip-types scripts/package-pricing-check.mjs",
-    "test": "npm run test:recipe-match && npm run test:smart-shop && npm run test:package-pricing",
+    "test": "npm run test:recipe-match && npm run test:grocery && npm run test:smart-shop && npm run test:package-pricing",
     "generate:brand": "node scripts/generate-brand-assets.mjs",
     "generate:pwa": "node scripts/generate-pwa-assets.mjs",
     "export:web": "npm run generate:brand && npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs"
