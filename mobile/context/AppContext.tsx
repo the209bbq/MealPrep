@@ -1,5 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../hooks/useOnboarding';
+import type { HandsOnTutorialStepId } from '../lib/onboarding/tutorialProgress';
 import type { Session } from '@supabase/supabase-js';
 import {
   APP_NAME,
@@ -218,15 +219,7 @@ interface AppContextValue {
   pantryRecipeMatches: PantryMatchIndex;
   pantryRecipeRecommendations: ReturnType<typeof topPantryRecipeRecommendations>;
   addMissingRecipeIngredientsToGrocery: (recipeId: string) => void;
-  onboarding: {
-    showWelcome: boolean;
-    showTour: boolean;
-    dismissWelcomeForBrowse: () => void;
-    dismissWelcomeForSignUp: () => void;
-    completeTour: () => void;
-    skipTour: () => void;
-    requestTourReplay: () => void;
-  };
+  onboarding: ReturnType<typeof useOnboarding>;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -282,6 +275,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const maintenanceActive = featureFlags.maintenanceMode && !isAdmin;
   const userId = session?.user.id ?? null;
   const ownerId = profile.id || 'demo-user';
+
+  const onboarding = useOnboarding({ session, authReady });
+  const notifyTutorialStepCompleteRef = useRef<(stepId: HandsOnTutorialStepId) => void>(() => {});
+  notifyTutorialStepCompleteRef.current = onboarding.notifyTutorialStepComplete;
 
   const plannedRecipeIds = useMemo(
     () => activeMealPlanRecipeIds(mealPlan, recipes, ownerId),
@@ -824,6 +821,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         madeAt: null,
         addedAt: new Date().toISOString(),
       });
+      notifyTutorialStepCompleteRef.current('recipes');
     },
     [addMealPlanEntry, mealPlan, recipes, removeMealPlanItem],
   );
@@ -868,6 +866,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         return next;
       });
+      notifyTutorialStepCompleteRef.current('grocery');
     },
     [demoMode, supabase, userId],
   );
@@ -975,6 +974,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         madeAt: null,
         addedAt: new Date().toISOString(),
       });
+      notifyTutorialStepCompleteRef.current('recipes');
     },
     [
       addMealPlanEntry,
@@ -1064,6 +1064,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       if (demoMode) {
         setPantry((prev) => [item, ...prev]);
+        notifyTutorialStepCompleteRef.current('scan');
         return;
       }
       if (!supabase || !userId) {
@@ -1071,6 +1072,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       const saved = await insertPantryItem(supabase, userId, item);
       setPantry((prev) => [saved, ...prev]);
+      notifyTutorialStepCompleteRef.current('scan');
     },
     [demoMode, supabase, userId],
   );
@@ -1196,6 +1198,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return next;
         });
+        notifyTutorialStepCompleteRef.current('scan');
         return;
       }
       if (!supabase || !userId) {
@@ -1230,6 +1233,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const without = prev.filter((p) => !ids.has(p.id));
         return [...saved, ...without];
       });
+      notifyTutorialStepCompleteRef.current('scan');
     },
     [demoMode, pantry, supabase, userId],
   );
@@ -1268,8 +1272,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const dismissUndoToast = useCallback(() => setUndoToast(null), []);
-
-  const onboarding = useOnboarding({ session, authReady });
 
   const mealMadeReviewTitle = useMemo(() => {
     if (!mealMadeReview) return null;

@@ -103,6 +103,7 @@ export default function RecipesScreen() {
     toggleMealPlanDiscoveryRecipe,
     isOnMealPlan,
     toggleMealPlanKitchenRecipe,
+    onboarding,
   } = useApp();
   const [activeId, setActiveId] = useState('');
   const [pantryFilter, setPantryFilter] = useState<RecipePantryFilterMode>('best_match');
@@ -114,6 +115,11 @@ export default function RecipesScreen() {
   const pantryEmpty = pantry.length === 0;
   const accessToken = session?.access_token ?? null;
   const activeMealCount = mealPlan.filter((m) => !m.made).length;
+
+  function selectRecipe(recipeId: string) {
+    setActiveId(recipeId);
+    onboarding.notifyTutorialStepComplete('recipes');
+  }
 
   const filteredKitchenRecipes = useMemo(() => {
     if (pantryEmpty) return [];
@@ -260,7 +266,7 @@ export default function RecipesScreen() {
         subtitle="Everything on hand — save a grocery run"
         list={cookNowRecipes}
         activeId={activeId}
-        setActiveId={setActiveId}
+        setActiveId={selectRecipe}
         pantryRecipeMatches={pantryRecipeMatches}
         isOnMealPlan={isOnMealPlan}
         toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
@@ -271,7 +277,7 @@ export default function RecipesScreen() {
         subtitle="Add missing ingredients to your list, then Smart Shop"
         list={needItemsRecipes}
         activeId={activeId}
-        setActiveId={setActiveId}
+        setActiveId={selectRecipe}
         pantryRecipeMatches={pantryRecipeMatches}
         isOnMealPlan={isOnMealPlan}
         toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
