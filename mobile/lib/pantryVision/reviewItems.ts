@@ -51,8 +51,12 @@ export function detectionsToReviewItems(
   });
 }
 
-export function reviewItemsToPantryItems(items: PantryScanReviewItem[]): PantryItem[] {
+export function reviewItemsToPantryItems(
+  items: PantryScanReviewItem[],
+  scanPhotoPath?: string | null,
+): PantryItem[] {
   const now = new Date().toISOString();
+  const path = scanPhotoPath?.trim() || null;
   return items
     .filter((item) => item.enabled && item.name.trim().length > 0)
     .map((item, index) => ({
@@ -64,6 +68,7 @@ export function reviewItemsToPantryItems(items: PantryScanReviewItem[]): PantryI
       unit: item.unit.trim() || 'each',
       location: item.location ?? DEFAULT_PANTRY_STORAGE_LOCATION,
       photoUri: item.photoUri,
+      scanPhotoPath: path,
       expiresOn: null,
       updatedAt: now,
     }));

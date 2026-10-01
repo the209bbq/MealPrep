@@ -4,6 +4,7 @@ import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
 import { formatSupabaseError, isMissingSchemaError } from './supabaseErrors';
 import { normalizePantryStorageLocation } from '../config/pantryStorage';
 import { pantryPhotoUrlForStorage } from './pantryPhotoStorage';
+import { deleteScanPhoto } from './scanPhotos/client';
 import { withTimeout } from './withTimeout';
 import { groceryDedupeKey } from './recipeMatch/groceryFromMissing';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
@@ -46,6 +47,7 @@ type PantryRow = {
   unit: string;
   location: string | null;
   photo_url: string | null;
+  scan_photo_path: string | null;
   expires_on: string | null;
   updated_at: string;
 };
@@ -153,6 +155,7 @@ export function mapPantry(row: PantryRow): PantryItem {
     unit: row.unit,
     location: normalizePantryStorageLocation(row.location),
     photoUri: row.photo_url,
+    scanPhotoPath: row.scan_photo_path ?? null,
     expiresOn: row.expires_on,
     updatedAt: row.updated_at,
   };
@@ -290,6 +293,7 @@ function pantryInsertRow(userId: string, item: PantryItem) {
     unit: item.unit,
     location: item.location,
     photo_url: pantryPhotoUrlForStorage(item.photoUri),
+    scan_photo_path: item.scanPhotoPath?.trim() || null,
     expires_on: item.expiresOn,
   };
 }
@@ -354,6 +358,7 @@ export async function updatePantryItem(
       unit: item.unit,
       location: item.location,
       photo_url: pantryPhotoUrlForStorage(item.photoUri),
+      scan_photo_path: item.scanPhotoPath?.trim() || null,
       expires_on: item.expiresOn,
       updated_at: new Date().toISOString(),
     })
@@ -371,13 +376,44 @@ export async function deletePantryItemsByIds(
   ids: string[],
 ): Promise<void> {
   if (ids.length === 0) return;
+  const { data: rows, error: selectError } = await client
+    .from('pantry_items')
+    .select('scan_photo_path')
+    .eq('user_id', userId)
+    .in('id', ids);
+  if (selectError) throw selectError;
+
   const { error } = await client.from('pantry_items').delete().eq('user_id', userId).in('id', ids);
   if (error) throw error;
+
+  const paths = new Set(
+    (rows ?? [])
+      .map((row) => (row as { scan_photo_path: string | null }).scan_photo_path)
+      .filter((path): path is string => Boolean(path?.trim())),
+  );
+  for (const path of paths) {
+    void deleteScanPhoto(path);
+  }
 }
 
 export async function deleteAllPantryItems(client: SupabaseClient, userId: string): Promise<void> {
+  const { data: rows, error: selectError } = await client
+    .from('pantry_items')
+    .select('scan_photo_path')
+    .eq('user_id', userId);
+  if (selectError) throw selectError;
+
   const { error } = await client.from('pantry_items').delete().eq('user_id', userId);
   if (error) throw error;
+
+  const paths = new Set(
+    (rows ?? [])
+      .map((row) => (row as { scan_photo_path: string | null }).scan_photo_path)
+      .filter((path): path is string => Boolean(path?.trim())),
+  );
+  for (const path of paths) {
+    void deleteScanPhoto(path);
+  }
 }
 
 export async function upsertImportedRecipe(
