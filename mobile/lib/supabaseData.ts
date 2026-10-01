@@ -5,6 +5,7 @@ import { formatSupabaseError, isMissingSchemaError } from './supabaseErrors';
 import { normalizePantryStorageLocation } from '../config/pantryStorage';
 import { pantryPhotoUrlForStorage } from './pantryPhotoStorage';
 import { withTimeout } from './withTimeout';
+import { groceryDedupeKey } from './recipeMatch/groceryFromMissing';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
 import type {
   FeatureFlagKey,
@@ -461,6 +462,14 @@ function groceryRowKey(ingredientId: string, unit: string): string {
   return `${ingredientId}::${unit}`;
 }
 
+function groceryNameUnitKey(name: string, unit: string): string {
+  return groceryDedupeKey(name, unit);
+}
+
+function isManualGroceryRow(row: GroceryRow): boolean {
+  return row.ingredient_id.startsWith('manual-');
+}
+
 function isPersistedGroceryId(id: string, existingIds: Set<string>): boolean {
   return existingIds.has(id);
 }
@@ -480,15 +489,18 @@ export async function replaceGroceryList(
   const existingById = new Map(existing.map((row) => [row.id, row]));
   const existingIds = new Set(existing.map((row) => row.id));
   const existingByKey = new Map(existing.map((row) => [groceryRowKey(row.ingredient_id, row.unit), row]));
+  const existingByNameUnit = new Map(existing.map((row) => [groceryNameUnitKey(row.name, row.unit), row]));
 
   const persisted: GroceryListItem[] = [];
   const keptIds = new Set<string>();
 
   for (const item of items) {
     const key = groceryRowKey(item.ingredientId, item.unit);
+    const nameKey = groceryNameUnitKey(item.name, item.unit);
     const matched =
       (isPersistedGroceryId(item.id, existingIds) ? existingById.get(item.id) : undefined) ??
-      existingByKey.get(key);
+      existingByKey.get(key) ??
+      existingByNameUnit.get(nameKey);
 
     const payload = {
       user_id: userId,
@@ -521,7 +533,9 @@ export async function replaceGroceryList(
     persisted.push(mapGrocery(data as GroceryRow));
   }
 
-  const toRemove = existing.filter((row) => !keptIds.has(row.id)).map((row) => row.id);
+  const toRemove = existing
+    .filter((row) => !keptIds.has(row.id) && !isManualGroceryRow(row))
+    .map((row) => row.id);
   if (toRemove.length > 0) {
     const { error: deleteError } = await client.from('grocery_list_items').delete().eq('user_id', userId).in('id', toRemove);
     if (deleteError) throw deleteError;
@@ -544,20 +558,45 @@ export async function insertGroceryItem(
   userId: string,
   item: GroceryListItem,
 ): Promise<GroceryListItem> {
-  const { data, error } = await client
+  const { data: existingRows, error: fetchError } = await client
     .from('grocery_list_items')
-    .insert({
-      user_id: userId,
-      ingredient_id: item.ingredientId,
-      name: item.name,
-      category: item.category,
-      quantity: item.quantity,
-      unit: item.unit,
-      checked: item.checked,
-      source_recipe_ids: item.sourceRecipeIds,
-    })
     .select('*')
-    .single();
+    .eq('user_id', userId);
+  if (fetchError) throw fetchError;
+
+  const existing = (existingRows ?? []) as GroceryRow[];
+  const nameKey = groceryNameUnitKey(item.name, item.unit);
+  const matched =
+    existing.find((row) => groceryRowKey(row.ingredient_id, row.unit) === groceryRowKey(item.ingredientId, item.unit)) ??
+    existing.find((row) => groceryNameUnitKey(row.name, row.unit) === nameKey);
+
+  const payload = {
+    user_id: userId,
+    ingredient_id: item.ingredientId,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    unit: item.unit,
+    checked: item.checked,
+    source_recipe_ids: item.sourceRecipeIds,
+  };
+
+  if (matched) {
+    const { data, error } = await client
+      .from('grocery_list_items')
+      .update({
+        ...payload,
+        quantity: matched.quantity + item.quantity,
+      })
+      .eq('id', matched.id)
+      .eq('user_id', userId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapGrocery(data as GroceryRow);
+  }
+
+  const { data, error } = await client.from('grocery_list_items').insert(payload).select('*').single();
   if (error) throw error;
   return mapGrocery(data as GroceryRow);
 }

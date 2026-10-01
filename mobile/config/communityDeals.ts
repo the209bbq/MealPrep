@@ -9,5 +9,5 @@ export const COMMUNITY_DEALS = {
   fuzzyMatchMinScore: 0.88,
   migrationFilePath: 'mobile/supabase/migrations/20261001120000_store_community_deals.sql',
   migrationHint:
-    'Community deals table is missing. Run the SQL migration in the Supabase SQL editor (see mobile/supabase/migrations/20261001120000_store_community_deals.sql).',
+    'Community deals aren’t available yet. Ask an admin to finish setup.',
 } as const;

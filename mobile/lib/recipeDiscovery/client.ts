@@ -50,6 +50,7 @@ function filtersToQuery(filters: RecipeDiscoverySearchFilters): Record<string, s
     page: filters.page ?? 1,
   };
   if (filters.search?.trim()) query.search = filters.search.trim();
+  if (filters.ingredients?.trim()) query.ingredients = filters.ingredients.trim();
   if (filters.cuisine) query.cuisine = filters.cuisine;
   if (filters.mealType) query.meal_type = filters.mealType;
   if (filters.difficulty) query.difficulty = filters.difficulty;
@@ -68,11 +69,11 @@ async function callProxy<T>(
   const url = getRecipeApiProxyUrl();
   if (!url) {
     throw new RecipeDiscoveryNotConfiguredError(
-      'Recipe discovery is not set up yet. Deploy the recipeapi-proxy Edge Function and set RECIPEAPI_KEY.',
+      'Recipe search isn’t set up on this app yet. Ask an admin to connect it.',
     );
   }
   if (!accessToken) {
-    throw new RecipeDiscoveryAuthError('Sign in to search RecipeAPI.io recipes.');
+    throw new RecipeDiscoveryAuthError('Sign in to search recipes.');
   }
 
   const response = await fetch(url, {

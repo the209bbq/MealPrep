@@ -1,6 +1,7 @@
 import { SMART_SHOP_COPY } from '../../config/smartShop';
 import type { DealsSearchResult, ItemStoreDeal, StoreCartTotal, StoreLocation } from '../deals/types';
 import type { GroceryListItem } from '../../types/mealprep';
+import { isRealPriceDeal, resultHasRealStorePricing, storeTotalHasRealPrices } from './realPricing';
 
 export function bestDealPerStoreForItem(deals: ItemStoreDeal[], groceryItemId: string, storeId: string): ItemStoreDeal | undefined {
   const matches = deals.filter((d) => d.groceryItemId === groceryItemId && d.storeId === storeId);
@@ -31,8 +32,13 @@ export function isEstimatePricingMode(result: DealsSearchResult): boolean {
   return result.mode === 'sample';
 }
 
-export function storeHasPricedTotal(total: StoreCartTotal | undefined): boolean {
-  return Boolean(total?.pricesAvailable && total.itemCount > 0);
+export function storeHasPricedTotal(
+  total: StoreCartTotal | undefined,
+  result?: DealsSearchResult,
+): boolean {
+  if (!total?.pricesAvailable || total.itemCount <= 0) return false;
+  if (!result || result.mode === 'sample') return true;
+  return storeTotalHasRealPrices(total, result.deals);
 }
 
 export function dealsSummaryLabel(result: DealsSearchResult): string {
@@ -55,10 +61,15 @@ export function pricingBadgeForStore(
     hasCommunityDeals?: boolean;
     resultMode?: DealsSearchResult['mode'];
     storeTotal?: StoreCartTotal;
+    result?: DealsSearchResult;
   },
 ): string {
-  const priced = storeHasPricedTotal(options?.storeTotal);
-  if (!priced) return SMART_SHOP_COPY.pricesUnavailable;
+  const priced = storeHasPricedTotal(options?.storeTotal, options?.result);
+  if (!priced) {
+    return options?.hasCommunityDeals
+      ? 'Community deals only'
+      : SMART_SHOP_COPY.noPricesYetStore;
+  }
 
   const estimate =
     options?.resultMode === 'sample' ||
@@ -88,7 +99,9 @@ export function estimateSmartShopSavings(
   result: DealsSearchResult,
   listItemCount: number,
 ): SmartShopSavingsEstimate | null {
-  const pricedTotals = result.storeTotals.filter((t) => t.pricesAvailable && t.itemCount > 0);
+  if (result.mode !== 'sample' && !resultHasRealStorePricing(result)) return null;
+
+  const pricedTotals = result.storeTotals.filter((t) => storeHasPricedTotal(t, result));
   if (pricedTotals.length < 2) return null;
 
   const subtotals = pricedTotals.map((t) => t.subtotal);
@@ -105,4 +118,22 @@ export function estimateSmartShopSavings(
     listItemCount,
     isDemoPricing: result.mode === 'sample',
   };
+}
+
+export function bestRealDealAcrossStores(deals: ItemStoreDeal[], groceryItemId: string): ItemStoreDeal | undefined {
+  const matches = deals.filter((d) => d.groceryItemId === groceryItemId && isRealPriceDeal(d));
+  if (matches.length === 0) return undefined;
+  return matches.reduce((best, current) => (current.lineTotal < best.lineTotal ? current : best));
+}
+
+export function bestRealDealPerStoreForItem(
+  deals: ItemStoreDeal[],
+  groceryItemId: string,
+  storeId: string,
+): ItemStoreDeal | undefined {
+  const matches = deals.filter(
+    (d) => d.groceryItemId === groceryItemId && d.storeId === storeId && isRealPriceDeal(d),
+  );
+  if (matches.length === 0) return undefined;
+  return matches.reduce((best, current) => (current.lineTotal < best.lineTotal ? current : best));
 }

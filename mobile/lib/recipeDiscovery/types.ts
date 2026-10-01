@@ -97,6 +97,8 @@ export interface RecipeApiErrorEnvelope {
 
 export interface RecipeDiscoverySearchFilters {
   search?: string;
+  /** RecipeAPI.io ingredient filter (comma-separated or single term). */
+  ingredients?: string;
   cuisine?: RecipeApiCuisine;
   mealType?: RecipeApiMealType;
   difficulty?: RecipeApiDifficulty;
