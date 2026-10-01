@@ -26,7 +26,8 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-web": "^0.21.2",
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "heic2any": "^0.0.4"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
@@ -55,6 +56,7 @@
     "test:guest-mode": "npx tsx scripts/guest-mode-check.ts",
     "test:photo-scan-gate": "npx tsx scripts/photo-scan-gate-check.ts",
     "test:prepare-image-web": "npx tsx scripts/infer-image-mime-check.ts && npx tsx scripts/prepare-image-web-check.ts",
+    "test:web-pantry-photo-scan": "npx tsx scripts/web-pantry-photo-scan-check.ts",
     "test:tutorial": "npx tsx scripts/tutorial-progress-check.ts",
     "test": "npm run test:recipe-match && npm run test:grocery && npm run test:smart-shop && npm run test:package-pricing && npm run test:community-prices && npm run test:add-price && npm run test:pantry-vision && npm run test:pantry-vision-gemini && npm run test:tutorial && npm run test:guest-mode && npm run test:photo-scan-gate && npm run test:prepare-image-web && npm run test:onboarding",
     "generate:brand": "node scripts/generate-brand-assets.mjs",

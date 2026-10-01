@@ -316,7 +316,9 @@ export default function PantryScreen() {
                 ? error.message
                 : error instanceof PantryVisionScanError
                   ? error.message
-                  : PHOTO_SCAN.scanFailedMessage;
+                  : error instanceof Error
+                    ? error.message
+                    : PHOTO_SCAN.scanFailedMessage;
       const canRetry = !(error instanceof PantryVisionNotConfiguredError);
       setScanFailure(message, title, canRetry ? attempt : null);
       setPhase('idle');
