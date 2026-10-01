@@ -48,3 +48,11 @@ export function writeJson(key: string, value: unknown): void {
     // Demo persistence is best-effort (private mode / quota).
   }
 }
+
+export function removeStorageKey(key: string): void {
+  try {
+    getStore().removeItem(key);
+  } catch {
+    // Best-effort.
+  }
+}
