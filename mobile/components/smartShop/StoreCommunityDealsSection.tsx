@@ -145,7 +145,7 @@ export function StoreCommunityDealsSection({
         <View className="mt-2">
           {loading ? (
             <View className="flex-row items-center gap-2 py-2">
-              <ActivityIndicator size="small" color={THEME.emerald} />
+              <ActivityIndicator size="small" color={THEME.success} />
               <Text className="text-xs text-muted">Loading community deals…</Text>
             </View>
           ) : null}
@@ -164,7 +164,7 @@ export function StoreCommunityDealsSection({
               <View className="flex-row items-start justify-between gap-2">
                 <View className="min-w-0 flex-1">
                   <Text className="font-semibold text-ink">{deal.itemName}</Text>
-                  <Text className="text-sm font-bold text-emerald-dark">
+                  <Text className="text-sm font-bold text-success-dark">
                     {formatMoney(deal.price)}
                     {deal.unit ? ` / ${deal.unit}` : ''}
                   </Text>
@@ -180,10 +180,10 @@ export function StoreCommunityDealsSection({
                 <View className="mt-2 flex-row flex-wrap gap-2">
                   <Pressable
                     onPress={() => void handleVote(deal.id, 'confirm')}
-                    className={`rounded-lg px-2 py-1 ${deal.myVote === 'confirm' ? 'bg-emerald' : 'bg-emerald-light'}`}
+                    className={`rounded-lg px-2 py-1 ${deal.myVote === 'confirm' ? 'bg-success' : 'bg-success-light'}`}
                   >
                     <Text
-                      className={`text-xs font-semibold ${deal.myVote === 'confirm' ? 'text-on-emerald' : 'text-emerald-dark'}`}
+                      className={`text-xs font-semibold ${deal.myVote === 'confirm' ? 'text-on-success' : 'text-success-dark'}`}
                     >
                       Confirm
                     </Text>
@@ -257,9 +257,9 @@ export function StoreCommunityDealsSection({
                 <Pressable
                   onPress={() => void handleSubmitDeal()}
                   disabled={submitting}
-                  className="flex-1 rounded-xl bg-emerald px-3 py-2"
+                  className="flex-1 rounded-xl bg-success px-3 py-2"
                 >
-                  <Text className="text-center text-xs font-bold text-on-emerald">
+                  <Text className="text-center text-xs font-bold text-on-success">
                     {submitting ? 'Saving…' : 'Post deal'}
                   </Text>
                 </Pressable>
@@ -270,7 +270,7 @@ export function StoreCommunityDealsSection({
             </View>
           ) : (
             <Pressable onPress={() => setShowForm(true)} className="mt-2 self-start">
-              <Text className="text-xs font-bold text-emerald-dark">Add a deal</Text>
+              <Text className="text-xs font-bold text-success-dark">Add a deal</Text>
             </Pressable>
           )}
         </View>

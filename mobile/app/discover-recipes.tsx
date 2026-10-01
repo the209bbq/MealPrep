@@ -195,7 +195,7 @@ export default function DiscoverRecipesScreen() {
           <Text className="text-sm font-semibold text-ink">
             {loading ? 'Searching…' : `${total} result${total === 1 ? '' : 's'}`}
           </Text>
-          {loading ? <ActivityIndicator color={THEME.emerald} /> : null}
+          {loading ? <ActivityIndicator color={THEME.primary} /> : null}
         </View>
 
         {items.map((recipe) => (

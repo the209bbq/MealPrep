@@ -58,7 +58,7 @@ export function MealMadeReviewSheet({
                     <Switch
                       value={checked}
                       onValueChange={(value) => onTogglePantryItem(pantryItem.id, value)}
-                      trackColor={{ true: THEME.emerald, false: THEME.border }}
+                      trackColor={{ true: THEME.primary, false: THEME.border }}
                     />
                   </View>
                 );

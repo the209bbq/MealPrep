@@ -11,7 +11,7 @@ export function RecipesEmptyState({ pantryEmpty }: RecipesEmptyStateProps) {
   return (
     <View className="mt-4 items-center rounded-3xl border border-dashed border-border bg-card px-6 py-10">
       <View className="mb-4 rounded-full bg-emerald-light p-4">
-        <Ionicons name={pantryEmpty ? 'camera-outline' : 'restaurant-outline'} size={40} color={THEME.emerald} />
+        <Ionicons name={pantryEmpty ? 'camera-outline' : 'restaurant-outline'} size={40} color={THEME.primary} />
       </View>
       <Text className="text-center text-lg font-bold text-ink">
         {pantryEmpty ? 'Scan your pantry to save a store trip' : 'No strong matches yet'}

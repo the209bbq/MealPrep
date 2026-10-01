@@ -103,7 +103,7 @@ export default function DiscoverRecipeDetailScreen() {
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color={THEME.emerald} size="large" />
+          <ActivityIndicator color={THEME.primary} size="large" />
         </View>
       ) : null}
 

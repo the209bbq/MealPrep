@@ -298,7 +298,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
               {loading ? 'Searching…' : `${displayItems.length} result${displayItems.length === 1 ? '' : 's'}`}
               {!loading && total > displayItems.length ? ` (of ${total})` : ''}
             </Text>
-            {loading ? <ActivityIndicator color={THEME.emerald} /> : null}
+            {loading ? <ActivityIndicator color={THEME.primary} /> : null}
           </View>
 
           {displayItems.length === 0 && !loading ? (

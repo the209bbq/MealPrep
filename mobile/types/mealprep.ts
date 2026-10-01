@@ -189,19 +189,24 @@ export interface TabConfig {
 }
 
 export interface ThemeTokens {
-  cream: string;
+  brandCream: string;
   paper: string;
   sand: string;
   ink: string;
   muted: string;
   border: string;
-  slate: string;
-  slateMuted: string;
-  emerald: string;
-  emeraldDark: string;
-  emeraldLight: string;
-  emeraldAccent: string;
-  onEmerald: string;
   card: string;
+  primary: string;
+  primaryDark: string;
+  primaryLight: string;
+  primaryAccent: string;
+  onPrimary: string;
+  onPrimaryMuted: string;
+  slateMuted: string;
+  success: string;
+  successDark: string;
+  successLight: string;
+  successAccent: string;
+  onSuccess: string;
   danger: string;
 }

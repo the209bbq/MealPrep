@@ -27,9 +27,9 @@ export function StoreWeeklyAdButton({ store, className }: StoreWeeklyAdButtonPro
   return (
     <Pressable
       onPress={() => void openExternalUrl(chain.url).catch(() => undefined)}
-      className={`min-h-[40px] flex-row items-center justify-center rounded-xl border border-emerald bg-emerald-light px-3 py-2 ${className ?? ''}`}
+      className={`min-h-[40px] flex-row items-center justify-center rounded-xl border border-success bg-success-light px-3 py-2 ${className ?? ''}`}
     >
-      <Text className="text-xs font-bold text-emerald-dark">{label}</Text>
+      <Text className="text-xs font-bold text-success-dark">{label}</Text>
     </Pressable>
   );
 }

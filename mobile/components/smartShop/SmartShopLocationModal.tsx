@@ -34,10 +34,10 @@ export function SmartShopLocationModal({
             onPress={onUseLocation}
             className="mt-4 min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl bg-emerald px-4 py-3"
           >
-            <Ionicons name="locate" size={20} color={THEME.onEmerald} />
+            <Ionicons name="locate" size={20} color={THEME.onPrimary} />
             <Text className="font-bold text-on-emerald">{SMART_SHOP_COPY.locationUseDevice}</Text>
           </Pressable>
-          {locationHint ? <Text className="mt-2 text-xs text-emerald-dark">{locationHint}</Text> : null}
+          {locationHint ? <Text className="mt-2 text-xs text-success-dark">{locationHint}</Text> : null}
           <View className="mt-3 flex-row gap-2">
             <TextInput
               value={zip}

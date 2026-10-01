@@ -19,7 +19,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
           name="viewport"
           content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
-        <meta name="theme-color" content={THEME.emerald} />
+        <meta name="theme-color" content={THEME.primaryDark} />
         <meta name="application-name" content={APP_BRAND.shortName} />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

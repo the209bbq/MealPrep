@@ -31,7 +31,7 @@ export function SmartShopCompareStoresSection({
       <View className="mb-2 flex-row items-center justify-between">
         <Text className="text-xs font-bold uppercase tracking-wide text-muted">{SMART_SHOP_COPY.compareStoresTitle}</Text>
         <Pressable onPress={onEditPress}>
-          <Text className="text-xs font-semibold text-emerald-dark">{SMART_SHOP_COPY.compareStoresEdit}</Text>
+          <Text className="text-xs font-semibold text-success-dark">{SMART_SHOP_COPY.compareStoresEdit}</Text>
         </Pressable>
       </View>
       {loadingStores && sortedNearbyStores.length === 0 ? (
@@ -44,7 +44,7 @@ export function SmartShopCompareStoresSection({
         const key = store.krogerLocationId ?? store.id;
         const selected = savedStoreIds.includes(key);
         return (
-          <View key={store.id} className="mb-2 rounded-xl border border-emerald bg-emerald-light/40 px-3 py-2">
+          <View key={store.id} className="mb-2 rounded-xl border border-success bg-success-light/40 px-3 py-2">
             <Text className="font-semibold text-ink">{store.chain || store.name}</Text>
             <Text className="text-xs text-muted">
               {store.distanceMiles != null ? `${store.distanceMiles.toFixed(1)} mi · ` : ''}
@@ -94,7 +94,7 @@ export function SmartShopStorePickerModal({
           <View className="mb-3 flex-row items-center justify-between">
             <Text className="text-lg font-bold text-ink">{SMART_SHOP_COPY.compareStoresPickerTitle}</Text>
             <Pressable onPress={onClose} className="rounded-full bg-card px-3 py-1">
-              <Text className="text-sm font-bold text-emerald-dark">{SMART_SHOP_COPY.compareStoresPickerDone}</Text>
+              <Text className="text-sm font-bold text-success-dark">{SMART_SHOP_COPY.compareStoresPickerDone}</Text>
             </Pressable>
           </View>
           <Text className="mb-2 text-xs text-muted">Select up to {maxStores} stores. Changes refresh prices right away.</Text>
@@ -106,7 +106,7 @@ export function SmartShopStorePickerModal({
                 <Pressable
                   key={store.id}
                   onPress={() => void onToggleStore(store)}
-                  className={`mb-2 rounded-2xl border px-4 py-3 ${selected ? 'border-emerald bg-emerald-light' : 'border-border bg-card'}`}
+                  className={`mb-2 rounded-2xl border px-4 py-3 ${selected ? 'border-success bg-success-light' : 'border-border bg-card'}`}
                 >
                   <View className="flex-row items-start justify-between gap-2">
                     <View className="flex-1">
@@ -123,7 +123,7 @@ export function SmartShopStorePickerModal({
                     <Ionicons
                       name={selected ? 'checkmark-circle' : 'ellipse-outline'}
                       size={24}
-                      color={selected ? THEME.emerald : THEME.muted}
+                      color={selected ? THEME.primary : THEME.muted}
                     />
                   </View>
                 </Pressable>
@@ -154,7 +154,7 @@ export function SmartShopStorePickerModal({
               }}
               className="mt-3 rounded-xl bg-slate px-4 py-2"
             >
-              <Text className="text-center font-bold text-on-emerald">Add store</Text>
+              <Text className="text-center font-bold text-on-success">Add store</Text>
             </Pressable>
           </View>
         </View>

@@ -8,7 +8,7 @@ export function SmartShopComparisonSkeleton() {
       {[0, 1, 2].map((i) => (
         <View key={i} className="mb-3 rounded-xl border border-border bg-card px-4 py-4 opacity-70">
           <View className="h-4 rounded bg-border" style={{ width: '45%' }} />
-          <View className="mt-3 h-6 rounded bg-emerald-light" style={{ width: '28%' }} />
+          <View className="mt-3 h-6 rounded bg-success-light" style={{ width: '28%' }} />
           <View className="mt-2 h-3 rounded bg-border" style={{ width: '60%' }} />
         </View>
       ))}

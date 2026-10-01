@@ -1,0 +1,22 @@
+{
+  "brandCream": "#FCF8EC",
+  "paper": "#F4F6F8",
+  "sand": "#E3E8EF",
+  "ink": "#1B2430",
+  "muted": "#5B6773",
+  "border": "#D9DEE4",
+  "card": "#FFFFFF",
+  "primary": "#1F3A5F",
+  "primaryDark": "#13253F",
+  "primaryLight": "#E8EEF4",
+  "primaryAccent": "#2A5080",
+  "onPrimary": "#FFFFFF",
+  "onPrimaryMuted": "#C5D0DE",
+  "slateMuted": "#8A96A5",
+  "success": "#047857",
+  "successDark": "#065F46",
+  "successLight": "#D1FAE5",
+  "successAccent": "#059669",
+  "onSuccess": "#FFFFFF",
+  "danger": "#B91C1C"
+}

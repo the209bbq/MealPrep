@@ -64,7 +64,7 @@ export function PantryLocationSections({
               className="flex-row items-center justify-between px-4 py-3"
             >
               <View className="flex-row items-center gap-2">
-                <Ionicons name={isOpen ? 'chevron-down' : 'chevron-forward'} size={18} color={THEME.emerald} />
+                <Ionicons name={isOpen ? 'chevron-down' : 'chevron-forward'} size={18} color={THEME.primary} />
                 <Text className="text-base font-bold text-ink">{section.label}</Text>
                 <Text className="text-sm text-muted">({count})</Text>
               </View>

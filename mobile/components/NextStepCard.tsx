@@ -22,7 +22,7 @@ export function NextStepCard({ step, onPress }: NextStepCardProps) {
       <Text className="text-xs font-bold uppercase tracking-widest text-emerald-dark">Next step</Text>
       <View className="mt-3 flex-row items-start gap-3">
         <View className="rounded-2xl bg-emerald-light p-3">
-          <Ionicons name={ICONS[step.kind]} size={26} color={THEME.emerald} />
+          <Ionicons name={ICONS[step.kind]} size={26} color={THEME.primary} />
         </View>
         <View className="flex-1">
           <Text className="text-xl font-bold leading-snug text-ink">{step.title}</Text>

@@ -273,7 +273,7 @@ export default function RecipesScreen() {
         <Card className="mt-2" title="Also from RecipeAPI" subtitle="Searched using your pantry ingredient names">
           {discoveryLoading ? (
             <View className="mt-3 flex-row items-center gap-2">
-              <ActivityIndicator color={THEME.emerald} />
+              <ActivityIndicator color={THEME.primary} />
               <Text className="text-sm text-muted">Finding recipes for your ingredients…</Text>
             </View>
           ) : null}
