@@ -1,5 +1,6 @@
 import type { GroceryListItem, PantryCategory, PantryItem, RecipeIngredient } from '../../types/mealprep';
 import { createManualGroceryItem } from '../grocery';
+import { normalizeIngredientName } from './normalize';
 
 function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
@@ -9,6 +10,21 @@ function slugFromName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'ingredient';
 }
 
+/** Dedupe key for grocery rows: normalized ingredient name + unit. */
+export function groceryDedupeKey(name: string, unit: string): string {
+  return `${normalizeIngredientName(name)}::${unit.trim().toLowerCase()}`;
+}
+
+function findExistingGroceryIndex(list: GroceryListItem[], ingredient: RecipeIngredient): number {
+  const key = groceryDedupeKey(ingredient.name, ingredient.unit);
+  return list.findIndex((row) => groceryDedupeKey(row.name, row.unit) === key);
+}
+
+export interface MergeMissingGroceryResult {
+  items: GroceryListItem[];
+  added: GroceryListItem[];
+}
+
 export function groceryItemsFromMissingIngredients(
   missing: RecipeIngredient[],
   recipeId: string,
@@ -16,11 +32,10 @@ export function groceryItemsFromMissingIngredients(
   previous: GroceryListItem[],
 ): GroceryListItem[] {
   const added: GroceryListItem[] = [];
-  const existingKeys = new Set(previous.map((item) => `${item.ingredientId}::${item.unit}`));
 
   for (const ingredient of missing) {
-    const key = `${ingredient.ingredientId}::${ingredient.unit}`;
-    if (existingKeys.has(key)) continue;
+    if (findExistingGroceryIndex(previous, ingredient) >= 0) continue;
+    if (findExistingGroceryIndex(added, ingredient) >= 0) continue;
 
     const pantryMatch = pantry.find((item) => item.ingredientId === ingredient.ingredientId);
     const category: PantryCategory = pantryMatch?.category ?? 'dry_goods';
@@ -36,7 +51,6 @@ export function groceryItemsFromMissingIngredients(
       checked: false,
       sourceRecipeIds: [recipeId],
     });
-    existingKeys.add(key);
   }
 
   return added;
@@ -47,15 +61,17 @@ export function mergeGroceryWithMissing(
   missing: RecipeIngredient[],
   recipeId: string,
   pantry: PantryItem[],
-): GroceryListItem[] {
+): MergeMissingGroceryResult {
   const newItems = groceryItemsFromMissingIngredients(missing, recipeId, pantry, previous);
-  if (newItems.length === 0) return previous;
+  if (newItems.length === 0) {
+    return { items: previous, added: [] };
+  }
 
   const merged = [...previous];
+  const added: GroceryListItem[] = [];
+
   for (const item of newItems) {
-    const idx = merged.findIndex(
-      (row) => row.ingredientId === item.ingredientId && row.unit === item.unit,
-    );
+    const idx = findExistingGroceryIndex(merged, item);
     if (idx >= 0) {
       const existing = merged[idx];
       merged[idx] = {
@@ -65,12 +81,17 @@ export function mergeGroceryWithMissing(
           ? existing.sourceRecipeIds
           : [...existing.sourceRecipeIds, recipeId],
       };
-    } else {
-      merged.push(item);
+      continue;
     }
+
+    merged.push(item);
+    added.push(item);
   }
 
-  return merged.sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    items: merged.sort((a, b) => a.name.localeCompare(b.name)),
+    added,
+  };
 }
 
 export function addMissingRecipeIngredientsToGrocery(input: {
@@ -78,7 +99,7 @@ export function addMissingRecipeIngredientsToGrocery(input: {
   recipeId: string;
   pantry: PantryItem[];
   previous: GroceryListItem[];
-}): GroceryListItem[] {
+}): MergeMissingGroceryResult {
   return mergeGroceryWithMissing(input.previous, input.missing, input.recipeId, input.pantry);
 }
 
@@ -101,4 +122,10 @@ export function groceryItemForIngredientName(input: {
     sourceRecipeIds: [input.recipeId],
     ingredientId: slugFromName(input.name),
   };
+}
+
+export function removeGroceryItemsByIds(list: GroceryListItem[], ids: string[]): GroceryListItem[] {
+  if (ids.length === 0) return list;
+  const remove = new Set(ids);
+  return list.filter((item) => !remove.has(item.id));
 }
