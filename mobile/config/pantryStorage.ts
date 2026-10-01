@@ -48,6 +48,7 @@ export const PANTRY_LOCATION_FILTER_STORAGE_KEY = 'mealprep.pantryLocationFilter
 
 export const PANTRY_LIST_COPY = {
   emptyFiltered: 'No items match your filters.',
+  showAllFilters: 'Show all locations & categories',
   storageFilterLabel: 'Storage',
   allLocationsChipLabel: 'All',
 } as const;

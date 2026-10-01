@@ -122,6 +122,7 @@ export default function PantryScreen() {
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanErrorTitle, setScanErrorTitle] = useState<string | null>(null);
+  const [scanGuestSignInCta, setScanGuestSignInCta] = useState(false);
   const [scanNotice, setScanNotice] = useState<{ title: string; message: string } | null>(null);
   const [scanQualityWarning, setScanQualityWarning] = useState<string | null>(null);
   const [lastScanAttempt, setLastScanAttempt] = useState<
@@ -199,6 +200,7 @@ export default function PantryScreen() {
   function clearScanFailure() {
     setScanError(null);
     setScanErrorTitle(null);
+    setScanGuestSignInCta(false);
     setScanNotice(null);
     setScanQualityWarning(null);
     setLastScanAttempt(null);
@@ -225,11 +227,13 @@ export default function PantryScreen() {
       | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
       | { kind: 'uri'; uri: string; location: PantryStorageLocation }
       | null,
+    options?: { signInCta?: boolean },
   ) {
     setScanNotice(null);
     setScanError(message);
     setScanErrorTitle(title);
     setLastScanAttempt(attempt);
+    setScanGuestSignInCta(Boolean(options?.signInCta));
   }
 
   function retryLastScan() {
@@ -392,10 +396,9 @@ export default function PantryScreen() {
   }
 
   function promptGuestPhotoScanSignIn() {
-    Alert.alert(GUEST_MODE_COPY.pantryScanSignInTitle, GUEST_MODE_COPY.pantryScanSignIn, [
-      { text: GUEST_MODE_COPY.pantryScanSignInCta, onPress: () => router.push(APP_ROUTES.profile) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    setScanFailure(GUEST_MODE_COPY.pantryScanSignIn, GUEST_MODE_COPY.pantryScanSignInTitle, null, {
+      signInCta: true,
+    });
   }
 
   function handleWebPrepareError(message: string) {
@@ -408,6 +411,7 @@ export default function PantryScreen() {
       const copy = photoScanAccessUserMessage(access);
       if (access === 'guest_blocked') {
         promptGuestPhotoScanSignIn();
+        return;
       }
       if (copy) {
         setScanFailure(copy.message, copy.title, null);
@@ -552,6 +556,8 @@ export default function PantryScreen() {
           category: manualCategory,
           location: manualLocation,
         });
+        selectLocationFilter(manualLocation);
+        setFilter('all');
       }
       closeManualModal();
     } catch (error) {
@@ -744,6 +750,14 @@ export default function PantryScreen() {
             <View className="mt-3 rounded-xl border border-danger/25 bg-paper p-3">
               <Text className="text-sm font-bold text-ink">{scanErrorTitle ?? PHOTO_SCAN.scanFailedTitle}</Text>
               <Text className="mt-1 text-xs text-muted">{scanError}</Text>
+              {scanGuestSignInCta ? (
+                <Pressable
+                  onPress={() => router.push(APP_ROUTES.profile)}
+                  className="mt-3 items-center rounded-xl bg-primary py-2.5"
+                >
+                  <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>
+                </Pressable>
+              ) : null}
               {lastScanAttempt ? (
                 <Pressable
                   onPress={retryLastScan}
@@ -798,6 +812,10 @@ export default function PantryScreen() {
             categoryFilter={filter}
             locationFilter={locationFilter}
             onPressItem={openEditModal}
+            onResetFilters={() => {
+              selectLocationFilter('all');
+              setFilter('all');
+            }}
           />
         )}
         </ScrollView>

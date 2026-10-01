@@ -10,6 +10,7 @@ interface PantryFilteredItemListProps {
   categoryFilter: PantryCategory | 'all';
   locationFilter: PantryStorageLocation | 'all';
   onPressItem: (item: PantryItem) => void;
+  onResetFilters?: () => void;
 }
 
 function PantryItemRow({ item, onPress }: { item: PantryItem; onPress: () => void }) {
@@ -38,6 +39,7 @@ export function PantryFilteredItemList({
   categoryFilter,
   locationFilter,
   onPressItem,
+  onResetFilters,
 }: PantryFilteredItemListProps) {
   const sections = useMemo(
     () => groupPantryIntoLocationSections(items, { categoryFilter, locationFilter }),
@@ -50,6 +52,11 @@ export function PantryFilteredItemList({
     return (
       <View className="mb-4 rounded-2xl border border-border bg-card px-4 py-6">
         <Text className="text-center text-sm text-muted">{PANTRY_LIST_COPY.emptyFiltered}</Text>
+        {items.length > 0 && onResetFilters ? (
+          <Pressable onPress={onResetFilters} className="mt-3 items-center rounded-xl border border-border py-2.5">
+            <Text className="text-sm font-bold text-primary-dark">{PANTRY_LIST_COPY.showAllFilters}</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   }

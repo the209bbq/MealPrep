@@ -23,7 +23,13 @@ export function InstallAppBanner() {
             </Text>
           ) : null}
         </View>
-        <Pressable onPress={dismissInstallHint} accessibilityLabel="Dismiss install hint" hitSlop={8}>
+        <Pressable
+          onPress={dismissInstallHint}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss install hint"
+          hitSlop={8}
+          className="rounded-full p-1"
+        >
           <Ionicons name="close" size={20} color={THEME.primaryDark} />
         </Pressable>
       </View>

@@ -130,6 +130,10 @@ export function buildGroceryList(
       pantry,
     );
     const have = totalPantryQuantityInUnit(pantryMatches, value.unit);
+    if (pantryMatches.length > 0 && have === null) {
+      // Name/id match in pantry but units don't convert (e.g. 1 each vs 250 g) — skip auto-buy line.
+      continue;
+    }
     const remaining = have === null ? value.quantity : roundQty(Math.max(0, value.quantity - have));
     if (remaining <= 0) continue;
 
