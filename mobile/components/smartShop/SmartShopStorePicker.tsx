@@ -15,6 +15,7 @@ type SectionProps = {
   storeHasCommunityDeals: (store: StoreLocation) => boolean;
   onEditPress: () => void;
   resultMode?: 'live' | 'sample';
+  onAddPrice?: (store: StoreLocation) => void;
 };
 
 export function SmartShopCompareStoresSection({
@@ -25,6 +26,7 @@ export function SmartShopCompareStoresSection({
   storeHasCommunityDeals,
   onEditPress,
   resultMode,
+  onAddPrice,
 }: SectionProps) {
   return (
     <View className="mt-3">
@@ -45,15 +47,24 @@ export function SmartShopCompareStoresSection({
         const selected = savedStoreIds.includes(key);
         return (
           <View key={store.id} className="mb-2 rounded-xl border border-emerald bg-emerald-light/40 px-3 py-2">
-            <Text className="font-semibold text-ink">{store.chain || store.name}</Text>
-            <Text className="text-xs text-muted">
-              {store.distanceMiles != null ? `${store.distanceMiles.toFixed(1)} mi · ` : ''}
-              {pricingBadgeForStore(store, {
-                hasCommunityDeals: storeHasCommunityDeals(store),
-                resultMode,
-              })}
-              {selected ? '' : ' · nearby default'}
-            </Text>
+            <View className="flex-row items-start justify-between gap-2">
+              <View className="min-w-0 flex-1">
+                <Text className="font-semibold text-ink">{store.chain || store.name}</Text>
+                <Text className="text-xs text-muted">
+                  {store.distanceMiles != null ? `${store.distanceMiles.toFixed(1)} mi · ` : ''}
+                  {pricingBadgeForStore(store, {
+                    hasCommunityDeals: storeHasCommunityDeals(store),
+                    resultMode,
+                  })}
+                  {selected ? '' : ' · nearby default'}
+                </Text>
+              </View>
+              {onAddPrice ? (
+                <Pressable onPress={() => onAddPrice(store)} className="rounded-lg bg-emerald px-2 py-1">
+                  <Text className="text-xs font-bold text-on-emerald">{SMART_SHOP_COPY.addPriceButton}</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         );
       })}

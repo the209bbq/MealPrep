@@ -88,6 +88,17 @@ const PANTRY_CATEGORIES = [
 
 const PANTRY_STORAGE = ['pantry', 'fridge', 'spice_rack'] as const;
 
+const PRICE_TAG_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    itemName: { type: 'string' },
+    price: { type: 'number' },
+    sizeUnit: { type: 'string' },
+    saleValidUntil: { type: ['string', 'null'] },
+  },
+  required: ['itemName', 'price'],
+} as const;
+
 const RESPONSE_JSON_SCHEMA = {
   type: 'object',
   properties: {
@@ -172,10 +183,13 @@ function parseScanLocationHint(raw: unknown): (typeof PANTRY_STORAGE)[number] {
   return 'pantry';
 }
 
+type VisionAction = 'pantry' | 'price-tag';
+
 type ImageFromRequest = {
   bytes: Uint8Array;
   mimeType: string;
   scanLocation: (typeof PANTRY_STORAGE)[number];
+  action: VisionAction;
 };
 
 async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Response> {
@@ -199,10 +213,12 @@ async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Re
     const scanLocation = parseScanLocationHint(
       typeof locationField === 'string' ? locationField : undefined,
     );
-    return { bytes: buffer, mimeType, scanLocation };
+    const actionField = form.get('action');
+    const action: VisionAction = actionField === 'price-tag' ? 'price-tag' : 'pantry';
+    return { bytes: buffer, mimeType, scanLocation, action };
   }
 
-  let body: { imageBase64?: string; mimeType?: string; location?: string };
+  let body: { imageBase64?: string; mimeType?: string; location?: string; action?: string };
   try {
     body = (await req.json()) as { imageBase64?: string; mimeType?: string; location?: string };
   } catch {
@@ -210,6 +226,7 @@ async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Re
   }
 
   const scanLocation = parseScanLocationHint(body.location);
+  const action: VisionAction = body.action === 'price-tag' ? 'price-tag' : 'pantry';
 
   const raw = body.imageBase64?.trim() ?? '';
   if (!raw) {
@@ -229,7 +246,7 @@ async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Re
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    return { bytes, mimeType, scanLocation };
+    return { bytes, mimeType, scanLocation, action };
   } catch {
     return jsonResponse({ error: 'Invalid base64 image data', code: 'BAD_REQUEST' }, 400);
   }
@@ -319,6 +336,43 @@ type GeminiAttemptTimeout = {
 
 type GeminiAttemptError = GeminiAttemptFailure | GeminiAttemptTimeout;
 
+function priceTagPrompt(): string {
+  return (
+    'You read grocery store shelf tags and price labels from a photo. ' +
+    'Extract the product name, the shelf price in US dollars (number only, no $), the package size or unit (e.g. "16 oz", "1 gal", "each"), ' +
+    'and an optional sale end date in YYYY-MM-DD if a sale or "valid through" date is visible. ' +
+    'If no sale date is shown, set saleValidUntil to null. Do not invent prices that are not visible. Return JSON only.'
+  );
+}
+
+type SanitizedPriceTag = {
+  itemName: string;
+  price: number;
+  sizeUnit?: string;
+  saleValidUntil?: string | null;
+};
+
+function sanitizePriceTag(raw: unknown): SanitizedPriceTag | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const itemName = typeof row.itemName === 'string' ? row.itemName.trim() : '';
+  const price = Number(row.price);
+  if (!itemName || !Number.isFinite(price) || price < 0) return null;
+  const sizeUnit =
+    typeof row.sizeUnit === 'string' && row.sizeUnit.trim() ? row.sizeUnit.trim().slice(0, 48) : undefined;
+  let saleValidUntil: string | null | undefined = undefined;
+  if (row.saleValidUntil === null) saleValidUntil = null;
+  else if (typeof row.saleValidUntil === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.saleValidUntil.trim())) {
+    saleValidUntil = row.saleValidUntil.trim();
+  }
+  return {
+    itemName: itemName.slice(0, 120),
+    price: Math.round(price * 100) / 100,
+    sizeUnit,
+    saleValidUntil,
+  };
+}
+
 function geminiPrompt(scanLocation: (typeof PANTRY_STORAGE)[number]): string {
   return (
     'You analyze photos of pantry shelves, refrigerators, or kitchen storage. ' +
@@ -348,13 +402,18 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type GeminiVisionRequest = {
+  prompt: string;
+  schema: Record<string, unknown>;
+};
+
 async function callGeminiOnce(
   apiKey: string,
   model: string,
   mimeType: string,
   imageBase64: string,
-  scanLocation: (typeof PANTRY_STORAGE)[number],
-): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
+  vision: GeminiVisionRequest,
+): Promise<{ text: string } | { error: GeminiAttemptError }> {
   const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const payload = {
@@ -362,13 +421,13 @@ async function callGeminiOnce(
       {
         parts: [
           { inline_data: { mime_type: mimeType, data: imageBase64 } },
-          { text: geminiPrompt(scanLocation) },
+          { text: vision.prompt },
         ],
       },
     ],
     generationConfig: {
       responseMimeType: 'application/json',
-      responseJsonSchema: RESPONSE_JSON_SCHEMA,
+      responseJsonSchema: vision.schema,
       temperature: 0.2,
     },
   };
@@ -428,10 +487,75 @@ async function callGeminiOnce(
         },
       };
     }
-    const parsed = JSON.parse(partText) as unknown;
-    return { items: sanitizeItems(parsed) };
+    return { text: partText };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to parse Gemini response';
+    return {
+      error: {
+        kind: 'http',
+        status: 502,
+        detail: message,
+        retryable: false,
+      },
+    };
+  }
+}
+
+async function callPantryGeminiOnce(
+  apiKey: string,
+  model: string,
+  mimeType: string,
+  imageBase64: string,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
+  const result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, {
+    prompt: geminiPrompt(scanLocation),
+    schema: RESPONSE_JSON_SCHEMA,
+  });
+  if ('error' in result) return result;
+  try {
+    const parsed = JSON.parse(result.text) as unknown;
+    return { items: sanitizeItems(parsed) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse pantry response';
+    return {
+      error: {
+        kind: 'http',
+        status: 502,
+        detail: message,
+        retryable: false,
+      },
+    };
+  }
+}
+
+async function callPriceTagGeminiOnce(
+  apiKey: string,
+  model: string,
+  mimeType: string,
+  imageBase64: string,
+): Promise<{ tag: SanitizedPriceTag } | { error: GeminiAttemptError }> {
+  const result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, {
+    prompt: priceTagPrompt(),
+    schema: PRICE_TAG_JSON_SCHEMA,
+  });
+  if ('error' in result) return result;
+  try {
+    const parsed = JSON.parse(result.text) as unknown;
+    const tag = sanitizePriceTag(parsed);
+    if (!tag) {
+      return {
+        error: {
+          kind: 'http',
+          status: 502,
+          detail: 'Could not read a price from the tag',
+          retryable: true,
+        },
+      };
+    }
+    return { tag };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse price tag response';
     return {
       error: {
         kind: 'http',
@@ -451,14 +575,14 @@ function formatAttemptError(model: string, error: GeminiAttemptError): string {
   return `${model} (${statusLabel}): ${error.detail}`;
 }
 
-async function callGeminiWithSingleRetry(
+async function callPantryGeminiWithSingleRetry(
   apiKey: string,
   model: string,
   mimeType: string,
   imageBase64: string,
   scanLocation: (typeof PANTRY_STORAGE)[number],
 ): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
-  let result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, scanLocation);
+  let result = await callPantryGeminiOnce(apiKey, model, mimeType, imageBase64, scanLocation);
   if ('items' in result) return result;
 
   const shouldRetry =
@@ -468,11 +592,31 @@ async function callGeminiWithSingleRetry(
   if (!shouldRetry) return result;
 
   await sleep(GEMINI_RETRY_BACKOFF_MS);
-  result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, scanLocation);
+  result = await callPantryGeminiOnce(apiKey, model, mimeType, imageBase64, scanLocation);
   return result;
 }
 
-async function callGeminiWithFallbacks(
+async function callPriceTagGeminiWithSingleRetry(
+  apiKey: string,
+  model: string,
+  mimeType: string,
+  imageBase64: string,
+): Promise<{ tag: SanitizedPriceTag } | { error: GeminiAttemptError }> {
+  let result = await callPriceTagGeminiOnce(apiKey, model, mimeType, imageBase64);
+  if ('tag' in result) return result;
+
+  const shouldRetry =
+    result.error.kind === 'timeout' ||
+    (result.error.kind === 'http' && result.error.retryable);
+
+  if (!shouldRetry) return result;
+
+  await sleep(GEMINI_RETRY_BACKOFF_MS);
+  result = await callPriceTagGeminiOnce(apiKey, model, mimeType, imageBase64);
+  return result;
+}
+
+async function callPantryGeminiWithFallbacks(
   apiKey: string,
   mimeType: string,
   imageBase64: string,
@@ -486,7 +630,7 @@ async function callGeminiWithFallbacks(
   const failures: string[] = [];
 
   for (const model of candidates) {
-    const result = await callGeminiWithSingleRetry(
+    const result = await callPantryGeminiWithSingleRetry(
       apiKey,
       model,
       mimeType,
@@ -504,6 +648,34 @@ async function callGeminiWithFallbacks(
   const summary = failures.slice(-4).join(' | ');
   throw new Error(
     `Pantry scan could not reach Gemini after trying ${candidates.length} model(s). ${summary}`,
+  );
+}
+
+async function callPriceTagGeminiWithFallbacks(
+  apiKey: string,
+  mimeType: string,
+  imageBase64: string,
+): Promise<{ tag: SanitizedPriceTag; model: string }> {
+  const candidates = buildGeminiModelCandidates(
+    Deno.env.get('GEMINI_MODEL') ?? undefined,
+    Deno.env.get('GEMINI_FALLBACK_MODELS') ?? undefined,
+  );
+
+  const failures: string[] = [];
+
+  for (const model of candidates) {
+    const result = await callPriceTagGeminiWithSingleRetry(apiKey, model, mimeType, imageBase64);
+    if ('tag' in result) {
+      console.log(`pantry-vision: price-tag ok model=${model} item=${result.tag.itemName}`);
+      return { tag: result.tag, model };
+    }
+    failures.push(formatAttemptError(model, result.error));
+    console.warn(`pantry-vision: price-tag failed ${failures[failures.length - 1]}`);
+  }
+
+  const summary = failures.slice(-4).join(' | ');
+  throw new Error(
+    `Could not read the shelf tag after trying ${candidates.length} model(s). ${summary}`,
   );
 }
 
@@ -548,7 +720,26 @@ Deno.serve(async (req) => {
     if (imageResult instanceof Response) return imageResult;
 
     const imageBase64 = bytesToBase64(imageResult.bytes);
-    const { items, model } = await callGeminiWithFallbacks(
+
+    if (imageResult.action === 'price-tag') {
+      const { tag, model } = await callPriceTagGeminiWithFallbacks(
+        apiKey,
+        imageResult.mimeType,
+        imageBase64,
+      );
+      return jsonResponse(
+        {
+          itemName: tag.itemName,
+          price: tag.price,
+          sizeUnit: tag.sizeUnit ?? null,
+          saleValidUntil: tag.saleValidUntil ?? null,
+          model,
+        },
+        200,
+      );
+    }
+
+    const { items, model } = await callPantryGeminiWithFallbacks(
       apiKey,
       imageResult.mimeType,
       imageBase64,

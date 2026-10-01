@@ -68,11 +68,11 @@ async function callProxy<T>(
   const url = getRecipeApiProxyUrl();
   if (!url) {
     throw new RecipeDiscoveryNotConfiguredError(
-      'Recipe discovery is not set up yet. Deploy the recipeapi-proxy Edge Function and set RECIPEAPI_KEY.',
+      'Recipe discovery is not set up yet. Try again later.',
     );
   }
   if (!accessToken) {
-    throw new RecipeDiscoveryAuthError('Sign in to search RecipeAPI.io recipes.');
+    throw new RecipeDiscoveryAuthError('Sign in to search recipes.');
   }
 
   const response = await fetch(url, {

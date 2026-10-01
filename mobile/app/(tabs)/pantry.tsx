@@ -496,7 +496,7 @@ export default function PantryScreen() {
 
           {demoMode ? (
             <Text className="mt-2 text-xs text-muted">
-              Demo mode: scan returns labeled sample detections only (no Gemini call).
+              Demo mode: scan returns labeled sample detections only (no cloud scan).
             </Text>
           ) : null}
 

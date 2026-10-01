@@ -9,7 +9,7 @@ import { formatMoney } from '../../lib/smartShop/aggregateDeals';
 import {
   addCommunityDeal,
   deleteCommunityDeal,
-  formatReportedAgo,
+  formatReportedLight,
   voteCommunityDeal,
 } from '../../lib/communityDeals/client';
 import { isPastLocalDate, localDateString } from '../../lib/communityDeals/localDate';
@@ -170,13 +170,13 @@ export function StoreCommunityDealsSection({
                   </Text>
                   {deal.note ? <Text className="mt-1 text-xs text-muted">{deal.note}</Text> : null}
                   <Text className="mt-1 text-xs text-muted">
-                    Reported {formatReportedAgo(deal.createdAt)}
+                    {formatReportedLight(deal.createdAt)}
                     {deal.confirmCount ? ` · ${deal.confirmCount} confirmed` : ''}
                     {expired ? ' · Expired' : ''}
                   </Text>
                 </View>
               </View>
-              {!deal.isSample ? (
+              {!deal.isSample && !isOwn ? (
                 <View className="mt-2 flex-row flex-wrap gap-2">
                   <Pressable
                     onPress={() => void handleVote(deal.id, 'confirm')}
@@ -194,14 +194,16 @@ export function StoreCommunityDealsSection({
                   >
                     <Text className="text-xs font-semibold text-danger">Expired</Text>
                   </Pressable>
-                  {isOwn ? (
-                    <Pressable
-                      onPress={() => void handleDelete(deal.id)}
-                      className="rounded-lg border border-danger/40 px-2 py-1"
-                    >
-                      <Text className="text-xs font-semibold text-danger">Delete</Text>
-                    </Pressable>
-                  ) : null}
+                </View>
+              ) : null}
+              {!deal.isSample && isOwn ? (
+                <View className="mt-2">
+                  <Pressable
+                    onPress={() => void handleDelete(deal.id)}
+                    className="self-start rounded-lg border border-danger/40 px-2 py-1"
+                  >
+                    <Text className="text-xs font-semibold text-danger">Delete</Text>
+                  </Pressable>
                 </View>
               ) : null}
             </View>

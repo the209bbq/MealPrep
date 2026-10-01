@@ -5,10 +5,7 @@ import type { DealsSearchResult, ItemStoreDeal, StoreLocation } from '../deals/t
 import { assembleDealsResult } from '../deals/buildShopResult';
 import { matchCommunityDealToGroceryItem } from './matchItem';
 import { COMMUNITY_DEALS } from '../../config/communityDeals';
-
-function communityLineTotal(deal: CommunityStoreDeal, item: GroceryListItem): number {
-  return Math.round(deal.price * item.quantity * 100) / 100;
-}
+import { communityLineTotalForItem } from './communityLineTotal';
 
 function communityDealToItemStoreDeal(
   deal: CommunityStoreDeal,
@@ -21,12 +18,13 @@ function communityDealToItemStoreDeal(
     storeId,
     productTitle: deal.itemName,
     unitPrice,
-    lineTotal: communityLineTotal(deal, item),
+    lineTotal: communityLineTotalForItem(deal, item),
     quantity: item.quantity,
     unit: deal.unit ?? item.unit,
-    promoLabel: 'Community deal',
+    promoLabel: deal.priceKind === 'sale' ? 'Sale' : undefined,
     priceSource: 'community',
     communityDealId: deal.id,
+    communityReportedAt: deal.createdAt,
   };
 }
 
@@ -91,7 +89,7 @@ export function mergeCommunityDealsIntoSearchResult(
   const mergedDeals = [...dealMap.values()];
   const hasCommunity = mergedDeals.some((d) => d.priceSource === 'community');
   const pricingNote = hasCommunity
-    ? [result.pricingNote, 'Includes user-reported community deals (not verified by the app).']
+    ? [result.pricingNote, 'Includes shopper-reported prices (not verified by the store).']
         .filter(Boolean)
         .join(' ')
     : result.pricingNote;

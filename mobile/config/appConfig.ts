@@ -117,8 +117,7 @@ export const PHOTO_SCAN = {
   /** Documented default fallback chain on the Edge Function (override via GEMINI_FALLBACK_MODELS secret). */
   defaultGeminiFallbackModels: DEFAULT_GEMINI_VISION_FALLBACK_MODELS,
   proxyUrl: process.env.EXPO_PUBLIC_PANTRY_VISION_URL ?? '',
-  notConfiguredMessage:
-    'Pantry photo scan is not set up yet. Deploy the pantry-vision Edge Function and add GEMINI_API_KEY in Supabase secrets.',
+  notConfiguredMessage: 'Pantry photo scan is not set up yet. Try again later.',
   rateLimitMessage: 'Too many scans — wait a minute and try again.',
   scanFailedTitle: 'Couldn’t read that photo',
   scanFailedMessage:

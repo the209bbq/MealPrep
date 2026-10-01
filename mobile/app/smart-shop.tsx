@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SmartShopComparisonResults, resolveCheapestStoreId } from '../components/smartShop/SmartShopComparisonResults';
@@ -15,11 +16,26 @@ import { SMART_SHOP_COPY } from '../config/smartShop';
 import { SMART_SHOP, THEME } from '../config/appConfig';
 import { useApp } from '../context/AppContext';
 import { useSmartShopScreen } from '../lib/smartShop/useSmartShopScreen';
+import {
+  SmartShopAddPriceSheet,
+  type SmartShopAddPriceTarget,
+} from '../components/smartShop/SmartShopAddPriceSheet';
+import type { StoreLocation } from '../lib/deals';
 
 export default function SmartShopScreen() {
   const insets = useSafeAreaInsets();
   const { grocery, featureFlags, profile } = useApp();
   const shop = useSmartShopScreen({ grocery, profile });
+  const [addPriceTarget, setAddPriceTarget] = useState<SmartShopAddPriceTarget | null>(null);
+
+  const openAddPrice = useCallback((store: StoreLocation, itemName?: string) => {
+    setAddPriceTarget({ store, itemName });
+  }, []);
+
+  const handlePriceSaved = useCallback(() => {
+    void shop.community.refresh();
+    void shop.refreshComparison();
+  }, [shop.community.refresh, shop.refreshComparison]);
 
   if (!featureFlags.smartShop) {
     return (
@@ -76,6 +92,7 @@ export default function SmartShopScreen() {
             storeHasCommunityDeals={shop.storeHasCommunityDeals}
             onEditPress={() => shop.setStorePickerOpen(true)}
             resultMode={shop.dealsResult?.mode}
+            onAddPrice={(store) => openAddPrice(store)}
           />
         ) : null}
 
@@ -105,6 +122,7 @@ export default function SmartShopScreen() {
             onRefreshCommunityDeals={() => void shop.community.refresh()}
             onOpenDirections={shop.openDirections}
             cheapestStoreId={cheapestStoreId}
+            onAddPrice={openAddPrice}
           />
         ) : null}
 
@@ -126,6 +144,12 @@ export default function SmartShopScreen() {
         onRequestClose={() => {
           if (shop.hasLocation) shop.setLocationModalOpen(false);
         }}
+      />
+
+      <SmartShopAddPriceSheet
+        target={addPriceTarget}
+        onClose={() => setAddPriceTarget(null)}
+        onSaved={handlePriceSaved}
       />
 
       <SmartShopStorePickerModal

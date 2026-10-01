@@ -6,24 +6,22 @@ import { assembleDealsResult, remapKrogerDealsToStores, storeRecordToLocation } 
 import { KROGER_NOT_CONFIGURED_NOTE, isKrogerProxyAvailable } from './krogerAvailability';
 import { fetchKrogerLocations } from './krogerClient';
 import { fetchKrogerNearbyStores, krogerPricingProvider } from './krogerProvider';
-import { samplePricingProvider } from './sampleProvider';
 import type { DealsSearchResult, FetchDealsParams, NearbyStoresParams, StoreLocation } from './types';
 
 export type { DealsSearchResult, ItemStoreDeal, PricingProvider, ShopSuggestion, StoreLocation } from './types';
 
-async function sampleDealsResult(
+function livePricesWithoutApi(
   stores: StoreLocation[],
   items: FetchDealsParams['items'],
   pricingNote?: string,
-): Promise<DealsSearchResult> {
-  const sample = await samplePricingProvider.fetchDeals({ stores, items });
+): DealsSearchResult {
   return assembleDealsResult({
-    mode: 'sample',
-    providerId: 'sample',
-    providerLabel: SMART_SHOP_COPY.estimatedPricesTitle,
-    pricingNote: pricingNote ?? SMART_SHOP_COPY.estimatedPricesNote,
-    stores: sample.stores,
-    deals: sample.deals,
+    mode: 'live',
+    providerId: 'community',
+    providerLabel: SMART_SHOP_COPY.communityPricesProviderLabel,
+    pricingNote: pricingNote ?? SMART_SHOP_COPY.communityPricesHint,
+    stores,
+    deals: [],
     items,
   });
 }
@@ -72,7 +70,7 @@ export async function searchDeals(params: FetchDealsParams): Promise<DealsSearch
   const { stores, items } = params;
 
   if (!isKrogerProxyAvailable()) {
-    return sampleDealsResult(stores, items, SMART_SHOP_COPY.estimatedPricesNote);
+    return livePricesWithoutApi(stores, items);
   }
 
   const hasKrogerStore = stores.some((s) => s.pricingSource === 'kroger');
@@ -87,14 +85,10 @@ export async function searchDeals(params: FetchDealsParams): Promise<DealsSearch
         })
       : { serverConfigured: false, stores: [] };
     if (!serverConfigured) {
-      return sampleDealsResult(stores, items, KROGER_NOT_CONFIGURED_NOTE);
+      return livePricesWithoutApi(stores, items, KROGER_NOT_CONFIGURED_NOTE);
     }
     if (krogerRows.length === 0) {
-      return sampleDealsResult(
-        stores,
-        items,
-        SMART_SHOP_COPY.noLiveStoresNearby,
-      );
+      return livePricesWithoutApi(stores, items, SMART_SHOP_COPY.noLiveStoresNearby);
     }
   }
 
@@ -114,10 +108,10 @@ export async function searchDeals(params: FetchDealsParams): Promise<DealsSearch
   } catch (err) {
     const message = err instanceof Error ? err.message : SMART_SHOP_COPY.livePricingUnavailable;
     const isNotConfigured = /not configured/i.test(message);
-    return sampleDealsResult(
+    return livePricesWithoutApi(
       stores,
       items,
-      isNotConfigured ? KROGER_NOT_CONFIGURED_NOTE : SMART_SHOP_COPY.estimatedPricesNote,
+      isNotConfigured ? KROGER_NOT_CONFIGURED_NOTE : SMART_SHOP_COPY.livePricingUnavailable,
     );
   }
 }
