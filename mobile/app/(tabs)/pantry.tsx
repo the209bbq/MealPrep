@@ -62,6 +62,11 @@ import {
   mergeSecondScanIntoReview,
 } from '../../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem, PreparedPantryImage } from '../../lib/pantryVision/types';
+import {
+  shouldBlockGuestPantryPhotoScan,
+  shouldDeferPantryPhotoScanForAuth,
+} from '../../lib/guest/pantryPhotoScanGate';
+import { resolvePhotoScanSession } from '../../lib/guest/resolvePhotoScanSession';
 import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 import { TabEmptyState } from '../../components/onboarding/TabEmptyState';
 import { ViewScanPhotoButton } from '../../components/ViewScanPhotoButton';
@@ -89,7 +94,7 @@ export default function PantryScreen() {
     recipes,
     featureFlags,
     demoMode,
-    isGuest,
+    authReady,
     session,
     savePantryScanReview,
     addManualPantryItem,
@@ -145,6 +150,15 @@ export default function PantryScreen() {
   const accessToken = session?.access_token ?? null;
   const userId = session?.user?.id ?? null;
 
+  const photoScanGate = useMemo(
+    () => ({
+      demoMode,
+      authReady,
+      hasSession: Boolean(session),
+    }),
+    [authReady, demoMode, session],
+  );
+
   const locationCounts = useMemo(
     () =>
       Object.fromEntries(
@@ -198,13 +212,33 @@ export default function PantryScreen() {
     scanLocation: PantryStorageLocation,
   ) {
     if (!featureFlags.photoScan) {
-      Alert.alert('Feature off', 'Photo scan is disabled in feature toggles.');
+      const message = 'Photo scan is disabled in feature toggles.';
+      if (Platform.OS === 'web') {
+        setScanFailure(message, 'Feature off', null);
+      } else {
+        Alert.alert('Feature off', message);
+      }
       return;
     }
-    if (!demoMode && !session) {
-      promptGuestPhotoScanSignIn();
+    const { gate, session: scanSession } = await resolvePhotoScanSession(photoScanGate, session);
+    if (gate === 'auth_loading') {
+      setScanFailure(
+        GUEST_MODE_COPY.pantryScanAuthLoading,
+        GUEST_MODE_COPY.pantryScanAuthLoadingTitle,
+        null,
+      );
       return;
     }
+    if (gate === 'guest_blocked') {
+      setScanFailure(GUEST_MODE_COPY.pantryScanSignIn, GUEST_MODE_COPY.pantryScanSignInTitle, null);
+      if (Platform.OS !== 'web') {
+        promptGuestPhotoScanSignIn();
+      }
+      return;
+    }
+
+    const scanAccessToken = scanSession?.access_token ?? accessToken;
+    const scanUserId = scanSession?.user?.id ?? userId;
 
     setScanLocationHint(scanLocation);
     clearScanFailure();
@@ -214,8 +248,8 @@ export default function PantryScreen() {
     const attempt = { kind: 'prepared' as const, prepared, location: scanLocation };
 
     setPendingScanPhotoPath(null);
-    if (userId) {
-      const uploadPromise = uploadScanPhoto(prepared, 'pantry', userId);
+    if (scanUserId) {
+      const uploadPromise = uploadScanPhoto(prepared, 'pantry', scanUserId);
       pantryScanUploadRef.current = uploadPromise;
       void uploadPromise.then(setPendingScanPhotoPath);
     } else {
@@ -223,7 +257,7 @@ export default function PantryScreen() {
     }
 
     try {
-      const result = await analyzePantryPhoto(prepared, accessToken, { scanLocation });
+      const result = await analyzePantryPhoto(prepared, scanAccessToken, { scanLocation });
       const rows = detectionsToReviewItems(
         result.items,
         pantry,
@@ -334,8 +368,22 @@ export default function PantryScreen() {
     ]);
   }
 
+  function handleWebPrepareError(message: string) {
+    setScanFailure(message, PHOTO_SCAN.scanFailedTitle, null);
+  }
+
   async function handleNativeScan(scanLocation: PantryStorageLocation, source: 'camera' | 'library') {
-    if (!demoMode && isGuest) {
+    const { gate } = await resolvePhotoScanSession(photoScanGate, session);
+    if (gate === 'auth_loading') {
+      setScanFailure(
+        GUEST_MODE_COPY.pantryScanAuthLoading,
+        GUEST_MODE_COPY.pantryScanAuthLoadingTitle,
+        null,
+      );
+      return;
+    }
+    if (gate === 'guest_blocked') {
+      setScanFailure(GUEST_MODE_COPY.pantryScanSignIn, GUEST_MODE_COPY.pantryScanSignInTitle, null);
       promptGuestPhotoScanSignIn();
       return;
     }
@@ -598,7 +646,11 @@ export default function PantryScreen() {
             <>
               <PantryStorageScanButtons
                 disabled={phase === 'loading' || !featureFlags.photoScan}
-                guestPhotoScanBlocked={!demoMode && isGuest}
+                guestPhotoScanBlocked={shouldBlockGuestPantryPhotoScan(photoScanGate)}
+                authPhotoScanPending={shouldDeferPantryPhotoScanForAuth(photoScanGate)}
+                photoScanGate={photoScanGate}
+                contextSession={session}
+                onPrepareError={handleWebPrepareError}
                 onImagePrepared={(location, prepared) => void runVisionFromPrepared(prepared, location)}
                 onRequestNativeScan={(location, source) => void handleNativeScan(location, source)}
               />

@@ -12,4 +12,6 @@ export const GUEST_MODE_COPY = {
   pantryScanSignIn: 'Sign in to scan or upload pantry photos.',
   pantryScanSignInTitle: 'Photo scan',
   pantryScanSignInCta: 'Sign in',
+  pantryScanAuthLoading: 'Checking your sign-in… try again in a moment.',
+  pantryScanAuthLoadingTitle: 'One moment',
 } as const;

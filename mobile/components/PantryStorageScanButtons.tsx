@@ -2,12 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { THEME } from '../config/appConfig';
 import { pantryStorageScanActions, type PantryStorageLocation } from '../config/pantryStorage';
+import type { PantryPhotoScanGateInput } from '../lib/guest/pantryPhotoScanGate';
 import type { PreparedPantryImage } from '../lib/pantryVision/types';
+import type { Session } from '@supabase/supabase-js';
 
 export interface PantryStorageScanButtonsProps {
   disabled?: boolean;
   /** Web: block photo pickers and show guest sign-in prompt instead. */
   guestPhotoScanBlocked?: boolean;
+  /** Web: session restore in progress — avoid treating signed-in users as guests. */
+  authPhotoScanPending?: boolean;
+  photoScanGate?: PantryPhotoScanGateInput;
+  contextSession?: Session | null;
+  onPrepareError?: (message: string) => void;
   onImagePrepared: (location: PantryStorageLocation, prepared: PreparedPantryImage) => void;
   onRequestNativeScan: (location: PantryStorageLocation, source: 'camera' | 'library') => void;
 }

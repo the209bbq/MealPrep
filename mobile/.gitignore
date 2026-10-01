@@ -8,6 +8,7 @@ node_modules/
 dist/
 web-build/
 .hydration-serve-root/
+.pantry-scan-serve-root/
 expo-env.d.ts
 
 # Native
@@ -44,3 +45,4 @@ yarn-error.*
 # generated PWA assets (see npm run generate:pwa)
 /public/icons/
 /public/manifest.webmanifest
+.pantry-scan-serve-root/
