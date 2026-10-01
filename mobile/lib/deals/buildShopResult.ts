@@ -16,7 +16,10 @@ function buildTotals(
     const storeDeals = deals.filter((d) => d.storeId === store.id);
     const subtotal = storeDeals.reduce((sum, d) => sum + d.lineTotal, 0);
     const promoCount = storeDeals.filter((d) => d.promoLabel).length;
-    const pricesAvailable = store.pricingSource === 'kroger' || store.pricingSource === 'sample';
+    const pricesAvailable =
+      store.pricingSource === 'kroger' ||
+      store.pricingSource === 'sample' ||
+      storeDeals.some((d) => d.priceSource === 'community');
     const itemCountPriced = storeDeals.length;
     const rankScore = pricesAvailable ? itemCountPriced * 1000 - subtotal : itemCountPriced;
     return {

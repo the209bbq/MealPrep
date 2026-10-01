@@ -35,6 +35,7 @@ export const samplePricingProvider: PricingProvider = {
           unit: item.unit,
           promoLabel: promoRoll === 0 ? 'Weekly special (sample)' : undefined,
           productUrl: store.url,
+          priceSource: 'sample',
         });
       }
     }

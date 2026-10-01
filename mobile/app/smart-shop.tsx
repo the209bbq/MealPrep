@@ -11,9 +11,14 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StoreCommunityDealsSection } from '../components/smartShop/StoreCommunityDealsSection';
+import { StoreWeeklyAdButton } from '../components/smartShop/StoreWeeklyAdButton';
 import { mapsDirectionsUrl } from '../lib/stores';
 import { manualStoreFromInput } from '../lib/stores';
 import { searchDeals, searchNearbyStores, type DealsSearchResult, type StoreLocation } from '../lib/deals';
+import { mergeCommunityDealsIntoSearchResult } from '../lib/communityDeals/mergeIntoDeals';
+import { chainKeysFromStores, useCommunityDealsForStores } from '../lib/communityDeals/useCommunityDeals';
+import { resolveStoreChainKey } from '../config/weeklyAds';
 import {
   bestDealAcrossStores,
   bestDealPerStoreForItem,
@@ -68,6 +73,28 @@ export default function SmartShopScreen() {
     if (picked.length > 0) return picked;
     return nearbyStores.slice(0, Math.min(3, SMART_SHOP.maxSavedStores));
   }, [nearbyStores, savedStoreIds]);
+
+  const communityStoreKeys = useMemo(() => chainKeysFromStores(nearbyStores), [nearbyStores]);
+  const {
+    deals: communityDeals,
+    loading: loadingCommunityDeals,
+    tableMissing: communityTableMissing,
+    hint: communityMigrationHint,
+    refresh: refreshCommunityDeals,
+  } = useCommunityDealsForStores(communityStoreKeys);
+
+  const communityDealsByStoreKey = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const deal of communityDeals) {
+      map.set(deal.storeKey, (map.get(deal.storeKey) ?? 0) + 1);
+    }
+    return map;
+  }, [communityDeals]);
+
+  function storeHasCommunityDeals(store: StoreLocation): boolean {
+    const key = resolveStoreChainKey(store);
+    return key ? (communityDealsByStoreKey.get(key) ?? 0) > 0 : false;
+  }
 
   const persistSavedStores = useCallback(
     async (ids: string[]) => {
@@ -186,13 +213,20 @@ export default function SmartShopScreen() {
     setError(null);
     try {
       const result = await searchDeals({ stores: activeStores, items });
-      setDealsResult(result);
+      setDealsResult(mergeCommunityDealsIntoSearchResult(result, communityDeals, items));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load deals');
     } finally {
       setLoadingDeals(false);
     }
   }
+
+  useEffect(() => {
+    if (!dealsResult || communityDeals.length === 0) return;
+    setDealsResult((prev) =>
+      prev ? mergeCommunityDealsIntoSearchResult(prev, communityDeals, items) : prev,
+    );
+  }, [communityDeals, items]);
 
   useEffect(() => {
     if (autoCompared) return;
@@ -291,33 +325,45 @@ export default function SmartShopScreen() {
               const key = store.krogerLocationId ?? store.id;
               const selected = savedStoreIds.includes(key);
               return (
-                <Pressable
+                <View
                   key={store.id}
-                  onPress={() => void toggleSavedStore(store)}
                   className={`mb-2 rounded-2xl border px-4 py-3 ${selected ? 'border-emerald bg-emerald-light' : 'border-border bg-card'}`}
                 >
-                  <View className="flex-row items-start justify-between gap-2">
-                    <View className="flex-1">
-                      <Text className="font-bold text-ink">{store.name}</Text>
-                      <Text className="text-sm text-muted">
-                        {store.addressLine}
-                        {store.city ? `, ${store.city}` : ''} {store.state} {store.zip}
-                      </Text>
-                      <Text className="mt-1 text-xs text-muted">
-                        {store.distanceMiles != null ? `${store.distanceMiles.toFixed(1)} mi · ` : ''}
-                        {pricingBadgeForStore(store)}
-                      </Text>
+                  <Pressable onPress={() => void toggleSavedStore(store)}>
+                    <View className="flex-row items-start justify-between gap-2">
+                      <View className="flex-1">
+                        <Text className="font-bold text-ink">{store.name}</Text>
+                        <Text className="text-sm text-muted">
+                          {store.addressLine}
+                          {store.city ? `, ${store.city}` : ''} {store.state} {store.zip}
+                        </Text>
+                        <Text className="mt-1 text-xs text-muted">
+                          {store.distanceMiles != null ? `${store.distanceMiles.toFixed(1)} mi · ` : ''}
+                          {pricingBadgeForStore(store, { hasCommunityDeals: storeHasCommunityDeals(store) })}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={24}
+                        color={selected ? THEME.emerald : THEME.muted}
+                      />
                     </View>
-                    <Ionicons
-                      name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                      size={24}
-                      color={selected ? THEME.emerald : THEME.muted}
-                    />
-                  </View>
-                  <Pressable onPress={() => openDirections(store)} className="mt-2 self-start">
-                    <Text className="text-xs font-semibold text-emerald-dark">Directions</Text>
                   </Pressable>
-                </Pressable>
+                  <View className="mt-2 flex-row flex-wrap items-center gap-2">
+                    <Pressable onPress={() => openDirections(store)} className="self-start">
+                      <Text className="text-xs font-semibold text-emerald-dark">Directions</Text>
+                    </Pressable>
+                    <StoreWeeklyAdButton store={store} />
+                  </View>
+                  <StoreCommunityDealsSection
+                    store={store}
+                    deals={communityDeals}
+                    loading={loadingCommunityDeals}
+                    tableMissing={communityTableMissing}
+                    migrationHint={communityMigrationHint}
+                    onRefresh={() => void refreshCommunityDeals()}
+                  />
+                </View>
               );
             })}
           </View>
@@ -393,7 +439,7 @@ export default function SmartShopScreen() {
                   <View className="flex-row items-start justify-between gap-2">
                     <View className="flex-1">
                       <Text className="font-bold text-ink">{store.chain || store.name}</Text>
-                      <Text className="text-xs text-muted">{pricingBadgeForStore(store)}</Text>
+                      <Text className="text-xs text-muted">{pricingBadgeForStore(store, { hasCommunityDeals: storeHasCommunityDeals(store) })}</Text>
                       <Text className="mt-1 text-xs text-muted">
                         {total.itemCount}/{items.length} items priced
                         {total.promoCount ? ` · ${total.promoCount} on sale` : ''}
@@ -415,9 +461,20 @@ export default function SmartShopScreen() {
                       ))}
                     </View>
                   ) : null}
-                  <Pressable onPress={() => openDirections(store)} className="mt-2 self-start">
-                    <Text className="text-xs font-semibold text-emerald-dark">Directions</Text>
-                  </Pressable>
+                  <View className="mt-2 flex-row flex-wrap items-center gap-2">
+                    <Pressable onPress={() => openDirections(store)} className="self-start">
+                      <Text className="text-xs font-semibold text-emerald-dark">Directions</Text>
+                    </Pressable>
+                    <StoreWeeklyAdButton store={store} />
+                  </View>
+                  <StoreCommunityDealsSection
+                    store={store}
+                    deals={communityDeals}
+                    loading={loadingCommunityDeals}
+                    tableMissing={communityTableMissing}
+                    migrationHint={communityMigrationHint}
+                    onRefresh={() => void refreshCommunityDeals()}
+                  />
                 </View>
               );
             })}

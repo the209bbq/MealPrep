@@ -22,15 +22,25 @@ export function formatMoney(value: number): string {
 }
 
 export function dealsSummaryLabel(result: DealsSearchResult): string {
+  const hasCommunity = result.deals.some((d) => d.priceSource === 'community');
+  const communitySuffix = hasCommunity ? ' + community deals' : '';
   if (result.mode === 'sample') {
-    return `SAMPLE deals · ${result.providerLabel}`;
+    return `SAMPLE deals · ${result.providerLabel}${communitySuffix}`;
   }
-  return `Live Kroger prices · ${result.providerLabel}`;
+  return `Live Kroger prices · ${result.providerLabel}${communitySuffix}`;
 }
 
-export function pricingBadgeForStore(store: import('../deals/types').StoreLocation): string {
-  if (store.pricingSource === 'kroger') return 'Kroger prices';
-  if (store.pricingSource === 'sample') return 'Sample prices';
+export function pricingBadgeForStore(
+  store: import('../deals/types').StoreLocation,
+  options?: { hasCommunityDeals?: boolean },
+): string {
+  if (store.pricingSource === 'kroger') {
+    return options?.hasCommunityDeals ? 'Kroger + community deals' : 'Kroger prices';
+  }
+  if (store.pricingSource === 'sample') {
+    return options?.hasCommunityDeals ? 'Sample + community deals' : 'Sample prices';
+  }
+  if (options?.hasCommunityDeals) return 'Community deals';
   return 'Prices not available';
 }
 

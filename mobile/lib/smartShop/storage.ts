@@ -28,6 +28,25 @@ export function writeSavedStoreIds(ids: string[]): void {
   writeJson(KEYS.savedStoreIds, ids);
 }
 
+export interface SavedStoreSummary {
+  id: string;
+  name: string;
+  chain: string;
+}
+
+const savedStoresKey = 'mealprep.smartShop.savedStores';
+
+export function readSavedStoreSummaries(): SavedStoreSummary[] {
+  return readJson<SavedStoreSummary[]>(savedStoresKey, []);
+}
+
+export function writeSavedStoreSummaries(stores: SavedStoreSummary[]): void {
+  writeJson(
+    savedStoresKey,
+    stores.map((s) => ({ id: s.id, name: s.name, chain: s.chain })),
+  );
+}
+
 export function readSavedCoords(): SavedCoords | null {
   return readJson<SavedCoords | null>(KEYS.coords, null);
 }
