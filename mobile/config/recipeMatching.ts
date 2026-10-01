@@ -12,10 +12,10 @@ export {
   PANTRY_STAPLES,
 } from './recipeMatchingConfig';
 
-/** Default minimum match % chip on Recipes (0 = show best-ranked matches). */
-export const DEFAULT_MIN_PANTRY_MATCH_PERCENT = 0;
+/** Minimum pantry overlap % for Recipes tab kitchen + discovery lists (non-staple ingredients). */
+export const DEFAULT_MIN_PANTRY_MATCH_PERCENT = 50;
 
-/** Kitchen catalog list is ranked by match %; percent filter only applies when user raises the chip. */
+/** Home kitchen recommendations: ranked by match % without the Recipes tab overlap floor. */
 export const KITCHEN_LIST_DEFAULT_MIN_PERCENT = 0;
 
 /** Recipes must match at least this many pantry ingredients (non-staples) to appear. */

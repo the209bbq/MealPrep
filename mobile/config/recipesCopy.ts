@@ -11,7 +11,6 @@ export const RECIPES_COPY = {
     title: 'Cook now',
     subtitle: 'Meals you can make with what is already in your pantry',
     sortFilterLabel: 'Sort & filter',
-    pantryOverlapLabel: 'How much you already have',
   },
 
   pantryFilterLabels: {
@@ -20,13 +19,6 @@ export const RECIPES_COPY = {
     missing_1_2: '1–2 missing',
     all: 'Show all',
   } satisfies Record<RecipesPantryFilterCopyId, string>,
-
-  minPantryOverlapChips: {
-    0: 'Any',
-    50: 'About half',
-    70: 'Most of it',
-    90: 'Almost all',
-  } as const satisfies Record<0 | 50 | 70 | 90, string>,
 
   readyToCook: {
     title: 'Ready to cook',

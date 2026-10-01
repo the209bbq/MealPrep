@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
+import { DEFAULT_MIN_PANTRY_MATCH_PERCENT } from '../config/recipeMatching';
 import { RECIPES_COPY } from '../config/recipesCopy';
 import { getRecipeDiscoveryAccessToken } from '../lib/recipeDiscovery/accessToken';
 import {
@@ -11,14 +12,14 @@ import type { PantryItem } from '../types/mealprep';
 export function usePantryDiscoverySuggestions(
   pantry: PantryItem[],
   session: Session | null,
-  options?: { enabled?: boolean; minPercent?: number },
+  options?: { enabled?: boolean },
 ): {
   suggestions: PantryDiscoverySuggestion[];
   loading: boolean;
   error: string | null;
 } {
   const enabled = options?.enabled ?? true;
-  const minPercent = options?.minPercent ?? 0;
+  const minPercent = DEFAULT_MIN_PANTRY_MATCH_PERCENT;
   const accessToken = getRecipeDiscoveryAccessToken(session);
   const pantryEmpty = pantry.length === 0;
 
