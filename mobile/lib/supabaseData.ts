@@ -95,7 +95,7 @@ type MealPlanRow = {
   added_at: string;
 };
 
-const MEAL_PLAN_MIGRATION_SQL = 'supabase/migrations/20261001120000_meal_plan_made_at_prefs.sql';
+const MEAL_PLAN_MIGRATION_SQL = 'supabase/migrations/20261001130000_meal_plan_made_at_prefs.sql';
 
 function asCategory(value: string): PantryCategory {
   const categories: PantryCategory[] = [
