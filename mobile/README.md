@@ -1,4 +1,4 @@
-# Meal Prep mobile (Expo)
+# MealPlanatic mobile (Expo)
 
 Expo Router app with NativeWind styling and optional Supabase auth. The web build is exported to GitHub Pages at `/MealPrep/app/` next to the static site in `New/`.
 

@@ -12,6 +12,9 @@ const mobileRoot = path.resolve(__dirname, '..');
 const publicDir = path.join(mobileRoot, 'public');
 const iconsDir = path.join(publicDir, 'icons');
 const appJson = JSON.parse(fs.readFileSync(path.join(mobileRoot, 'app.json'), 'utf8'));
+const appBrand = JSON.parse(
+  fs.readFileSync(path.join(mobileRoot, 'config', 'appBrand.json'), 'utf8'),
+);
 
 const baseUrl = appJson.expo?.experiments?.baseUrl ?? '';
 const basePath = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
@@ -20,7 +23,8 @@ const THEME = {
   emerald: '#047857',
   cream: '#FAF7F2',
 };
-const APP_SHORT_NAME = 'Meal Prep';
+const APP_NAME = appBrand.name;
+const APP_SHORT_NAME = appBrand.shortName;
 
 function webPath(relative) {
   const normalized = relative.startsWith('/') ? relative : `/${relative}`;
@@ -64,7 +68,7 @@ async function generateIcons(sourceIcon) {
 function writeManifest() {
   const manifest = {
     id: webPath('/'),
-    name: APP_SHORT_NAME,
+    name: APP_NAME,
     short_name: APP_SHORT_NAME,
     description: 'Chef-crafted kitchen, ready when you are.',
     start_url: webPath('/'),

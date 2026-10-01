@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-globals */
 /**
- * App-shell service worker for Meal Prep (GitHub Pages subpath).
+ * App-shell service worker for MealPlanatic (GitHub Pages subpath).
  * Cache version and precache list are injected at export time by scripts/apply-pwa-export.mjs.
  */
 const CACHE_VERSION = '__CACHE_VERSION__';

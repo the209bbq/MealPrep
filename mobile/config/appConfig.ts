@@ -6,9 +6,10 @@ import type {
   UserRole,
 } from '../types/mealprep';
 import { SMART_SHOP_STORES } from './smartShop';
+import appBrand from './appBrand.json';
 
-export const APP_NAME = '209 Meal Prep';
-export const APP_SHORT_NAME = 'Meal Prep';
+export const APP_NAME = appBrand.name;
+export const APP_SHORT_NAME = appBrand.shortName;
 export const APP_TAGLINE = 'Save time, effort, and money — cook what you have, shop only what you need.';
 export const APP_SCHEME = 'mealprep';
 
