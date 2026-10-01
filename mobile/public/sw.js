@@ -6,7 +6,7 @@
 const CACHE_VERSION = '__CACHE_VERSION__';
 const PRECACHE_URLS = __PRECACHE_URLS__;
 /** Bumped when navigation caching policy changes (forces fresh shell cache). */
-const NAV_POLICY_VERSION = '3';
+const NAV_POLICY_VERSION = '4';
 const SHELL_CACHE = `meal-prep-shell-${CACHE_VERSION}-${NAV_POLICY_VERSION}`;
 
 const SUPABASE_HOST_RE = /(^|\.)supabase\.co$/i;
@@ -33,6 +33,28 @@ function serveAppShell() {
     if (cached) return cached;
     return fetch(indexPath);
   });
+}
+
+function isVersionedAsset(pathname) {
+  return pathname.includes('/_expo/static/') || pathname.endsWith('/sw.js') || pathname.endsWith('/pwa-register.js');
+}
+
+function networkFirst(request) {
+  return fetch(request)
+    .then((response) => {
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
+      }
+      return response;
+    })
+    .catch(() =>
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        if (request.mode === 'navigate') return serveAppShell();
+        throw new Error('offline');
+      }),
+    );
 }
 
 self.addEventListener('install', (event) => {
@@ -66,18 +88,12 @@ self.addEventListener('fetch', (event) => {
   if (isAuthLikeRequest(url, request)) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
-            return response;
-          }
-          return serveAppShell();
-        })
-        .catch(() => serveAppShell())
-    );
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (isVersionedAsset(url.pathname)) {
+    event.respondWith(networkFirst(request));
     return;
   }
 

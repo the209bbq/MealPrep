@@ -265,7 +265,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
   const [recipes, setRecipes] = useState<Recipe[]>(() => (demoMode ? MOCK_RECIPES : []));
   const [grocery, setGrocery] = useState<GroceryListItem[]>([]);
-  const [mealPlan, setMealPlan] = useState<MealPlanItem[]>(() => initialMealPlan(demoMode));
+  const [mealPlan, setMealPlan] = useState<MealPlanItem[]>([]);
   const [liveDataLoaded, setLiveDataLoaded] = useState(demoMode);
   const [servingOverrides, setServingOverrides] = useState<Record<string, number>>({});
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(DEFAULT_FEATURE_FLAGS);

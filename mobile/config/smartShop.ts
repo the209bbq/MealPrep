@@ -21,9 +21,20 @@ export const SMART_SHOP_STORES = {
   /** Web / fallback: Nominatim requires a contact email in the request (cannot set User-Agent in browsers). */
   nominatimContactEmail: 'smartshop@209mealprep.local',
   nominatimBaseUrl: 'https://nominatim.openstreetmap.org',
+  /** Overpass mirrors tried in order (browser-friendly POST endpoints). */
+  overpassApiUrls: [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+  ] as const,
+  /** @deprecated Use overpassApiUrls — kept for scripts. */
   overpassApiUrl: 'https://overpass-api.de/api/interpreter',
+  overpassRequestTimeoutMs: 25_000,
   /** In-memory cache TTL for geocode / Overpass (ms). */
   cacheTtlMs: 15 * 60 * 1000,
+  /** localStorage cache for ZIP geocode + nearby stores (ms). */
+  zipGeocodePersistentTtlMs: 30 * 24 * 60 * 60 * 1000,
+  overpassPersistentTtlMs: 7 * 24 * 60 * 60 * 1000,
   /** Merge Kroger location rows within this distance (miles). */
   krogerMergeRadiusMiles: 0.35,
 } as const;
@@ -67,7 +78,10 @@ export const SMART_SHOP_COPY = {
   loadingStores: 'Finding nearby grocery stores…',
   loadingComparison: 'Comparing prices for your list…',
   osmRateLimited: 'Store search is busy — try again in a minute.',
-  osmNetwork: 'Store search is unavailable — try again or enter a ZIP code.',
+  osmNetwork:
+    'Store search is unavailable right now. Showing your saved stores when we have them — pull to refresh or try again in a few minutes.',
+  osmNetworkRetry:
+    'Could not reach store search servers. Your saved stores are shown below — tap Change location or try again shortly.',
   osmEmpty: 'No grocery stores found near this area — try a different ZIP.',
   livePricesLabel: 'Live store prices',
   livePricesWithCommunity: 'Store prices + shopper reports',

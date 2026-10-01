@@ -5,6 +5,7 @@
 
 import { assembleDealsResult } from '../lib/deals/buildShopResult';
 import { coordsForStoreSearch } from '../lib/smartShop/coordsResolve';
+import { localZipPlaceLabel } from '../lib/stores/localZipTable';
 import { parseCityStateFromNominatimDisplay } from '../lib/stores/zipPlaceParse';
 import { estimateSmartShopSavings } from '../lib/smartShop/aggregateDeals';
 import type { ItemStoreDeal, StoreLocation } from '../lib/deals/types';
@@ -138,5 +139,9 @@ assert(
   parseCityStateFromNominatimDisplay('95361, Oakdale, Stanislaus County, California, United States') === 'Oakdale, CA',
   'ZIP geocode display should resolve to city, state',
 );
+
+assert(localZipPlaceLabel('95361') === 'Oakdale, CA', 'built-in ZIP table should label Oakdale');
+assert(localZipPlaceLabel('95350') === 'Modesto, CA', 'built-in ZIP table should label Modesto');
+assert(localZipPlaceLabel('99999') === null, 'unknown ZIP should not fake a label');
 
 console.log('Smart Shop honesty tests passed.');
