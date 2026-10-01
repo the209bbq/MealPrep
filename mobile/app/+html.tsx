@@ -1,5 +1,5 @@
 import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html';
-import { APP_SHORT_NAME, THEME } from '../config/appConfig';
+import { APP_NAME, APP_SHORT_NAME, THEME } from '../config/appConfig';
 import { webAssetPath } from '../lib/webBasePath';
 
 export default function Root({ children }: { children: React.ReactNode }) {
@@ -11,6 +11,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" {...htmlAttributes}>
       <head>
+        <title>{APP_NAME}</title>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
