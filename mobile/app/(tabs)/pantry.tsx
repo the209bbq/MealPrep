@@ -45,6 +45,7 @@ import {
   PantryVisionAuthError,
   PantryVisionNotConfiguredError,
   PantryVisionRateLimitError,
+  PantryVisionScanError,
 } from '../../lib/pantryVision/client';
 import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import { detectionsToReviewItems } from '../../lib/pantryVision/reviewItems';
@@ -80,6 +81,12 @@ export default function PantryScreen() {
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanErrorTitle, setScanErrorTitle] = useState<string | null>(null);
+  const [lastScanAttempt, setLastScanAttempt] = useState<
+    | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
+    | { kind: 'uri'; uri: string; location: PantryStorageLocation }
+    | null
+  >(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [modelLabel, setModelLabel] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
@@ -114,6 +121,34 @@ export default function PantryScreen() {
 
   const resortPreview = useMemo(() => previewResortFromDefaultPantry(pantry), [pantry]);
 
+  function clearScanFailure() {
+    setScanError(null);
+    setScanErrorTitle(null);
+    setLastScanAttempt(null);
+  }
+
+  function setScanFailure(
+    message: string,
+    title: string,
+    attempt:
+      | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
+      | { kind: 'uri'; uri: string; location: PantryStorageLocation }
+      | null,
+  ) {
+    setScanError(message);
+    setScanErrorTitle(title);
+    setLastScanAttempt(attempt);
+  }
+
+  function retryLastScan() {
+    if (!lastScanAttempt) return;
+    if (lastScanAttempt.kind === 'prepared') {
+      void runVisionFromPrepared(lastScanAttempt.prepared, lastScanAttempt.location);
+      return;
+    }
+    void runVisionFromUri(lastScanAttempt.uri, lastScanAttempt.location);
+  }
+
   async function runVisionFromPrepared(
     prepared: PreparedPantryImage,
     scanLocation: PantryStorageLocation,
@@ -124,9 +159,11 @@ export default function PantryScreen() {
     }
 
     setScanLocationHint(scanLocation);
-    setScanError(null);
+    clearScanFailure();
     setPhase('loading');
     setPreviewUri(prepared.uri);
+
+    const attempt = { kind: 'prepared' as const, prepared, location: scanLocation };
 
     try {
       const result = await analyzePantryPhoto(prepared, accessToken, { scanLocation });
@@ -139,14 +176,27 @@ export default function PantryScreen() {
         scanLocation,
       );
       if (rows.length === 0) {
-        setScanError('No pantry items were detected. Try a clearer photo with labels visible.');
+        setScanFailure(
+          'No pantry items were detected. Try a clearer photo with labels visible.',
+          'No items found',
+          attempt,
+        );
         setPhase('idle');
         return;
       }
+      clearScanFailure();
       setModelLabel(result.model);
       setReviewItems(rows);
       setPhase('review');
     } catch (error) {
+      const title =
+        error instanceof PantryVisionRateLimitError
+          ? 'Too many scans'
+          : error instanceof PantryVisionAuthError
+            ? 'Sign in required'
+            : error instanceof PantryVisionNotConfiguredError
+              ? 'Scan not set up'
+              : PHOTO_SCAN.scanFailedTitle;
       const message =
         error instanceof PantryVisionNotConfiguredError
           ? error.message
@@ -154,24 +204,29 @@ export default function PantryScreen() {
             ? error.message
             : error instanceof PantryVisionRateLimitError
               ? error.message
-              : error instanceof Error
+              : error instanceof PantryVisionScanError
                 ? error.message
-                : 'Pantry scan failed';
-      setScanError(message);
+                : PHOTO_SCAN.scanFailedMessage;
+      const canRetry = !(error instanceof PantryVisionNotConfiguredError);
+      setScanFailure(message, title, canRetry ? attempt : null);
       setPhase('idle');
     }
   }
 
   async function runVisionFromUri(uri: string, scanLocation: PantryStorageLocation) {
-    setScanError(null);
+    clearScanFailure();
     setPhase('loading');
     setPreviewUri(uri);
+    const attempt = { kind: 'uri' as const, uri, location: scanLocation };
     try {
       const prepared = await preparePantryImage(uri);
       await runVisionFromPrepared(prepared, scanLocation);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Pantry scan failed';
-      setScanError(message);
+      setScanFailure(
+        error instanceof Error ? error.message : PHOTO_SCAN.scanFailedMessage,
+        PHOTO_SCAN.scanFailedTitle,
+        attempt,
+      );
       setPhase('idle');
     }
   }
@@ -212,7 +267,7 @@ export default function PantryScreen() {
       setPhase('idle');
       setReviewItems([]);
       setPreviewUri(null);
-      setScanError(null);
+      clearScanFailure();
       setSaveError(null);
       setScanRecipeCount(recipeCount);
     } catch (error) {
@@ -446,7 +501,18 @@ export default function PantryScreen() {
           ) : null}
 
           {scanError ? (
-            <Text className="mt-2 text-xs font-semibold text-danger">{scanError}</Text>
+            <View className="mt-3 rounded-xl border border-danger/25 bg-paper p-3">
+              <Text className="text-sm font-bold text-ink">{scanErrorTitle ?? PHOTO_SCAN.scanFailedTitle}</Text>
+              <Text className="mt-1 text-xs text-muted">{scanError}</Text>
+              {lastScanAttempt ? (
+                <Pressable
+                  onPress={retryLastScan}
+                  className="mt-3 items-center rounded-xl border border-border bg-card py-2.5"
+                >
+                  <Text className="text-sm font-bold text-emerald-dark">{PHOTO_SCAN.tryAgainLabel}</Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
 
           {phase === 'review' ? (
