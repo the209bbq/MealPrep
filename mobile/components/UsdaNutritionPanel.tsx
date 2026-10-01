@@ -139,12 +139,12 @@ export function UsdaNutritionPanel({ recipes, onSave }: UsdaNutritionPanelProps)
                   setStatus(null);
                 }}
                 className={`rounded-full px-3 py-1 ${
-                  selectedRecipeId === r.id ? 'bg-emerald' : 'border border-border bg-paper'
+                  selectedRecipeId === r.id ? 'bg-primary' : 'border border-border bg-paper'
                 }`}
               >
                 <Text
                   className={`text-xs font-semibold ${
-                    selectedRecipeId === r.id ? 'text-on-emerald' : 'text-muted'
+                    selectedRecipeId === r.id ? 'text-on-primary' : 'text-muted'
                   }`}
                 >
                   {r.name.split(' ')[0]}
@@ -173,12 +173,12 @@ export function UsdaNutritionPanel({ recipes, onSave }: UsdaNutritionPanelProps)
             key={ing.ingredientId}
             onPress={() => setTargetIngredientId(ing.ingredientId)}
             className={`rounded-full px-3 py-1 ${
-              targetIngredientId === ing.ingredientId ? 'bg-emerald' : 'border border-border bg-paper'
+              targetIngredientId === ing.ingredientId ? 'bg-primary' : 'border border-border bg-paper'
             }`}
           >
             <Text
               className={`text-xs font-semibold ${
-                targetIngredientId === ing.ingredientId ? 'text-on-emerald' : 'text-muted'
+                targetIngredientId === ing.ingredientId ? 'text-on-primary' : 'text-muted'
               }`}
             >
               {ing.name.split(' ')[0]}
@@ -203,9 +203,9 @@ export function UsdaNutritionPanel({ recipes, onSave }: UsdaNutritionPanelProps)
       <Pressable
         disabled={busy || !query.trim()}
         onPress={() => void runSearch()}
-        className={`mt-3 rounded-xl px-4 py-3 ${busy ? 'bg-emerald opacity-60' : 'bg-emerald'}`}
+        className={`mt-3 rounded-xl px-4 py-3 ${busy ? 'bg-primary opacity-60' : 'bg-primary'}`}
       >
-        <Text className="text-center font-bold text-on-emerald">Search USDA</Text>
+        <Text className="text-center font-bold text-on-primary">Search USDA</Text>
       </Pressable>
 
       <Text className="mt-3 text-xs text-muted">Current per serving: {nutritionLabel(recipe)}</Text>
@@ -220,9 +220,9 @@ export function UsdaNutritionPanel({ recipes, onSave }: UsdaNutritionPanelProps)
             <Pressable
               disabled={busy}
               onPress={() => void attachMatch(match)}
-              className="rounded-full bg-emerald px-3 py-1"
+              className="rounded-full bg-primary px-3 py-1"
             >
-              <Text className="text-xs font-bold text-on-emerald">Attach to ingredient</Text>
+              <Text className="text-xs font-bold text-on-primary">Attach to ingredient</Text>
             </Pressable>
             <Pressable
               disabled={busy}
@@ -235,7 +235,7 @@ export function UsdaNutritionPanel({ recipes, onSave }: UsdaNutritionPanelProps)
         </View>
       ))}
 
-      {status ? <Text className="mt-3 text-sm text-emerald-dark">{status}</Text> : null}
+      {status ? <Text className="mt-3 text-sm text-primary-dark">{status}</Text> : null}
     </View>
   );
 }

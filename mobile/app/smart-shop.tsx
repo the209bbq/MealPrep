@@ -41,8 +41,8 @@ export default function SmartShopScreen() {
     return (
       <View className="flex-1 bg-paper px-4" style={{ paddingTop: insets.top }}>
         <Text className="mt-8 text-lg font-bold text-ink">Smart Shop is turned off</Text>
-        <Pressable onPress={() => router.back()} className="mt-4 rounded-2xl bg-emerald px-4 py-3">
-          <Text className="text-center font-bold text-on-emerald">Back</Text>
+        <Pressable onPress={() => router.back()} className="mt-4 rounded-2xl bg-primary px-4 py-3">
+          <Text className="text-center font-bold text-on-primary">Back</Text>
         </Pressable>
       </View>
     );

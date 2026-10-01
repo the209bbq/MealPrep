@@ -95,7 +95,7 @@ export default function GroceryScreen() {
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: showShopCta ? 100 + insets.bottom : 32 }}>
           <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-5">
             <Text className="text-xs font-bold uppercase tracking-widest text-on-primary-muted">Grocery list</Text>
-            <Text className="mt-1 text-2xl font-bold text-on-emerald">
+            <Text className="mt-1 text-2xl font-bold text-on-primary">
               {open.length} to buy · {checkedCount} in cart
             </Text>
             <View className="mt-3 h-2 overflow-hidden rounded-full bg-on-primary-muted/30">
@@ -116,7 +116,7 @@ export default function GroceryScreen() {
                 onPress={refreshGrocery}
                 className="min-h-[48px] rounded-2xl border border-on-primary-muted/40 bg-primary/30 px-4 py-3"
               >
-                <Text className="text-center text-sm font-bold text-on-emerald">Refresh</Text>
+                <Text className="text-center text-sm font-bold text-on-primary">Refresh</Text>
               </Pressable>
             </View>
           </View>
@@ -136,7 +136,7 @@ export default function GroceryScreen() {
                 openSections.map((section) => (
                   <View key={section.category} className="mb-4">
                     <View className="mb-2 flex-row items-center gap-2">
-                      <View className="h-8 w-1 rounded-full bg-emerald" />
+                      <View className="h-8 w-1 rounded-full bg-primary" />
                       <Text className="text-base font-bold text-ink">{section.label}</Text>
                       <Text className="text-sm text-muted">({section.items.length})</Text>
                     </View>
@@ -195,10 +195,10 @@ export default function GroceryScreen() {
           >
             <Pressable
               onPress={() => router.push('/smart-shop')}
-              className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-emerald px-4 py-3"
+              className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3"
             >
               <Ionicons name="pricetags" size={22} color={THEME.onPrimary} />
-              <Text className="text-base font-bold text-on-emerald">Shop this list ({open.length})</Text>
+              <Text className="text-base font-bold text-on-primary">Shop this list ({open.length})</Text>
             </Pressable>
           </View>
         ) : null}
@@ -240,9 +240,9 @@ export default function GroceryScreen() {
                   <Pressable
                     key={cat}
                     onPress={() => setManualCategory(cat)}
-                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-emerald' : 'border border-border bg-card'}`}
+                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
                   >
-                    <Text className={`text-xs font-semibold ${selected ? 'text-on-emerald' : 'text-slate'}`}>
+                    <Text className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-slate'}`}>
                       {CATEGORY_LABELS[cat]}
                     </Text>
                   </Pressable>
@@ -253,8 +253,8 @@ export default function GroceryScreen() {
               <Pressable onPress={() => setAddOpen(false)} className="flex-1 rounded-2xl border border-border py-3">
                 <Text className="text-center font-bold text-slate">Cancel</Text>
               </Pressable>
-              <Pressable onPress={submitManualItem} className="flex-1 rounded-2xl bg-emerald py-3">
-                <Text className="text-center font-bold text-on-emerald">Add to list</Text>
+              <Pressable onPress={submitManualItem} className="flex-1 rounded-2xl bg-primary py-3">
+                <Text className="text-center font-bold text-on-primary">Add to list</Text>
               </Pressable>
             </View>
           </View>

@@ -60,10 +60,10 @@ function RecipeListSection({
         const match = pantryRecipeMatches.byRecipeId.get(recipe.id);
         return (
           <Pressable key={recipe.id} onPress={() => setActiveId(recipe.id)}>
-            <Card className={`mb-3 ${activeId === recipe.id ? 'border-emerald' : ''}`}>
+            <Card className={`mb-3 ${activeId === recipe.id ? 'border-primary' : ''}`}>
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 pr-2">
-                  <Text className="text-xs font-semibold uppercase text-emerald">{recipe.tag}</Text>
+                  <Text className="text-xs font-semibold uppercase text-primary">{recipe.tag}</Text>
                   <Text className="text-base font-bold text-ink">{recipe.name}</Text>
                   <Text className="mt-1 text-sm text-muted">{recipe.description}</Text>
                   <RecipePantryMatchBadge match={match} />
@@ -73,9 +73,9 @@ function RecipeListSection({
                 </View>
                 <Pressable
                   onPress={() => void toggleMealPlanKitchenRecipe(recipe.id)}
-                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
                 >
-                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
+                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
                     {onPlan ? 'In meals' : 'Add to meals'}
                   </Text>
                 </Pressable>
@@ -236,9 +236,9 @@ export default function RecipesScreen() {
               <Pressable
                 key={pct}
                 onPress={() => setMinPercent(pct)}
-                className={`rounded-full px-3 py-1.5 ${activeChip ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                className={`rounded-full px-3 py-1.5 ${activeChip ? 'bg-primary' : 'border border-border bg-paper'}`}
               >
-                <Text className={`text-xs font-semibold ${activeChip ? 'text-on-emerald' : 'text-muted'}`}>
+                <Text className={`text-xs font-semibold ${activeChip ? 'text-on-primary' : 'text-muted'}`}>
                   {pct === 0 ? 'Any %' : `${pct}%+`}
                 </Text>
               </Pressable>
@@ -310,9 +310,9 @@ export default function RecipesScreen() {
                     </View>
                     <Pressable
                       onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
-                      className={`rounded-full px-3 py-1 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                      className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
                     >
-                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
+                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
                         {onPlan ? 'In meals' : 'Add to meals'}
                       </Text>
                     </Pressable>
@@ -326,7 +326,7 @@ export default function RecipesScreen() {
 
       {active && activeMatch ? (
         <Card title="Pantry check" subtitle={active.name} className="mt-3">
-          <Text className="mt-2 text-sm font-semibold text-emerald-dark">You have</Text>
+          <Text className="mt-2 text-sm font-semibold text-primary-dark">You have</Text>
           {activeMatch.matched.length === 0 ? (
             <Text className="mt-1 text-sm text-muted">No matching pantry items yet.</Text>
           ) : (
@@ -350,9 +350,9 @@ export default function RecipesScreen() {
           {activeMatch.missing.length > 0 ? (
             <Pressable
               onPress={() => addMissingRecipeIngredientsToGrocery(active.id)}
-              className="mt-4 items-center rounded-xl bg-emerald py-3"
+              className="mt-4 items-center rounded-xl bg-primary py-3"
             >
-              <Text className="text-sm font-bold text-on-emerald">Add missing to grocery list</Text>
+              <Text className="text-sm font-bold text-on-primary">Add missing to grocery list</Text>
             </Pressable>
           ) : null}
         </Card>
