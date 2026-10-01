@@ -17,7 +17,7 @@ import {
 import { Card } from '../../components/Card';
 import { CategoryChips } from '../../components/CategoryChips';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { PantryLocationSections } from '../../components/PantryLocationSections';
+import { PantryFilteredItemList } from '../../components/PantryFilteredItemList';
 import { PantryStorageScanButtons } from '../../components/PantryStorageScanButtons';
 import { PantryScanReview, PantryScanReviewStickyFooter } from '../../components/PantryScanReview';
 import { PantryOverflowMenu } from '../../components/PantryOverflowMenu';
@@ -29,7 +29,9 @@ import {
 import { CATEGORY_LABELS, isPantryVisionConfigured, PHOTO_SCAN, THEME } from '../../config/appConfig';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
+  isPantryStorageLocation,
   labelForPantryStorageLocation,
+  PANTRY_LOCATION_FILTER_STORAGE_KEY,
   PANTRY_STORAGE_LOCATIONS,
   previewResortFromDefaultPantry,
   suggestStorageLocationForCategory,
@@ -39,7 +41,8 @@ import { useApp } from '../../context/AppContext';
 import { countDefaultKitchenMatches } from '../../config/recipeMatching';
 import { buildPantryMatchIndex } from '../../lib/recipeMatch';
 import { reviewItemsToPantryItems } from '../../lib/pantryVision/reviewItems';
-import { countPantryItemsInLocation } from '../../lib/pantryGrouping';
+import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
+import { readJson, writeJson } from '../../lib/storage';
 import {
   analyzePantryPhoto,
   PantryVisionAuthError,
@@ -60,6 +63,13 @@ type PantryConfirmAction =
   | { kind: 'clear-all'; count: number }
   | { kind: 'resort'; toFridge: number; toSpiceRack: number };
 
+function readStoredPantryLocationFilter(): PantryStorageLocation | 'all' {
+  const saved = readJson<string | null>(PANTRY_LOCATION_FILTER_STORAGE_KEY, null);
+  if (saved === 'all') return 'all';
+  if (saved && isPantryStorageLocation(saved)) return saved;
+  return 'all';
+}
+
 export default function PantryScreen() {
   const {
     pantry,
@@ -76,7 +86,7 @@ export default function PantryScreen() {
     resortPantryItemsInDefaultLocation,
   } = useApp();
   const [filter, setFilter] = useState<PantryCategory | 'all'>('all');
-  const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>('all');
+  const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>(readStoredPantryLocationFilter);
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
@@ -118,6 +128,16 @@ export default function PantryScreen() {
       ) as Record<PantryStorageLocation, number>,
     [pantry],
   );
+
+  const locationFilterCounts = useMemo(
+    () => countPantryItemsForLocationFilters(pantry, filter),
+    [filter, pantry],
+  );
+
+  function selectLocationFilter(next: PantryStorageLocation | 'all') {
+    setLocationFilter(next);
+    writeJson(PANTRY_LOCATION_FILTER_STORAGE_KEY, next);
+  }
 
   const resortPreview = useMemo(() => previewResortFromDefaultPantry(pantry), [pantry]);
 
@@ -537,14 +557,17 @@ export default function PantryScreen() {
           </Pressable>
         </Card>
 
-        <Text className="mb-1 mt-2 text-xs font-bold uppercase tracking-wide text-muted">Storage</Text>
-        <PantryStorageLocationFilterChips selected={locationFilter} onSelect={setLocationFilter} />
+        <PantryStorageLocationFilterChips
+          selected={locationFilter}
+          onSelect={selectLocationFilter}
+          counts={locationFilterCounts}
+        />
 
         <CategoryChips selected={filter} onSelect={setFilter} />
 
         {actionError ? <Text className="mb-2 text-xs font-semibold text-danger">{actionError}</Text> : null}
 
-        <PantryLocationSections
+        <PantryFilteredItemList
           items={pantry}
           categoryFilter={filter}
           locationFilter={locationFilter}

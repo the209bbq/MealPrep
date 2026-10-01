@@ -61,3 +61,30 @@ export function groupPantryIntoLocationSections(
 export function countPantryItemsInLocation(items: PantryItem[], location: PantryStorageLocation): number {
   return items.filter((item) => item.location === location).length;
 }
+
+export interface PantryLocationFilterCounts {
+  all: number;
+  pantry: number;
+  fridge: number;
+  spice_rack: number;
+}
+
+/** Item counts per storage tab, respecting an optional category filter (not location). */
+export function countPantryItemsForLocationFilters(
+  items: PantryItem[],
+  categoryFilter: PantryCategory | 'all',
+): PantryLocationFilterCounts {
+  const filtered = items.filter(
+    (item) => categoryFilter === 'all' || item.category === categoryFilter,
+  );
+  const counts = Object.fromEntries(
+    PANTRY_STORAGE_LOCATIONS.map((location) => [
+      location,
+      filtered.filter((item) => item.location === location).length,
+    ]),
+  ) as Record<PantryStorageLocation, number>;
+  return {
+    all: filtered.length,
+    ...counts,
+  };
+}
