@@ -21,6 +21,7 @@ import {
 } from '../../lib/smartShop/aggregateDeals';
 import { resultHasRealStorePricing } from '../../lib/smartShop/realPricing';
 import type { GroceryListItem } from '../../types/mealprep';
+import { formatReportedLight } from '../../lib/communityDeals/client';
 
 type Props = {
   dealsResult: DealsSearchResult;
@@ -35,6 +36,7 @@ type Props = {
   onRefreshCommunityDeals: () => void;
   onOpenDirections: (store: StoreLocation) => void;
   cheapestStoreId: string | null;
+  onAddPrice: (store: StoreLocation, itemName?: string) => void;
 };
 
 export function SmartShopComparisonResults({
@@ -50,6 +52,7 @@ export function SmartShopComparisonResults({
   onRefreshCommunityDeals,
   onOpenDirections,
   cheapestStoreId,
+  onAddPrice,
 }: Props) {
   const hasRealPricing = resultHasRealStorePricing(dealsResult);
   const isEstimate = isEstimatePricingMode(dealsResult);
@@ -157,6 +160,9 @@ export function SmartShopComparisonResults({
               </View>
             ) : null}
             <View className="mt-2 flex-row flex-wrap items-center gap-2">
+              <Pressable onPress={() => onAddPrice(store)} className="self-start">
+                <Text className="text-xs font-bold text-emerald-dark">{SMART_SHOP_COPY.addPriceButton}</Text>
+              </Pressable>
               <Pressable onPress={() => onOpenDirections(store)} className="self-start">
                 <Text className="text-xs font-semibold text-emerald-dark">Directions</Text>
               </Pressable>
@@ -196,6 +202,9 @@ export function SmartShopComparisonResults({
                       {formatMoney(best.lineTotal)} at {activeStores.find((s) => s.id === best.storeId)?.chain ?? 'store'}
                     </Text>
                     {best.promoLabel ? <Text className="text-xs text-danger">{best.promoLabel}</Text> : null}
+                    {best.communityReportedAt ? (
+                      <Text className="mt-0.5 text-xs text-muted">{formatReportedLight(best.communityReportedAt)}</Text>
+                    ) : null}
                   </View>
                 ) : (
                   <Text className="mt-2 text-sm text-muted">
@@ -219,6 +228,15 @@ export function SmartShopComparisonResults({
                     })}
                   </View>
                 ) : null}
+                <View className="mt-2 flex-row flex-wrap gap-3">
+                  {activeStores.map((store) => (
+                    <Pressable key={`add-${store.id}-${item.id}`} onPress={() => onAddPrice(store, item.name)}>
+                      <Text className="text-xs font-bold text-emerald-dark">
+                        {SMART_SHOP_COPY.addPriceButton} · {store.chain}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
                 {best?.productUrl ? (
                   <Pressable onPress={() => void Linking.openURL(best.productUrl!)} className="mt-2">
                     <Text className="text-xs font-semibold text-emerald-dark">View at store</Text>

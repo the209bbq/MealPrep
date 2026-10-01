@@ -74,7 +74,10 @@ export function pricingBadgeForStore(
   const estimate =
     options?.resultMode === 'sample' ||
     store.pricingSource === 'sample' ||
-    (options?.storeTotal && options.storeTotal.pricesAvailable && store.pricingSource !== 'kroger');
+    (options?.storeTotal &&
+      options.storeTotal.pricesAvailable &&
+      store.pricingSource !== 'kroger' &&
+      !options?.hasCommunityDeals);
 
   if (estimate) {
     return options?.hasCommunityDeals ? SMART_SHOP_COPY.estimatedWithCommunity : SMART_SHOP_COPY.estimatedBadge;
@@ -84,7 +87,7 @@ export function pricingBadgeForStore(
     return options?.hasCommunityDeals ? SMART_SHOP_COPY.livePricesWithCommunity : SMART_SHOP_COPY.livePricesLabel;
   }
 
-  if (options?.hasCommunityDeals) return 'Community deals';
+  if (options?.hasCommunityDeals && priced) return SMART_SHOP_COPY.reportedPriceNote;
   return SMART_SHOP_COPY.estimatedBadge;
 }
 

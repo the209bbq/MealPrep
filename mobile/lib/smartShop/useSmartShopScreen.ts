@@ -309,5 +309,6 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
     openDirections,
     storeHasCommunityDeals,
     community,
+    refreshComparison: fetchDeals,
   };
 }

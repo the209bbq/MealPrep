@@ -55,8 +55,8 @@ export function recipeApiToAppRecipe(
     steps: api.instructions ?? [],
     isMaster: options.asMaster,
     createdAt: new Date().toISOString(),
-    nutritionSource: 'RecipeAPI.io',
-    nutritionCitation: 'Nutrition per serving from RecipeAPI.io',
+    nutritionSource: 'Recipe source',
+    nutritionCitation: 'Nutrition per serving from the recipe provider',
     nutritionSourcedAt: new Date().toISOString(),
   };
 }

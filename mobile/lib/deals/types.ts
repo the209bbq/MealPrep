@@ -33,6 +33,7 @@ export interface ItemStoreDeal {
   productUrl?: string;
   priceSource?: DealPriceSource;
   communityDealId?: string;
+  communityReportedAt?: string;
 }
 
 export interface StoreCartTotal {
