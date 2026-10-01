@@ -6,6 +6,10 @@ export type PickWebImageFileOptions = {
   capture?: 'environment' | 'user';
 };
 
+const CANCEL_POLL_INTERVAL_MS = 250;
+/** Mobile Safari can populate `input.files` hundreds of ms after window focus. */
+const CANCEL_POLL_MAX_ATTEMPTS = 16;
+
 export function pickWebImageFile(options: PickWebImageFileOptions = {}): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
@@ -22,34 +26,68 @@ export function pickWebImageFile(options: PickWebImageFileOptions = {}): Promise
     input.style.opacity = '0';
 
     let settled = false;
+    let pollTimer: number | undefined;
+    let focusTimer: number | undefined;
+
+    const clearTimers = () => {
+      if (pollTimer !== undefined) {
+        window.clearTimeout(pollTimer);
+        pollTimer = undefined;
+      }
+      if (focusTimer !== undefined) {
+        window.clearTimeout(focusTimer);
+        focusTimer = undefined;
+      }
+    };
+
     const finish = (file: File | null) => {
       if (settled) return;
       settled = true;
+      clearTimers();
       input.remove();
       resolve(file);
     };
 
+    const resolveFileFromInput = () => finish(input.files?.[0] ?? null);
+
     input.addEventListener(
       'change',
       () => {
-        finish(input.files?.[0] ?? null);
+        if (input.files?.length) {
+          resolveFileFromInput();
+          return;
+        }
+        // Some WebViews fire `change` before `files` is populated.
+        window.setTimeout(resolveFileFromInput, 0);
+      },
+      { once: true },
+    );
+
+    const pollForSelectionAfterDismiss = (attempt = 0) => {
+      if (settled) return;
+      if (input.files?.length) {
+        resolveFileFromInput();
+        return;
+      }
+      if (attempt >= CANCEL_POLL_MAX_ATTEMPTS) {
+        finish(null);
+        return;
+      }
+      pollTimer = window.setTimeout(
+        () => pollForSelectionAfterDismiss(attempt + 1),
+        CANCEL_POLL_INTERVAL_MS,
+      );
+    };
+
+    window.addEventListener(
+      'focus',
+      () => {
+        focusTimer = window.setTimeout(() => pollForSelectionAfterDismiss(0), 150);
       },
       { once: true },
     );
 
     document.body.appendChild(input);
     input.click();
-
-    window.addEventListener(
-      'focus',
-      () => {
-        window.setTimeout(() => {
-          if (!input.files?.length) {
-            finish(null);
-          }
-        }, 400);
-      },
-      { once: true },
-    );
   });
 }
