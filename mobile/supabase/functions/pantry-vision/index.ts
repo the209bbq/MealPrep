@@ -1,16 +1,71 @@
 // Pantry shelf vision — paste this ENTIRE file into Supabase Dashboard:
-// Edge Functions → Deploy a new function → Via Editor → name: pantry-vision
+// Edge Functions → pantry-vision → Via Editor
 //
 // Settings: leave "Verify JWT" ENABLED (default). Anonymous calls are rejected at the gateway;
 // this handler reads the user id from the JWT for rate limiting.
 //
 // Secrets (Edge Functions → Secrets):
 //   GEMINI_API_KEY = key from https://aistudio.google.com/apikey
-// Optional secret:
-//   GEMINI_MODEL = e.g. gemini-2.5-flash (defaults below)
+// Optional secrets:
+//   GEMINI_MODEL = e.g. gemini-3.6-flash (defaults below; keep in sync with mobile/config/geminiVision.ts)
+//   GEMINI_FALLBACK_MODELS = comma-separated backup model ids (optional)
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+/** @sync mobile/config/geminiVision.ts */
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
+const DEFAULT_GEMINI_FALLBACK_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+] as const;
+const GEMINI_REQUEST_TIMEOUT_MS = 90_000;
+const GEMINI_RETRY_BACKOFF_MS = 450;
+const GEMINI_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 503]);
+
+function parseCommaSeparatedModels(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function buildGeminiModelCandidates(
+  primaryFromEnv: string | undefined,
+  fallbacksFromEnv: string | undefined,
+): string[] {
+  const primary =
+    (primaryFromEnv ?? DEFAULT_GEMINI_MODEL).trim() || DEFAULT_GEMINI_MODEL;
+  const fromSecret = parseCommaSeparatedModels(fallbacksFromEnv);
+  const ordered = [primary, ...fromSecret, ...DEFAULT_GEMINI_FALLBACK_MODELS];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const model of ordered) {
+    if (seen.has(model)) continue;
+    seen.add(model);
+    out.push(model);
+  }
+  return out;
+}
+
+function isModelNotFoundOrRetired(status: number, detail: string): boolean {
+  if (status !== 404) return false;
+  const lower = detail.toLowerCase();
+  return (
+    lower.includes('not found') ||
+    lower.includes('not_found') ||
+    lower.includes('retired') ||
+    lower.includes('no longer') ||
+    lower.includes('does not exist')
+  );
+}
+
+function isRetryableGeminiHttpFailure(status: number, detail: string): boolean {
+  return GEMINI_RETRYABLE_HTTP_STATUSES.has(status) || isModelNotFoundOrRetired(status, detail);
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -250,16 +305,22 @@ function scanLocationPromptHint(scanLocation: (typeof PANTRY_STORAGE)[number]): 
   }
 }
 
-async function callGemini(
-  apiKey: string,
-  model: string,
-  mimeType: string,
-  imageBase64: string,
-  scanLocation: (typeof PANTRY_STORAGE)[number],
-): Promise<DetectedPantryItem[]> {
-  const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+type GeminiAttemptFailure = {
+  kind: 'http';
+  status: number;
+  detail: string;
+  retryable: boolean;
+};
 
-  const prompt =
+type GeminiAttemptTimeout = {
+  kind: 'timeout';
+  retryable: true;
+};
+
+type GeminiAttemptError = GeminiAttemptFailure | GeminiAttemptTimeout;
+
+function geminiPrompt(scanLocation: (typeof PANTRY_STORAGE)[number]): string {
+  return (
     'You analyze photos of pantry shelves, refrigerators, or kitchen storage. ' +
     scanLocationPromptHint(scanLocation) +
     ' List distinct food or kitchen items visible. Use realistic quantities and units (oz, lb, cups, each, bottle, jar). ' +
@@ -268,14 +329,40 @@ async function callGemini(
     'Put dried spices, dried herbs, and seasonings (e.g. garlic powder, cumin, paprika) in spice_rack. ' +
     'Put dairy, eggs, fresh meat and fish, most fresh produce, opened condiments that need refrigeration, and leftovers in fridge. ' +
     'Put dry goods, canned goods, snacks, cereal, baking supplies, shelf-stable sauces and dressings (unopened), syrup, peanut butter, and bread in pantry. ' +
-    'Set confidence between 0 and 1. Do not invent items that are not visible. Return JSON only.';
+    'Set confidence between 0 and 1. Do not invent items that are not visible. Return JSON only.'
+  );
+}
+
+function parseGeminiErrorDetail(status: number, text: string): { detail: string; retryable: boolean } {
+  let detail = text.slice(0, 320);
+  try {
+    const errJson = JSON.parse(text) as { error?: { message?: string } };
+    detail = errJson.error?.message ?? detail;
+  } catch {
+    /* keep raw snippet */
+  }
+  return { detail, retryable: isRetryableGeminiHttpFailure(status, detail) };
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callGeminiOnce(
+  apiKey: string,
+  model: string,
+  mimeType: string,
+  imageBase64: string,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
+  const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const payload = {
     contents: [
       {
         parts: [
           { inline_data: { mime_type: mimeType, data: imageBase64 } },
-          { text: prompt },
+          { text: geminiPrompt(scanLocation) },
         ],
       },
     ],
@@ -286,38 +373,138 @@ async function callGemini(
     },
   };
 
-  const upstream = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(GEMINI_REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const isTimeout =
+      error instanceof DOMException
+        ? error.name === 'TimeoutError'
+        : error instanceof Error && error.name === 'TimeoutError';
+    if (isTimeout) {
+      return { error: { kind: 'timeout', retryable: true } };
+    }
+    const message = error instanceof Error ? error.message : 'Network error calling Gemini';
+    return {
+      error: {
+        kind: 'http',
+        status: 0,
+        detail: message,
+        retryable: false,
+      },
+    };
+  }
 
   const text = await upstream.text();
   if (!upstream.ok) {
-    let detail = text.slice(0, 240);
-    try {
-      const errJson = JSON.parse(text) as { error?: { message?: string } };
-      detail = errJson.error?.message ?? detail;
-    } catch {
-      /* keep raw snippet */
-    }
-    throw new Error(`Gemini request failed (${upstream.status}): ${detail}`);
+    const parsed = parseGeminiErrorDetail(upstream.status, text);
+    return {
+      error: {
+        kind: 'http',
+        status: upstream.status,
+        detail: parsed.detail,
+        retryable: parsed.retryable,
+      },
+    };
   }
 
-  let parsed: unknown;
   try {
     const envelope = JSON.parse(text) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
     const partText = envelope.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-    if (!partText) throw new Error('Empty model response');
-    parsed = JSON.parse(partText);
+    if (!partText) {
+      return {
+        error: {
+          kind: 'http',
+          status: 502,
+          detail: 'Empty model response',
+          retryable: true,
+        },
+      };
+    }
+    const parsed = JSON.parse(partText) as unknown;
+    return { items: sanitizeItems(parsed) };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to parse Gemini response';
-    throw new Error(message);
+    return {
+      error: {
+        kind: 'http',
+        status: 502,
+        detail: message,
+        retryable: false,
+      },
+    };
+  }
+}
+
+function formatAttemptError(model: string, error: GeminiAttemptError): string {
+  if (error.kind === 'timeout') {
+    return `${model}: timed out after ${GEMINI_REQUEST_TIMEOUT_MS}ms`;
+  }
+  const statusLabel = error.status > 0 ? String(error.status) : 'network';
+  return `${model} (${statusLabel}): ${error.detail}`;
+}
+
+async function callGeminiWithSingleRetry(
+  apiKey: string,
+  model: string,
+  mimeType: string,
+  imageBase64: string,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
+  let result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, scanLocation);
+  if ('items' in result) return result;
+
+  const shouldRetry =
+    result.error.kind === 'timeout' ||
+    (result.error.kind === 'http' && result.error.retryable);
+
+  if (!shouldRetry) return result;
+
+  await sleep(GEMINI_RETRY_BACKOFF_MS);
+  result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, scanLocation);
+  return result;
+}
+
+async function callGeminiWithFallbacks(
+  apiKey: string,
+  mimeType: string,
+  imageBase64: string,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+): Promise<{ items: DetectedPantryItem[]; model: string }> {
+  const candidates = buildGeminiModelCandidates(
+    Deno.env.get('GEMINI_MODEL') ?? undefined,
+    Deno.env.get('GEMINI_FALLBACK_MODELS') ?? undefined,
+  );
+
+  const failures: string[] = [];
+
+  for (const model of candidates) {
+    const result = await callGeminiWithSingleRetry(
+      apiKey,
+      model,
+      mimeType,
+      imageBase64,
+      scanLocation,
+    );
+    if ('items' in result) {
+      console.log(`pantry-vision: gemini ok model=${model} items=${result.items.length}`);
+      return { items: result.items, model };
+    }
+    failures.push(formatAttemptError(model, result.error));
+    console.warn(`pantry-vision: gemini failed ${failures[failures.length - 1]}`);
   }
 
-  return sanitizeItems(parsed);
+  const summary = failures.slice(-4).join(' | ');
+  throw new Error(
+    `Pantry scan could not reach Gemini after trying ${candidates.length} model(s). ${summary}`,
+  );
 }
 
 Deno.serve(async (req) => {
@@ -356,16 +543,13 @@ Deno.serve(async (req) => {
     );
   }
 
-  const model = (Deno.env.get('GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL).trim() || DEFAULT_GEMINI_MODEL;
-
   try {
     const imageResult = await readImageFromRequest(req);
     if (imageResult instanceof Response) return imageResult;
 
     const imageBase64 = bytesToBase64(imageResult.bytes);
-    const items = await callGemini(
+    const { items, model } = await callGeminiWithFallbacks(
       apiKey,
-      model,
       imageResult.mimeType,
       imageBase64,
       imageResult.scanLocation,

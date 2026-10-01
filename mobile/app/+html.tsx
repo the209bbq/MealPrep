@@ -1,6 +1,6 @@
 import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html';
 import { APP_SHORT_NAME, THEME } from '../config/appConfig';
-import { webAssetPath } from '../lib/webBasePath';
+import { getWebBasePath, webAssetPath } from '../lib/webBasePath';
 
 export default function Root({ children }: { children: React.ReactNode }) {
   const { bodyAttributes, bodyNodes, htmlAttributes, headNodes } = useServerDocumentContext();
@@ -23,6 +23,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content={APP_SHORT_NAME} />
         <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="meal-prep-base" content={getWebBasePath() || '/'} />
         <link rel="manifest" href={manifestHref} />
         <link rel="apple-touch-icon" href={appleIconHref} />
         <ScrollViewStyleReset />

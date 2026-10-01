@@ -3,10 +3,7 @@ import { resolveStoreChainKey } from '../../config/weeklyAds';
 import type { GroceryListItem } from '../../types/mealprep';
 import { readSavedStoreSummaries } from '../smartShop/storage';
 import type { StoreLocation } from '../deals/types';
-import {
-  fetchCommunityDealsForStoreKeys,
-  filterVisibleCommunityDeals,
-} from './client';
+import { fetchCommunityDealsForStoreKeys } from './client';
 import { buildGroceryCommunityBadges, type GroceryCommunityDealBadge } from './matchItem';
 import type { CommunityStoreDeal, FetchCommunityDealsResult } from './types';
 
@@ -47,9 +44,7 @@ export function useCommunityDealsForStores(storeKeys: string[]) {
     void refresh();
   }, [refresh]);
 
-  const visibleDeals = useMemo(() => filterVisibleCommunityDeals(result.deals), [result.deals]);
-
-  return { ...result, deals: visibleDeals, loading, refresh };
+  return { ...result, loading, refresh };
 }
 
 export function useGroceryCommunityDealBadges(openItemIds: string[], items: GroceryListItem[]) {
