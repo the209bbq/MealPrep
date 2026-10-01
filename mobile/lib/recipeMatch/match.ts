@@ -183,6 +183,13 @@ export function scoreRecipeAgainstPantry(recipe: Recipe, pantry: PantryItem[]): 
   };
 }
 
+export function compareRecipePantryMatches(a: RecipePantryMatch, b: RecipePantryMatch): number {
+  if (b.matchedCount !== a.matchedCount) return b.matchedCount - a.matchedCount;
+  if (b.percentMatch !== a.percentMatch) return b.percentMatch - a.percentMatch;
+  if (a.missingCount !== b.missingCount) return a.missingCount - b.missingCount;
+  return a.recipeName.localeCompare(b.recipeName);
+}
+
 export function buildPantryMatchIndex(recipes: Recipe[], pantry: PantryItem[]): PantryMatchIndex {
   if (pantry.length === 0) {
     const empty = recipes.map((recipe) => scoreRecipeAgainstPantry(recipe, pantry));
@@ -191,34 +198,29 @@ export function buildPantryMatchIndex(recipes: Recipe[], pantry: PantryItem[]): 
   }
 
   const ranked = recipes.map((recipe) => scoreRecipeAgainstPantry(recipe, pantry));
-  ranked.sort((a, b) => {
-    if (b.percentMatch !== a.percentMatch) return b.percentMatch - a.percentMatch;
-    if (a.missingCount !== b.missingCount) return a.missingCount - b.missingCount;
-    return a.recipeName.localeCompare(b.recipeName);
-  });
+  ranked.sort(compareRecipePantryMatches);
   const byRecipeId = new Map(ranked.map((m) => [m.recipeId, m]));
   return { byRecipeId, ranked };
 }
 
 export type RecipePantryFilterMode = 'all' | 'have_all' | 'missing_1_2' | 'best_match';
 
-export interface PantryMatchFilterOptions {
-  minPercent?: number;
-  minMatchedIngredients?: number;
+export interface FilterRankedMatchesOptions {
+  /** Minimum non-staple pantry ingredient matches (default from recipeMatching config). */
+  minMatchedCount?: number;
+  /** When 0, returns no recipes (empty pantry). */
   pantryItemCount?: number;
 }
 
 export function filterRankedMatches(
   ranked: RecipePantryMatch[],
   mode: RecipePantryFilterMode,
-  options: PantryMatchFilterOptions = {},
+  minPercent: number,
+  options?: FilterRankedMatchesOptions,
 ): RecipePantryMatch[] {
-  const minPercent = options.minPercent ?? DEFAULT_MIN_PANTRY_MATCH_PERCENT;
-  const minMatched = options.minMatchedIngredients ?? DEFAULT_MIN_MATCHED_INGREDIENTS;
-  const pantryItemCount = options.pantryItemCount;
+  if (options?.pantryItemCount === 0) return [];
 
-  if (pantryItemCount === 0) return [];
-
+  const minMatched = options?.minMatchedCount ?? DEFAULT_MIN_MATCHED_INGREDIENTS;
   return ranked.filter((m) => {
     if (m.matchedCount < minMatched) return false;
     if (m.percentMatch < minPercent) return false;
@@ -235,9 +237,8 @@ export function topPantryRecipeRecommendations(
 ): RecipePantryMatch[] {
   if (pantry.length === 0) return [];
   const { ranked } = buildPantryMatchIndex(recipes, pantry);
-  return filterRankedMatches(ranked, 'all', {
-    minPercent: DEFAULT_MIN_PANTRY_MATCH_PERCENT,
-    minMatchedIngredients: DEFAULT_MIN_MATCHED_INGREDIENTS,
+  return filterRankedMatches(ranked, 'all', DEFAULT_MIN_PANTRY_MATCH_PERCENT, {
+    minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
     pantryItemCount: pantry.length,
   }).slice(0, limit);
 }

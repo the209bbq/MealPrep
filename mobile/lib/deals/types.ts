@@ -1,6 +1,7 @@
 import type { GroceryListItem } from '../../types/mealprep';
 
 export type DealsMode = 'live' | 'sample';
+export type StorePricingSource = 'kroger' | 'sample' | 'none';
 
 export interface StoreLocation {
   id: string;
@@ -12,6 +13,10 @@ export interface StoreLocation {
   zip: string;
   lat?: number;
   lng?: number;
+  distanceMiles?: number;
+  source?: 'osm' | 'manual' | 'kroger';
+  pricingSource?: StorePricingSource;
+  krogerLocationId?: string;
   url?: string;
 }
 
@@ -32,6 +37,9 @@ export interface StoreCartTotal {
   subtotal: number;
   itemCount: number;
   missingCount: number;
+  promoCount?: number;
+  pricesAvailable?: boolean;
+  rankScore?: number;
 }
 
 export interface ShopSuggestion {
@@ -46,6 +54,7 @@ export interface DealsSearchResult {
   mode: DealsMode;
   providerId: string;
   providerLabel: string;
+  pricingNote?: string;
   stores: StoreLocation[];
   deals: ItemStoreDeal[];
   storeTotals: StoreCartTotal[];
@@ -68,6 +77,5 @@ export interface PricingProvider {
   id: string;
   label: string;
   isConfigured: () => boolean;
-  findNearbyStores: (params: NearbyStoresParams) => Promise<StoreLocation[]>;
-  fetchDeals: (params: FetchDealsParams) => Promise<Omit<DealsSearchResult, 'mode' | 'providerId' | 'providerLabel'>>;
+  fetchDeals: (params: FetchDealsParams) => Promise<Omit<DealsSearchResult, 'mode' | 'providerId' | 'providerLabel' | 'pricingNote'>>;
 }

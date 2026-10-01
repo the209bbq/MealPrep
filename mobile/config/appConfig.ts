@@ -5,6 +5,7 @@ import type {
   ThemeTokens,
   UserRole,
 } from '../types/mealprep';
+import { SMART_SHOP_STORES } from './smartShop';
 
 export const APP_NAME = '209 Meal Prep';
 export const APP_SHORT_NAME = 'Meal Prep';
@@ -66,14 +67,11 @@ export const FEATURE_FLAG_DEFAULTS: FeatureFlags = {
 
 /** Smart Shop / store pricing (no secrets in repo — use env + optional Supabase Edge Function). */
 export const SMART_SHOP = {
-  defaultRadiusMiles: 15,
-  maxSavedStores: 5,
-  krogerClientId: process.env.EXPO_PUBLIC_KROGER_CLIENT_ID ?? '',
-  /** Override full URL; default is `${SUPABASE_URL}/functions/v1/kroger-deals` when Supabase is configured. */
+  defaultRadiusMiles: SMART_SHOP_STORES.defaultRadiusMiles,
+  maxSavedStores: SMART_SHOP_STORES.maxSavedStores,
+  /** Optional override; default is `${SUPABASE_URL}/functions/v1/kroger-deals`. */
   krogerProxyUrl: process.env.EXPO_PUBLIC_KROGER_PROXY_URL ?? '',
 } as const;
-
-export const isKrogerConfigured = (): boolean => SMART_SHOP.krogerClientId.trim().length > 0;
 
 /** RecipeAPI.io discovery (secret stays on Supabase Edge Function `recipeapi-proxy`). */
 export const RECIPE_DISCOVERY = {
@@ -82,6 +80,14 @@ export const RECIPE_DISCOVERY = {
   cacheTtlMs: 10 * 60 * 1000,
   defaultPerPage: 10,
   proxyUrl: process.env.EXPO_PUBLIC_RECIPEAPI_PROXY_URL ?? '',
+} as const;
+
+/** Recipes tab: pantry-ranked kitchen list + optional discover search. */
+export const RECIPES_TAB = {
+  /** Do not load discover/catalog results until the user searches or applies filters. */
+  discoverRequiresActiveQuery: true,
+  /** Default kitchen list hides recipes with zero pantry ingredient matches. */
+  hideZeroPantryMatches: true,
 } as const;
 
 export const getRecipeApiProxyUrl = (): string => {

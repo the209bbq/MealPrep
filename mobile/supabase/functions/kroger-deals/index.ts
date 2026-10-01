@@ -1,6 +1,12 @@
-// Supabase Edge Function: Kroger API proxy (keeps client secret server-side).
-// Deploy: supabase functions deploy kroger-deals --project-ref <ref>
-// Secrets: KROGER_CLIENT_ID, KROGER_CLIENT_SECRET (Kroger Developer Portal, free tier)
+// Kroger weekly specials proxy — paste this ENTIRE file into Supabase Dashboard:
+// Edge Functions → kroger-deals → Via Editor
+//
+// Settings: leave "Verify JWT" ENABLED (authenticated app users only).
+//
+// Secrets (Edge Functions → Secrets):
+//   KROGER_CLIENT_ID
+//   KROGER_CLIENT_SECRET
+// From https://developer.kroger.com/ — application scopes: Product + Location.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 
@@ -69,18 +75,14 @@ function mapKrogerLocation(row: Record<string, unknown>): StoreLocation {
   const chain = String(row.chain ?? 'Kroger');
   const locationId = String(row.locationId ?? row.id ?? '');
   const name = String(row.name ?? chain);
-  const line = address.addressLine1 ?? '';
-  const city = address.city ?? '';
-  const state = address.state ?? '';
-  const zip = address.zipCode ?? '';
   return {
     id: locationId,
     name,
     chain,
-    addressLine: line,
-    city,
-    state,
-    zip,
+    addressLine: address.addressLine1 ?? '',
+    city: address.city ?? '',
+    state: address.state ?? '',
+    zip: address.zipCode ?? '',
     lat: geo.latitude,
     lng: geo.longitude,
     url: `https://www.kroger.com/stores/details/${locationId}`,
@@ -94,12 +96,12 @@ async function fetchNearbyStores(
   const radius = params.radiusMiles ?? 15;
   const search = new URLSearchParams({
     'filter.radiusInMiles': String(radius),
-    'filter.limit': '20',
+    'filter.limit': '25',
   });
   if (params.lat != null && params.lng != null) {
     search.set('filter.latLong.near', `${params.lat},${params.lng}`);
   } else if (params.zip) {
-    search.set('filter.zipCode.near', params.zip);
+    search.set('filter.zipCode.near', params.zip.slice(0, 5));
   } else {
     throw new Error('Provide lat/lng or zip');
   }
@@ -115,6 +117,23 @@ async function fetchNearbyStores(
   return (json.data ?? []).map(mapKrogerLocation);
 }
 
+function pickPrice(priceObj: Record<string, unknown> | undefined): {
+  unit: number;
+  promoLabel?: string;
+} | null {
+  if (!priceObj) return null;
+  const regular = Number(priceObj.regular);
+  const promo = Number(priceObj.promo);
+  const hasPromo = Number.isFinite(promo) && promo > 0;
+  const hasRegular = Number.isFinite(regular) && regular > 0;
+  if (hasPromo && hasRegular && promo < regular) {
+    return { unit: promo, promoLabel: `Sale (was $${regular.toFixed(2)})` };
+  }
+  if (hasPromo) return { unit: promo, promoLabel: 'Promo price' };
+  if (hasRegular) return { unit: regular };
+  return null;
+}
+
 async function fetchProductPrice(
   token: string,
   locationId: string,
@@ -123,7 +142,7 @@ async function fetchProductPrice(
   const search = new URLSearchParams({
     'filter.term': term.slice(0, 48),
     'filter.locationId': locationId,
-    'filter.limit': '5',
+    'filter.limit': '8',
   });
   const response = await fetch(`${KROGER_API}/products?${search.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -137,16 +156,14 @@ async function fetchProductPrice(
   for (const product of products) {
     const items = (product.items as Record<string, unknown>[]) ?? [];
     for (const item of items) {
-      const priceObj = item.price as Record<string, unknown> | undefined;
-      const regular = Number(priceObj?.regular ?? priceObj?.promo ?? 0);
-      if (!Number.isFinite(regular) || regular <= 0) continue;
+      const picked = pickPrice(item.price as Record<string, unknown> | undefined);
+      if (!picked) continue;
       const title = String(product.description ?? term);
-      const promo = priceObj?.promo ? 'Promo price' : undefined;
       const url = product.productId
         ? `https://www.kroger.com/p/${String(product.productId)}`
         : undefined;
-      if (!best || regular < best.price) {
-        best = { title, price: regular, promo, url };
+      if (!best || picked.unit < best.price) {
+        best = { title, price: picked.unit, promo: picked.promoLabel, url };
       }
     }
   }
@@ -162,14 +179,20 @@ serve(async (req) => {
     const clientId = Deno.env.get('KROGER_CLIENT_ID') ?? '';
     const clientSecret = Deno.env.get('KROGER_CLIENT_SECRET') ?? '';
     if (!clientId || !clientSecret) {
-      return new Response(JSON.stringify({ error: 'Kroger credentials not configured on server' }), {
-        status: 503,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({
+          error: 'Kroger credentials not configured on server. Add KROGER_CLIENT_ID and KROGER_CLIENT_SECRET in Supabase secrets.',
+          configured: false,
+        }),
+        {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
     const body = (await req.json()) as {
-      action: 'stores' | 'deals';
+      action: 'stores' | 'locations' | 'deals';
       lat?: number;
       lng?: number;
       zip?: string;
@@ -180,9 +203,9 @@ serve(async (req) => {
 
     const token = await getKrogerToken(clientId, clientSecret);
 
-    if (body.action === 'stores') {
+    if (body.action === 'stores' || body.action === 'locations') {
       const stores = await fetchNearbyStores(token, body);
-      return new Response(JSON.stringify({ stores }), {
+      return new Response(JSON.stringify({ stores, configured: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -214,15 +237,18 @@ serve(async (req) => {
       const storeTotals = stores.map((store) => {
         const storeDeals = deals.filter((d) => d.storeId === store.id);
         const subtotal = storeDeals.reduce((sum, d) => sum + Number(d.lineTotal), 0);
+        const promoCount = storeDeals.filter((d) => d.promoLabel).length;
         return {
           storeId: store.id,
           subtotal: Math.round(subtotal * 100) / 100,
           itemCount: storeDeals.length,
           missingCount: Math.max(0, items.length - storeDeals.length),
+          promoCount,
+          pricesAvailable: true,
         };
       });
 
-      const sorted = [...storeTotals].sort((a, b) => a.subtotal - b.subtotal);
+      const sorted = [...storeTotals].sort((a, b) => b.itemCount - a.itemCount || a.subtotal - b.subtotal);
       const best = sorted[0];
       const bestStore = stores.find((s) => s.id === best?.storeId);
 
@@ -232,14 +258,14 @@ serve(async (req) => {
         storeTotals,
         suggestion: {
           kind: 'single_store',
-          label: bestStore ? `Best single trip: ${bestStore.chain}` : 'Cheapest store',
+          label: bestStore ? `Kroger: ${bestStore.chain}` : 'Kroger locations',
           storeIds: best ? [best.storeId] : [],
           estimatedTotal: best?.subtotal ?? 0,
-          note: 'Prices from Kroger product search at selected locations.',
+          note: 'Live Kroger product search at selected locations (weekly promos when available).',
         },
       };
 
-      return new Response(JSON.stringify({ result }), {
+      return new Response(JSON.stringify({ result, configured: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

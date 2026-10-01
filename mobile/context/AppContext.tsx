@@ -30,6 +30,7 @@ import { recipeApiToAppRecipe } from '../lib/recipeDiscovery/mapToAppRecipe';
 import { isRecipeApiInLibrary, recipeApiMasterSlug, recipeApiPersonalSlug } from '../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
 import { activeMealPlanRecipeIds, isRecipeOnMealPlan } from '../lib/mealPlan/resolve';
+import { hydrateLocationFromProfile } from '../lib/smartShop/profileLocation';
 import {
   fetchLiveBundle,
   deleteGroceryItems,
@@ -205,7 +206,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const loadLiveData = useCallback(async () => {
     if (!supabase || !userId) return;
     const bundle = await fetchLiveBundle(supabase, userId);
-    if (bundle.profile) setLiveProfile(bundle.profile);
+    if (bundle.profile) {
+      setLiveProfile(bundle.profile);
+      hydrateLocationFromProfile(bundle.profile);
+    }
     removeStorageKey(STORAGE_KEYS.pantry);
     setPantry(normalizePantryItemList(bundle.pantry));
     setRecipes(bundle.recipes.length > 0 ? bundle.recipes : []);
