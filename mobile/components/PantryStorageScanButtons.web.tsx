@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { THEME } from '../config/appConfig';
 import { pantryStorageScanActions, type PantryStorageLocation } from '../config/pantryStorage';
 import { preparePantryImageFromFile } from '../lib/pantryVision/prepareImage.web';
@@ -14,19 +14,6 @@ export function PantryStorageScanButtons({
   const [pickLocation, setPickLocation] = useState<PantryStorageLocation | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const libraryRef = useRef<HTMLInputElement | null>(null);
-
-  function openPickPhotoLocationMenu() {
-    Alert.alert('Pick photo', 'Which storage area is this photo from?', [
-      ...actions.map((action) => ({
-        text: action.scanTitle,
-        onPress: () => {
-          setPickLocation(action.location);
-          libraryRef.current?.click();
-        },
-      })),
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }
 
   const handleWebFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -89,13 +76,6 @@ export function PantryStorageScanButtons({
         </View>
       ))}
 
-      <Pressable
-        disabled={disabled}
-        onPress={() => openPickPhotoLocationMenu()}
-        className={`mt-1 rounded-xl border border-border bg-paper px-3 py-3 ${disabled ? 'opacity-40' : ''}`}
-      >
-        <Text className="text-center text-sm font-bold text-slate">Pick photo…</Text>
-      </Pressable>
     </View>
   );
 }

@@ -12,15 +12,16 @@ function buildTotals(
   stores: StoreLocation[],
   deals: ItemStoreDeal[],
   itemCount: number,
+  mode: 'live' | 'sample',
 ): StoreCartTotal[] {
   return stores.map((store) => {
     const storeDeals = deals.filter((d) => d.storeId === store.id);
     const subtotal = storeDeals.reduce((sum, d) => sum + d.lineTotal, 0);
     const promoCount = storeDeals.filter((d) => d.promoLabel).length;
     const pricesAvailable =
-      store.pricingSource === 'kroger' ||
-      store.pricingSource === 'sample' ||
-      storeDeals.some((d) => d.priceSource === 'community');
+      mode === 'sample'
+        ? storeDeals.length > 0
+        : storeDeals.some((d) => d.priceSource === 'kroger' || d.priceSource === 'community');
     const itemCountPriced = storeDeals.length;
     const rankScore = pricesAvailable ? itemCountPriced * 1000 - subtotal : itemCountPriced;
     return {
@@ -46,10 +47,14 @@ function buildSuggestion(
   const sortedByCoverage = [...totals].sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
   const bestCoverage = sortedByCoverage[0];
 
-  const sortedPrice = [...pricedTotals].sort((a, b) => a.subtotal - b.subtotal);
-  const cheapest = sortedPrice[0];
+  const realPricedTotals = pricedTotals.filter((t) => {
+    const storeDeals = deals.filter((d) => d.storeId === t.storeId);
+    return storeDeals.some((d) => d.priceSource === 'kroger' || d.priceSource === 'community');
+  });
+  const rankingTotals = mode === 'sample' ? pricedTotals : realPricedTotals;
+  const cheapestRanked = [...rankingTotals].sort((a, b) => a.subtotal - b.subtotal)[0];
 
-  if (!cheapest && bestCoverage) {
+  if (!cheapestRanked && bestCoverage) {
     const store = stores.find((s) => s.id === bestCoverage.storeId);
     return {
       kind: 'single_store',
@@ -60,14 +65,19 @@ function buildSuggestion(
     };
   }
 
-  if (!cheapest) {
+  if (!cheapestRanked) {
     return { kind: 'single_store', label: 'No stores selected', storeIds: [], estimatedTotal: 0 };
   }
+
+  const rankingDeals =
+    mode === 'sample'
+      ? deals
+      : deals.filter((d) => d.priceSource === 'kroger' || d.priceSource === 'community');
 
   const splitStoreIds = new Set<string>();
   let splitTotal = 0;
   for (const itemId of itemIds) {
-    const itemDeals = deals.filter((d) => d.groceryItemId === itemId);
+    const itemDeals = rankingDeals.filter((d) => d.groceryItemId === itemId);
     if (itemDeals.length === 0) continue;
     const cheapestDeal = itemDeals.reduce((a, b) => (a.lineTotal < b.lineTotal ? a : b));
     splitStoreIds.add(cheapestDeal.storeId);
@@ -75,7 +85,7 @@ function buildSuggestion(
   }
   splitTotal = Math.round(splitTotal * 100) / 100;
 
-  if (splitStoreIds.size > 1 && splitTotal + 0.001 < cheapest.subtotal) {
+  if (splitStoreIds.size > 1 && splitTotal + 0.001 < cheapestRanked.subtotal) {
     const chains = [...splitStoreIds]
       .map((id) => stores.find((s) => s.id === id)?.chain ?? 'store')
       .join(' + ');
@@ -88,17 +98,17 @@ function buildSuggestion(
     };
   }
 
-  const store = stores.find((s) => s.id === cheapest.storeId);
+  const store = stores.find((s) => s.id === cheapestRanked.storeId);
   const coverageNote =
-    bestCoverage && bestCoverage.storeId !== cheapest.storeId
+    bestCoverage && bestCoverage.storeId !== cheapestRanked.storeId
       ? `Best coverage: ${stores.find((s) => s.id === bestCoverage.storeId)?.chain ?? 'store'} (${bestCoverage.itemCount}/${itemIds.length} items priced).`
       : undefined;
 
   return {
     kind: 'single_store',
     label: store ? `Best value: ${store.chain}` : 'Cheapest store',
-    storeIds: [cheapest.storeId],
-    estimatedTotal: cheapest.subtotal,
+    storeIds: [cheapestRanked.storeId],
+    estimatedTotal: cheapestRanked.subtotal,
     note: coverageNote,
   };
 }
@@ -112,7 +122,7 @@ export function assembleDealsResult(params: {
   deals: ItemStoreDeal[];
   items: GroceryListItem[];
 }): DealsSearchResult {
-  const storeTotals = buildTotals(params.stores, params.deals, params.items.length);
+  const storeTotals = buildTotals(params.stores, params.deals, params.items.length, params.mode);
   const sortedTotals = [...storeTotals].sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
   return {
     mode: params.mode,

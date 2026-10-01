@@ -169,15 +169,18 @@ create trigger on_auth_user_created
 -- RLS policies (drop + recreate for idempotency)
 drop policy if exists profiles_select_self on public.profiles;
 create policy profiles_select_self on public.profiles
-  for select using (auth.uid() = id or public.is_admin());
+  for select
+  to authenticated
+  using (auth.uid() = id);
 
 drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles
-  for update using (auth.uid() = id);
+  for update
+  to authenticated
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
 
 drop policy if exists profiles_admin_all on public.profiles;
-create policy profiles_admin_all on public.profiles
-  for all using (public.is_admin());
 
 drop policy if exists feature_flags_read on public.feature_flags;
 create policy feature_flags_read on public.feature_flags
@@ -195,25 +198,40 @@ create policy pantry_owner on public.pantry_items
   with check (auth.uid() = user_id);
 
 drop policy if exists pantry_admin_read on public.pantry_items;
-create policy pantry_admin_read on public.pantry_items
-  for select
-  to authenticated
-  using (public.is_admin());
-
 drop policy if exists pantry_admin_write on public.pantry_items;
-create policy pantry_admin_write on public.pantry_items
-  for all
-  to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
 
 drop policy if exists recipes_read on public.recipes;
 create policy recipes_read on public.recipes
-  for select using (auth.role() = 'authenticated');
+  for select
+  to authenticated
+  using (
+    auth.role() = 'authenticated'
+    and (is_master or created_by = auth.uid())
+  );
 
 drop policy if exists recipes_admin_write on public.recipes;
-create policy recipes_admin_write on public.recipes
-  for all using (public.is_admin());
+drop policy if exists recipes_admin_master_all on public.recipes;
+create policy recipes_admin_master_all on public.recipes
+  for all
+  to authenticated
+  using (public.is_admin() and is_master)
+  with check (public.is_admin() and is_master);
+
+drop policy if exists recipes_user_insert on public.recipes;
+create policy recipes_user_insert on public.recipes
+  for insert
+  with check (auth.uid() = created_by and is_master = false);
+
+drop policy if exists recipes_user_update on public.recipes;
+create policy recipes_user_update on public.recipes
+  for update
+  using (auth.uid() = created_by and is_master = false)
+  with check (auth.uid() = created_by and is_master = false);
+
+drop policy if exists recipes_user_delete on public.recipes;
+create policy recipes_user_delete on public.recipes
+  for delete
+  using (auth.uid() = created_by and is_master = false);
 
 drop policy if exists grocery_owner on public.grocery_list_items;
 create policy grocery_owner on public.grocery_list_items

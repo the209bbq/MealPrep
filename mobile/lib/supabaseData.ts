@@ -4,7 +4,9 @@ import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
 import { formatSupabaseError, isMissingSchemaError } from './supabaseErrors';
 import { normalizePantryStorageLocation } from '../config/pantryStorage';
 import { pantryPhotoUrlForStorage } from './pantryPhotoStorage';
+import { deleteScanPhoto } from './scanPhotos/client';
 import { withTimeout } from './withTimeout';
+import { groceryDedupeKey } from './recipeMatch/groceryFromMissing';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
 import type {
   FeatureFlagKey,
@@ -45,6 +47,7 @@ type PantryRow = {
   unit: string;
   location: string | null;
   photo_url: string | null;
+  scan_photo_path: string | null;
   expires_on: string | null;
   updated_at: string;
 };
@@ -82,6 +85,16 @@ type GroceryRow = {
 };
 
 type FlagRow = { key: string; enabled: boolean };
+
+type AdminAnalyticsJson = {
+  user_count: number;
+  admin_count: number;
+  member_count: number;
+  pantry_items_total: number;
+  recipes_total: number;
+  grocery_open_total: number;
+  meal_plan_items_total?: number;
+};
 
 type MealPlanRow = {
   id: string;
@@ -142,6 +155,7 @@ export function mapPantry(row: PantryRow): PantryItem {
     unit: row.unit,
     location: normalizePantryStorageLocation(row.location),
     photoUri: row.photo_url,
+    scanPhotoPath: row.scan_photo_path ?? null,
     expiresOn: row.expires_on,
     updatedAt: row.updated_at,
   };
@@ -206,7 +220,7 @@ export function mapFeatureFlags(rows: FlagRow[]): FeatureFlags {
 }
 
 export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
-  const [profileRes, pantryRes, recipesRes, groceryRes, flagsRes, countsRes, mealPlanRes] = await Promise.all([
+  const [profileRes, pantryRes, recipesRes, groceryRes, flagsRes, mealPlanRes] = await Promise.all([
     client.from('profiles').select('*').eq('id', userId).maybeSingle(),
     client.from('pantry_items').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
     client
@@ -216,7 +230,6 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
       .order('created_at', { ascending: true }),
     client.from('grocery_list_items').select('*').eq('user_id', userId).order('name'),
     client.from('feature_flags').select('key, enabled'),
-    client.from('profiles').select('role', { count: 'exact', head: false }),
     client
       .from('meal_plan_items')
       .select('*')
@@ -231,18 +244,33 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
   if (flagsRes.error) throw flagsRes.error;
   if (mealPlanRes.error && mealPlanRes.error.code !== 'PGRST205') throw mealPlanRes.error;
 
-  const profiles = (countsRes.data ?? []) as { role: UserRole }[];
-  const adminCount = profiles.filter((p) => p.role === 'admin').length;
+  const profileRole = profileRes.data ? (profileRes.data as ProfileRow).role : null;
 
-  const analytics: UserAnalytics = {
-    userCount: profiles.length,
-    adminCount,
-    memberCount: profiles.length - adminCount,
-    pantryItems: pantryRes.data?.length ?? 0,
-    recipes: recipesRes.data?.length ?? 0,
-    groceryOpen: (groceryRes.data ?? []).filter((g: GroceryRow) => !g.checked).length,
-    lastActiveAt: new Date().toISOString(),
-  };
+  let analytics: UserAnalytics;
+  if (profileRole === 'admin') {
+    const { data: agg, error: aggError } = await client.rpc('admin_analytics');
+    if (aggError) throw aggError;
+    const counts = agg as AdminAnalyticsJson;
+    analytics = {
+      userCount: Number(counts.user_count),
+      adminCount: Number(counts.admin_count),
+      memberCount: Number(counts.member_count),
+      pantryItems: Number(counts.pantry_items_total),
+      recipes: Number(counts.recipes_total),
+      groceryOpen: Number(counts.grocery_open_total),
+      lastActiveAt: new Date().toISOString(),
+    };
+  } else {
+    analytics = {
+      userCount: 1,
+      adminCount: 0,
+      memberCount: 1,
+      pantryItems: pantryRes.data?.length ?? 0,
+      recipes: recipesRes.data?.length ?? 0,
+      groceryOpen: (groceryRes.data ?? []).filter((g: GroceryRow) => !g.checked).length,
+      lastActiveAt: new Date().toISOString(),
+    };
+  }
 
   return {
     profile: profileRes.data ? mapProfile(profileRes.data as ProfileRow) : null,
@@ -265,6 +293,7 @@ function pantryInsertRow(userId: string, item: PantryItem) {
     unit: item.unit,
     location: item.location,
     photo_url: pantryPhotoUrlForStorage(item.photoUri),
+    scan_photo_path: item.scanPhotoPath?.trim() || null,
     expires_on: item.expiresOn,
   };
 }
@@ -329,6 +358,7 @@ export async function updatePantryItem(
       unit: item.unit,
       location: item.location,
       photo_url: pantryPhotoUrlForStorage(item.photoUri),
+      scan_photo_path: item.scanPhotoPath?.trim() || null,
       expires_on: item.expiresOn,
       updated_at: new Date().toISOString(),
     })
@@ -346,13 +376,44 @@ export async function deletePantryItemsByIds(
   ids: string[],
 ): Promise<void> {
   if (ids.length === 0) return;
+  const { data: rows, error: selectError } = await client
+    .from('pantry_items')
+    .select('scan_photo_path')
+    .eq('user_id', userId)
+    .in('id', ids);
+  if (selectError) throw selectError;
+
   const { error } = await client.from('pantry_items').delete().eq('user_id', userId).in('id', ids);
   if (error) throw error;
+
+  const paths = new Set(
+    (rows ?? [])
+      .map((row) => (row as { scan_photo_path: string | null }).scan_photo_path)
+      .filter((path): path is string => Boolean(path?.trim())),
+  );
+  for (const path of paths) {
+    void deleteScanPhoto(path);
+  }
 }
 
 export async function deleteAllPantryItems(client: SupabaseClient, userId: string): Promise<void> {
+  const { data: rows, error: selectError } = await client
+    .from('pantry_items')
+    .select('scan_photo_path')
+    .eq('user_id', userId);
+  if (selectError) throw selectError;
+
   const { error } = await client.from('pantry_items').delete().eq('user_id', userId);
   if (error) throw error;
+
+  const paths = new Set(
+    (rows ?? [])
+      .map((row) => (row as { scan_photo_path: string | null }).scan_photo_path)
+      .filter((path): path is string => Boolean(path?.trim())),
+  );
+  for (const path of paths) {
+    void deleteScanPhoto(path);
+  }
 }
 
 export async function upsertImportedRecipe(
@@ -437,6 +498,14 @@ function groceryRowKey(ingredientId: string, unit: string): string {
   return `${ingredientId}::${unit}`;
 }
 
+function groceryNameUnitKey(name: string, unit: string): string {
+  return groceryDedupeKey(name, unit);
+}
+
+function isManualGroceryRow(row: GroceryRow): boolean {
+  return row.ingredient_id.startsWith('manual-');
+}
+
 function isPersistedGroceryId(id: string, existingIds: Set<string>): boolean {
   return existingIds.has(id);
 }
@@ -456,15 +525,18 @@ export async function replaceGroceryList(
   const existingById = new Map(existing.map((row) => [row.id, row]));
   const existingIds = new Set(existing.map((row) => row.id));
   const existingByKey = new Map(existing.map((row) => [groceryRowKey(row.ingredient_id, row.unit), row]));
+  const existingByNameUnit = new Map(existing.map((row) => [groceryNameUnitKey(row.name, row.unit), row]));
 
   const persisted: GroceryListItem[] = [];
   const keptIds = new Set<string>();
 
   for (const item of items) {
     const key = groceryRowKey(item.ingredientId, item.unit);
+    const nameKey = groceryNameUnitKey(item.name, item.unit);
     const matched =
       (isPersistedGroceryId(item.id, existingIds) ? existingById.get(item.id) : undefined) ??
-      existingByKey.get(key);
+      existingByKey.get(key) ??
+      existingByNameUnit.get(nameKey);
 
     const payload = {
       user_id: userId,
@@ -497,7 +569,9 @@ export async function replaceGroceryList(
     persisted.push(mapGrocery(data as GroceryRow));
   }
 
-  const toRemove = existing.filter((row) => !keptIds.has(row.id)).map((row) => row.id);
+  const toRemove = existing
+    .filter((row) => !keptIds.has(row.id) && !isManualGroceryRow(row))
+    .map((row) => row.id);
   if (toRemove.length > 0) {
     const { error: deleteError } = await client.from('grocery_list_items').delete().eq('user_id', userId).in('id', toRemove);
     if (deleteError) throw deleteError;
@@ -520,20 +594,45 @@ export async function insertGroceryItem(
   userId: string,
   item: GroceryListItem,
 ): Promise<GroceryListItem> {
-  const { data, error } = await client
+  const { data: existingRows, error: fetchError } = await client
     .from('grocery_list_items')
-    .insert({
-      user_id: userId,
-      ingredient_id: item.ingredientId,
-      name: item.name,
-      category: item.category,
-      quantity: item.quantity,
-      unit: item.unit,
-      checked: item.checked,
-      source_recipe_ids: item.sourceRecipeIds,
-    })
     .select('*')
-    .single();
+    .eq('user_id', userId);
+  if (fetchError) throw fetchError;
+
+  const existing = (existingRows ?? []) as GroceryRow[];
+  const nameKey = groceryNameUnitKey(item.name, item.unit);
+  const matched =
+    existing.find((row) => groceryRowKey(row.ingredient_id, row.unit) === groceryRowKey(item.ingredientId, item.unit)) ??
+    existing.find((row) => groceryNameUnitKey(row.name, row.unit) === nameKey);
+
+  const payload = {
+    user_id: userId,
+    ingredient_id: item.ingredientId,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    unit: item.unit,
+    checked: item.checked,
+    source_recipe_ids: item.sourceRecipeIds,
+  };
+
+  if (matched) {
+    const { data, error } = await client
+      .from('grocery_list_items')
+      .update({
+        ...payload,
+        quantity: matched.quantity + item.quantity,
+      })
+      .eq('id', matched.id)
+      .eq('user_id', userId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapGrocery(data as GroceryRow);
+  }
+
+  const { data, error } = await client.from('grocery_list_items').insert(payload).select('*').single();
   if (error) throw error;
   return mapGrocery(data as GroceryRow);
 }

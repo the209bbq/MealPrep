@@ -9,12 +9,13 @@ import { formatMoney } from '../../lib/smartShop/aggregateDeals';
 import {
   addCommunityDeal,
   deleteCommunityDeal,
-  formatReportedAgo,
+  formatReportedLight,
   voteCommunityDeal,
 } from '../../lib/communityDeals/client';
 import { isPastLocalDate, localDateString } from '../../lib/communityDeals/localDate';
 import { getSupabase } from '../../lib/supabase';
 import type { CommunityStoreDeal } from '../../lib/communityDeals/types';
+import { ViewScanPhotoButton } from '../ViewScanPhotoButton';
 
 interface StoreCommunityDealsSectionProps {
   store: StoreLocation;
@@ -74,8 +75,8 @@ export function StoreCommunityDealsSection({
     onRefresh();
   }
 
-  async function handleVote(dealId: string, vote: 'confirm' | 'expired') {
-    const res = await voteCommunityDeal(dealId, vote);
+  async function handleVote(dealId: string, vote: 'confirm' | 'expired', reportedBy: string) {
+    const res = await voteCommunityDeal(dealId, vote, { reportedBy });
     if (!res.ok) {
       setFormError(res.error ?? 'Could not save vote');
       return;
@@ -170,16 +171,16 @@ export function StoreCommunityDealsSection({
                   </Text>
                   {deal.note ? <Text className="mt-1 text-xs text-muted">{deal.note}</Text> : null}
                   <Text className="mt-1 text-xs text-muted">
-                    Reported {formatReportedAgo(deal.createdAt)}
+                    {formatReportedLight(deal.createdAt)}
                     {deal.confirmCount ? ` · ${deal.confirmCount} confirmed` : ''}
                     {expired ? ' · Expired' : ''}
                   </Text>
                 </View>
               </View>
-              {!deal.isSample ? (
+              {!deal.isSample && !isOwn ? (
                 <View className="mt-2 flex-row flex-wrap gap-2">
                   <Pressable
-                    onPress={() => void handleVote(deal.id, 'confirm')}
+                    onPress={() => void handleVote(deal.id, 'confirm', deal.reportedBy)}
                     className={`rounded-lg px-2 py-1 ${deal.myVote === 'confirm' ? 'bg-success' : 'bg-success-light'}`}
                   >
                     <Text
@@ -189,19 +190,22 @@ export function StoreCommunityDealsSection({
                     </Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => void handleVote(deal.id, 'expired')}
+                    onPress={() => void handleVote(deal.id, 'expired', deal.reportedBy)}
                     className={`rounded-lg px-2 py-1 ${deal.myVote === 'expired' ? 'bg-danger/20' : 'bg-paper'}`}
                   >
                     <Text className="text-xs font-semibold text-danger">Expired</Text>
                   </Pressable>
-                  {isOwn ? (
-                    <Pressable
-                      onPress={() => void handleDelete(deal.id)}
-                      className="rounded-lg border border-danger/40 px-2 py-1"
-                    >
-                      <Text className="text-xs font-semibold text-danger">Delete</Text>
-                    </Pressable>
-                  ) : null}
+                </View>
+              ) : null}
+              {!deal.isSample && isOwn ? (
+                <View className="mt-2">
+                  <ViewScanPhotoButton scanPhotoPath={deal.scanPhotoPath} />
+                  <Pressable
+                    onPress={() => void handleDelete(deal.id)}
+                    className="mt-2 self-start rounded-lg border border-danger/40 px-2 py-1"
+                  >
+                    <Text className="text-xs font-semibold text-danger">Delete</Text>
+                  </Pressable>
                 </View>
               ) : null}
             </View>

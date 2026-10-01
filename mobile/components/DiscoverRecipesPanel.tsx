@@ -170,7 +170,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
       >
         <View className="flex-1 pr-3">
           <Text className="text-base font-bold text-ink">Recipe List</Text>
-          <Text className="mt-1 text-sm text-muted">Optional RecipeAPI search when you want new meals beyond your pantry matches.</Text>
+          <Text className="mt-1 text-sm text-muted">Optional recipe search when you want new meals beyond your pantry matches.</Text>
         </View>
         <Ionicons name="chevron-down" size={22} color={THEME.muted} />
       </Pressable>
@@ -184,13 +184,13 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
         <Ionicons name="chevron-up" size={22} color={THEME.muted} />
       </Pressable>
       <Text className="mt-1 text-sm text-muted">
-        Search RecipeAPI.io when you want new ideas — results rank by pantry ingredient matches.
+        Search online recipes when you want new ideas — results rank by pantry ingredient matches.
       </Text>
 
       {demoMode ? (
         <View className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
           <Text className="text-xs font-semibold text-amber-900">Demo mode</Text>
-          <Text className="mt-1 text-xs text-amber-800">Sample results only until Supabase + recipeapi-proxy are connected.</Text>
+          <Text className="mt-1 text-xs text-amber-800">Sample results only until you sign in with a connected account.</Text>
         </View>
       ) : null}
 
@@ -198,7 +198,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
         <Card className="mt-3 border-dashed">
           <Text className="text-sm font-semibold text-ink">Not set up yet</Text>
           <Text className="mt-2 text-sm text-muted">
-            Add RECIPEAPI_KEY in Supabase and deploy recipeapi-proxy. See mobile/docs/RECIPE_DISCOVERY.md.
+            Recipe search isn’t connected yet. Ask an admin to finish setup, then try again.
           </Text>
         </Card>
       ) : null}

@@ -15,6 +15,13 @@ import {
 } from '../config/pantryStorage';
 import { DEFAULT_FEATURE_FLAGS, MOCK_PANTRY, MOCK_RECIPES, profileForRole } from '../data/mockData';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
+import {
+  addGroceryDismissals,
+  clearGroceryDismissals,
+  groceryDismissalKey,
+  readGroceryDismissals,
+} from '../lib/grocery/dismissals';
+import { enqueueGroceryPersist } from '../lib/grocery/persistQueue';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
 import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
@@ -84,6 +91,27 @@ const STORAGE_KEYS = {
   flags: 'mealprep.featureFlags',
   userPreferences: 'mealprep.userPreferences',
 };
+
+function initialMealPlan(demoMode: boolean): MealPlanItem[] {
+  if (!demoMode) return [];
+  const stored = readJson<MealPlanItem[] | null>(STORAGE_KEYS.mealPlan, null);
+  if (stored && stored.length > 0) return stored;
+  const legacyIds = readJson<string[]>(STORAGE_KEYS.selectedRecipes, ['lemon-chicken', 'pulled-pork']);
+  const now = new Date().toISOString();
+  return legacyIds.map((slug) => {
+    const recipe = MOCK_RECIPES.find((r) => r.id === slug);
+    return {
+      id: `demo-plan-${slug}`,
+      recipeSlug: slug,
+      recipeApiId: null,
+      title: recipe?.name ?? slug,
+      imageUrl: null,
+      made: false,
+      madeAt: null,
+      addedAt: now,
+    };
+  });
+}
 
 const GUEST_PROFILE: UserProfile = {
   id: '',
@@ -180,7 +208,7 @@ interface AppContextValue {
   clearAllPantry: () => Promise<void>;
   previewPantryResort: () => PantryResortPreview;
   resortPantryItemsInDefaultLocation: () => Promise<PantryResortPreview>;
-  savePantryScanReview: (items: PantryScanReviewItem[]) => Promise<void>;
+  savePantryScanReview: (items: PantryScanReviewItem[], scanPhotoPath?: string | null) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
   pantryRecipeMatches: PantryMatchIndex;
@@ -205,27 +233,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ? normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY))
       : [],
   );
-  const [recipes, setRecipes] = useState<Recipe[]>(() => readJson(STORAGE_KEYS.recipes, MOCK_RECIPES));
-  const [grocery, setGrocery] = useState<GroceryListItem[]>(() => readJson(STORAGE_KEYS.grocery, []));
-  const [mealPlan, setMealPlan] = useState<MealPlanItem[]>(() => {
-    const stored = readJson<MealPlanItem[] | null>(STORAGE_KEYS.mealPlan, null);
-    if (stored && stored.length > 0) return stored;
-    const legacyIds = readJson<string[]>(STORAGE_KEYS.selectedRecipes, ['lemon-chicken', 'pulled-pork']);
-    const now = new Date().toISOString();
-    return legacyIds.map((slug) => {
-      const recipe = MOCK_RECIPES.find((r) => r.id === slug);
-      return {
-      id: `demo-plan-${slug}`,
-      recipeSlug: slug,
-      recipeApiId: null,
-      title: recipe?.name ?? slug,
-      imageUrl: null,
-        made: false,
-        madeAt: null,
-        addedAt: now,
-    };
-    });
-  });
+  const [recipes, setRecipes] = useState<Recipe[]>(() =>
+    demoMode ? readJson(STORAGE_KEYS.recipes, MOCK_RECIPES) : [],
+  );
+  const [grocery, setGrocery] = useState<GroceryListItem[]>(() =>
+    demoMode ? readJson(STORAGE_KEYS.grocery, []) : [],
+  );
+  const [mealPlan, setMealPlan] = useState<MealPlanItem[]>(() => initialMealPlan(demoMode));
+  const [liveDataLoaded, setLiveDataLoaded] = useState(demoMode);
   const [servingOverrides, setServingOverrides] = useState<Record<string, number>>(() =>
     readJson(STORAGE_KEYS.servingOverrides, {}),
   );
@@ -262,6 +277,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const loadLiveData = useCallback(async () => {
     if (!supabase || !userId) return;
+    setLiveDataLoaded(false);
     const bundle = await fetchLiveBundle(supabase, userId);
     if (bundle.profile) {
       setLiveProfile(bundle.profile);
@@ -269,12 +285,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       hydrateLocationFromProfile(bundle.profile);
     }
     removeStorageKey(STORAGE_KEYS.pantry);
+    removeStorageKey(STORAGE_KEYS.grocery);
+    removeStorageKey(STORAGE_KEYS.mealPlan);
+    removeStorageKey(STORAGE_KEYS.recipes);
     setPantry(normalizePantryItemList(bundle.pantry));
     setRecipes(bundle.recipes.length > 0 ? bundle.recipes : []);
     setGrocery(bundle.grocery);
     setFeatureFlags(bundle.featureFlags);
     setMealPlan(bundle.mealPlan ?? []);
     setLiveAnalytics(bundle.analytics);
+    setLiveDataLoaded(true);
   }, [supabase, userId]);
 
   useEffect(() => {
@@ -304,33 +324,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLiveProfile(null);
         setLiveAnalytics(null);
         setPantry([]);
+        setRecipes([]);
+        setGrocery([]);
+        setMealPlan([]);
+        setServingOverrides({});
+        setLiveDataLoaded(false);
       }
       return;
     }
     void loadLiveData().catch((error: unknown) => {
+      setLiveDataLoaded(true);
       setAuthError(error instanceof Error ? error.message : 'Failed to load kitchen data');
     });
   }, [demoMode, userId, loadLiveData]);
 
   const refreshGrocery = useCallback(() => {
     if (!featureFlags.grocerySync) return;
+    if (!demoMode && userId && !liveDataLoaded) return;
+    const dismissals = readGroceryDismissals(ownerId);
     setGrocery((prev) => {
-      const next = buildGroceryList(recipes, plannedRecipeIds, pantry, servingOverrides, prev);
+      const next = buildGroceryList(recipes, plannedRecipeIds, pantry, servingOverrides, prev, {
+        groceryDismissals: dismissals,
+      });
       if (demoMode) {
         writeJson(STORAGE_KEYS.grocery, next);
         return next;
       }
       if (supabase && userId) {
-        void replaceGroceryList(supabase, userId, next)
-          .then((persisted) => setGrocery(persisted))
-          .catch((error: unknown) => {
-            setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
-          });
+        void enqueueGroceryPersist(() =>
+          replaceGroceryList(supabase, userId, next).then((persisted) => {
+            setGrocery(persisted);
+          }),
+        ).catch((error: unknown) => {
+          setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
+        });
         return next;
       }
       return next;
     });
-  }, [demoMode, featureFlags.grocerySync, pantry, plannedRecipeIds, recipes, servingOverrides, supabase, userId]);
+  }, [
+    demoMode,
+    featureFlags.grocerySync,
+    liveDataLoaded,
+    ownerId,
+    pantry,
+    plannedRecipeIds,
+    recipes,
+    servingOverrides,
+    supabase,
+    userId,
+  ]);
 
   useEffect(() => {
     refreshGrocery();
@@ -443,12 +486,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     if (!supabase) return;
     setAuthError(null);
+    const signedOutOwnerId = profile.id;
     await supabase.auth.signOut();
+    if (signedOutOwnerId) clearGroceryDismissals(signedOutOwnerId);
     setLiveProfile(null);
     setLiveAnalytics(null);
-    removeStorageKey(STORAGE_KEYS.pantry);
     setPantry([]);
-  }, [supabase]);
+    setRecipes([]);
+    setGrocery([]);
+    setMealPlan([]);
+    setServingOverrides({});
+    setUndoToast(null);
+    setMealMadeReview(null);
+    setMealMadeUndo(null);
+    setLiveDataLoaded(false);
+    for (const key of Object.values(STORAGE_KEYS)) {
+      removeStorageKey(key);
+    }
+  }, [profile.id, supabase]);
 
   const isOnMealPlan = useCallback(
     (options: { recipeSlug?: string; recipeApiId?: number }) =>
@@ -460,11 +515,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (next: GroceryListItem[]) => {
       if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
       if (!demoMode && supabase && userId) {
-        void replaceGroceryList(supabase, userId, next)
-          .then((persisted) => setGrocery(persisted))
-          .catch((error: unknown) => {
-            setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
-          });
+        void enqueueGroceryPersist(() =>
+          replaceGroceryList(supabase, userId, next).then((persisted) => {
+            setGrocery(persisted);
+            return persisted;
+          }),
+        ).catch((error: unknown) => {
+          setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
+        });
       }
     },
     [demoMode, supabase, userId],
@@ -480,13 +538,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUndoToast({
         message: label,
         onUndo: () => {
+          const dismissalKeys = added.flatMap((item) =>
+            item.sourceRecipeIds.map((recipeId) =>
+              groceryDismissalKey(recipeId, item.name, item.unit),
+            ),
+          );
+          addGroceryDismissals(ownerId, dismissalKeys);
           setGrocery(previous);
           persistGroceryList(previous);
           setUndoToast(null);
         },
       });
     },
-    [persistGroceryList],
+    [ownerId, persistGroceryList],
   );
 
   const appendMissingIngredientsForRecipe = useCallback(
@@ -495,12 +559,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!match || match.missing.length === 0) return 0;
 
       let addedCount = 0;
+      const dismissals = readGroceryDismissals(ownerId);
       setGrocery((prev) => {
         const { items: next, added } = mergeMissingIntoGrocery({
           missing: match.missing,
           recipeId,
           pantry,
           previous: prev,
+          groceryDismissals: dismissals,
         });
         addedCount = added.length;
         if (added.length > 0) {
@@ -511,7 +577,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       return addedCount;
     },
-    [pantry, pantryRecipeMatches.byRecipeId, persistGroceryList, showGroceryAddedToast],
+    [ownerId, pantry, pantryRecipeMatches.byRecipeId, persistGroceryList, showGroceryAddedToast],
   );
 
   const removeMealPlanItem = useCallback(
@@ -773,7 +839,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const next = [...prev, item];
         if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
         if (supabase && userId) {
-          void insertGroceryItem(supabase, userId, item)
+          void enqueueGroceryPersist(() => insertGroceryItem(supabase, userId, item))
             .then((saved) => setGrocery((current) => [...current.filter((g) => g.id !== item.id), saved]))
             .catch((error: unknown) => {
               setAuthError(error instanceof Error ? error.message : 'Failed to add grocery item');
@@ -901,6 +967,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addMissingForPlannedMealsToGrocery = useCallback(() => {
+    const dismissals = readGroceryDismissals(ownerId);
     setGrocery((prev) => {
       let next = prev;
       const allAdded: GroceryListItem[] = [];
@@ -912,6 +979,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           recipeId,
           pantry,
           previous: next,
+          groceryDismissals: dismissals,
         });
         next = result.items;
         allAdded.push(...result.added);
@@ -922,7 +990,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return next;
     });
-  }, [pantry, pantryRecipeMatches.byRecipeId, persistGroceryList, plannedRecipeIds, showGroceryAddedToast]);
+  }, [ownerId, pantry, pantryRecipeMatches.byRecipeId, persistGroceryList, plannedRecipeIds, showGroceryAddedToast]);
 
   const addPantryFromScan = useCallback(
     (name: string, photoUri: string | null) => {
@@ -1073,8 +1141,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, pantry.length, supabase, userId]);
 
   const savePantryScanReview = useCallback(
-    async (items: PantryScanReviewItem[]) => {
-      const toSave = reviewItemsToPantryItems(items);
+    async (items: PantryScanReviewItem[], scanPhotoPath?: string | null) => {
+      const toSave = reviewItemsToPantryItems(items, scanPhotoPath);
       if (toSave.length === 0) return;
 
       if (demoMode) {

@@ -46,10 +46,13 @@ jobs:
           cp -a New/. _site/
           cp -a mobile/dist/. _site/app/
           touch _site/.nojekyll
+          test -f _site/app/404.html || (echo "missing SPA 404 fallback in mobile/dist" && exit 1)
           cd _site/app
-          for route in admin pantry grocery recipes; do
-            mkdir -p "$route"
-            cp "$route.html" "$route/index.html"
+          for route in admin pantry grocery recipes smart-shop discover-recipes; do
+            if [ -f "$route.html" ]; then
+              mkdir -p "$route"
+              cp "$route.html" "$route/index.html"
+            fi
           done
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3

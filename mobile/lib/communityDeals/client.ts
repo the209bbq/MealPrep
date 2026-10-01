@@ -1,8 +1,11 @@
 import { COMMUNITY_DEALS } from '../../config/communityDeals';
 import { isDemoMode } from '../../config/appConfig';
 import { getSupabase } from '../supabase';
+import { deleteScanPhoto } from '../scanPhotos/client';
 import { demoCommunityDeals } from './demoSamples';
 import { isPastLocalDate, localDateString } from './localDate';
+import { resolvePriceValidity } from './priceValidity';
+import type { CommunityPriceKind } from './types';
 import type {
   AddCommunityDealInput,
   CommunityStoreDeal,
@@ -20,8 +23,10 @@ type DealRow = {
   unit: string | null;
   note: string | null;
   valid_until: string | null;
+  price_kind: string | null;
   reported_by: string;
   created_at: string;
+  scan_photo_path: string | null;
 };
 
 type VoteRow = {
@@ -58,11 +63,13 @@ function mapDealRow(
     unit: row.unit ?? undefined,
     note: row.note ?? undefined,
     validUntil: row.valid_until ?? undefined,
+    priceKind: (row.price_kind === 'sale' ? 'sale' : 'regular') as CommunityPriceKind,
     reportedBy: row.reported_by,
     createdAt: row.created_at,
     confirmCount,
     expiredCount,
     myVote,
+    scanPhotoPath: row.scan_photo_path ?? undefined,
   };
 }
 
@@ -104,7 +111,7 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
   const { data: dealRows, error: dealsError } = await client
     .from('store_deals')
     .select(
-      'id, store_key, osm_store_id, store_name, item_name, price, unit, note, valid_until, reported_by, created_at',
+      'id, store_key, osm_store_id, store_name, item_name, price, unit, note, valid_until, price_kind, reported_by, created_at, scan_photo_path',
     )
     .in('store_key', uniqueKeys)
     .order('created_at', { ascending: false });
@@ -142,26 +149,22 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
 
 export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ ok: boolean; error?: string }> {
   if (isDemoMode()) {
-    return { ok: false, error: 'Sign in with Supabase to report deals (demo shows sample deals only).' };
+    return { ok: false, error: 'Sign in to report prices (demo shows sample prices only).' };
   }
 
   const client = getSupabase();
-  if (!client) return { ok: false, error: 'Supabase is not configured.' };
+  if (!client) return { ok: false, error: 'Account sync isn’t set up on this device.' };
 
   const { data: userData } = await client.auth.getUser();
   const userId = userData.user?.id;
   if (!userId) return { ok: false, error: 'Sign in to add a community deal.' };
 
-  const validUntil =
-    input.validUntil?.trim() ||
-    (() => {
-      const d = new Date();
-      d.setDate(d.getDate() + COMMUNITY_DEALS.defaultValidDays);
-      return localDateString(d);
-    })();
+  const { priceKind, validUntil } = resolvePriceValidity({
+    saleValidUntil: input.saleValidUntil ?? input.validUntil,
+  });
 
   if (isPastLocalDate(validUntil)) {
-    return { ok: false, error: 'Valid until must be today or a future date.' };
+    return { ok: false, error: 'Sale end date must be today or later.' };
   }
 
   const { error } = await client.from('store_deals').insert({
@@ -173,7 +176,9 @@ export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ 
     unit: input.unit?.trim() || null,
     note: input.note?.trim() || null,
     valid_until: validUntil,
+    price_kind: priceKind,
     reported_by: userId,
+    scan_photo_path: input.scanPhotoPath?.trim() || null,
   });
 
   if (isMissingTableError(error)) {
@@ -186,15 +191,28 @@ export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ 
 
 export async function deleteCommunityDeal(dealId: string): Promise<{ ok: boolean; error?: string }> {
   if (isDemoMode()) {
-    return { ok: false, error: 'Sign in with Supabase to manage deals (demo shows sample deals only).' };
+    return { ok: false, error: 'Sign in to manage prices (demo shows sample prices only).' };
   }
 
   const client = getSupabase();
-  if (!client) return { ok: false, error: 'Supabase is not configured.' };
+  if (!client) return { ok: false, error: 'Account sync isn’t set up on this device.' };
 
   const { data: userData } = await client.auth.getUser();
   const userId = userData.user?.id;
   if (!userId) return { ok: false, error: 'Sign in to delete a deal.' };
+
+  const { data: row, error: fetchError } = await client
+    .from('store_deals')
+    .select('scan_photo_path')
+    .eq('id', dealId)
+    .eq('reported_by', userId)
+    .maybeSingle();
+
+  if (isMissingTableError(fetchError)) {
+    return { ok: false, error: COMMUNITY_DEALS.migrationHint };
+  }
+
+  const photoPath = fetchError ? null : (row as { scan_photo_path?: string | null } | null)?.scan_photo_path;
 
   const { error } = await client.from('store_deals').delete().eq('id', dealId).eq('reported_by', userId);
 
@@ -203,23 +221,30 @@ export async function deleteCommunityDeal(dealId: string): Promise<{ ok: boolean
   }
   if (error) return { ok: false, error: error.message };
 
+  void deleteScanPhoto((row as { scan_photo_path?: string | null } | null)?.scan_photo_path);
+
   return { ok: true };
 }
 
 export async function voteCommunityDeal(
   dealId: string,
   vote: StoreDealVoteKind,
+  options?: { reportedBy?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   if (isDemoMode()) {
     return { ok: false, error: 'Votes are disabled in demo mode.' };
   }
 
   const client = getSupabase();
-  if (!client) return { ok: false, error: 'Supabase is not configured.' };
+  if (!client) return { ok: false, error: 'Account sync isn’t set up on this device.' };
 
   const { data: userData } = await client.auth.getUser();
   const userId = userData.user?.id;
-  if (!userId) return { ok: false, error: 'Sign in to vote on deals.' };
+  if (!userId) return { ok: false, error: 'Sign in to vote on prices.' };
+
+  if (options?.reportedBy && options.reportedBy === userId) {
+    return { ok: false, error: 'You cannot vote on a deal you reported.' };
+  }
 
   const { error } = await client.from('store_deal_votes').upsert(
     { deal_id: dealId, user_id: userId, vote },
@@ -232,6 +257,15 @@ export async function voteCommunityDeal(
   if (error) return { ok: false, error: error.message };
 
   return { ok: true };
+}
+
+export function formatReportedLight(iso: string): string {
+  const then = new Date(iso);
+  if (!Number.isFinite(then.getTime())) return 'Reported recently';
+  const today = localDateString();
+  const reportedDay = localDateString(then);
+  if (reportedDay === today) return 'Reported today';
+  return `Reported ${formatReportedAgo(iso)}`;
 }
 
 export function formatReportedAgo(iso: string): string {

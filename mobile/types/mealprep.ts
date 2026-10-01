@@ -64,6 +64,8 @@ export interface PantryItem {
   unit: string;
   location: PantryStorageLocation;
   photoUri: string | null;
+  /** Private storage path for the scan photo used when adding this item (if any). */
+  scanPhotoPath?: string | null;
   expiresOn: string | null;
   updatedAt: string;
 }

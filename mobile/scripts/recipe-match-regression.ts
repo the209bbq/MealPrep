@@ -134,6 +134,31 @@ const riceAfter = nextPantry.find((p) => p.name === 'rice');
 assert(chickenAfter && chickenAfter.quantity > 0 && chickenAfter.quantity < 2, 'chicken partially deducted in lb');
 assert(riceAfter && riceAfter.quantity === 5, 'rice left unchanged when cups vs lb');
 
+const eggRecipe = recipes[0];
+if (eggRecipe) {
+  const eggOnly: Recipe = {
+    ...eggRecipe,
+    id: 'egg-shortfall',
+    ingredients: [{ name: 'Eggs', ingredientId: 'eggs', quantity: 6, unit: 'each' }],
+  };
+  const eggPantry: PantryItem[] = [
+    {
+      id: 'egg-p',
+      ingredientId: 'eggs',
+      name: 'Eggs',
+      category: 'dairy',
+      quantity: 1,
+      unit: 'each',
+      location: 'fridge',
+      photoUri: null,
+      expiresOn: null,
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+  const eggMatch = scoreRecipeAgainstPantry(eggOnly, eggPantry);
+  assert(eggMatch.missing.length === 1 && eggMatch.missing[0].quantity === 5, 'one egg does not satisfy six');
+}
+
 const mergeTwice = mergeGroceryWithMissing(
   grocery.items,
   [{ ...match.missing[0], quantity: 8 }],

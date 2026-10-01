@@ -16,15 +16,23 @@ export function migrationHintForError(
   sqlFile: string,
 ): string | null {
   if (!isMissingSchemaError(error)) return null;
-  return `Database is missing a column or table. Run ${sqlFile} in the Supabase SQL editor, then reload the app.`;
+  console.warn(
+    `[mealprep] Database schema may be out of date. An admin can apply the migration file: ${sqlFile}`,
+    error,
+  );
+  return 'Your account data isn’t fully set up yet. Ask an admin to finish setup, then reload the app.';
 }
 
 export function formatSupabaseError(error: unknown, sqlFile?: string): string {
   if (isPostgrestError(error)) {
     const hint = sqlFile ? migrationHintForError(error, sqlFile) : null;
     if (hint) return hint;
+    console.warn('[mealprep] save failed:', error);
+    return 'Something went wrong while saving. Try again in a moment.';
+  }
+  if (error instanceof Error) {
+    console.warn('[mealprep] save failed:', error);
     return error.message;
   }
-  if (error instanceof Error) return error.message;
-  return 'Something went wrong saving to Supabase.';
+  return 'Something went wrong while saving. Try again in a moment.';
 }

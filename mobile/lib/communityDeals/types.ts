@@ -6,6 +6,8 @@ export interface StoreDealVoteRow {
   vote: StoreDealVoteKind;
 }
 
+export type CommunityPriceKind = 'regular' | 'sale';
+
 export interface CommunityStoreDeal {
   id: string;
   storeKey: string;
@@ -15,6 +17,7 @@ export interface CommunityStoreDeal {
   price: number;
   unit?: string;
   note?: string;
+  priceKind?: CommunityPriceKind;
   validUntil?: string;
   reportedBy: string;
   createdAt: string;
@@ -22,6 +25,8 @@ export interface CommunityStoreDeal {
   expiredCount: number;
   myVote?: StoreDealVoteKind;
   isSample?: boolean;
+  /** Storage path for the shelf-tag photo used when reporting (owner can reopen). */
+  scanPhotoPath?: string | null;
 }
 
 export interface AddCommunityDealInput {
@@ -33,6 +38,9 @@ export interface AddCommunityDealInput {
   unit?: string;
   note?: string;
   validUntil?: string;
+  /** When set, item is on sale until this date (YYYY-MM-DD). Omit for a regular shelf price. */
+  saleValidUntil?: string | null;
+  scanPhotoPath?: string | null;
 }
 
 export interface FetchCommunityDealsResult {

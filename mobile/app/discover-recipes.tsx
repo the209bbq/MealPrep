@@ -129,14 +129,14 @@ export default function DiscoverRecipesScreen() {
 
       <ScrollView className="flex-1 px-4 pb-8" keyboardShouldPersistTaps="handled">
         <Text className="mt-4 text-sm text-muted">
-          Search RecipeAPI.io and import recipes into your kitchen library.
+          Search online recipes and import them into your kitchen library.
         </Text>
 
         {demoMode ? (
           <View className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
             <Text className="text-xs font-semibold text-amber-900">Demo mode</Text>
             <Text className="mt-1 text-xs text-amber-800">
-              Results below are labeled sample data only. Connect Supabase and deploy the proxy for live search.
+              Results below are labeled sample data only. Sign in with a connected account for live search.
             </Text>
           </View>
         ) : null}
@@ -145,8 +145,7 @@ export default function DiscoverRecipesScreen() {
           <Card className="mt-4 border-dashed">
             <Text className="text-sm font-semibold text-ink">Not set up yet</Text>
             <Text className="mt-2 text-sm text-muted">
-              Add the `RECIPEAPI_KEY` secret in Supabase and deploy the `recipeapi-proxy` Edge Function. See
-              mobile/docs/RECIPE_DISCOVERY.md.
+              Recipe search isn’t connected yet. Ask an admin to finish setup, then try again.
             </Text>
           </Card>
         ) : null}

@@ -38,7 +38,7 @@ export default function AdminScreen() {
     if (!authReady) {
       return (
         <ScrollView className="flex-1 bg-paper px-4 pb-8">
-          <Card className="mt-4" title="Sign in" subtitle="Connecting to Supabase…">
+          <Card className="mt-4" title="Sign in" subtitle="Connecting…">
             <Text className="mt-2 text-sm text-muted">Loading authentication.</Text>
           </Card>
         </ScrollView>
@@ -164,11 +164,15 @@ export default function AdminScreen() {
         ))}
       </Card>
 
-      <Card className="mt-4" title="User analytics" subtitle={demoMode ? 'Basic counts (demo)' : 'Live Supabase counts'}>
+      <Card
+        className="mt-4"
+        title="Platform analytics"
+        subtitle={demoMode ? 'Basic counts (demo)' : 'Aggregate totals only — no per-user data'}
+      >
         <Text className="mt-2 text-sm text-muted">Users: {analytics.userCount} ({analytics.adminCount} admin)</Text>
-        <Text className="text-sm text-muted">Pantry items: {analytics.pantryItems}</Text>
-        <Text className="text-sm text-muted">Recipes: {analytics.recipes}</Text>
-        <Text className="text-sm text-muted">Open grocery lines: {analytics.groceryOpen}</Text>
+        <Text className="text-sm text-muted">Pantry items (all users): {analytics.pantryItems}</Text>
+        <Text className="text-sm text-muted">Recipes (all rows): {analytics.recipes}</Text>
+        <Text className="text-sm text-muted">Open grocery lines (all users): {analytics.groceryOpen}</Text>
         <Text className="text-sm text-muted">Last active: {new Date(analytics.lastActiveAt).toLocaleString()}</Text>
       </Card>
     </ScrollView>

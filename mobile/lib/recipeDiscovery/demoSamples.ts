@@ -5,7 +5,7 @@ const DEMO_RECIPE_BASE: RecipeApiRecipe[] = [
     id: 900001,
     name: 'Demo: Lemon Herb Chicken Bowls',
     description:
-      'Sample result only — not from RecipeAPI.io. Shows how discover search and import work in demo mode.',
+      'Sample result only — shows how discover search and import work in demo mode.',
     difficulty: 'easy',
     meal_type: 'main',
     cuisine: 'american',
@@ -31,7 +31,7 @@ const DEMO_RECIPE_BASE: RecipeApiRecipe[] = [
   {
     id: 900002,
     name: 'Demo: Weeknight Veggie Pasta',
-    description: 'Sample result only — labeled for demo mode. Search the live API after deploying the proxy.',
+    description: 'Sample result only — labeled for demo mode. Sign in for live recipe search.',
     difficulty: 'medium',
     meal_type: 'main',
     cuisine: 'italian',
@@ -57,7 +57,7 @@ const DEMO_RECIPE_BASE: RecipeApiRecipe[] = [
   {
     id: 900003,
     name: 'Demo: Coconut Curry Soup',
-    description: 'Sample result only — use Supabase + RECIPEAPI_KEY for real RecipeAPI.io data.',
+    description: 'Sample result only — sign in for live recipe data.',
     difficulty: 'easy',
     meal_type: 'soup',
     cuisine: 'thai',

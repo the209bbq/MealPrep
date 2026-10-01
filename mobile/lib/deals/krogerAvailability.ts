@@ -6,4 +6,4 @@ export function isKrogerProxyAvailable(): boolean {
   return !isDemoMode() && getKrogerProxyUrl().length > 0;
 }
 
-export const KROGER_NOT_CONFIGURED_NOTE = SMART_SHOP_COPY.estimatedPricesNote;
+export const KROGER_NOT_CONFIGURED_NOTE = SMART_SHOP_COPY.noLiveStoresNearby;
