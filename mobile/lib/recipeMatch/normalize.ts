@@ -35,36 +35,88 @@ export function tokenizeIngredientName(value: string): string[] {
     .map(singularizeToken);
 }
 
-/** Expand name to canonical keys including synonym groups. */
-export function expandSynonymKeys(name: string): string[] {
+function ingredientForms(name: string): string[] {
   const normalized = normalizeIngredientName(name);
-  const keys = new Set<string>([normalized]);
-  const tokens = tokenizeIngredientName(name).join(' ');
-  if (tokens) keys.add(tokens);
+  const tokenPhrase = tokenizeIngredientName(name).join(' ');
+  return [normalized, tokenPhrase].filter(Boolean);
+}
+
+function tokensEqualSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((t) => bSet.has(t));
+}
+
+function nameBelongsToSynonymGroup(name: string, canonical: string, synonyms: string[]): boolean {
+  const nameForms = ingredientForms(name);
+  const members = [canonical, ...synonyms];
+
+  for (const member of members) {
+    const memberForms = ingredientForms(member);
+    for (const nf of nameForms) {
+      for (const mf of memberForms) {
+        if (nf === mf) return true;
+      }
+    }
+    const memberTokens = tokenizeIngredientName(member);
+    for (const nf of nameForms) {
+      const nameTokens = nf.includes(' ') ? nf.split(' ') : tokenizeIngredientName(nf);
+      if (nameTokens.length > 0 && tokensEqualSet(nameTokens, memberTokens)) return true;
+    }
+  }
+
+  return false;
+}
+
+/** Expand name to canonical keys including synonym groups (exact group membership only). */
+export function expandSynonymKeys(name: string): string[] {
+  const keys = new Set<string>();
+  for (const form of ingredientForms(name)) keys.add(form);
 
   for (const [canonical, synonyms] of Object.entries(INGREDIENT_SYNONYMS)) {
-    const group = [canonical, ...synonyms].map(normalizeIngredientName);
-    const tokenGroup = group.map((g) => tokenizeIngredientName(g).join(' '));
-    const haystack = [normalized, tokens, ...group, ...tokenGroup];
-    const hit = haystack.some(
-      (candidate) =>
-        candidate &&
-        (candidate === normalized ||
-          candidate === tokens ||
-          normalized.includes(candidate) ||
-          candidate.includes(normalized)),
-    );
-    if (hit) {
-      keys.add(normalizeIngredientName(canonical));
-      keys.add(tokenizeIngredientName(canonical).join(' '));
-      for (const syn of synonyms) {
-        keys.add(normalizeIngredientName(syn));
-        keys.add(tokenizeIngredientName(syn).join(' '));
-      }
+    if (!nameBelongsToSynonymGroup(name, canonical, synonyms)) continue;
+    keys.add(normalizeIngredientName(canonical));
+    keys.add(tokenizeIngredientName(canonical).join(' '));
+    for (const syn of synonyms) {
+      keys.add(normalizeIngredientName(syn));
+      keys.add(tokenizeIngredientName(syn).join(' '));
     }
   }
 
   return [...keys].filter(Boolean);
+}
+
+function headToken(tokens: string[]): string | undefined {
+  return tokens[tokens.length - 1];
+}
+
+function wholeTokenPresent(needle: string, tokens: string[]): boolean {
+  return tokens.some((t) => t === needle);
+}
+
+/** True when shorter phrase is a strict subset of longer with compatible head nouns. */
+function phraseSubsetScore(shortTokens: string[], longTokens: string[]): number {
+  if (shortTokens.length === 0 || longTokens.length === 0) return 0;
+  if (!shortTokens.every((t) => wholeTokenPresent(t, longTokens))) return 0;
+
+  const shortHead = headToken(shortTokens)!;
+  const longHead = headToken(longTokens)!;
+
+  if (shortTokens.length === 1 && longTokens.length === 1) {
+    return shortHead === longHead ? 0.92 : 0;
+  }
+
+  if (shortTokens.length === 1 && longTokens.length > 1) {
+    const extras = longTokens.filter((t) => t !== shortTokens[0]);
+    if (extras.length > 0) return 0;
+  }
+
+  if (shortTokens.length >= 2) {
+    return shortHead === longHead ? 0.92 : 0;
+  }
+
+  // Single token on both sides (e.g. rice ↔ rice).
+  return shortHead === longHead ? 0.92 : 0;
 }
 
 export function fuzzyNameScore(a: string, b: string): number {
@@ -78,17 +130,6 @@ export function fuzzyNameScore(a: string, b: string): number {
   for (const ak of aKeys) {
     for (const bk of bKeys) {
       if (ak === bk) return 1;
-      const shorter = ak.length <= bk.length ? ak : bk;
-      const longer = ak.length <= bk.length ? bk : ak;
-      if (shorter.length >= 4 && (longer.includes(shorter) || shorter.includes(longer))) return 0.92;
-      const shortTokens = tokenizeIngredientName(shorter);
-      const longTokens = tokenizeIngredientName(longer);
-      if (
-        shortTokens.length >= 2 &&
-        shortTokens.every((t) => longTokens.includes(t))
-      ) {
-        return 0.92;
-      }
     }
   }
 
@@ -96,15 +137,29 @@ export function fuzzyNameScore(a: string, b: string): number {
   const bTokens = tokenizeIngredientName(b);
   if (aTokens.length === 0 || bTokens.length === 0) return 0;
 
+  const shorter = aTokens.length <= bTokens.length ? aTokens : bTokens;
+  const longer = aTokens.length <= bTokens.length ? bTokens : aTokens;
+  const subsetScore = phraseSubsetScore(shorter, longer);
+  if (subsetScore > 0) return subsetScore;
+
   const aSet = new Set(aTokens);
-  const overlap = bTokens.filter((t) => aSet.has(t));
-  if (overlap.length === 0) {
-    const aJoined = aTokens.join(' ');
-    const bJoined = bTokens.join(' ');
-    if (aJoined.includes(bJoined) || bJoined.includes(aJoined)) return 0.88;
+  const bSet = new Set(bTokens);
+  const overlap = aTokens.filter((t) => bSet.has(t));
+  if (overlap.length === 0) return 0;
+
+  const aHead = headToken(aTokens);
+  const bHead = headToken(bTokens);
+  if (!aHead || !bHead || aHead !== bHead) {
+    return 0;
+  }
+
+  if (aTokens.length > 1 && bTokens.length > 1 && !tokensEqualSet(aTokens, bTokens)) {
     return 0;
   }
 
   const unionSize = new Set([...aTokens, ...bTokens]).size;
-  return Math.min(0.95, overlap.length / unionSize + overlap.length / Math.max(aTokens.length, bTokens.length) * 0.15);
+  return Math.min(
+    0.88,
+    overlap.length / unionSize + (overlap.length / Math.max(aTokens.length, bTokens.length)) * 0.12,
+  );
 }

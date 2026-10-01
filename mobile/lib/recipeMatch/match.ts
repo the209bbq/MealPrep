@@ -4,8 +4,8 @@ import {
   DEFAULT_MIN_PANTRY_MATCH_PERCENT,
   RECIPE_MATCHING,
 } from '../../config/recipeMatching';
-import { FUZZY_MATCH_THRESHOLD, PANTRY_STAPLES } from './config';
-import { expandSynonymKeys, fuzzyNameScore, normalizeIngredientName, tokenizeIngredientName } from './normalize';
+import { FUZZY_MATCH_THRESHOLD, PANTRY_STAPLES } from '../../config/recipeMatchingConfig';
+import { expandSynonymKeys, fuzzyNameScore, normalizeIngredientName } from './normalize';
 
 export interface MatchedIngredient {
   ingredient: RecipeIngredient;
@@ -34,25 +34,10 @@ export interface PantryMatchIndex {
 function isConfiguredStaple(name: string, ingredientId: string): boolean {
   const normalized = normalizeIngredientName(name);
   const idNorm = normalizeIngredientName(ingredientId.replace(/-/g, ' '));
-  const tokens = new Set([
-    ...tokenizeIngredientName(name),
-    ...tokenizeIngredientName(ingredientId.replace(/-/g, ' ')),
-  ]);
 
   for (const staple of PANTRY_STAPLES) {
     const sNorm = normalizeIngredientName(staple);
-    if (normalized === sNorm || idNorm === sNorm.replace(/\s+/g, '-')) return true;
-
-    const stapleTokens = tokenizeIngredientName(staple);
-    if (stapleTokens.length === 0) continue;
-
-    if (stapleTokens.length === 1) {
-      const token = stapleTokens[0];
-      if (tokens.has(token)) return true;
-      continue;
-    }
-
-    if (stapleTokens.every((t) => tokens.has(t))) return true;
+    if (normalized === sNorm || idNorm === sNorm) return true;
   }
   return false;
 }
@@ -75,23 +60,9 @@ function ingredientLookupKeys(ing: RecipeIngredient): string[] {
 }
 
 function keysOverlap(ingKeys: string[], pantryKeys: string[]): boolean {
+  const pantrySet = new Set(pantryKeys.filter(Boolean));
   for (const ik of ingKeys) {
-    if (!ik) continue;
-    const ikTokens = ik.includes(' ') ? ik.split(' ') : tokenizeIngredientName(ik);
-    for (const pk of pantryKeys) {
-      if (!pk) continue;
-      if (ik === pk) return true;
-      const pkTokens = pk.includes(' ') ? pk.split(' ') : tokenizeIngredientName(pk);
-      if (ikTokens.length >= 2 || pkTokens.length >= 2) {
-        const ikSet = new Set(ikTokens);
-        const shared = pkTokens.filter((t) => ikSet.has(t));
-        if (shared.length >= 2) return true;
-        if (ikTokens.length >= 2 && shared.length === ikTokens.length) return true;
-        if (pkTokens.length >= 2 && shared.length === pkTokens.length) return true;
-      } else if (ikTokens.length === 1 && pkTokens.length === 1 && ikTokens[0] === pkTokens[0]) {
-        return true;
-      }
-    }
+    if (ik && pantrySet.has(ik)) return true;
   }
   return false;
 }

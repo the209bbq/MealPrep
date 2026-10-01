@@ -27,6 +27,14 @@ export class PantryVisionRateLimitError extends Error {
   }
 }
 
+export class PantryVisionScanError extends Error {
+  code = 'SCAN_FAILED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'PantryVisionScanError';
+  }
+}
+
 async function parseErrorResponse(
   response: Response,
   text: string,
@@ -49,7 +57,10 @@ async function parseErrorResponse(
   if (response.status === 429 || json.code === 'RATE_LIMIT') {
     throw new PantryVisionRateLimitError(json.error ?? PHOTO_SCAN.rateLimitMessage);
   }
-  throw new Error(json.error ?? `Pantry scan failed (${response.status})`);
+  if (response.status === 502 && json.code === 'UPSTREAM_ERROR') {
+    throw new PantryVisionScanError(PHOTO_SCAN.scanFailedMessage);
+  }
+  throw new PantryVisionScanError(json.error ?? PHOTO_SCAN.scanFailedMessage);
 }
 
 export interface AnalyzePantryPhotoOptions {

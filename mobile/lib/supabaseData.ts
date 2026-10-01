@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FEATURE_FLAG_DEFAULTS, PHOTO_SCAN } from '../config/appConfig';
+import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
+import { formatSupabaseError, isMissingSchemaError } from './supabaseErrors';
 import { normalizePantryStorageLocation } from '../config/pantryStorage';
 import { pantryPhotoUrlForStorage } from './pantryPhotoStorage';
 import { withTimeout } from './withTimeout';
@@ -31,6 +33,7 @@ type ProfileRow = {
   home_lng: number | null;
   home_location_updated_at: string | null;
   created_at: string;
+  auto_add_missing_to_grocery?: boolean | null;
 };
 
 type PantryRow = {
@@ -88,8 +91,11 @@ type MealPlanRow = {
   title: string;
   image_url: string | null;
   made: boolean;
+  made_at?: string | null;
   added_at: string;
 };
+
+const MEAL_PLAN_MIGRATION_SQL = 'supabase/migrations/20261001130000_meal_plan_made_at_prefs.sql';
 
 function asCategory(value: string): PantryCategory {
   const categories: PantryCategory[] = [
@@ -119,6 +125,10 @@ export function mapProfile(row: ProfileRow): UserProfile {
     homeLng: row.home_lng ?? undefined,
     homeLocationUpdatedAt: row.home_location_updated_at ?? undefined,
     createdAt: row.created_at,
+    preferences: {
+      autoAddMissingToGrocery:
+        row.auto_add_missing_to_grocery ?? USER_PREFERENCE_DEFAULTS.autoAddMissingToGrocery,
+    },
   };
 }
 
@@ -179,7 +189,8 @@ export function mapMealPlanItem(row: MealPlanRow): MealPlanItem {
     recipeApiId: row.recipe_api_id,
     title: row.title,
     imageUrl: row.image_url,
-    made: row.made,
+    made: row.made_at != null ? true : row.made,
+    madeAt: row.made_at ?? (row.made ? row.added_at : null),
     addedAt: row.added_at,
   };
 }
@@ -542,20 +553,31 @@ export async function insertMealPlanItem(
   userId: string,
   item: Omit<MealPlanItem, 'id'>,
 ): Promise<MealPlanItem> {
-  const { data, error } = await client
+  const basePayload = {
+    user_id: userId,
+    recipe_slug: item.recipeSlug,
+    recipe_api_id: item.recipeApiId,
+    title: item.title,
+    image_url: item.imageUrl,
+    made: item.made,
+    added_at: item.addedAt,
+  };
+
+  let { data, error } = await client
     .from('meal_plan_items')
-    .insert({
-      user_id: userId,
-      recipe_slug: item.recipeSlug,
-      recipe_api_id: item.recipeApiId,
-      title: item.title,
-      image_url: item.imageUrl,
-      made: item.made,
-      added_at: item.addedAt,
-    })
+    .insert({ ...basePayload, made_at: item.madeAt })
     .select('*')
     .single();
-  if (error) throw error;
+
+  if (error && isMissingSchemaError(error)) {
+    const fallback = await client.from('meal_plan_items').insert(basePayload).select('*').single();
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) {
+    throw new Error(formatSupabaseError(error, MEAL_PLAN_MIGRATION_SQL));
+  }
   return mapMealPlanItem(data as MealPlanRow);
 }
 
@@ -563,17 +585,64 @@ export async function updateMealPlanItem(
   client: SupabaseClient,
   userId: string,
   id: string,
-  patch: Partial<Pick<MealPlanItem, 'made'>>,
+  patch: Partial<Pick<MealPlanItem, 'made' | 'madeAt'>>,
 ): Promise<MealPlanItem> {
-  const { data, error } = await client
+  const made = patch.made;
+  const madeAt =
+    patch.madeAt !== undefined
+      ? patch.madeAt
+      : made === true
+        ? new Date().toISOString()
+        : made === false
+          ? null
+          : undefined;
+
+  const withTimestamp: Record<string, unknown> = {};
+  if (made !== undefined) withTimestamp.made = made;
+  if (madeAt !== undefined) withTimestamp.made_at = madeAt;
+
+  let { data, error } = await client
     .from('meal_plan_items')
-    .update({ made: patch.made })
+    .update(withTimestamp)
     .eq('user_id', userId)
     .eq('id', id)
     .select('*')
     .single();
-  if (error) throw error;
+
+  if (error && isMissingSchemaError(error) && 'made_at' in withTimestamp) {
+    const fallbackPayload: Record<string, unknown> = {};
+    if (made !== undefined) fallbackPayload.made = made;
+    const fallback = await client
+      .from('meal_plan_items')
+      .update(fallbackPayload)
+      .eq('user_id', userId)
+      .eq('id', id)
+      .select('*')
+      .single();
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) {
+    throw new Error(formatSupabaseError(error, MEAL_PLAN_MIGRATION_SQL));
+  }
   return mapMealPlanItem(data as MealPlanRow);
+}
+
+export async function updateProfilePreferences(
+  client: SupabaseClient,
+  userId: string,
+  preferences: Pick<UserProfile['preferences'], 'autoAddMissingToGrocery'>,
+): Promise<void> {
+  const { error } = await client
+    .from('profiles')
+    .update({ auto_add_missing_to_grocery: preferences.autoAddMissingToGrocery })
+    .eq('id', userId);
+
+  if (error && isMissingSchemaError(error)) {
+    throw new Error(formatSupabaseError(error, MEAL_PLAN_MIGRATION_SQL));
+  }
+  if (error) throw error;
 }
 
 export async function deleteMealPlanItem(

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-nati
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
+import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
 import { UsdaNutritionPanel } from '../../components/UsdaNutritionPanel';
 import { initials } from '../../lib/initials';
@@ -23,6 +24,8 @@ export default function AdminScreen() {
     signOut,
     featureFlags,
     setFeatureFlag,
+    userPreferences,
+    setUserPreference,
     seedPantry,
     analytics,
     recipes,
@@ -63,6 +66,21 @@ export default function AdminScreen() {
           <Text className="mt-1 text-xs font-bold uppercase text-emerald">{ROLE_LABELS[profile.role]}</Text>
           <Text className="mt-4 text-sm text-muted">Household: {profile.householdSize}</Text>
           <Text className="mt-1 text-sm text-muted">{profile.dietaryNotes}</Text>
+        </Card>
+        <Card className="mt-4" title="Kitchen preferences">
+          {(Object.keys(USER_PREFERENCE_LABELS) as (keyof typeof USER_PREFERENCE_LABELS)[]).map((key) => (
+            <View key={key} className="mb-3 flex-row items-center justify-between gap-3 border-b border-border pb-3">
+              <View className="flex-1">
+                <Text className="font-semibold text-ink">{USER_PREFERENCE_LABELS[key].title}</Text>
+                <Text className="text-xs text-muted">{USER_PREFERENCE_LABELS[key].blurb}</Text>
+              </View>
+              <Switch
+                value={userPreferences[key]}
+                onValueChange={(value) => setUserPreference(key, value)}
+                trackColor={{ true: THEME.emerald, false: THEME.border }}
+              />
+            </View>
+          ))}
         </Card>
         {demoMode ? (
           <Card className="mt-4" title="Demo mode" subtitle="Switch role without Supabase">
@@ -110,6 +128,22 @@ export default function AdminScreen() {
         <Pressable onPress={seedPantry} className="mt-2 rounded-xl border border-border bg-card px-4 py-3">
           <Text className="text-center font-bold text-slate">Load sample pantry items</Text>
         </Pressable>
+      </Card>
+
+      <Card className="mt-4" title="Kitchen preferences">
+        {(Object.keys(USER_PREFERENCE_LABELS) as (keyof typeof USER_PREFERENCE_LABELS)[]).map((key) => (
+          <View key={key} className="mb-3 flex-row items-center justify-between gap-3 border-b border-border pb-3">
+            <View className="flex-1">
+              <Text className="font-semibold text-ink">{USER_PREFERENCE_LABELS[key].title}</Text>
+              <Text className="text-xs text-muted">{USER_PREFERENCE_LABELS[key].blurb}</Text>
+            </View>
+            <Switch
+              value={userPreferences[key]}
+              onValueChange={(value) => setUserPreference(key, value)}
+              trackColor={{ true: THEME.emerald, false: THEME.border }}
+            />
+          </View>
+        ))}
       </Card>
 
       <Card className="mt-4" title="Feature toggles">

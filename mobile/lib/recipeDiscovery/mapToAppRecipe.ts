@@ -6,7 +6,14 @@ function mapIngredientCategory(apiCategory: string): PantryCategory {
   const c = apiCategory.toLowerCase();
   if (c.includes('spice') || c.includes('herb')) return 'spices';
   if (c.includes('meat') || c.includes('fish') || c.includes('seafood') || c.includes('poultry')) return 'meats';
-  if (c.includes('vegetable') || c.includes('fruit') || c.includes('produce')) return 'produce';
+  if (
+    c.includes('vegetable') ||
+    c.includes('fruit') ||
+    c.includes('produce') ||
+    /\b(broccoli|asparagus|kale|spinach|lettuce|tomato|onion|pepper|carrot|celery|squash|zucchini)\b/.test(c)
+  ) {
+    return 'produce';
+  }
   if (c.includes('dairy') || c.includes('cheese') || c.includes('milk')) return 'dairy';
   if (c.includes('frozen')) return 'frozen';
   if (c.includes('condiment') || c.includes('sauce')) return 'condiments';
@@ -55,5 +62,5 @@ export function recipeApiToAppRecipe(
 }
 
 export function pantryCategoryForImportedIngredient(name: string, notes?: string): PantryCategory {
-  return mapIngredientCategory(notes ?? name);
+  return mapIngredientCategory([notes, name].filter(Boolean).join(' '));
 }

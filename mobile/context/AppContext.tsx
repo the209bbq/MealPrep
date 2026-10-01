@@ -17,6 +17,14 @@ import { DEFAULT_FEATURE_FLAGS, MOCK_PANTRY, MOCK_RECIPES, profileForRole } from
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
+import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
+import {
+  applyPantryDeductions,
+  buildPantryDeductionLines,
+  matchedRowsForReview,
+  type PantryDeductionLine,
+} from '../lib/mealPlan/pantryDeduction';
+import { scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
 import {
   buildPantryMatchIndex,
   topPantryRecipeRecommendations,
@@ -29,7 +37,7 @@ import { getSupabase } from '../lib/supabase';
 import { recipeApiToAppRecipe } from '../lib/recipeDiscovery/mapToAppRecipe';
 import { isRecipeApiInLibrary, recipeApiMasterSlug, recipeApiPersonalSlug } from '../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
-import { activeMealPlanRecipeIds, isRecipeOnMealPlan } from '../lib/mealPlan/resolve';
+import { activeMealPlanRecipeIds, isRecipeOnMealPlan, resolveMealPlanRecipeId } from '../lib/mealPlan/resolve';
 import { hydrateLocationFromProfile } from '../lib/smartShop/profileLocation';
 import {
   fetchLiveBundle,
@@ -46,6 +54,7 @@ import {
   updateMasterRecipe,
   updateMealPlanItem,
   updatePantryItem,
+  updateProfilePreferences,
   upsertFeatureFlag,
   upsertImportedRecipe,
 } from '../lib/supabaseData';
@@ -59,6 +68,7 @@ import type {
   PantryStorageLocation,
   Recipe,
   UserAnalytics,
+  UserPreferences,
   UserProfile,
   UserRole,
 } from '../types/mealprep';
@@ -72,6 +82,7 @@ const STORAGE_KEYS = {
   mealPlan: 'mealprep.mealPlan',
   servingOverrides: 'mealprep.servingOverrides',
   flags: 'mealprep.featureFlags',
+  userPreferences: 'mealprep.userPreferences',
 };
 
 const GUEST_PROFILE: UserProfile = {
@@ -83,7 +94,25 @@ const GUEST_PROFILE: UserProfile = {
   householdSize: 2,
   dietaryNotes: '',
   createdAt: new Date(0).toISOString(),
+  preferences: { ...USER_PREFERENCE_DEFAULTS },
 };
+
+interface UndoToastState {
+  message: string;
+  onUndo: () => void;
+}
+
+interface MealMadeUndoState {
+  mealPlanItemId: string;
+  previousMeal: MealPlanItem;
+  pantrySnapshot: PantryItem[];
+  deductionLines: PantryDeductionLine[];
+}
+
+interface MealMadeReviewState {
+  mealPlanItemId: string;
+  selectedPantryIds: Set<string>;
+}
 
 interface AppContextValue {
   appName: string;
@@ -112,9 +141,21 @@ interface AppContextValue {
   toggleMealPlanKitchenRecipe: (recipeId: string) => Promise<void>;
   toggleMealPlanDiscoveryRecipe: (item: RecipeDiscoveryListItem) => Promise<void>;
   removeMealPlanItem: (id: string) => Promise<void>;
-  setMealPlanItemMade: (id: string, made: boolean) => Promise<void>;
+  openMealMadeReview: (mealPlanItemId: string) => void;
+  closeMealMadeReview: () => void;
+  toggleMealMadePantryUse: (pantryItemId: string, useFromPantry: boolean) => void;
+  confirmMealMade: () => Promise<void>;
+  undoLastMealMade: (mealPlanItemId?: string) => Promise<void>;
+  mealMadeReview: MealMadeReviewState | null;
+  mealMadeReviewTitle: string | null;
+  mealMadeReviewRows: ReturnType<typeof matchedRowsForReview>;
+  mealMadeBusy: boolean;
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
   addMissingForPlannedMealsToGrocery: () => void;
+  userPreferences: UserPreferences;
+  setUserPreference: <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => void;
+  undoToast: UndoToastState | null;
+  dismissUndoToast: () => void;
   setServingOverride: (recipeId: string, servings: number) => void;
   toggleGroceryItem: (id: string) => void;
   addManualGroceryItem: (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => void;
@@ -179,8 +220,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       recipeApiId: null,
       title: recipe?.name ?? slug,
       imageUrl: null,
-      made: false,
-      addedAt: now,
+        made: false,
+        madeAt: null,
+        addedAt: now,
     };
     });
   });
@@ -190,9 +232,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(() =>
     readJson(STORAGE_KEYS.flags, DEFAULT_FEATURE_FLAGS),
   );
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>(() =>
+    readJson(STORAGE_KEYS.userPreferences, USER_PREFERENCE_DEFAULTS),
+  );
+  const [undoToast, setUndoToast] = useState<UndoToastState | null>(null);
+  const [mealMadeReview, setMealMadeReview] = useState<MealMadeReviewState | null>(null);
+  const [mealMadeUndo, setMealMadeUndo] = useState<MealMadeUndoState | null>(null);
+  const [mealMadeBusy, setMealMadeBusy] = useState(false);
   const [liveAnalytics, setLiveAnalytics] = useState<UserAnalytics | null>(null);
 
-  const profile = demoMode ? profileForRole(role) : liveProfile ?? GUEST_PROFILE;
+  const profile = useMemo<UserProfile>(() => {
+    if (demoMode) {
+      return { ...profileForRole(role), preferences: userPreferences };
+    }
+    if (liveProfile) {
+      return { ...liveProfile, preferences: userPreferences };
+    }
+    return { ...GUEST_PROFILE, preferences: userPreferences };
+  }, [demoMode, liveProfile, role, userPreferences]);
   const isAdmin = profile.role === 'admin';
   const maintenanceActive = featureFlags.maintenanceMode && !isAdmin;
   const userId = session?.user.id ?? null;
@@ -208,6 +265,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const bundle = await fetchLiveBundle(supabase, userId);
     if (bundle.profile) {
       setLiveProfile(bundle.profile);
+      setUserPreferences(bundle.profile.preferences);
       hydrateLocationFromProfile(bundle.profile);
     }
     removeStorageKey(STORAGE_KEYS.pantry);
@@ -293,6 +351,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.flags, featureFlags);
   }, [demoMode, featureFlags]);
+
+  useEffect(() => {
+    if (demoMode) writeJson(STORAGE_KEYS.userPreferences, userPreferences);
+  }, [demoMode, userPreferences]);
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.mealPlan, mealPlan);
@@ -394,6 +456,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [mealPlan],
   );
 
+  const persistGroceryList = useCallback(
+    (next: GroceryListItem[]) => {
+      if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+      if (!demoMode && supabase && userId) {
+        void replaceGroceryList(supabase, userId, next)
+          .then((persisted) => setGrocery(persisted))
+          .catch((error: unknown) => {
+            setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
+          });
+      }
+    },
+    [demoMode, supabase, userId],
+  );
+
+  const showGroceryAddedToast = useCallback(
+    (added: GroceryListItem[], previous: GroceryListItem[]) => {
+      if (added.length === 0) return;
+      const label =
+        added.length === 1
+          ? `Added ${added[0].name} to your grocery list`
+          : `Added ${added.length} missing items to your grocery list`;
+      setUndoToast({
+        message: label,
+        onUndo: () => {
+          setGrocery(previous);
+          persistGroceryList(previous);
+          setUndoToast(null);
+        },
+      });
+    },
+    [persistGroceryList],
+  );
+
+  const appendMissingIngredientsForRecipe = useCallback(
+    (recipeId: string, options?: { showToast?: boolean }) => {
+      const match = pantryRecipeMatches.byRecipeId.get(recipeId);
+      if (!match || match.missing.length === 0) return 0;
+
+      let addedCount = 0;
+      setGrocery((prev) => {
+        const { items: next, added } = mergeMissingIntoGrocery({
+          missing: match.missing,
+          recipeId,
+          pantry,
+          previous: prev,
+        });
+        addedCount = added.length;
+        if (added.length > 0) {
+          persistGroceryList(next);
+          if (options?.showToast) showGroceryAddedToast(added, prev);
+        }
+        return next;
+      });
+      return addedCount;
+    },
+    [pantry, pantryRecipeMatches.byRecipeId, persistGroceryList, showGroceryAddedToast],
+  );
+
   const removeMealPlanItem = useCallback(
     async (id: string) => {
       setMealPlan((prev) => prev.filter((item) => item.id !== id));
@@ -406,30 +526,197 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, supabase, userId],
   );
 
-  const setMealPlanItemMade = useCallback(
-    async (id: string, made: boolean) => {
-      setMealPlan((prev) => prev.map((item) => (item.id === id ? { ...item, made } : item)));
+  const openMealMadeReview = useCallback(
+    (mealPlanItemId: string) => {
+      const item = mealPlan.find((row) => row.id === mealPlanItemId);
+      if (!item || item.made) return;
+
+      const recipeId = resolveMealPlanRecipeId(item, recipes, ownerId);
+      const recipe = recipeId ? recipes.find((r) => r.id === recipeId) : undefined;
+      if (!recipe) return;
+
+      const match = scoreRecipeAgainstPantry(recipe, pantry);
+      const rows = matchedRowsForReview(match);
+      setMealMadeReview({
+        mealPlanItemId,
+        selectedPantryIds: new Set(rows.map((row) => row.matchedPantryItem!.id)),
+      });
+    },
+    [mealPlan, ownerId, pantry, recipes],
+  );
+
+  const closeMealMadeReview = useCallback(() => {
+    setMealMadeReview(null);
+  }, []);
+
+  const toggleMealMadePantryUse = useCallback((pantryItemId: string, useFromPantry: boolean) => {
+    setMealMadeReview((prev) => {
+      if (!prev) return prev;
+      const next = new Set(prev.selectedPantryIds);
+      if (useFromPantry) next.add(pantryItemId);
+      else next.delete(pantryItemId);
+      return { ...prev, selectedPantryIds: next };
+    });
+  }, []);
+
+  const undoLastMealMade = useCallback(
+    async (mealPlanItemId?: string) => {
+      const targetId = mealPlanItemId ?? mealMadeUndo?.mealPlanItemId;
+      if (!targetId || !mealMadeUndo || mealMadeUndo.mealPlanItemId !== targetId) return;
+
+      const { previousMeal, pantrySnapshot, deductionLines } = mealMadeUndo;
+
+      setPantry(pantrySnapshot);
+      setMealPlan((prev) => prev.map((row) => (row.id === targetId ? previousMeal : row)));
+      setMealMadeUndo(null);
+      setUndoToast(null);
+
       if (!demoMode && supabase && userId) {
-        await updateMealPlanItem(supabase, userId, id, { made }).catch((error: unknown) => {
-          setAuthError(error instanceof Error ? error.message : 'Failed to update meal plan');
-        });
+        try {
+          const currentIds = new Set(pantry.map((row) => row.id));
+          const snapshotIds = new Set(pantrySnapshot.map((row) => row.id));
+          const removedIds = [...currentIds].filter((id) => !snapshotIds.has(id));
+          if (removedIds.length > 0) {
+            await deletePantryItemsByIds(supabase, userId, removedIds);
+          }
+          for (const row of pantrySnapshot) {
+            if (deductionLines.some((line) => line.pantryItemId === row.id) || !currentIds.has(row.id)) {
+              if (currentIds.has(row.id)) {
+                await updatePantryItem(supabase, userId, row);
+              } else {
+                await insertPantryItem(supabase, userId, row);
+              }
+            }
+          }
+          await updateMealPlanItem(supabase, userId, targetId, {
+            made: previousMeal.made,
+            madeAt: previousMeal.madeAt,
+          });
+        } catch (error: unknown) {
+          setAuthError(error instanceof Error ? error.message : 'Failed to undo');
+        }
       }
     },
-    [demoMode, supabase, userId],
+    [demoMode, mealMadeUndo, pantry, supabase, userId],
   );
+
+  const confirmMealMade = useCallback(async () => {
+    if (!mealMadeReview) return;
+    const item = mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId);
+    if (!item) {
+      setMealMadeReview(null);
+      return;
+    }
+
+    const recipeId = resolveMealPlanRecipeId(item, recipes, ownerId);
+    const recipe = recipeId ? recipes.find((r) => r.id === recipeId) : undefined;
+    if (!recipe) {
+      setMealMadeReview(null);
+      return;
+    }
+
+    const match = scoreRecipeAgainstPantry(recipe, pantry);
+    const excluded = new Set(
+      matchedRowsForReview(match)
+        .map((row) => row.matchedPantryItem!.id)
+        .filter((id) => !mealMadeReview.selectedPantryIds.has(id)),
+    );
+    const lines = buildPantryDeductionLines(match, recipe, servingOverrides, excluded);
+    const pantrySnapshot = pantry.map((row) => ({ ...row }));
+    const { nextPantry } = applyPantryDeductions(pantry, lines);
+    const madeAt = new Date().toISOString();
+    const previousMeal = { ...item };
+
+    setMealMadeBusy(true);
+    try {
+      setPantry(nextPantry);
+      setMealPlan((prev) =>
+        prev.map((row) =>
+          row.id === item.id ? { ...row, made: true, madeAt } : row,
+        ),
+      );
+      setMealMadeUndo({
+        mealPlanItemId: item.id,
+        previousMeal,
+        pantrySnapshot,
+        deductionLines: lines,
+      });
+
+      if (!demoMode && supabase && userId) {
+        for (const line of lines) {
+          const updated = nextPantry.find((row) => row.id === line.pantryItemId);
+          if (updated) {
+            await updatePantryItem(supabase, userId, updated);
+          } else {
+            await deletePantryItemsByIds(supabase, userId, [line.pantryItemId]);
+          }
+        }
+        await updateMealPlanItem(supabase, userId, item.id, { made: true, madeAt });
+      }
+
+      setMealMadeReview(null);
+      setUndoToast({
+        message: `Marked “${item.title}” as made`,
+        onUndo: () => {
+          void undoLastMealMade(item.id);
+        },
+      });
+    } catch (error: unknown) {
+      setAuthError(error instanceof Error ? error.message : 'Failed to mark meal as made');
+      setPantry(pantrySnapshot);
+      setMealPlan((prev) => prev.map((row) => (row.id === item.id ? previousMeal : row)));
+    } finally {
+      setMealMadeBusy(false);
+    }
+  }, [
+    demoMode,
+    mealMadeReview,
+    mealPlan,
+    ownerId,
+    pantry,
+    recipes,
+    servingOverrides,
+    supabase,
+    undoLastMealMade,
+    userId,
+  ]);
 
   const addMealPlanEntry = useCallback(
     async (entry: Omit<MealPlanItem, 'id'>) => {
+      const normalized: Omit<MealPlanItem, 'id'> = {
+        ...entry,
+        madeAt: entry.madeAt ?? null,
+      };
+      const recipeId = resolveMealPlanRecipeId(
+        { ...normalized, id: 'pending' },
+        recipes,
+        ownerId,
+      );
+
       if (demoMode) {
         const id = `demo-plan-${Date.now()}`;
-        setMealPlan((prev) => [{ ...entry, id }, ...prev]);
+        setMealPlan((prev) => [{ ...normalized, id }, ...prev]);
+        if (userPreferences.autoAddMissingToGrocery && recipeId) {
+          appendMissingIngredientsForRecipe(recipeId, { showToast: true });
+        }
         return;
       }
       if (!supabase || !userId) throw new Error('Sign in to save your meal plan.');
-      const saved = await insertMealPlanItem(supabase, userId, entry);
+      const saved = await insertMealPlanItem(supabase, userId, normalized);
       setMealPlan((prev) => [saved, ...prev]);
+      if (userPreferences.autoAddMissingToGrocery && recipeId) {
+        appendMissingIngredientsForRecipe(recipeId, { showToast: true });
+      }
     },
-    [demoMode, supabase, userId],
+    [
+      appendMissingIngredientsForRecipe,
+      demoMode,
+      ownerId,
+      recipes,
+      supabase,
+      userId,
+      userPreferences.autoAddMissingToGrocery,
+    ],
   );
 
   const toggleMealPlanKitchenRecipe = useCallback(
@@ -447,6 +734,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         title: recipe.name,
         imageUrl: null,
         made: false,
+        madeAt: null,
         addedAt: new Date().toISOString(),
       });
     },
@@ -597,6 +885,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         title: item.name,
         imageUrl: null,
         made: false,
+        madeAt: null,
         addedAt: new Date().toISOString(),
       });
     },
@@ -614,27 +903,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addMissingForPlannedMealsToGrocery = useCallback(() => {
     setGrocery((prev) => {
       let next = prev;
+      const allAdded: GroceryListItem[] = [];
       for (const recipeId of plannedRecipeIds) {
         const match = pantryRecipeMatches.byRecipeId.get(recipeId);
         if (!match || match.missing.length === 0) continue;
-        next = mergeMissingIntoGrocery({
+        const result = mergeMissingIntoGrocery({
           missing: match.missing,
           recipeId,
           pantry,
           previous: next,
         });
+        next = result.items;
+        allAdded.push(...result.added);
       }
-      if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
-      if (!demoMode && supabase && userId) {
-        void replaceGroceryList(supabase, userId, next)
-          .then((persisted) => setGrocery(persisted))
-          .catch((error: unknown) => {
-            setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
-          });
+      if (allAdded.length > 0) {
+        persistGroceryList(next);
+        showGroceryAddedToast(allAdded, prev);
       }
       return next;
     });
-  }, [demoMode, pantry, pantryRecipeMatches.byRecipeId, plannedRecipeIds, supabase, userId]);
+  }, [pantry, pantryRecipeMatches.byRecipeId, persistGroceryList, plannedRecipeIds, showGroceryAddedToast]);
 
   const addPantryFromScan = useCallback(
     (name: string, photoUri: string | null) => {
@@ -817,30 +1105,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addMissingRecipeIngredientsToGrocery = useCallback(
     (recipeId: string) => {
-      const recipe = recipes.find((r) => r.id === recipeId);
-      const match = pantryRecipeMatches.byRecipeId.get(recipeId);
-      if (!recipe || !match || match.missing.length === 0) return;
-
-      setGrocery((prev) => {
-        const next = mergeMissingIntoGrocery({
-          missing: match.missing,
-          recipeId,
-          pantry,
-          previous: prev,
-        });
-        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
-        if (supabase && userId) {
-          void replaceGroceryList(supabase, userId, next)
-            .then((persisted) => setGrocery(persisted))
-            .catch((error: unknown) => {
-              setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
-            });
-        }
-        return next;
-      });
+      appendMissingIngredientsForRecipe(recipeId, { showToast: true });
     },
-    [demoMode, pantry, pantryRecipeMatches.byRecipeId, recipes, supabase, userId],
+    [appendMissingIngredientsForRecipe],
   );
+
+  const setUserPreference = useCallback(
+    <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
+      setUserPreferences((prev) => ({ ...prev, [key]: value }));
+      if (!demoMode && supabase && userId && key === 'autoAddMissingToGrocery') {
+        void updateProfilePreferences(supabase, userId, {
+          autoAddMissingToGrocery: value as boolean,
+        }).catch((error: unknown) => {
+          setAuthError(error instanceof Error ? error.message : 'Failed to save preference');
+        });
+      }
+    },
+    [demoMode, supabase, userId],
+  );
+
+  const dismissUndoToast = useCallback(() => setUndoToast(null), []);
+
+  const mealMadeReviewTitle = useMemo(() => {
+    if (!mealMadeReview) return null;
+    return mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)?.title ?? null;
+  }, [mealMadeReview, mealPlan]);
+
+  const mealMadeReviewRows = useMemo(() => {
+    if (!mealMadeReview) return [];
+    const item = mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId);
+    if (!item) return [];
+    const recipeId = resolveMealPlanRecipeId(item, recipes, ownerId);
+    const recipe = recipeId ? recipes.find((r) => r.id === recipeId) : undefined;
+    if (!recipe) return [];
+    return matchedRowsForReview(scoreRecipeAgainstPantry(recipe, pantry));
+  }, [mealMadeReview, mealPlan, ownerId, pantry, recipes]);
 
   const value = useMemo(
     () => ({
@@ -869,9 +1168,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleMealPlanKitchenRecipe,
       toggleMealPlanDiscoveryRecipe,
       removeMealPlanItem,
-      setMealPlanItemMade,
+      openMealMadeReview,
+      closeMealMadeReview,
+      toggleMealMadePantryUse,
+      confirmMealMade,
+      undoLastMealMade,
+      mealMadeReview,
+      mealMadeReviewTitle,
+      mealMadeReviewRows,
+      mealMadeBusy,
       isOnMealPlan,
       addMissingForPlannedMealsToGrocery,
+      userPreferences,
+      setUserPreference,
+      undoToast,
+      dismissUndoToast,
       setServingOverride,
       toggleGroceryItem,
       addManualGroceryItem,
@@ -935,9 +1246,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleMealPlanKitchenRecipe,
       toggleMealPlanDiscoveryRecipe,
       removeMealPlanItem,
-      setMealPlanItemMade,
+      openMealMadeReview,
+      closeMealMadeReview,
+      toggleMealMadePantryUse,
+      confirmMealMade,
+      undoLastMealMade,
+      mealMadeReview,
+      mealMadeReviewTitle,
+      mealMadeReviewRows,
+      mealMadeBusy,
       isOnMealPlan,
       addMissingForPlannedMealsToGrocery,
+      userPreferences,
+      setUserPreference,
+      undoToast,
+      dismissUndoToast,
       updateRecipe,
       importDiscoveredRecipe,
       pantryRecipeMatches,

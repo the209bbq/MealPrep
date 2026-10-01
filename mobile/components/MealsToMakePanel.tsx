@@ -8,7 +8,8 @@ interface MealsToMakePanelProps {
   items: MealPlanItem[];
   compact?: boolean;
   onRemove: (id: string) => void;
-  onToggleMade: (id: string, made: boolean) => void;
+  onMarkMade: (id: string) => void;
+  onUndoMade: (id: string) => void;
   onAddMissingToGrocery?: () => void;
 }
 
@@ -16,7 +17,8 @@ export function MealsToMakePanel({
   items,
   compact = false,
   onRemove,
-  onToggleMade,
+  onMarkMade,
+  onUndoMade,
   onAddMissingToGrocery,
 }: MealsToMakePanelProps) {
   const active = items.filter((m) => !m.made);
@@ -36,7 +38,7 @@ export function MealsToMakePanel({
     <Card
       className={compact ? 'mt-3' : 'mt-4'}
       title={`Meals to make (${active.length})`}
-      subtitle={compact ? 'Tap to mark made or remove' : 'Your cooking queue for the week'}
+      subtitle={compact ? 'Made it deducts pantry & moves to cooked' : 'Your cooking queue for the week'}
     >
       {active.map((item, index) => (
         <View
@@ -46,10 +48,10 @@ export function MealsToMakePanel({
           <Text className="mr-2 flex-1 font-semibold text-ink" numberOfLines={2}>{item.title}</Text>
           <View className="flex-row items-center gap-2">
             <Pressable
-              onPress={() => onToggleMade(item.id, true)}
+              onPress={() => onMarkMade(item.id)}
               className="rounded-full bg-emerald-light px-3 py-1.5"
             >
-              <Text className="text-xs font-bold text-emerald-dark">Made</Text>
+              <Text className="text-xs font-bold text-emerald-dark">Made it</Text>
             </Pressable>
             <Pressable onPress={() => onRemove(item.id)} className="p-1">
               <Ionicons name="close-circle" size={22} color={THEME.muted} />
@@ -64,7 +66,7 @@ export function MealsToMakePanel({
           {done.map((item) => (
             <View key={item.id} className="mt-2 flex-row items-center justify-between">
               <Text className="flex-1 text-sm text-muted line-through" numberOfLines={1}>{item.title}</Text>
-              <Pressable onPress={() => onToggleMade(item.id, false)}>
+              <Pressable onPress={() => onUndoMade(item.id)}>
                 <Text className="text-xs font-bold text-emerald-dark">Undo</Text>
               </Pressable>
             </View>
