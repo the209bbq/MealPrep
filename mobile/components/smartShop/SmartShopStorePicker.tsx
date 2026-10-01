@@ -154,7 +154,7 @@ export function SmartShopStorePickerModal({
               }}
               className="mt-3 rounded-xl bg-slate px-4 py-2"
             >
-              <Text className="text-center font-bold text-on-success">Add store</Text>
+              <Text className="text-center font-bold text-on-emerald">Add store</Text>
             </Pressable>
           </View>
         </View>
