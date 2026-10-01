@@ -52,16 +52,25 @@ import {
   clearGuestKitchenStorage,
   readGuestGrocery,
   readGuestKitchenSnapshot,
+  readGuestMealPlan,
   readGuestPantry,
+  readGuestRecipes,
   writeGuestGrocery,
+  writeGuestMealPlan,
   writeGuestPantry,
+  writeGuestRecipes,
 } from '../lib/guest/localKitchenStore';
 import { mergeGuestKitchenIntoAccount } from '../lib/guest/mergeGuestKitchen';
 import { readJson, removeStorageKey, writeJson } from '../lib/storage';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
 import { getSupabase } from '../lib/supabase';
 import { recipeApiToAppRecipe } from '../lib/recipeDiscovery/mapToAppRecipe';
-import { isRecipeApiInLibrary, recipeApiMasterSlug, recipeApiPersonalSlug } from '../lib/recipeDiscovery/slugs';
+import {
+  isRecipeApiInLibrary,
+  parseRecipeApiNumericId,
+  recipeApiMasterSlug,
+  recipeApiPersonalSlug,
+} from '../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
 import { activeMealPlanRecipeIds, isRecipeOnMealPlan, resolveMealPlanRecipeId } from '../lib/mealPlan/resolve';
 import { hydrateLocationFromProfile } from '../lib/smartShop/profileLocation';
@@ -318,15 +327,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let nextPantry = normalizePantryItemList(bundle.pantry);
     let nextGrocery = bundle.grocery;
 
-    if (guestKitchen.pantry.length > 0 || guestKitchen.grocery.length > 0) {
+    let nextMealPlan = bundle.mealPlan ?? [];
+    let nextRecipes = bundle.recipes.length > 0 ? bundle.recipes : [];
+
+    if (
+      guestKitchen.pantry.length > 0 ||
+      guestKitchen.grocery.length > 0 ||
+      guestKitchen.mealPlan.length > 0
+    ) {
       const merged = mergeGuestKitchenIntoAccount(
         nextPantry,
         nextGrocery,
         guestKitchen.pantry,
         guestKitchen.grocery,
+        nextMealPlan,
+        guestKitchen.mealPlan,
       );
       nextPantry = normalizePantryItemList(merged.pantry);
       nextGrocery = merged.grocery;
+      nextMealPlan = merged.mealPlan;
 
       for (const row of merged.pantryUpdates) {
         await updatePantryItem(supabase, userId, row);
@@ -340,6 +359,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ];
       }
       nextGrocery = await replaceGroceryList(supabase, userId, nextGrocery);
+
+      for (const guestRecipe of guestKitchen.recipes) {
+        const recipeApiId = parseRecipeApiNumericId(guestRecipe.id);
+        const exists = nextRecipes.some((row) => row.id === guestRecipe.id);
+        if (!exists && recipeApiId != null) {
+          const saved = await upsertImportedRecipe(supabase, userId, guestRecipe, {
+            asMaster: false,
+            recipeApiId,
+          });
+          nextRecipes = [saved, ...nextRecipes];
+        } else if (!exists) {
+          nextRecipes = [guestRecipe, ...nextRecipes];
+        }
+      }
+
+      const insertedMeals: MealPlanItem[] = [];
+      for (const row of merged.mealPlanInserts) {
+        insertedMeals.push(await insertMealPlanItem(supabase, userId, row));
+      }
+      if (insertedMeals.length > 0) {
+        const guestIds = new Set(merged.mealPlanInserts.map((row) => row.id));
+        nextMealPlan = [
+          ...insertedMeals,
+          ...nextMealPlan.filter((row) => !guestIds.has(row.id)),
+        ];
+      }
+
       clearGuestKitchenStorage();
     }
 
@@ -348,10 +394,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     removeStorageKey(STORAGE_KEYS.mealPlan);
     removeStorageKey(STORAGE_KEYS.recipes);
     setPantry(nextPantry);
-    setRecipes(bundle.recipes.length > 0 ? bundle.recipes : []);
+    setRecipes(nextRecipes);
     setGrocery(nextGrocery);
     setFeatureFlags(bundle.featureFlags);
-    setMealPlan(bundle.mealPlan ?? []);
+    setMealPlan(nextMealPlan);
     setLiveAnalytics(bundle.analytics);
     setLiveDataLoaded(true);
   }, [supabase, userId]);
@@ -382,8 +428,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!userId) {
       setLiveProfile(null);
       setLiveAnalytics(null);
-      setRecipes([]);
-      setMealPlan([]);
+      setRecipes(readGuestRecipes());
+      setMealPlan(readGuestMealPlan());
       setServingOverrides({});
       setPantry(readGuestPantry());
       setGrocery(readGuestGrocery());
@@ -458,7 +504,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.recipes, recipes);
-  }, [demoMode, recipes]);
+    else if (isGuest) writeGuestRecipes(recipes);
+  }, [demoMode, isGuest, recipes]);
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.flags, featureFlags);
@@ -470,7 +517,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.mealPlan, mealPlan);
-  }, [demoMode, mealPlan]);
+    else if (isGuest) writeGuestMealPlan(mealPlan);
+  }, [demoMode, isGuest, mealPlan]);
 
   const summary = useMemo<MealPrepSummary>(() => {
     const activePlan = mealPlan.filter((m) => !m.made);
@@ -574,6 +622,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLiveDataLoaded(false);
     setPantry(readGuestPantry());
     setGrocery(readGuestGrocery());
+    setMealPlan(readGuestMealPlan());
+    setRecipes(readGuestRecipes());
     for (const key of Object.values(STORAGE_KEYS)) {
       removeStorageKey(key);
     }
@@ -834,8 +884,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ownerId,
       );
 
-      if (demoMode) {
-        const id = `demo-plan-${Date.now()}`;
+      if (demoMode || isGuest) {
+        const id = isGuest ? `guest-plan-${Date.now()}` : `demo-plan-${Date.now()}`;
         setMealPlan((prev) => [{ ...normalized, id }, ...prev]);
         if (userPreferences.autoAddMissingToGrocery && recipeId) {
           appendMissingIngredientsForRecipe(recipeId, { showToast: true });
@@ -852,6 +902,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [
       appendMissingIngredientsForRecipe,
       demoMode,
+      isGuest,
       ownerId,
       recipes,
       supabase,
@@ -1017,14 +1068,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (options.asMaster && !isAdmin) {
         throw new Error('Only admins can add recipes to the shared kitchen catalog.');
       }
-      if (demoMode) {
-        let saved = { ...recipe, isMaster: options.asMaster };
+      if (demoMode || isGuest) {
+        const saved = { ...recipe, isMaster: isGuest ? false : options.asMaster };
         setRecipes((prev) => {
           const exists = prev.some((r) => r.id === recipe.id);
           const next = exists
             ? prev.map((r) => (r.id === recipe.id ? saved : r))
             : [saved, ...prev];
-          writeJson(STORAGE_KEYS.recipes, next);
+          if (demoMode) writeJson(STORAGE_KEYS.recipes, next);
+          else writeGuestRecipes(next);
           return next;
         });
         return saved;
@@ -1039,7 +1091,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       return saved;
     },
-    [demoMode, isAdmin, supabase, userId],
+    [demoMode, isAdmin, isGuest, supabase, userId],
   );
 
   const toggleMealPlanDiscoveryRecipe = useCallback(

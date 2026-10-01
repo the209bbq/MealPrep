@@ -6,6 +6,8 @@ import type { PreparedPantryImage } from '../lib/pantryVision/types';
 
 export interface PantryStorageScanButtonsProps {
   disabled?: boolean;
+  /** Web: block photo pickers and show guest sign-in prompt instead. */
+  guestPhotoScanBlocked?: boolean;
   onImagePrepared: (location: PantryStorageLocation, prepared: PreparedPantryImage) => void;
   onRequestNativeScan: (location: PantryStorageLocation, source: 'camera' | 'library') => void;
 }

@@ -1,6 +1,6 @@
 import { PANTRY_DISCOVERY_MAX_QUERIES } from '../../config/recipeMatching';
 import { PANTRY_STAPLES } from '../recipeMatch/config';
-import { canonicalIngredientSearchLabel, tokenizeIngredientName } from '../recipeMatch/normalize';
+import { canonicalIngredientSearchLabel, tokenizeIngredientName } from '../recipeMatch/ingredientNormalize';
 import type { PantryItem } from '../../types/mealprep';
 
 const STAPLE_TOKEN_SET = new Set(

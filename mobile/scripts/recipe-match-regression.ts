@@ -169,6 +169,17 @@ assert(
   'realistic pantry should match lemon herb chicken',
 );
 
+const guestQaPantry = pantryFrom(['boneless chicken breast 2 lb', 'rice', 'broccoli']);
+const guestQaIndex = buildPantryMatchIndex(recipes, guestQaPantry);
+const guestQaShown = filterRankedMatches(guestQaIndex.ranked, 'all', 0, {
+  minMatchedCount: 2,
+  pantryItemCount: guestQaPantry.length,
+});
+assert(
+  guestQaShown.length >= 1,
+  `guest QA pantry (chicken, rice, broccoli) should match at least one fixture recipe, got ${guestQaShown.length}`,
+);
+
 // --- Made it deduction repro ---
 const lemon = recipes.find((r) => r.id === 'lemon-chicken');
 assert(lemon, 'lemon-chicken fixture');

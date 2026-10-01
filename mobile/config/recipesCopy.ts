@@ -31,10 +31,14 @@ export const RECIPES_COPY = {
   readyToCook: {
     title: 'Ready to cook',
     subtitle: 'Everything on hand — save a grocery run',
+    discoveryTitle: 'Ready to cook from Recipe List',
+    discoverySubtitle: 'Online recipes that match your pantry — tap to open details',
   },
   needAFewItems: {
     title: 'Need a few items',
     subtitle: 'Add missing ingredients to your list, then Smart Shop',
+    discoveryTitle: 'Almost there from Recipe List',
+    discoverySubtitle: 'A few groceries away — add to meals to fill your list',
   },
 
   moreIdeasCard: {
