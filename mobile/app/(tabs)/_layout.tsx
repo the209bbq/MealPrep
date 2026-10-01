@@ -1,14 +1,18 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, type Href } from 'expo-router';
 import { View } from 'react-native';
 import { AppHeader } from '../../components/AppHeader';
+import { HydrationSafeIonicon } from '../../components/HydrationSafeIonicon';
+import type { ComponentProps } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
 import { AppOverlays } from '../../components/AppOverlays';
 import { MaintenanceScreen } from '../../components/MaintenanceScreen';
 import { TABS, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 
 export default function TabsLayout() {
-  const { maintenanceActive } = useApp();
+  const { maintenanceActive, isAdmin } = useApp();
 
   if (maintenanceActive) {
     return (
@@ -44,9 +48,10 @@ export default function TabsLayout() {
             name={tab.name === 'index' ? 'index' : tab.name}
             options={{
               title: tab.title,
+              href: (tab.adminOnly && !isAdmin ? null : tab.href) as Href | null,
               tabBarIcon: ({ color, focused }) => (
-                <Ionicons
-                  name={(focused ? tab.iconActive : tab.icon) as keyof typeof Ionicons.glyphMap}
+                <HydrationSafeIonicon
+                  name={(focused ? tab.iconActive : tab.icon) as IoniconName}
                   size={22}
                   color={color}
                 />

@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { APP_ROUTES } from '../config/appRoutes';
+import { useHydrated } from './useHydrated';
 import {
   readTourCompleted,
   readTourQueued,
@@ -17,15 +19,23 @@ export function useOnboarding(input: {
 }) {
   const { session, authReady } = input;
   const signedIn = session != null;
+  const hydrated = useHydrated();
 
-  const [welcomeDismissed, setWelcomeDismissed] = useState(() => readWelcomeDismissed());
-  const [tourCompleted, setTourCompleted] = useState(() => readTourCompleted());
-  const [tourQueued, setTourQueued] = useState(() => readTourQueued());
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const [tourCompleted, setTourCompleted] = useState(false);
+  const [tourQueued, setTourQueued] = useState(false);
   const hadSessionRef = useRef(signedIn);
 
-  const showWelcome = authReady && !signedIn && !welcomeDismissed;
+  useEffect(() => {
+    if (!hydrated) return;
+    setWelcomeDismissed(readWelcomeDismissed());
+    setTourCompleted(readTourCompleted());
+    setTourQueued(readTourQueued());
+  }, [hydrated]);
 
-  const showTour = authReady && tourQueued && !tourCompleted && !showWelcome;
+  const showWelcome = hydrated && authReady && !signedIn && !welcomeDismissed;
+
+  const showTour = hydrated && authReady && tourQueued && !tourCompleted && !showWelcome;
 
   useEffect(() => {
     const wasSignedIn = hadSessionRef.current;
@@ -36,27 +46,31 @@ export function useOnboarding(input: {
     writeTourQueued(true);
   }, [signedIn, tourCompleted]);
 
-  const dismissWelcomeForBrowse = useCallback(() => {
-    setWelcomeDismissed(true);
-    writeWelcomeDismissed(true);
+  const queueTutorial = useCallback(() => {
     if (!tourCompleted) {
       setTourQueued(true);
       writeTourQueued(true);
     }
   }, [tourCompleted]);
 
+  const dismissWelcomeForBrowse = useCallback(() => {
+    setWelcomeDismissed(true);
+    writeWelcomeDismissed(true);
+    queueTutorial();
+  }, [queueTutorial]);
+
   const dismissWelcomeForSignUp = useCallback(() => {
     setWelcomeDismissed(true);
     writeWelcomeDismissed(true);
-    router.push('/admin');
-  }, []);
+    queueTutorial();
+  }, [queueTutorial]);
 
   const completeTour = useCallback(() => {
     setTourCompleted(true);
     setTourQueued(false);
     writeTourCompleted(true);
     writeTourQueued(false);
-    router.push('/pantry');
+    router.push(APP_ROUTES.pantry);
   }, []);
 
   const skipTour = useCallback(() => {

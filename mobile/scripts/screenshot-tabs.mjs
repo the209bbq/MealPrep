@@ -11,7 +11,7 @@ const shots = [
   { path: '/recipes', file: 'tab_recipes.png' },
   { path: '/grocery', file: 'tab_grocery.png' },
   { path: '/admin', file: 'tab_admin_panel.png', role: 'admin' },
-  { path: '/admin', file: 'tab_profile_member.png', role: 'member' },
+  { path: '/profile', file: 'tab_profile_member.png', role: 'member' },
 ];
 
 await mkdir(outDir, { recursive: true });

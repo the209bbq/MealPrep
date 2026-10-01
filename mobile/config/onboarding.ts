@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import { APP_ROUTES } from './appRoutes';
 
 export type OnboardingBenefitId = 'scan' | 'recipes' | 'grocery' | 'smartShop';
 
@@ -135,28 +136,28 @@ export const ONBOARDING_COPY: OnboardingCopy = {
       title: 'Your kitchen hub',
       body: 'Scan your pantry first — we will show your next step here.',
       ctaLabel: 'Scan pantry',
-      href: '/pantry',
+      href: APP_ROUTES.pantry,
     },
     pantry: {
       icon: 'camera-outline',
       title: 'Your pantry is empty',
       body: 'Scan a shelf or add a few items so we know what you can cook.',
       ctaLabel: 'Scan pantry',
-      href: '/pantry',
+      href: APP_ROUTES.pantry,
     },
     recipes: {
       icon: 'restaurant-outline',
       title: 'Add your pantry to see recipes',
       body: 'We match meals to what you already have — start with a quick scan.',
       ctaLabel: 'Go to Pantry',
-      href: '/pantry',
+      href: APP_ROUTES.pantry,
     },
     grocery: {
       icon: 'cart-outline',
       title: 'Nothing on your list yet',
       body: 'Pick a recipe or add missing items from your pantry — we build the list for you.',
       ctaLabel: 'Browse recipes',
-      href: '/recipes',
+      href: APP_ROUTES.recipes,
     },
   },
 };

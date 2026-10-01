@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { HydrationSafeIonicon } from '../../components/HydrationSafeIonicon';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -87,7 +87,7 @@ export default function HomeScreen() {
               onPress={() => router.push(action.route)}
               className="flex-1 items-center rounded-2xl border border-border bg-card py-4"
             >
-              <Ionicons name={action.icon} size={24} color={THEME.primary} />
+              <HydrationSafeIonicon name={action.icon} size={24} color={THEME.primary} />
               <Text className="mt-2 text-sm font-bold text-ink">{action.label}</Text>
             </Pressable>
           ))}

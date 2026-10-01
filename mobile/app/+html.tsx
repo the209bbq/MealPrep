@@ -1,6 +1,6 @@
 import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html';
 import { APP_BRAND } from '../config/appBrand';
-import { APP_NAME, THEME } from '../config/appConfig';
+import { THEME } from '../config/appConfig';
 import { getWebBasePath, webAssetPath } from '../lib/webBasePath';
 
 export default function Root({ children }: { children: React.ReactNode }) {
@@ -10,9 +10,8 @@ export default function Root({ children }: { children: React.ReactNode }) {
   const appleIconHref = webAssetPath('/icons/apple-touch-icon.png');
 
   return (
-    <html lang="en" {...htmlAttributes}>
+    <html lang="en" suppressHydrationWarning {...htmlAttributes}>
       <head>
-        <title>{APP_NAME}</title>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
@@ -31,7 +30,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <ScrollViewStyleReset />
         {headNodes}
       </head>
-      <body {...bodyAttributes}>
+      <body suppressHydrationWarning {...bodyAttributes}>
         {children}
         {bodyNodes}
         <script src={webAssetPath('/pwa-register.js')} defer />
