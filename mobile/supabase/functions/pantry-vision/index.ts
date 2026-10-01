@@ -1,5 +1,5 @@
-// Pantry shelf vision — deploy `index.ts` + `geminiOrchestration.ts` together (Supabase CLI or Dashboard).
-// Edge Functions → pantry-vision
+// Pantry shelf vision — paste this ENTIRE file into Supabase Dashboard:
+// Edge Functions → pantry-vision → Via Editor
 //
 // Settings: leave "Verify JWT" ENABLED (default). Anonymous calls are rejected at the gateway;
 // this handler reads the user id from the JWT for rate limiting.
@@ -10,14 +10,140 @@
 //   GEMINI_MODEL = e.g. gemini-3.6-flash (defaults below; keep in sync with mobile/config/geminiVision.ts)
 //   GEMINI_FALLBACK_MODELS = comma-separated backup model ids (optional)
 
-import {
-  GEMINI_REQUEST_TIMEOUT_MS,
-  GEMINI_REQUEST_TOTAL_BUDGET_MS,
-  ModelTimeoutMemory,
-  RequestTimeBudget,
-  orderModelsForAttempt,
-  shouldRetrySameModelAfterError,
-} from './geminiOrchestration.ts';
+// BEGIN GEMINI_ORCHESTRATION (keep in sync with geminiOrchestration.ts — npm run test:pantry-vision-gemini)
+/** @sync mobile/config/geminiVision.ts */
+const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
+const DEFAULT_GEMINI_FALLBACK_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+] as const;
+
+/** Per upstream HTTP call (each Gemini generateContent). */
+const GEMINI_REQUEST_TIMEOUT_MS = 22_000;
+
+/** Shared wall-clock budget for one pantry-vision HTTP request (under Supabase ~150s limit). */
+const GEMINI_REQUEST_TOTAL_BUDGET_MS = 110_000;
+
+/** Do not start a new Gemini call when less than this remains on the budget. */
+const GEMINI_MIN_PER_CALL_TIMEOUT_MS = 2_500;
+
+const MODEL_TIMEOUT_DEPRIORITIZE_MS = 5 * 60 * 1000;
+
+const GEMINI_HTTP_RETRIES_PER_MODEL = 2;
+
+function parseCommaSeparatedModels(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function buildGeminiModelCandidates(
+  primaryFromEnv: string | undefined,
+  fallbacksFromEnv: string | undefined,
+): string[] {
+  const primary =
+    (primaryFromEnv ?? DEFAULT_GEMINI_MODEL).trim() || DEFAULT_GEMINI_MODEL;
+  const fromSecret = parseCommaSeparatedModels(fallbacksFromEnv);
+  const ordered = [primary, ...fromSecret, ...DEFAULT_GEMINI_FALLBACK_MODELS];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const model of ordered) {
+    if (seen.has(model)) continue;
+    seen.add(model);
+    out.push(model);
+  }
+  return out;
+}
+
+function deprioritizeRecentlyTimedOutModels(
+  candidates: string[],
+  timedOutAt: ReadonlyMap<string, number>,
+  nowMs: number,
+  ttlMs: number = MODEL_TIMEOUT_DEPRIORITIZE_MS,
+): string[] {
+  const fresh: string[] = [];
+  const deprioritized: string[] = [];
+  for (const model of candidates) {
+    const at = timedOutAt.get(model);
+    if (at != null && nowMs - at < ttlMs) {
+      deprioritized.push(model);
+    } else {
+      fresh.push(model);
+    }
+  }
+  return [...fresh, ...deprioritized];
+}
+
+class ModelTimeoutMemory {
+  private readonly timedOutAt = new Map<string, number>();
+
+  record(model: string, nowMs: number = Date.now()): void {
+    this.timedOutAt.set(model, nowMs);
+  }
+
+  orderCandidates(candidates: string[], nowMs: number = Date.now()): string[] {
+    return deprioritizeRecentlyTimedOutModels(candidates, this.timedOutAt, nowMs);
+  }
+}
+
+class RequestTimeBudget {
+  private readonly startedAtMs: number;
+
+  constructor(
+    private readonly totalMs: number,
+    private readonly nowFn: () => number = Date.now,
+  ) {
+    this.startedAtMs = nowFn();
+  }
+
+  elapsedMs(): number {
+    return this.nowFn() - this.startedAtMs;
+  }
+
+  remainingMs(): number {
+    return Math.max(0, this.totalMs - this.elapsedMs());
+  }
+
+  isExhausted(): boolean {
+    return this.remainingMs() < GEMINI_MIN_PER_CALL_TIMEOUT_MS;
+  }
+
+  /** Milliseconds for the next AbortSignal.timeout, or null if the budget is too low. */
+  perCallTimeoutMs(capMs: number = GEMINI_REQUEST_TIMEOUT_MS): number | null {
+    const remaining = this.remainingMs();
+    if (remaining < GEMINI_MIN_PER_CALL_TIMEOUT_MS) return null;
+    return Math.min(capMs, remaining);
+  }
+}
+
+type GeminiRetryableErrorKind = 'timeout' | 'http';
+
+function shouldRetrySameModelAfterError(
+  error: { kind: GeminiRetryableErrorKind; retryable?: boolean },
+  httpRetriesUsed: number,
+  maxHttpRetries: number = GEMINI_HTTP_RETRIES_PER_MODEL,
+): boolean {
+  if (error.kind === 'timeout') return false;
+  if (error.kind === 'http' && error.retryable) {
+    return httpRetriesUsed < maxHttpRetries - 1;
+  }
+  return false;
+}
+
+function orderModelsForAttempt(
+  primaryFromEnv: string | undefined,
+  fallbacksFromEnv: string | undefined,
+  timeoutMemory: ModelTimeoutMemory,
+  nowMs: number = Date.now(),
+): string[] {
+  const base = buildGeminiModelCandidates(primaryFromEnv, fallbacksFromEnv);
+  return timeoutMemory.orderCandidates(base, nowMs);
+}
+// END GEMINI_ORCHESTRATION
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_RETRY_BACKOFF_MS = 450;

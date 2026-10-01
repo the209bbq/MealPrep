@@ -1,6 +1,7 @@
 /**
- * Gemini model ordering and request time budget for pantry-vision.
- * Unit-tested from mobile/scripts (tsx); imported by index.ts in this folder.
+ * Canonical Gemini orchestration for pantry-vision (unit tests import this file).
+ * Must stay byte-for-byte equivalent to the block between BEGIN/END GEMINI_ORCHESTRATION in index.ts
+ * (see npm run test:pantry-vision-gemini-inline).
  */
 
 /** @sync mobile/config/geminiVision.ts */
