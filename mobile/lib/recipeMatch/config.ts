@@ -1,85 +1,10 @@
-/** Pantry staples treated as always available for recipe matching (v1 ignores quantities). */
-export const PANTRY_STAPLES = [
-  'salt',
-  'pepper',
-  'black pepper',
-  'water',
-  'oil',
-  'olive oil',
-  'vegetable oil',
-  'cooking oil',
-  'butter',
-  'garlic powder',
-  'onion powder',
-  'paprika',
-] as const;
+import {
+  FUZZY_MATCH_THRESHOLD,
+  INGREDIENT_STRIP_TOKENS,
+  INGREDIENT_SYNONYMS,
+  PANTRY_STAPLES,
+} from '../../config/recipeMatchingConfig';
 
-/** Canonical ingredient name → synonyms (all lowercase). */
-export const INGREDIENT_SYNONYMS: Record<string, string[]> = {
-  'green onion': ['scallion', 'scallions', 'spring onion', 'spring onions'],
-  'peanut butter': ['skippy peanut butter', 'jif peanut butter', 'creamy peanut butter'],
-  'ranch dressing': ['kraft ranch', 'ranch', 'ranch drizzle'],
-  broccoli: ['broccoli florets', 'fresh broccoli'],
-  rice: ['jasmine rice', 'white rice', 'steamed rice'],
-  chicken: ['chicken breast', 'boneless chicken breast', 'grilled chicken'],
-  lime: ['limes', 'fresh lime'],
-  lemon: ['lemons', 'fresh lemon'],
-  'green beans': ['string beans', 'snap beans'],
-  'sweet potato': ['sweet potatoes', 'yams'],
-};
+export { FUZZY_MATCH_THRESHOLD, INGREDIENT_SYNONYMS, PANTRY_STAPLES };
 
-/** Words stripped before token matching (brands, sizes, filler adjectives). */
-export const STRIP_TOKENS = new Set([
-  'skippy',
-  'jif',
-  'kraft',
-  'heinz',
-  'great',
-  'value',
-  'organic',
-  'fresh',
-  'frozen',
-  'raw',
-  'cooked',
-  'diced',
-  'chopped',
-  'sliced',
-  'minced',
-  'large',
-  'small',
-  'medium',
-  'extra',
-  'virgin',
-  'smoked',
-  'lean',
-  'boneless',
-  'skinless',
-  'whole',
-  'ground',
-  'creamy',
-  'crunchy',
-  'unsalted',
-  'salted',
-  'red',
-  'yellow',
-  'white',
-  'brown',
-  'light',
-  'dark',
-  'each',
-  'oz',
-  'lb',
-  'lbs',
-  'cup',
-  'cups',
-  'tbsp',
-  'tsp',
-  'can',
-  'jar',
-  'pack',
-  'bag',
-  'bottle',
-]);
-
-/** Minimum fuzzy score (0–1) to treat a pantry item as matching a recipe ingredient. */
-export const FUZZY_MATCH_THRESHOLD = 0.72;
+export const STRIP_TOKENS = new Set<string>(INGREDIENT_STRIP_TOKENS);

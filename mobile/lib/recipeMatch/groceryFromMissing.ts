@@ -1,5 +1,7 @@
 import type { GroceryListItem, PantryCategory, PantryItem, RecipeIngredient } from '../../types/mealprep';
+import { pantryCategoryForImportedIngredient } from '../recipeDiscovery/mapToAppRecipe';
 import { createManualGroceryItem } from '../grocery';
+import { convertQuantity, unitsAreConvertible } from '../units/conversion';
 import { normalizeIngredientName } from './normalize';
 
 function roundQty(value: number): number {
@@ -15,9 +17,41 @@ export function groceryDedupeKey(name: string, unit: string): string {
   return `${normalizeIngredientName(name)}::${unit.trim().toLowerCase()}`;
 }
 
-function findExistingGroceryIndex(list: GroceryListItem[], ingredient: RecipeIngredient): number {
-  const key = groceryDedupeKey(ingredient.name, ingredient.unit);
-  return list.findIndex((row) => groceryDedupeKey(row.name, row.unit) === key);
+function ingredientMergeKey(ingredient: RecipeIngredient): string {
+  return ingredient.ingredientId || normalizeIngredientName(ingredient.name);
+}
+
+function categoryForMissingIngredient(ingredient: RecipeIngredient, pantry: PantryItem[]): PantryCategory {
+  const pantryMatch = pantry.find(
+    (item) =>
+      item.ingredientId === ingredient.ingredientId ||
+      normalizeIngredientName(item.name) === normalizeIngredientName(ingredient.name),
+  );
+  if (pantryMatch) return pantryMatch.category;
+  return pantryCategoryForImportedIngredient(ingredient.name, ingredient.notes);
+}
+
+function findMergeableGroceryIndex(list: GroceryListItem[], ingredient: RecipeIngredient): number {
+  const mergeKey = ingredientMergeKey(ingredient);
+  return list.findIndex((row) => {
+    const rowKey = row.ingredientId || normalizeIngredientName(row.name);
+    if (rowKey !== mergeKey) return false;
+    if (groceryDedupeKey(row.name, row.unit) === groceryDedupeKey(ingredient.name, ingredient.unit)) {
+      return true;
+    }
+    return unitsAreConvertible(row.unit, ingredient.unit);
+  });
+}
+
+function mergedQuantity(existing: GroceryListItem, ingredient: RecipeIngredient): number {
+  if (groceryDedupeKey(existing.name, existing.unit) === groceryDedupeKey(ingredient.name, ingredient.unit)) {
+    return roundQty(existing.quantity + ingredient.quantity);
+  }
+  const converted = convertQuantity(ingredient.quantity, ingredient.unit, existing.unit);
+  if (converted === null) {
+    return roundQty(existing.quantity + ingredient.quantity);
+  }
+  return roundQty(existing.quantity + converted);
 }
 
 export interface MergeMissingGroceryResult {
@@ -34,11 +68,10 @@ export function groceryItemsFromMissingIngredients(
   const added: GroceryListItem[] = [];
 
   for (const ingredient of missing) {
-    if (findExistingGroceryIndex(previous, ingredient) >= 0) continue;
-    if (findExistingGroceryIndex(added, ingredient) >= 0) continue;
+    if (findMergeableGroceryIndex(previous, ingredient) >= 0) continue;
+    if (findMergeableGroceryIndex(added, ingredient) >= 0) continue;
 
-    const pantryMatch = pantry.find((item) => item.ingredientId === ingredient.ingredientId);
-    const category: PantryCategory = pantryMatch?.category ?? 'dry_goods';
+    const category = categoryForMissingIngredient(ingredient, pantry);
     const id = `groc-${ingredient.ingredientId}::${ingredient.unit}`;
 
     added.push({
@@ -62,21 +95,16 @@ export function mergeGroceryWithMissing(
   recipeId: string,
   pantry: PantryItem[],
 ): MergeMissingGroceryResult {
-  const newItems = groceryItemsFromMissingIngredients(missing, recipeId, pantry, previous);
-  if (newItems.length === 0) {
-    return { items: previous, added: [] };
-  }
-
   const merged = [...previous];
   const added: GroceryListItem[] = [];
 
-  for (const item of newItems) {
-    const idx = findExistingGroceryIndex(merged, item);
+  for (const ingredient of missing) {
+    const idx = findMergeableGroceryIndex(merged, ingredient);
     if (idx >= 0) {
       const existing = merged[idx];
       merged[idx] = {
         ...existing,
-        quantity: roundQty(existing.quantity + item.quantity),
+        quantity: mergedQuantity(existing, ingredient),
         sourceRecipeIds: existing.sourceRecipeIds.includes(recipeId)
           ? existing.sourceRecipeIds
           : [...existing.sourceRecipeIds, recipeId],
@@ -84,6 +112,17 @@ export function mergeGroceryWithMissing(
       continue;
     }
 
+    const category = categoryForMissingIngredient(ingredient, pantry);
+    const item: GroceryListItem = {
+      id: `groc-${ingredient.ingredientId}::${ingredient.unit}`,
+      ingredientId: ingredient.ingredientId,
+      name: ingredient.name,
+      category,
+      quantity: roundQty(ingredient.quantity),
+      unit: ingredient.unit,
+      checked: false,
+      sourceRecipeIds: [recipeId],
+    };
     merged.push(item);
     added.push(item);
   }

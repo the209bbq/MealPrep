@@ -4,6 +4,13 @@
 
 import { filterRankedMatches, type RecipePantryMatch } from '../lib/recipeMatch';
 
+export {
+  FUZZY_MATCH_THRESHOLD,
+  INGREDIENT_STRIP_TOKENS,
+  INGREDIENT_SYNONYMS,
+  PANTRY_STAPLES,
+} from './recipeMatchingConfig';
+
 /** Default minimum match % when the user has not changed the filter chips. */
 export const DEFAULT_MIN_PANTRY_MATCH_PERCENT = 50;
 
