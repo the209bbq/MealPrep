@@ -15,6 +15,7 @@ import { GroceryEmptyState } from '../../components/grocery/GroceryEmptyState';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { GroceryItemRow } from '../../components/grocery/GroceryItemRow';
 import { CATEGORY_LABELS, THEME } from '../../config/appConfig';
+import { APP_ROUTES } from '../../config/appRoutes';
 import { GROCERY_COPY } from '../../config/grocery';
 import { useApp } from '../../context/AppContext';
 import { groupGroceryByAisle } from '../../lib/grocery';
@@ -234,7 +235,7 @@ export default function GroceryScreen() {
             style={{ paddingBottom: Math.max(insets.bottom, 12) }}
           >
             <Pressable
-              onPress={() => router.push('/smart-shop')}
+              onPress={() => router.push(APP_ROUTES.smartShop)}
               className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3"
             >
               <Ionicons name="pricetags" size={22} color={THEME.onPrimary} />
