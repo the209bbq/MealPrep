@@ -1,7 +1,8 @@
 import type { GroceryListItem } from '../../types/mealprep';
 
 export type DealsMode = 'live' | 'sample';
-export type StorePricingSource = 'kroger' | 'sample' | 'none';
+export type StorePricingSource = 'kroger' | 'sample' | 'community' | 'none';
+export type DealPriceSource = 'kroger' | 'sample' | 'community';
 
 export interface StoreLocation {
   id: string;
@@ -30,6 +31,8 @@ export interface ItemStoreDeal {
   unit: string;
   promoLabel?: string;
   productUrl?: string;
+  priceSource?: DealPriceSource;
+  communityDealId?: string;
 }
 
 export interface StoreCartTotal {

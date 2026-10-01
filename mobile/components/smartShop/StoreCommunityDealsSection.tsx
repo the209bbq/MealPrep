@@ -1,0 +1,241 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { COMMUNITY_DEALS } from '../../config/communityDeals';
+import { THEME } from '../../config/appConfig';
+import { resolveStoreChainKey } from '../../config/weeklyAds';
+import type { StoreLocation } from '../../lib/deals/types';
+import { formatMoney } from '../../lib/smartShop/aggregateDeals';
+import {
+  addCommunityDeal,
+  formatReportedAgo,
+  voteCommunityDeal,
+} from '../../lib/communityDeals/client';
+import type { CommunityStoreDeal } from '../../lib/communityDeals/types';
+
+interface StoreCommunityDealsSectionProps {
+  store: StoreLocation;
+  deals: CommunityStoreDeal[];
+  loading?: boolean;
+  tableMissing?: boolean;
+  migrationHint?: string;
+  onRefresh: () => void;
+}
+
+function defaultValidUntilIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + COMMUNITY_DEALS.defaultValidDays);
+  return d.toISOString().slice(0, 10);
+}
+
+export function StoreCommunityDealsSection({
+  store,
+  deals,
+  loading,
+  tableMissing,
+  migrationHint,
+  onRefresh,
+}: StoreCommunityDealsSectionProps) {
+  const storeKey = resolveStoreChainKey(store);
+  const storeDeals = useMemo(
+    () => (storeKey ? deals.filter((d) => d.storeKey === storeKey) : []),
+    [deals, storeKey],
+  );
+
+  const [expanded, setExpanded] = useState(storeDeals.length > 0);
+  const [showForm, setShowForm] = useState(false);
+  const [itemName, setItemName] = useState('');
+  const [price, setPrice] = useState('');
+  const [unit, setUnit] = useState('');
+  const [note, setNote] = useState('');
+  const [validUntil, setValidUntil] = useState(defaultValidUntilIso);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!storeKey) return null;
+
+  async function handleVote(dealId: string, vote: 'confirm' | 'expired') {
+    const res = await voteCommunityDeal(dealId, vote);
+    if (!res.ok) {
+      setFormError(res.error ?? 'Could not save vote');
+      return;
+    }
+    setFormError(null);
+    onRefresh();
+  }
+
+  async function handleSubmitDeal() {
+    const parsed = Number.parseFloat(price);
+    if (!itemName.trim()) {
+      setFormError('Enter an item name.');
+      return;
+    }
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setFormError('Enter a valid price.');
+      return;
+    }
+    setSubmitting(true);
+    setFormError(null);
+    const res = await addCommunityDeal({
+      storeKey: storeKey as string,
+      osmStoreId: store.id.startsWith('kroger-') ? undefined : store.id,
+      storeName: store.name,
+      itemName: itemName.trim(),
+      price: parsed,
+      unit: unit.trim() || undefined,
+      note: note.trim() || undefined,
+      validUntil: validUntil.trim() || undefined,
+    });
+    setSubmitting(false);
+    if (!res.ok) {
+      setFormError(res.error ?? 'Could not add deal');
+      return;
+    }
+    setItemName('');
+    setPrice('');
+    setUnit('');
+    setNote('');
+    setValidUntil(defaultValidUntilIso());
+    setShowForm(false);
+    onRefresh();
+  }
+
+  return (
+    <View className="mt-3 border-t border-border pt-3">
+      <Pressable
+        onPress={() => setExpanded((v) => !v)}
+        className="flex-row items-center justify-between"
+      >
+        <Text className="text-sm font-bold text-ink">
+          Deals ({storeDeals.length}){storeDeals.some((d) => d.isSample) ? ' · SAMPLE' : ''}
+        </Text>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={THEME.muted} />
+      </Pressable>
+
+      {tableMissing && migrationHint ? (
+        <Text className="mt-2 text-xs text-amber-800">{migrationHint}</Text>
+      ) : null}
+
+      {expanded ? (
+        <View className="mt-2">
+          {loading ? (
+            <View className="flex-row items-center gap-2 py-2">
+              <ActivityIndicator size="small" color={THEME.emerald} />
+              <Text className="text-xs text-muted">Loading community deals…</Text>
+            </View>
+          ) : null}
+
+          {storeDeals.length === 0 && !loading ? (
+            <Text className="text-xs text-muted">No community deals yet — add one below.</Text>
+          ) : null}
+
+          {storeDeals.map((deal) => (
+            <View key={deal.id} className="mb-2 rounded-xl border border-border bg-paper px-3 py-2">
+              <View className="flex-row items-start justify-between gap-2">
+                <View className="min-w-0 flex-1">
+                  <Text className="font-semibold text-ink">{deal.itemName}</Text>
+                  <Text className="text-sm font-bold text-emerald-dark">
+                    {formatMoney(deal.price)}
+                    {deal.unit ? ` / ${deal.unit}` : ''}
+                  </Text>
+                  {deal.note ? <Text className="mt-1 text-xs text-muted">{deal.note}</Text> : null}
+                  <Text className="mt-1 text-xs text-muted">
+                    Reported {formatReportedAgo(deal.createdAt)}
+                    {deal.confirmCount ? ` · ${deal.confirmCount} confirmed` : ''}
+                    {deal.isSample ? ' · SAMPLE' : ''}
+                  </Text>
+                </View>
+              </View>
+              {!deal.isSample ? (
+                <View className="mt-2 flex-row flex-wrap gap-2">
+                  <Pressable
+                    onPress={() => void handleVote(deal.id, 'confirm')}
+                    className={`rounded-lg px-2 py-1 ${deal.myVote === 'confirm' ? 'bg-emerald' : 'bg-emerald-light'}`}
+                  >
+                    <Text
+                      className={`text-xs font-semibold ${deal.myVote === 'confirm' ? 'text-on-emerald' : 'text-emerald-dark'}`}
+                    >
+                      Confirm
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => void handleVote(deal.id, 'expired')}
+                    className={`rounded-lg px-2 py-1 ${deal.myVote === 'expired' ? 'bg-danger/20' : 'bg-paper'}`}
+                  >
+                    <Text className="text-xs font-semibold text-danger">Expired</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          ))}
+
+          {formError ? (
+            <Text className="mb-2 text-xs text-danger">{formError}</Text>
+          ) : null}
+
+          {showForm ? (
+            <View className="rounded-xl border border-border bg-paper p-3">
+              <Text className="text-xs font-bold text-ink">Add a deal</Text>
+              <TextInput
+                value={itemName}
+                onChangeText={setItemName}
+                placeholder="Item name"
+                placeholderTextColor={THEME.muted}
+                className="mt-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+              />
+              <View className="mt-2 flex-row gap-2">
+                <TextInput
+                  value={price}
+                  onChangeText={setPrice}
+                  placeholder="Price"
+                  keyboardType="decimal-pad"
+                  placeholderTextColor={THEME.muted}
+                  className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+                />
+                <TextInput
+                  value={unit}
+                  onChangeText={setUnit}
+                  placeholder="Unit (lb)"
+                  placeholderTextColor={THEME.muted}
+                  className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+                />
+              </View>
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder="Note (optional)"
+                placeholderTextColor={THEME.muted}
+                className="mt-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+              />
+              <TextInput
+                value={validUntil}
+                onChangeText={setValidUntil}
+                placeholder="Valid until (YYYY-MM-DD)"
+                placeholderTextColor={THEME.muted}
+                className="mt-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+              />
+              <View className="mt-3 flex-row gap-2">
+                <Pressable
+                  onPress={() => void handleSubmitDeal()}
+                  disabled={submitting}
+                  className="flex-1 rounded-xl bg-emerald px-3 py-2"
+                >
+                  <Text className="text-center text-xs font-bold text-on-emerald">
+                    {submitting ? 'Saving…' : 'Post deal'}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => setShowForm(false)} className="rounded-xl border border-border px-3 py-2">
+                  <Text className="text-xs font-semibold text-muted">Cancel</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable onPress={() => setShowForm(true)} className="mt-2 self-start">
+              <Text className="text-xs font-bold text-emerald-dark">Add a deal</Text>
+            </Pressable>
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+}

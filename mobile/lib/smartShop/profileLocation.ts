@@ -7,6 +7,7 @@ import {
   readSavedZip,
   writeSavedCoords,
   writeSavedStoreIds,
+  writeSavedStoreSummaries,
   writeSavedZip,
 } from './storage';
 import type { StoreLocation } from '../deals/types';
@@ -83,6 +84,13 @@ export async function loadFavoriteStoreIds(): Promise<string[]> {
 export async function persistFavoriteStores(stores: StoreLocation[]): Promise<void> {
   const keys = stores.map(storeKey);
   writeSavedStoreIds(keys);
+  writeSavedStoreSummaries(
+    stores.map((store) => ({
+      id: storeKey(store),
+      name: store.name,
+      chain: store.chain || store.name,
+    })),
+  );
 
   if (isDemoMode() || !isSupabaseConfigured()) return;
   const client = getSupabase();

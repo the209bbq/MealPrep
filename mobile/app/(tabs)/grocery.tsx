@@ -16,6 +16,7 @@ import { GroceryItemRow } from '../../components/grocery/GroceryItemRow';
 import { CATEGORY_LABELS, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 import { groupGroceryByAisle } from '../../lib/grocery';
+import { useGroceryCommunityDealBadges } from '../../lib/communityDeals/useCommunityDeals';
 import { PANTRY_CATEGORIES, type PantryCategory } from '../../types/mealprep';
 
 export default function GroceryScreen() {
@@ -43,6 +44,8 @@ export default function GroceryScreen() {
   const totalCount = grocery.length;
   const checkedCount = done.length;
   const openSections = useMemo(() => groupGroceryByAisle(open), [open]);
+  const openItemIds = useMemo(() => open.map((g) => g.id), [open]);
+  const { badges: communityBadges } = useGroceryCommunityDealBadges(openItemIds, grocery);
 
   const recipeNameById = useMemo(() => new Map(recipes.map((r) => [r.id, r.name])), [recipes]);
 
@@ -143,6 +146,7 @@ export default function GroceryScreen() {
                         item={item}
                         recipeLabels={recipeLabelFor(item)}
                         onToggle={() => toggleGroceryItem(item.id)}
+                        communityDeal={communityBadges.get(item.id)}
                       />
                     ))}
                   </View>
