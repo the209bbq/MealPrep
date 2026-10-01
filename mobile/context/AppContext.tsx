@@ -40,6 +40,7 @@ import {
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
 import { readJson, removeStorageKey, writeJson } from '../lib/storage';
+import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
 import { getSupabase } from '../lib/supabase';
 import { recipeApiToAppRecipe } from '../lib/recipeDiscovery/mapToAppRecipe';
 import { isRecipeApiInLibrary, recipeApiMasterSlug, recipeApiPersonalSlug } from '../lib/recipeDiscovery/slugs';
@@ -488,7 +489,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAuthError(null);
     const signedOutOwnerId = profile.id;
     await supabase.auth.signOut();
-    if (signedOutOwnerId) clearGroceryDismissals(signedOutOwnerId);
+    if (signedOutOwnerId) {
+      clearGroceryDismissals(signedOutOwnerId);
+      clearAddPriceMemory(signedOutOwnerId);
+    }
     setLiveProfile(null);
     setLiveAnalytics(null);
     setPantry([]);

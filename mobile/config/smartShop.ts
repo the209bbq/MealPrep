@@ -91,6 +91,18 @@ export const SMART_SHOP_COPY = {
   addPriceScanFailed: 'Could not read that tag. Try a clearer photo.',
   addPriceScanNotConfigured: 'Photo price scan is not set up yet.',
   reportedPriceNote: 'Shopper-reported price',
+  addPriceFromListLabel: 'From your list',
+  addPricePickStore: 'Pick a store',
+  addPriceSavedTitle: 'Price saved',
+  addPriceSavedBody: 'Thanks — other shoppers can use this when they compare your list.',
+  addPriceAddAnother: 'Add another',
+  addPriceDone: 'Done',
+  addPriceItemRequired: 'Enter an item name.',
+  addPricePriceRequired: 'Enter a valid price.',
+  addPriceSaleDateInvalid: 'Sale end date must be today or later.',
+  addPriceStoreUnsupported: 'This store cannot accept prices yet.',
+  addPriceSaveFailed: 'Could not save price.',
+  addPriceCameraPermission: 'Camera permission is needed to scan a shelf tag.',
 } as const;
 
 export const KROGER_CHAINS = [

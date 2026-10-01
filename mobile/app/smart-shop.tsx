@@ -28,7 +28,7 @@ export default function SmartShopScreen() {
   const shop = useSmartShopScreen({ grocery, profile });
   const [addPriceTarget, setAddPriceTarget] = useState<SmartShopAddPriceTarget | null>(null);
 
-  const openAddPrice = useCallback((store: StoreLocation, itemName?: string) => {
+  const openAddPrice = useCallback((store?: StoreLocation, itemName?: string) => {
     setAddPriceTarget({ store, itemName });
   }, []);
 
@@ -65,6 +65,14 @@ export default function SmartShopScreen() {
             {shop.originLabel ? ` · ${shop.originLabel}` : ''}
           </Text>
         </View>
+        {shop.items.length > 0 ? (
+          <Pressable
+            onPress={() => openAddPrice()}
+            className="rounded-xl bg-emerald px-3 py-2"
+          >
+            <Text className="text-xs font-bold text-on-emerald">{SMART_SHOP_COPY.addPriceButton}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {shop.hasLocation ? (
@@ -148,6 +156,11 @@ export default function SmartShopScreen() {
 
       <SmartShopAddPriceSheet
         target={addPriceTarget}
+        ownerId={profile.id}
+        groceryItems={shop.items}
+        nearbyStores={shop.sortedNearbyStores}
+        communityDeals={shop.community.deals}
+        dealsResult={shop.dealsResult}
         onClose={() => setAddPriceTarget(null)}
         onSaved={handlePriceSaved}
       />
