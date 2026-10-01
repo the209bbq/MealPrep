@@ -122,6 +122,8 @@ export const PHOTO_SCAN = {
   scanFailedMessage:
     'Something went wrong while analyzing your photo. Check your connection and try again.',
   scanBusyMessage: 'Scanning is busy right now. Try again in a moment.',
+  /** Client fetch timeout; keep above pantry-vision GEMINI_REQUEST_TOTAL_BUDGET_MS (~110s). */
+  visionRequestTimeoutMs: 125_000,
   tryAgainLabel: 'Try again',
   /** Max wait for saving reviewed scan items to Supabase (web/PWA). */
   saveTimeoutMs: 15_000,

@@ -1,5 +1,5 @@
-// Pantry shelf vision — paste this ENTIRE file into Supabase Dashboard:
-// Edge Functions → pantry-vision → Via Editor
+// Pantry shelf vision — deploy `index.ts` + `geminiOrchestration.ts` together (Supabase CLI or Dashboard).
+// Edge Functions → pantry-vision
 //
 // Settings: leave "Verify JWT" ENABLED (default). Anonymous calls are rejected at the gateway;
 // this handler reads the user id from the JWT for rate limiting.
@@ -10,19 +10,19 @@
 //   GEMINI_MODEL = e.g. gemini-3.6-flash (defaults below; keep in sync with mobile/config/geminiVision.ts)
 //   GEMINI_FALLBACK_MODELS = comma-separated backup model ids (optional)
 
-/** @sync mobile/config/geminiVision.ts */
+import {
+  GEMINI_REQUEST_TIMEOUT_MS,
+  GEMINI_REQUEST_TOTAL_BUDGET_MS,
+  ModelTimeoutMemory,
+  RequestTimeBudget,
+  orderModelsForAttempt,
+  shouldRetrySameModelAfterError,
+} from './geminiOrchestration.ts';
+
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
-const DEFAULT_GEMINI_FALLBACK_MODELS = [
-  'gemini-3.8-flash',
-  'gemini-3.7-flash',
-  'gemini-3.6-flash',
-  'gemini-3.5-flash',
-] as const;
-const GEMINI_REQUEST_TIMEOUT_MS = 90_000;
 const GEMINI_RETRY_BACKOFF_MS = 450;
-const GEMINI_PRIMARY_MODEL_ATTEMPTS = 3;
 const GEMINI_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 503]);
+const geminiModelTimeoutMemory = new ModelTimeoutMemory();
 const PANTRY_VISION_CACHE_VERSION = 'v3';
 const PANTRY_MAX_ITEMS = 120;
 const GEMINI_DETERMINISTIC_SEED = 42;
@@ -32,32 +32,6 @@ const GEMINI_MAX_OUTPUT_TOKENS_RETRY = 24_576;
 const SCAN_RESULT_CACHE_TTL_MS = 30 * 60 * 1000;
 const SCAN_RESULT_CACHE_MAX = 200;
 const scanResultCache = new Map<string, { at: number; items: DetectedPantryItem[]; model: string }>();
-
-function parseCommaSeparatedModels(raw: string | undefined): string[] {
-  if (!raw?.trim()) return [];
-  return raw
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-}
-
-function buildGeminiModelCandidates(
-  primaryFromEnv: string | undefined,
-  fallbacksFromEnv: string | undefined,
-): string[] {
-  const primary =
-    (primaryFromEnv ?? DEFAULT_GEMINI_MODEL).trim() || DEFAULT_GEMINI_MODEL;
-  const fromSecret = parseCommaSeparatedModels(fallbacksFromEnv);
-  const ordered = [primary, ...fromSecret, ...DEFAULT_GEMINI_FALLBACK_MODELS];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const model of ordered) {
-    if (seen.has(model)) continue;
-    seen.add(model);
-    out.push(model);
-  }
-  return out;
-}
 
 function isModelNotFoundOrRetired(status: number, detail: string): boolean {
   if (status !== 404) return false;
@@ -552,7 +526,13 @@ async function callGeminiOnce(
   mimeType: string,
   imageBase64: string,
   vision: GeminiVisionRequest,
+  budget: RequestTimeBudget,
 ): Promise<GeminiCallSuccess | { error: GeminiAttemptError }> {
+  const timeoutMs = budget.perCallTimeoutMs(GEMINI_REQUEST_TIMEOUT_MS);
+  if (timeoutMs == null) {
+    return { error: { kind: 'timeout', retryable: false } };
+  }
+
   const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const payload = {
@@ -580,7 +560,7 @@ async function callGeminiOnce(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(GEMINI_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     const isTimeout =
@@ -588,7 +568,7 @@ async function callGeminiOnce(
         ? error.name === 'TimeoutError'
         : error instanceof Error && error.name === 'TimeoutError';
     if (isTimeout) {
-      return { error: { kind: 'timeout', retryable: true } };
+      return { error: { kind: 'timeout', retryable: false } };
     }
     const message = error instanceof Error ? error.message : 'Network error calling Gemini';
     return {
@@ -652,12 +632,13 @@ async function callPantryGeminiPass(
   imageBase64: string,
   prompt: string,
   maxOutputTokens: number,
+  budget: RequestTimeBudget,
 ): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
   const result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, {
     prompt,
     schema: RESPONSE_JSON_SCHEMA,
     maxOutputTokens,
-  });
+  }, budget);
   if ('error' in result) return result;
 
   if (result.finishReason === 'MAX_TOKENS') {
@@ -665,7 +646,7 @@ async function callPantryGeminiPass(
       prompt,
       schema: RESPONSE_JSON_SCHEMA,
       maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS_RETRY,
-    });
+    }, budget);
     if ('error' in retry) return retry;
     try {
       const parsed = JSON.parse(retry.text) as unknown;
@@ -725,6 +706,7 @@ async function callPantryGeminiTwoPass(
   mimeType: string,
   imageBase64: string,
   scanLocation: (typeof PANTRY_STORAGE)[number],
+  budget: RequestTimeBudget,
 ): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
   const passOne = await callPantryGeminiPass(
     apiKey,
@@ -733,6 +715,7 @@ async function callPantryGeminiTwoPass(
     imageBase64,
     geminiEnumeratePrompt(scanLocation),
     GEMINI_MAX_OUTPUT_TOKENS,
+    budget,
   );
   if ('error' in passOne) return passOne;
 
@@ -743,6 +726,7 @@ async function callPantryGeminiTwoPass(
     imageBase64,
     geminiVerifyPrompt(scanLocation, passOne.items.map((i) => i.name)),
     GEMINI_MAX_OUTPUT_TOKENS,
+    budget,
   );
   if ('error' in passTwo) {
     return passOne;
@@ -756,12 +740,13 @@ async function callPriceTagGeminiOnce(
   model: string,
   mimeType: string,
   imageBase64: string,
+  budget: RequestTimeBudget,
 ): Promise<{ tag: SanitizedPriceTag } | { error: GeminiAttemptError }> {
   const result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, {
     prompt: priceTagPrompt(),
     schema: PRICE_TAG_JSON_SCHEMA,
     maxOutputTokens: 1024,
-  });
+  }, budget);
   if ('error' in result) return result;
   try {
     const parsed = JSON.parse(result.text) as unknown;
@@ -790,56 +775,86 @@ async function callPriceTagGeminiOnce(
   }
 }
 
-function formatAttemptError(model: string, error: GeminiAttemptError): string {
+function formatAttemptError(model: string, error: GeminiAttemptError, timeoutMs: number): string {
   if (error.kind === 'timeout') {
-    return `${model}: timed out after ${GEMINI_REQUEST_TIMEOUT_MS}ms`;
+    return `${model}: timed out (budget or ${timeoutMs}ms per call)`;
   }
   const statusLabel = error.status > 0 ? String(error.status) : 'network';
   return `${model} (${statusLabel}): ${error.detail}`;
 }
 
-async function callPantryGeminiOnModelWithRetries(
+async function callPantryGeminiOnModel(
   apiKey: string,
   model: string,
   mimeType: string,
   imageBase64: string,
   scanLocation: (typeof PANTRY_STORAGE)[number],
+  budget: RequestTimeBudget,
 ): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
-  let lastError: GeminiAttemptError | null = null;
-  for (let attempt = 0; attempt < GEMINI_PRIMARY_MODEL_ATTEMPTS; attempt += 1) {
-    const result = await callPantryGeminiTwoPass(apiKey, model, mimeType, imageBase64, scanLocation);
+  let httpRetries = 0;
+
+  while (true) {
+    if (budget.isExhausted()) {
+      return { error: { kind: 'timeout', retryable: false } };
+    }
+
+    const result = await callPantryGeminiTwoPass(
+      apiKey,
+      model,
+      mimeType,
+      imageBase64,
+      scanLocation,
+      budget,
+    );
     if ('items' in result) return result;
-    lastError = result.error;
-    const shouldRetry =
-      result.error.kind === 'timeout' ||
-      (result.error.kind === 'http' && result.error.retryable);
-    if (!shouldRetry) return result;
-    await sleep(GEMINI_RETRY_BACKOFF_MS * (attempt + 1));
+
+    if (result.error.kind === 'timeout') {
+      geminiModelTimeoutMemory.record(model);
+      return result;
+    }
+
+    if (!shouldRetrySameModelAfterError(result.error, httpRetries)) {
+      return result;
+    }
+
+    httpRetries += 1;
+    await sleep(GEMINI_RETRY_BACKOFF_MS * httpRetries);
   }
-  return lastError
-    ? { error: lastError }
-    : { error: { kind: 'http', status: 502, detail: 'Unknown failure', retryable: true } };
 }
 
-async function callPriceTagGeminiWithSingleRetry(
+async function callPriceTagGeminiOnModel(
   apiKey: string,
   model: string,
   mimeType: string,
   imageBase64: string,
+  budget: RequestTimeBudget,
 ): Promise<{ tag: SanitizedPriceTag } | { error: GeminiAttemptError }> {
-  let result = await callPriceTagGeminiOnce(apiKey, model, mimeType, imageBase64);
-  if ('tag' in result) return result;
+  let httpRetries = 0;
 
-  const shouldRetry =
-    result.error.kind === 'timeout' ||
-    (result.error.kind === 'http' && result.error.retryable);
+  while (true) {
+    if (budget.isExhausted()) {
+      return { error: { kind: 'timeout', retryable: false } };
+    }
 
-  if (!shouldRetry) return result;
+    const result = await callPriceTagGeminiOnce(apiKey, model, mimeType, imageBase64, budget);
+    if ('tag' in result) return result;
 
-  await sleep(GEMINI_RETRY_BACKOFF_MS);
-  result = await callPriceTagGeminiOnce(apiKey, model, mimeType, imageBase64);
-  return result;
+    if (result.error.kind === 'timeout') {
+      geminiModelTimeoutMemory.record(model);
+      return result;
+    }
+
+    if (!shouldRetrySameModelAfterError(result.error, httpRetries)) {
+      return result;
+    }
+
+    httpRetries += 1;
+    await sleep(GEMINI_RETRY_BACKOFF_MS * httpRetries);
+  }
 }
+
+const UPSTREAM_BUSY_MESSAGE =
+  'Vision scan is busy right now. Try again in a moment.';
 
 async function callPantryGeminiWithFallbacks(
   apiKey: string,
@@ -847,32 +862,42 @@ async function callPantryGeminiWithFallbacks(
   imageBase64: string,
   scanLocation: (typeof PANTRY_STORAGE)[number],
 ): Promise<{ items: DetectedPantryItem[]; model: string }> {
-  const candidates = buildGeminiModelCandidates(
+  const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
+  const candidates = orderModelsForAttempt(
     Deno.env.get('GEMINI_MODEL') ?? undefined,
     Deno.env.get('GEMINI_FALLBACK_MODELS') ?? undefined,
+    geminiModelTimeoutMemory,
   );
 
   const failures: string[] = [];
 
   for (const model of candidates) {
-    const result = await callPantryGeminiOnModelWithRetries(
+    if (budget.isExhausted()) {
+      failures.push('request time budget exhausted before next model');
+      break;
+    }
+
+    const result = await callPantryGeminiOnModel(
       apiKey,
       model,
       mimeType,
       imageBase64,
       scanLocation,
+      budget,
     );
     if ('items' in result) {
       console.log(`pantry-vision: gemini ok model=${model} items=${result.items.length}`);
       return { items: result.items, model };
     }
-    failures.push(formatAttemptError(model, result.error));
+    failures.push(formatAttemptError(model, result.error, GEMINI_REQUEST_TIMEOUT_MS));
     console.warn(`pantry-vision: gemini failed ${failures[failures.length - 1]}`);
   }
 
   const summary = failures.slice(-4).join(' | ');
   throw new Error(
-    `Pantry scan could not reach Gemini after trying ${candidates.length} model(s). ${summary}`,
+    failures.some((f) => f.includes('budget'))
+      ? `${UPSTREAM_BUSY_MESSAGE} (${summary})`
+      : `Pantry scan could not reach Gemini after trying ${candidates.length} model(s). ${summary}`,
   );
 }
 
@@ -881,26 +906,35 @@ async function callPriceTagGeminiWithFallbacks(
   mimeType: string,
   imageBase64: string,
 ): Promise<{ tag: SanitizedPriceTag; model: string }> {
-  const candidates = buildGeminiModelCandidates(
+  const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
+  const candidates = orderModelsForAttempt(
     Deno.env.get('GEMINI_MODEL') ?? undefined,
     Deno.env.get('GEMINI_FALLBACK_MODELS') ?? undefined,
+    geminiModelTimeoutMemory,
   );
 
   const failures: string[] = [];
 
   for (const model of candidates) {
-    const result = await callPriceTagGeminiWithSingleRetry(apiKey, model, mimeType, imageBase64);
+    if (budget.isExhausted()) {
+      failures.push('request time budget exhausted before next model');
+      break;
+    }
+
+    const result = await callPriceTagGeminiOnModel(apiKey, model, mimeType, imageBase64, budget);
     if ('tag' in result) {
       console.log(`pantry-vision: price-tag ok model=${model} item=${result.tag.itemName}`);
       return { tag: result.tag, model };
     }
-    failures.push(formatAttemptError(model, result.error));
+    failures.push(formatAttemptError(model, result.error, GEMINI_REQUEST_TIMEOUT_MS));
     console.warn(`pantry-vision: price-tag failed ${failures[failures.length - 1]}`);
   }
 
   const summary = failures.slice(-4).join(' | ');
   throw new Error(
-    `Could not read the shelf tag after trying ${candidates.length} model(s). ${summary}`,
+    failures.some((f) => f.includes('budget'))
+      ? `${UPSTREAM_BUSY_MESSAGE} (${summary})`
+      : `Could not read the shelf tag after trying ${candidates.length} model(s). ${summary}`,
   );
 }
 
