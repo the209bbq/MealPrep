@@ -126,6 +126,7 @@ export default function PantryScreen() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanErrorTitle, setScanErrorTitle] = useState<string | null>(null);
   const [scanNotice, setScanNotice] = useState<{ title: string; message: string } | null>(null);
+  const [scanQualityWarning, setScanQualityWarning] = useState<string | null>(null);
   const [lastScanAttempt, setLastScanAttempt] = useState<
     | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
     | { kind: 'uri'; uri: string; location: PantryStorageLocation }
@@ -202,6 +203,7 @@ export default function PantryScreen() {
     setScanError(null);
     setScanErrorTitle(null);
     setScanNotice(null);
+    setScanQualityWarning(null);
     setLastScanAttempt(null);
   }
 
@@ -272,6 +274,7 @@ export default function PantryScreen() {
 
     setScanLocationHint(scanLocation);
     clearScanFailure();
+    setScanQualityWarning(prepared.qualityWarnings?.join(' ') ?? null);
     setPhase('loading');
     setPreviewUri(prepared.uri);
 
@@ -329,7 +332,9 @@ export default function PantryScreen() {
                 ? error.message
                 : error instanceof PantryVisionScanError
                   ? error.message
-                  : PHOTO_SCAN.scanFailedMessage;
+                  : error instanceof Error
+                    ? error.message
+                    : PHOTO_SCAN.scanFailedMessage;
       const canRetry = !(error instanceof PantryVisionNotConfiguredError);
       setScanFailure(message, title, canRetry ? attempt : null);
       setPhase('idle');
@@ -345,10 +350,8 @@ export default function PantryScreen() {
       const prepared = await preparePantryImage(uri);
       await runVisionFromPrepared(prepared, scanLocation);
     } catch (error) {
-      if (error instanceof PantryImageQualityError) {
-        logPantryScanFailure(
-          error.reason === 'too_dark' ? 'IMAGE_TOO_DARK' : 'IMAGE_TOO_BLURRY',
-        );
+      if (error instanceof PantryImageQualityError && error.reason === 'blank') {
+        logPantryScanFailure('BAD_IMAGE', error.message);
         setScanFailure(error.message, PHOTO_SCAN.scanFailedTitle, attempt);
       } else if (error instanceof Error) {
         logPantryScanFailure('BAD_IMAGE', error.message);
@@ -715,6 +718,12 @@ export default function PantryScreen() {
             <Text className="mt-2 text-xs text-muted">
               Demo mode: scan returns labeled sample detections only (no cloud scan).
             </Text>
+          ) : null}
+
+          {scanQualityWarning ? (
+            <View className="mt-3 rounded-xl border border-border bg-paper p-3">
+              <Text className="text-xs text-muted">{scanQualityWarning}</Text>
+            </View>
           ) : null}
 
           {scanNotice ? (

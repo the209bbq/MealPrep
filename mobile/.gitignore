@@ -10,6 +10,7 @@ web-build/
 .hydration-serve-root/
 .pantry-scan-serve-root/
 expo-env.d.ts
+.prepare-image-web-test/
 
 # Native
 .kotlin/

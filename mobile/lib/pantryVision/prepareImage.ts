@@ -1,6 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { PHOTO_SCAN } from '../../config/appConfig';
-import { assessJpegBase64Quality } from './imageQuality';
+import { evaluateJpegBase64Quality } from './imageQuality';
 import {
   computeLongEdgeResize,
   PantryImageQualityError,
@@ -79,13 +79,14 @@ export async function preparePantryImage(uri: string): Promise<PreparedPantryIma
     [{ resize: { width: 128 } }],
     { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
   );
+  let qualityWarnings: string[] | undefined;
   if (thumb.base64) {
-    const assessment = assessJpegBase64Quality(thumb.base64);
-    if (!assessment.ok && assessment.rejectReason === 'too_dark') {
-      throw new PantryImageQualityError('too_dark', PHOTO_SCAN.imageTooDarkMessage);
+    const evaluation = evaluateJpegBase64Quality(thumb.base64);
+    if (evaluation.hardReject === 'blank') {
+      throw new PantryImageQualityError('blank', evaluation.hardRejectMessage ?? PHOTO_SCAN.imageBlankMessage);
     }
-    if (!assessment.ok && assessment.rejectReason === 'too_blurry') {
-      throw new PantryImageQualityError('too_blurry', PHOTO_SCAN.imageTooBlurryMessage);
+    if (evaluation.warnings.length > 0) {
+      qualityWarnings = evaluation.warnings;
     }
   }
 
@@ -95,5 +96,6 @@ export async function preparePantryImage(uri: string): Promise<PreparedPantryIma
     base64,
     byteLength,
     contentHash: undefined,
+    qualityWarnings,
   };
 }

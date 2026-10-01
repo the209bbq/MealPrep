@@ -1,10 +1,9 @@
 /**
- * Playwright: pantry web file input starts scan flow on static export.
- * Run from mobile/ after export:web:
- *   npx serve dist -l 8766 --no-port-switching  (or let this script start serve)
- *   APP_BASE=/MealPrep/app npx tsx scripts/web-pantry-photo-scan-check.ts
+ * Playwright: pantry web file input + prepare on static export (Pixel / Android Chrome).
+ * Uses test/fixtures/photos/pantry-rack.jpg. Mocks auth + pantry-vision.
+ * Run after export:web: npm run test:web-pantry-photo-scan
  */
-import { chromium } from 'playwright';
+import { devices, chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,15 +13,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mobileRoot = path.resolve(__dirname, '..');
 const distDir = path.join(mobileRoot, 'dist');
 const serveRoot = path.join(mobileRoot, '.pantry-scan-serve-root');
+const userPhoto = path.join(mobileRoot, 'test/fixtures/photos/pantry-rack.jpg');
 
 const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
 const port = Number(process.env.PORT ?? 8766);
 const origin = `http://127.0.0.1:${port}`;
-
-const MINIMAL_JPEG = Buffer.from(
-  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxISEhUQEhIVFhUVFRUVFRUVFRUWFhUVFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMtNygtLisBCgoKDg0OGxAQGy0lICUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAAEAAQMBIgACEQEDEQH/xAAbAAACAwEBAQAAAAAAAAAAAAADBAECBQYAB//EADAQAAIBAwMCBQQDAwUAAAAAAAECAwAEEQUSITETQVFhBiJxgZEUobHB0fAjQuH/xAAZAQADAQEBAAAAAAAAAAAAAAABAgMABP/EACARAAIBBQEAAwEBAAAAAAAAAAECAxEEBRIhMQYTQVFh/9oADAMBAAIRAxEAPwD9gKKKKKAP/9k=',
-  'base64',
-);
 
 function prepareServeRoot(): string {
   const nested = path.join(serveRoot, basePath.replace(/^\//, ''));
@@ -63,11 +58,7 @@ function startServer(): Promise<{ close: () => void }> {
     });
     proc.on('error', reject);
     void waitForHttpReady()
-      .then(() => {
-        resolve({
-          close: () => proc.kill('SIGKILL'),
-        });
-      })
+      .then(() => resolve({ close: () => proc.kill('SIGKILL') }))
       .catch((err) => {
         proc.kill('SIGTERM');
         reject(err);
@@ -80,18 +71,43 @@ async function main() {
     console.error('Missing dist/ — run npm run export:web first');
     process.exit(1);
   }
+  if (!fs.existsSync(userPhoto)) {
+    console.error('Missing test/fixtures/photos/pantry-rack.jpg');
+    process.exit(1);
+  }
 
   const server = await startServer();
   const browser = await chromium.launch();
-  const tmpImage = path.join(mobileRoot, '.tmp-pantry-scan-test.jpg');
-  fs.writeFileSync(tmpImage, MINIMAL_JPEG);
+  const context = await browser.newContext({ ...devices['Pixel 5'] });
 
   try {
-    const context = await browser.newContext();
     const page = await context.newPage();
     await page.route(`**${basePath}/pwa-register.js`, (route) => route.abort());
 
-    await page.goto(`${origin}${basePath}/pantry`, { waitUntil: 'networkidle', timeout: 60_000 });
+    await page.addInitScript(() => {
+      const session = {
+        access_token: 'test-access-token',
+        refresh_token: 'test-refresh',
+        user: { id: 'test-user-id', email: 'test@example.com' },
+      };
+      window.localStorage.setItem(
+        'sb-test-auth-token',
+        JSON.stringify({ currentSession: session, expiresAt: Date.now() + 3600_000 }),
+      );
+    });
+
+    await page.route('**/functions/v1/pantry-vision**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [{ name: 'Canned beans', category: 'pantry', confidence: 0.9 }],
+          model: 'test-mock',
+        }),
+      });
+    });
+
+    await page.goto(`${origin}${basePath}/pantry`, { waitUntil: 'networkidle', timeout: 90_000 });
 
     const libraryButton = page.getByLabel(/from photo library/i).first();
     await libraryButton.scrollIntoViewIfNeeded();
@@ -104,32 +120,25 @@ async function main() {
       fileChooser = await fileChooserPromise;
     } catch {
       console.warn('Pantry photo scan check: file chooser did not open in headless (skipping UI leg).');
-      await context.close();
       return;
     }
-    await fileChooser.setFiles(tmpImage);
+    await fileChooser.setFiles(userPhoto);
 
-    await page.getByText('Analyzing photo', { exact: false }).waitFor({ timeout: 20_000 });
+    await page.getByText('Analyzing photo', { exact: false }).waitFor({ timeout: 30_000 });
 
-    const sawReviewOrError = await Promise.race([
-      page.getByText('Review scan', { exact: false }).waitFor({ timeout: 45_000 }).then(() => 'review'),
-      page.getByText('No items found', { exact: false }).waitFor({ timeout: 45_000 }).then(() => 'empty'),
-      page.getByText('Scan failed', { exact: false }).waitFor({ timeout: 45_000 }).then(() => 'error'),
-      page.getByText('Sign in', { exact: false }).waitFor({ timeout: 45_000 }).then(() => 'signin'),
-    ]).catch(() => 'timeout');
-
-    if (sawReviewOrError === 'timeout') {
-      console.error('Pantry photo scan did not reach review, error, or sign-in UI after file upload');
+    const readPhotoTitle = page.getByText("Couldn't read that photo", { exact: false });
+    const sawPrepareFailure = await readPhotoTitle.isVisible().catch(() => false);
+    if (sawPrepareFailure) {
+      const detail = await page.locator('text=Couldn').locator('..').locator('text=/./').nth(1).textContent().catch(() => '');
+      console.error(`Prepare/scan failed with scanFailedTitle. Detail: ${detail}`);
       process.exitCode = 1;
-    } else if (sawReviewOrError === 'signin') {
-      console.log('Pantry photo scan check: file input ran; live build requires sign-in (expected without mocked session).');
-    } else {
-      console.log(`Pantry photo scan check passed (outcome: ${sawReviewOrError}).`);
+      return;
     }
 
-    await context.close();
+    await page.getByText('Review scan', { exact: false }).waitFor({ timeout: 60_000 });
+    console.log('web-pantry-photo-scan-check: pantry-rack.jpg reached review UI on Pixel Chromium.');
   } finally {
-    fs.rmSync(tmpImage, { force: true });
+    await context.close();
     await browser.close();
     server.close();
   }

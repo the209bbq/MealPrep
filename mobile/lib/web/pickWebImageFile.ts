@@ -7,7 +7,7 @@ export type PickWebImageFileOptions = {
 };
 
 const CANCEL_POLL_INTERVAL_MS = 250;
-/** Mobile Safari can populate `input.files` hundreds of ms after window focus. */
+/** Android Chrome / mobile Safari can populate `input.files` hundreds of ms after focus. */
 const CANCEL_POLL_MAX_ATTEMPTS = 16;
 
 export function pickWebImageFile(options: PickWebImageFileOptions = {}): Promise<File | null> {

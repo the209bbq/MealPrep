@@ -79,12 +79,11 @@ export function PantryStorageScanButtons({
       const prepared = await preparePantryImageFromFile(file);
       onImagePrepared(location, prepared);
     } catch (error: unknown) {
-      const message =
-        error instanceof PantryImageQualityError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : 'Could not prepare photo';
+      if (error instanceof PantryImageQualityError && error.reason === 'blank') {
+        onPrepareError?.(error.message);
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Could not prepare photo';
       onPrepareError?.(message);
     } finally {
       setPickerBusy(false);

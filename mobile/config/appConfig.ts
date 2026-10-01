@@ -105,11 +105,17 @@ export const PHOTO_SCAN = {
   maxImageDimension: 1600,
   jpegQuality: 0.82,
   maxPayloadBytes: 2_800_000,
-  /** Quality gate before upload (thumb analysis). */
+  /** Quality hints before upload (analysis on a downsampled thumb, not the full upload). */
+  qualityAnalysisLongEdge: 256,
   minMeanLuminance: 0.12,
-  minLaplacianVariance: 18,
+  /** Soft blur hint — mean squared Laplacian on 0–1 luma (sharp phone photos are often ~0.03–0.08). */
+  minLaplacianVariance: 0.008,
+  /** Hard reject when the frame is uniform/blank. */
+  minLuminanceStdDev: 0.01,
+  blankLaplacianVariance: 1e-6,
   imageTooDarkMessage: 'This photo looks too dark. Turn on more light and try again.',
   imageTooBlurryMessage: 'This photo looks blurry. Hold steady and tap to focus, then try again.',
+  imageBlankMessage: 'This photo looks blank. Try another picture with your pantry in frame.',
   /** Documented default for the Edge Function secret GEMINI_MODEL (not sent from the client). */
   defaultGeminiModel: DEFAULT_GEMINI_VISION_MODEL,
   /** Documented default fallback chain on the Edge Function (override via GEMINI_FALLBACK_MODELS secret). */
