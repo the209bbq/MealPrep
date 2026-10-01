@@ -2,6 +2,7 @@ import { COMMUNITY_DEALS } from '../../config/communityDeals';
 import { isDemoMode } from '../../config/appConfig';
 import { getSupabase } from '../supabase';
 import { demoCommunityDeals } from './demoSamples';
+import { isPastLocalDate, localDateString } from './localDate';
 import type {
   AddCommunityDealInput,
   CommunityStoreDeal,
@@ -65,10 +66,15 @@ function mapDealRow(
   };
 }
 
-export function filterVisibleCommunityDeals(deals: CommunityStoreDeal[]): CommunityStoreDeal[] {
-  const today = new Date().toISOString().slice(0, 10);
+export function filterVisibleCommunityDeals(
+  deals: CommunityStoreDeal[],
+  currentUserId?: string | null,
+): CommunityStoreDeal[] {
+  const today = localDateString();
   return deals.filter((deal) => {
-    if (deal.validUntil && deal.validUntil < today) return false;
+    if (deal.validUntil && isPastLocalDate(deal.validUntil, today)) {
+      return Boolean(currentUserId && deal.reportedBy === currentUserId);
+    }
     if (deal.expiredCount >= COMMUNITY_DEALS.expiredVoteThreshold) return false;
     return true;
   });
@@ -81,18 +87,18 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
   }
 
   if (isDemoMode()) {
-    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys)), tableMissing: false };
+    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), null), tableMissing: false };
   }
 
   const client = getSupabase();
   if (!client) {
-    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys)), tableMissing: false };
+    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), null), tableMissing: false };
   }
 
   const { data: sessionData } = await client.auth.getSession();
   const userId = sessionData.session?.user?.id ?? null;
   if (!userId) {
-    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys)), tableMissing: false };
+    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), null), tableMissing: false };
   }
 
   const { data: dealRows, error: dealsError } = await client
@@ -105,7 +111,7 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
 
   if (isMissingTableError(dealsError)) {
     return {
-      deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys)),
+      deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), userId),
       tableMissing: true,
       hint: COMMUNITY_DEALS.migrationHint,
     };
@@ -123,7 +129,7 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
 
   if (isMissingTableError(votesError)) {
     return {
-      deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys)),
+      deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), userId),
       tableMissing: true,
       hint: COMMUNITY_DEALS.migrationHint,
     };
@@ -131,7 +137,7 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
 
   const votes = (voteRows ?? []) as VoteRow[];
   const mapped = (dealRows as DealRow[]).map((row) => mapDealRow(row, votes, userId));
-  return { deals: filterVisibleCommunityDeals(mapped), tableMissing: false };
+  return { deals: filterVisibleCommunityDeals(mapped, userId), tableMissing: false };
 }
 
 export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ ok: boolean; error?: string }> {
@@ -151,8 +157,12 @@ export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ 
     (() => {
       const d = new Date();
       d.setDate(d.getDate() + COMMUNITY_DEALS.defaultValidDays);
-      return d.toISOString().slice(0, 10);
+      return localDateString(d);
     })();
+
+  if (isPastLocalDate(validUntil)) {
+    return { ok: false, error: 'Valid until must be today or a future date.' };
+  }
 
   const { error } = await client.from('store_deals').insert({
     store_key: input.storeKey,
@@ -165,6 +175,28 @@ export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ 
     valid_until: validUntil,
     reported_by: userId,
   });
+
+  if (isMissingTableError(error)) {
+    return { ok: false, error: COMMUNITY_DEALS.migrationHint };
+  }
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true };
+}
+
+export async function deleteCommunityDeal(dealId: string): Promise<{ ok: boolean; error?: string }> {
+  if (isDemoMode()) {
+    return { ok: false, error: 'Sign in with Supabase to manage deals (demo shows sample deals only).' };
+  }
+
+  const client = getSupabase();
+  if (!client) return { ok: false, error: 'Supabase is not configured.' };
+
+  const { data: userData } = await client.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return { ok: false, error: 'Sign in to delete a deal.' };
+
+  const { error } = await client.from('store_deals').delete().eq('id', dealId).eq('reported_by', userId);
 
   if (isMissingTableError(error)) {
     return { ok: false, error: COMMUNITY_DEALS.migrationHint };

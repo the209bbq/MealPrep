@@ -39,6 +39,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test:recipe-match": "npx tsx scripts/recipe-match-regression.ts",
+    "test:package-pricing": "node --experimental-strip-types scripts/package-pricing-check.mjs",
     "generate:pwa": "node scripts/generate-pwa-assets.mjs",
     "export:web": "npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs"
   },
