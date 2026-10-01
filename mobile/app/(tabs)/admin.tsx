@@ -8,7 +8,6 @@ import { ONBOARDING_COPY } from '../../config/onboarding';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
-import { UsdaNutritionPanel } from '../../components/UsdaNutritionPanel';
 import { initials } from '../../lib/initials';
 import type { FeatureFlagKey, UserRole } from '../../types/mealprep';
 
@@ -31,8 +30,6 @@ export default function AdminScreen() {
     setUserPreference,
     seedPantry,
     analytics,
-    recipes,
-    updateRecipe,
     onboarding,
   } = useApp();
 
@@ -131,12 +128,6 @@ export default function AdminScreen() {
       {demoMode || isDemoMode() ? (
         <Card className="mt-4" title="Demo role switch" subtitle="Preview admin vs member UI">
           <RoleToggle current={profile.role} onChange={setDemoRole} />
-        </Card>
-      ) : null}
-
-      {recipes.length > 0 ? (
-        <Card className="mt-4">
-          <UsdaNutritionPanel recipes={recipes} onSave={updateRecipe} />
         </Card>
       ) : null}
 
