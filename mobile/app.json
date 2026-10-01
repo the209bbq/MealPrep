@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "209 Meal Prep",
+    "name": "MealPlanatic",
     "slug": "meal-prep",
     "scheme": "mealprep",
     "version": "1.0.0",
@@ -39,7 +39,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Meal Prep to use your location to find nearby grocery stores and deals."
+          "locationWhenInUsePermission": "Allow MealPlanatic to use your location to find nearby grocery stores and deals."
         }
       ]
     ]

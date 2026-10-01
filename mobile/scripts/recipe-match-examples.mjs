@@ -12,6 +12,10 @@ function normalizeIngredientName(value) {
     .trim();
 }
 
+function groceryDedupeKey(name, unit) {
+  return `${normalizeIngredientName(name)}::${unit.trim().toLowerCase()}`;
+}
+
 const STRIP = new Set(['skippy', 'jif', 'smoked', 'creamy', 'fresh', 'organic']);
 
 function tokenize(name) {
@@ -39,6 +43,20 @@ console.log('scallions vs green onion (smoke test):', scallion);
 
 if (peanut < 0.72) {
   console.error('FAIL: expected peanut butter match');
+  process.exit(1);
+}
+
+const dedupeA = groceryDedupeKey('Green Onions', 'bunch');
+const dedupeB = groceryDedupeKey('green onions', 'bunch');
+const dedupeC = groceryDedupeKey('green onions', 'BUNCH');
+if (dedupeA !== dedupeB || dedupeA !== dedupeC) {
+  console.error('FAIL: grocery dedupe keys should match normalized name + unit');
+  process.exit(1);
+}
+
+const differentUnit = groceryDedupeKey('green onions', 'each');
+if (dedupeA === differentUnit) {
+  console.error('FAIL: grocery dedupe keys should differ when units differ');
   process.exit(1);
 }
 

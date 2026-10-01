@@ -23,7 +23,11 @@
     "logoMark": "assets/mealplanatic-logo-mark.png"
   },
   "ui": {
-    "headerLogoHeight": 34,
+    "headerMarkSize": 22,
     "authLogoWidth": 260
+  },
+  "copy": {
+    "authCardSubtitle": "Save your pantry, meals, and grocery list across devices.",
+    "authCardBlurb": "Sign in with your email and password, or get a one-tap sign-in link by email."
   }
 }

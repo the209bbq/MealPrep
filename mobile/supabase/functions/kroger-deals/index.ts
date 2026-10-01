@@ -117,6 +117,79 @@ async function fetchNearbyStores(
   return (json.data ?? []).map(mapKrogerLocation);
 }
 
+const OZ_PER_LB = 16;
+const G_PER_OZ = 28.3495;
+
+function normalizeUnit(unit: string): string {
+  const u = unit.trim().toLowerCase();
+  if (u === 'lbs' || u === 'pound' || u === 'pounds') return 'lb';
+  if (u === 'ounces' || u === 'ounce') return 'oz';
+  if (u === 'grams' || u === 'gram') return 'g';
+  if (u === 'kilograms' || u === 'kilogram' || u === 'kgs') return 'kg';
+  if (u === 'ct' || u === 'ea' || u === 'item' || u === 'items') return 'each';
+  return u;
+}
+
+function amountToOunces(quantity: number, unit: string): number | null {
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
+  const u = normalizeUnit(unit);
+  if (u === 'oz') return quantity;
+  if (u === 'lb') return quantity * OZ_PER_LB;
+  if (u === 'g') return quantity / G_PER_OZ;
+  if (u === 'kg') return (quantity * 1000) / G_PER_OZ;
+  return null;
+}
+
+const SIZE_IN_TEXT_RE =
+  /(\d+(?:\.\d+)?)\s*(oz|ounce|ounces|lb|lbs|pound|pounds|g|gram|grams|kg|kilogram|kilograms)\b/i;
+
+function parsePackageSizeFromText(text: string): { amount: number; unit: string } | null {
+  const match = text.match(SIZE_IN_TEXT_RE);
+  if (!match) return null;
+  const amount = Number.parseFloat(match[1] ?? '');
+  const unit = match[2] ?? '';
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return { amount, unit };
+}
+
+function packagesNeededForLine(
+  neededQuantity: number,
+  neededUnit: string,
+  packageSize: { amount: number; unit: string } | null,
+): number {
+  if (!Number.isFinite(neededQuantity) || neededQuantity <= 0) return 1;
+  const needU = normalizeUnit(neededUnit);
+  if (needU === 'each' || needU === 'count') {
+    return Math.max(1, Math.ceil(neededQuantity));
+  }
+  if (!packageSize) return 1;
+  const pkgU = normalizeUnit(packageSize.unit);
+  if (pkgU === 'each' || pkgU === 'count') {
+    return Math.max(1, Math.ceil(neededQuantity / packageSize.amount));
+  }
+  const needOz = amountToOunces(neededQuantity, needU);
+  const pkgOz = amountToOunces(packageSize.amount, pkgU);
+  if (needOz == null || pkgOz == null || pkgOz <= 0) return 1;
+  return Math.max(1, Math.ceil(needOz / pkgOz));
+}
+
+const DELI_PREPARED_RE =
+  /\b(deli|sliced|prepared|cooked|rotisserie|breaded|nugget|strip|lunch\s*meat|smoked|honey\s*ham)\b/i;
+const FRESH_RAW_RE = /\b(fresh|raw|boneless|skinless|breast|thigh|whole)\b/i;
+
+function scoreProductTitle(searchTerm: string, productTitle: string): number {
+  const title = productTitle.toLowerCase();
+  const term = searchTerm.toLowerCase();
+  let score = 0;
+  if (title.includes(term)) score += 40;
+  for (const token of term.split(/\s+/).filter((t) => t.length > 2)) {
+    if (title.includes(token)) score += 8;
+  }
+  if (DELI_PREPARED_RE.test(productTitle)) score -= 35;
+  if (FRESH_RAW_RE.test(productTitle)) score += 12;
+  return score;
+}
+
 function pickPrice(priceObj: Record<string, unknown> | undefined): {
   unit: number;
   promoLabel?: string;
@@ -138,7 +211,9 @@ async function fetchProductPrice(
   token: string,
   locationId: string,
   term: string,
-): Promise<{ title: string; price: number; promo?: string; url?: string } | null> {
+  neededQuantity: number,
+  neededUnit: string,
+): Promise<{ title: string; price: number; promo?: string; url?: string; lineTotal: number } | null> {
   const search = new URLSearchParams({
     'filter.term': term.slice(0, 48),
     'filter.locationId': locationId,
@@ -152,7 +227,8 @@ async function fetchProductPrice(
   const products = json.data ?? [];
   if (products.length === 0) return null;
 
-  let best: { title: string; price: number; promo?: string; url?: string } | null = null;
+  let best: { title: string; price: number; promo?: string; url?: string; lineTotal: number; score: number } | null =
+    null;
   for (const product of products) {
     const items = (product.items as Record<string, unknown>[]) ?? [];
     for (const item of items) {
@@ -162,12 +238,23 @@ async function fetchProductPrice(
       const url = product.productId
         ? `https://www.kroger.com/p/${String(product.productId)}`
         : undefined;
-      if (!best || picked.unit < best.price) {
-        best = { title, price: picked.unit, promo: picked.promoLabel, url };
+      const sizeText = String(item.size ?? product.size ?? title);
+      const packageSize = parsePackageSizeFromText(sizeText) ?? parsePackageSizeFromText(title);
+      const packages = packagesNeededForLine(neededQuantity, neededUnit, packageSize);
+      const lineTotal = Math.round(picked.unit * packages * 100) / 100;
+      const score = scoreProductTitle(term, title) - picked.unit * 0.01;
+      if (
+        !best ||
+        score > best.score ||
+        (score === best.score && lineTotal < best.lineTotal) ||
+        (score === best.score && lineTotal === best.lineTotal && picked.unit < best.price)
+      ) {
+        best = { title, price: picked.unit, promo: picked.promoLabel, url, lineTotal, score };
       }
     }
   }
-  return best;
+  if (!best) return null;
+  return { title: best.title, price: best.price, promo: best.promo, url: best.url, lineTotal: best.lineTotal };
 }
 
 serve(async (req) => {
@@ -217,9 +304,9 @@ serve(async (req) => {
 
       for (const item of items) {
         for (const store of stores) {
-          const match = await fetchProductPrice(token, store.id, item.name);
+          const match = await fetchProductPrice(token, store.id, item.name, item.quantity, item.unit);
           if (!match) continue;
-          const lineTotal = Math.round(match.price * item.quantity * 100) / 100;
+          const lineTotal = match.lineTotal;
           deals.push({
             groceryItemId: item.id,
             storeId: store.id,

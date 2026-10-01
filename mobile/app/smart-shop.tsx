@@ -11,10 +11,20 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OrderListDeliveryButtons, StoreDeliveryButtons } from '../components/smartShop/StoreDeliveryButtons';
 import { StoreCommunityDealsSection } from '../components/smartShop/StoreCommunityDealsSection';
 import { StoreWeeklyAdButton } from '../components/smartShop/StoreWeeklyAdButton';
-import { mapsDirectionsUrl } from '../lib/stores';
-import { manualStoreFromInput } from '../lib/stores';
+import { SMART_SHOP_STORES } from '../config/smartShop';
+import { DELIVERY_CLIPBOARD_TOAST } from '../config/smartShopDelivery';
+import { mapsDirectionsUrl, manualStoreFromInput } from '../lib/stores';
+import { sortStoreLocationsForDisplay } from '../lib/stores/groceryFilter';
+import { copyTextToClipboard } from '../lib/smartShop/copyToClipboard';
+import {
+  deliveryListOrderUrl,
+  formatGroceryListPlainText,
+} from '../lib/smartShop/deliveryLinks';
+import type { DeliveryServiceId } from '../config/smartShopChains';
+import { openExternalUrl } from '../lib/smartShop/openExternalUrl';
 import { searchDeals, searchNearbyStores, type DealsSearchResult, type StoreLocation } from '../lib/deals';
 import { mergeCommunityDealsIntoSearchResult } from '../lib/communityDeals/mergeIntoDeals';
 import { chainKeysFromStores, useCommunityDealsForStores } from '../lib/communityDeals/useCommunityDeals';
@@ -57,6 +67,8 @@ export default function SmartShopScreen() {
   const [manualName, setManualName] = useState('');
   const [manualAddress, setManualAddress] = useState('');
   const [autoCompared, setAutoCompared] = useState(false);
+  const [showAllStores, setShowAllStores] = useState(false);
+  const [clipboardToast, setClipboardToast] = useState<string | null>(null);
 
   const hasLocation = useMemo(() => {
     const coords = readInitialCoords(profile);
@@ -68,11 +80,21 @@ export default function SmartShopScreen() {
     [dealsResult, items.length],
   );
 
+  const sortedNearbyStores = useMemo(
+    () => sortStoreLocationsForDisplay(nearbyStores, savedStoreIds),
+    [nearbyStores, savedStoreIds],
+  );
+
+  const visibleStores = useMemo(() => {
+    if (showAllStores) return sortedNearbyStores;
+    return sortedNearbyStores.slice(0, SMART_SHOP_STORES.defaultVisibleStores);
+  }, [showAllStores, sortedNearbyStores]);
+
   const activeStores = useMemo(() => {
-    const picked = nearbyStores.filter((s) => savedStoreIds.includes(s.krogerLocationId ?? s.id));
+    const picked = sortedNearbyStores.filter((s) => savedStoreIds.includes(s.krogerLocationId ?? s.id));
     if (picked.length > 0) return picked;
-    return nearbyStores.slice(0, Math.min(3, SMART_SHOP.maxSavedStores));
-  }, [nearbyStores, savedStoreIds]);
+    return sortedNearbyStores.slice(0, Math.min(3, SMART_SHOP.maxSavedStores));
+  }, [sortedNearbyStores, savedStoreIds]);
 
   const communityStoreKeys = useMemo(() => chainKeysFromStores(nearbyStores), [nearbyStores]);
   const {
@@ -118,6 +140,7 @@ export default function SmartShopScreen() {
           radiusMiles: SMART_SHOP.defaultRadiusMiles,
         });
         setNearbyStores(stores);
+        setShowAllStores(false);
         setOriginLabel(label);
         setStoreSearchWarning(warning ?? null);
         const favorites = await loadFavoriteStoreIds();
@@ -240,6 +263,19 @@ export default function SmartShopScreen() {
     void Linking.openURL(url);
   }
 
+  async function handleOrderList(service: DeliveryServiceId) {
+    if (items.length === 0) {
+      setError('Add unchecked items on your grocery list first.');
+      return;
+    }
+    setError(null);
+    const text = formatGroceryListPlainText(items);
+    await copyTextToClipboard(text);
+    setClipboardToast(DELIVERY_CLIPBOARD_TOAST);
+    setTimeout(() => setClipboardToast(null), 3500);
+    await openExternalUrl(deliveryListOrderUrl(service));
+  }
+
   if (!featureFlags.smartShop) {
     return (
       <View className="flex-1 bg-paper px-4" style={{ paddingTop: insets.top }}>
@@ -318,10 +354,23 @@ export default function SmartShopScreen() {
           ) : null}
         </View>
 
-        {nearbyStores.length > 0 ? (
+        {items.length > 0 ? (
+          <View className="mt-4 rounded-2xl border border-border bg-card p-4">
+            <Text className="text-sm font-bold text-ink">Delivery</Text>
+            <Text className="mt-1 text-xs text-muted">
+              Copy your list, then paste into the store search on Instacart or DoorDash.
+            </Text>
+            <OrderListDeliveryButtons onOrder={(service) => void handleOrderList(service)} />
+            {clipboardToast ? (
+              <Text className="mt-2 text-xs font-semibold text-emerald-dark">{clipboardToast}</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {sortedNearbyStores.length > 0 ? (
           <View className="mt-4">
             <Text className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">My stores (tap to favorite)</Text>
-            {nearbyStores.map((store) => {
+            {visibleStores.map((store) => {
               const key = store.krogerLocationId ?? store.id;
               const selected = savedStoreIds.includes(key);
               return (
@@ -355,6 +404,9 @@ export default function SmartShopScreen() {
                     </Pressable>
                     <StoreWeeklyAdButton store={store} />
                   </View>
+                  <View className="mt-2">
+                    <StoreDeliveryButtons store={store} />
+                  </View>
                   <StoreCommunityDealsSection
                     store={store}
                     deals={communityDeals}
@@ -366,6 +418,18 @@ export default function SmartShopScreen() {
                 </View>
               );
             })}
+            {sortedNearbyStores.length > SMART_SHOP_STORES.defaultVisibleStores ? (
+              <Pressable
+                onPress={() => setShowAllStores((v) => !v)}
+                className="mb-2 rounded-xl border border-border bg-card px-4 py-3"
+              >
+                <Text className="text-center text-sm font-bold text-emerald-dark">
+                  {showAllStores
+                    ? 'Show fewer stores'
+                    : `Show more (${sortedNearbyStores.length - SMART_SHOP_STORES.defaultVisibleStores} more)`}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 
@@ -466,6 +530,9 @@ export default function SmartShopScreen() {
                       <Text className="text-xs font-semibold text-emerald-dark">Directions</Text>
                     </Pressable>
                     <StoreWeeklyAdButton store={store} />
+                  </View>
+                  <View className="mt-2">
+                    <StoreDeliveryButtons store={store} />
                   </View>
                   <StoreCommunityDealsSection
                     store={store}

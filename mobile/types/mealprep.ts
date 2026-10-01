@@ -27,6 +27,11 @@ export type FeatureFlagKey = (typeof FEATURE_FLAG_KEYS)[number];
 
 export type FeatureFlags = Record<FeatureFlagKey, boolean>;
 
+export interface UserPreferences {
+  /** When true, adding a recipe to Meals to make auto-adds missing ingredients to the grocery list. */
+  autoAddMissingToGrocery: boolean;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -40,6 +45,7 @@ export interface UserProfile {
   homeLng?: number;
   homeLocationUpdatedAt?: string;
   createdAt: string;
+  preferences: UserPreferences;
 }
 
 export interface Ingredient {
@@ -152,6 +158,7 @@ export interface MealPlanItem {
   title: string;
   imageUrl: string | null;
   made: boolean;
+  madeAt: string | null;
   addedAt: string;
 }
 

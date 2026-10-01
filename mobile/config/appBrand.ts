@@ -26,8 +26,13 @@ export type AppBrandAssetPaths = {
 };
 
 export type AppBrandUi = {
-  headerLogoHeight: number;
+  headerMarkSize: number;
   authLogoWidth: number;
+};
+
+export type AppBrandCopy = {
+  authCardSubtitle: string;
+  authCardBlurb: string;
 };
 
 export type AppBrandConfig = {
@@ -42,6 +47,7 @@ export type AppBrandConfig = {
   };
   assets: AppBrandAssetPaths;
   ui: AppBrandUi;
+  copy: AppBrandCopy;
 };
 
 /** Brand metadata and relative asset paths (see `generate-brand-assets.mjs`). */

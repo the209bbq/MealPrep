@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 /**
- * App-shell service worker for Meal Prep (GitHub Pages subpath).
- * Placeholders __CACHE_VERSION__ and __PRECACHE_URLS__ are filled by scripts/apply-pwa-export.mjs.
+ * App-shell service worker for MealPlanatic (GitHub Pages subpath).
+ * Cache version and precache list are injected at export time by scripts/apply-pwa-export.mjs.
  */
 const CACHE_VERSION = '__CACHE_VERSION__';
 const PRECACHE_URLS = __PRECACHE_URLS__;

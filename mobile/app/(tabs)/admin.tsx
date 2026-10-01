@@ -3,7 +3,9 @@ import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-nati
 import { BrandLogo } from '../../components/BrandLogo';
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
+import { APP_BRAND } from '../../config/appBrand';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
+import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
 import { UsdaNutritionPanel } from '../../components/UsdaNutritionPanel';
 import { initials } from '../../lib/initials';
@@ -24,6 +26,8 @@ export default function AdminScreen() {
     signOut,
     featureFlags,
     setFeatureFlag,
+    userPreferences,
+    setUserPreference,
     seedPantry,
     analytics,
     recipes,
@@ -64,6 +68,21 @@ export default function AdminScreen() {
           <Text className="mt-1 text-xs font-bold uppercase text-emerald">{ROLE_LABELS[profile.role]}</Text>
           <Text className="mt-4 text-sm text-muted">Household: {profile.householdSize}</Text>
           <Text className="mt-1 text-sm text-muted">{profile.dietaryNotes}</Text>
+        </Card>
+        <Card className="mt-4" title="Kitchen preferences">
+          {(Object.keys(USER_PREFERENCE_LABELS) as (keyof typeof USER_PREFERENCE_LABELS)[]).map((key) => (
+            <View key={key} className="mb-3 flex-row items-center justify-between gap-3 border-b border-border pb-3">
+              <View className="flex-1">
+                <Text className="font-semibold text-ink">{USER_PREFERENCE_LABELS[key].title}</Text>
+                <Text className="text-xs text-muted">{USER_PREFERENCE_LABELS[key].blurb}</Text>
+              </View>
+              <Switch
+                value={userPreferences[key]}
+                onValueChange={(value) => setUserPreference(key, value)}
+                trackColor={{ true: THEME.emerald, false: THEME.border }}
+              />
+            </View>
+          ))}
         </Card>
         {demoMode ? (
           <Card className="mt-4" title="Demo mode" subtitle="Switch role without Supabase">
@@ -111,6 +130,22 @@ export default function AdminScreen() {
         <Pressable onPress={seedPantry} className="mt-2 rounded-xl border border-border bg-card px-4 py-3">
           <Text className="text-center font-bold text-slate">Load sample pantry items</Text>
         </Pressable>
+      </Card>
+
+      <Card className="mt-4" title="Kitchen preferences">
+        {(Object.keys(USER_PREFERENCE_LABELS) as (keyof typeof USER_PREFERENCE_LABELS)[]).map((key) => (
+          <View key={key} className="mb-3 flex-row items-center justify-between gap-3 border-b border-border pb-3">
+            <View className="flex-1">
+              <Text className="font-semibold text-ink">{USER_PREFERENCE_LABELS[key].title}</Text>
+              <Text className="text-xs text-muted">{USER_PREFERENCE_LABELS[key].blurb}</Text>
+            </View>
+            <Switch
+              value={userPreferences[key]}
+              onValueChange={(value) => setUserPreference(key, value)}
+              trackColor={{ true: THEME.emerald, false: THEME.border }}
+            />
+          </View>
+        ))}
       </Card>
 
       <Card className="mt-4" title="Feature toggles">
@@ -170,11 +205,9 @@ function AuthPanel({
   }
 
   return (
-    <Card className="mt-4" title="Sign in" subtitle="Supabase auth for your kitchen data">
+    <Card className="mt-4" title="Sign in" subtitle={APP_BRAND.copy.authCardSubtitle}>
       <BrandLogo variant="auth" />
-      <Text className="mt-2 text-sm text-muted">
-        Use email + password or request a magic link. Redirects return to this Admin tab on GitHub Pages.
-      </Text>
+      <Text className="mt-2 text-sm text-muted">{APP_BRAND.copy.authCardBlurb}</Text>
       <View className="mt-4 flex-row gap-2">
         {(['sign-in', 'sign-up'] as const).map((tab) => (
           <Pressable

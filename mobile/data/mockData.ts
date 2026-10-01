@@ -78,6 +78,9 @@ export function profileForRole(role: 'admin' | 'member'): UserProfile {
     householdSize: role === 'admin' ? 4 : 2,
     dietaryNotes: role === 'admin' ? 'High protein, no shellfish' : 'Gluten conscious',
     createdAt: new Date().toISOString(),
+    preferences: {
+      autoAddMissingToGrocery: true,
+    },
   };
 }
 

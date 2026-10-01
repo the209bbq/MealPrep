@@ -21,6 +21,7 @@ const THEME = {
   emerald: brand.colors.themeEmerald,
   cream: brand.colors.brandCream,
 };
+const APP_NAME = brand.name;
 const APP_SHORT_NAME = brand.shortName;
 const PWA_DESCRIPTION = brand.pwaDescription;
 
@@ -66,7 +67,7 @@ async function generateIcons(sourceIcon) {
 function writeManifest() {
   const manifest = {
     id: webPath('/'),
-    name: APP_SHORT_NAME,
+    name: APP_NAME,
     short_name: APP_SHORT_NAME,
     description: PWA_DESCRIPTION,
     start_url: webPath('/'),

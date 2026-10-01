@@ -1,4 +1,9 @@
 import type { GroceryListItem } from '../../types/mealprep';
+import {
+  computeLineTotal,
+  packagesNeededForLine,
+  parsePackageSizeFromText,
+} from './packagePricing';
 import type { FetchDealsParams, ItemStoreDeal, PricingProvider, StoreLocation } from './types';
 
 function hashString(value: string): number {
@@ -23,7 +28,9 @@ export const samplePricingProvider: PricingProvider = {
     for (const item of items) {
       for (const store of pricedStores) {
         const unitPrice = unitPriceFor(item, store);
-        const lineTotal = Math.round(unitPrice * item.quantity * 100) / 100;
+        const packageSize = parsePackageSizeFromText(item.name);
+        const packages = packagesNeededForLine(item.quantity, item.unit, packageSize);
+        const lineTotal = computeLineTotal(unitPrice, packages);
         const promoRoll = hashString(`${store.id}:${item.id}`) % 5;
         deals.push({
           groceryItemId: item.id,
@@ -66,7 +73,7 @@ export const samplePricingProvider: PricingProvider = {
         label: bestStore ? `Sample trip: ${bestStore.chain}` : 'Sample pricing',
         storeIds: best ? [best.storeId] : [],
         estimatedTotal: best?.subtotal ?? 0,
-        note: 'Sample pricing for demo — add Kroger API secrets for real weekly specials.',
+        note: 'Sample pricing (estimates) — not live store prices.',
       },
     };
   },
