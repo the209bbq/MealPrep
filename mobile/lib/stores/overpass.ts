@@ -19,7 +19,7 @@ function parseAddress(tags: Record<string, string>): {
 } {
   const housenumber = tags['addr:housenumber'] ?? '';
   const street = tags['addr:street'] ?? tags['addr:place'] ?? '';
-  const addressLine = [housenumber, street].filter(Boolean).join(' ').trim() || tags['addr:full'] || 'Address not listed';
+  const addressLine = [housenumber, street].filter(Boolean).join(' ').trim() || tags['addr:full'] || '';
   const city = tags['addr:city'] ?? tags['addr:town'] ?? tags['addr:village'] ?? '';
   const state = tags['addr:state'] ?? '';
   const zip = tags['addr:postcode'] ?? '';

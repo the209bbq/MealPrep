@@ -5,6 +5,7 @@ import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { SMART_SHOP, THEME } from '../../config/appConfig';
 import type { StoreLocation } from '../../lib/deals/types';
 import { pricingBadgeForStore } from '../../lib/smartShop/aggregateDeals';
+import { formatStoreAddress } from '../../lib/stores/formatAddress';
 
 type SectionProps = {
   activeStores: StoreLocation[];
@@ -13,6 +14,7 @@ type SectionProps = {
   loadingStores: boolean;
   storeHasCommunityDeals: (store: StoreLocation) => boolean;
   onEditPress: () => void;
+  resultMode?: 'live' | 'sample';
 };
 
 export function SmartShopCompareStoresSection({
@@ -22,6 +24,7 @@ export function SmartShopCompareStoresSection({
   loadingStores,
   storeHasCommunityDeals,
   onEditPress,
+  resultMode,
 }: SectionProps) {
   return (
     <View className="mt-3">
@@ -45,7 +48,10 @@ export function SmartShopCompareStoresSection({
             <Text className="font-semibold text-ink">{store.chain || store.name}</Text>
             <Text className="text-xs text-muted">
               {store.distanceMiles != null ? `${store.distanceMiles.toFixed(1)} mi · ` : ''}
-              {pricingBadgeForStore(store, { hasCommunityDeals: storeHasCommunityDeals(store) })}
+              {pricingBadgeForStore(store, {
+                hasCommunityDeals: storeHasCommunityDeals(store),
+                resultMode,
+              })}
               {selected ? '' : ' · nearby default'}
             </Text>
           </View>
@@ -64,6 +70,7 @@ type ModalProps = {
   onToggleStore: (store: StoreLocation) => void;
   onAddManualStore: (name: string, address: string) => void;
   maxStores: number;
+  resultMode?: 'live' | 'sample';
 };
 
 export function SmartShopStorePickerModal({
@@ -75,6 +82,7 @@ export function SmartShopStorePickerModal({
   onToggleStore,
   onAddManualStore,
   maxStores,
+  resultMode,
 }: ModalProps) {
   const [manualName, setManualName] = useState('');
   const [manualAddress, setManualAddress] = useState('');
@@ -103,13 +111,13 @@ export function SmartShopStorePickerModal({
                   <View className="flex-row items-start justify-between gap-2">
                     <View className="flex-1">
                       <Text className="font-bold text-ink">{store.name}</Text>
-                      <Text className="text-sm text-muted">
-                        {store.addressLine}
-                        {store.city ? `, ${store.city}` : ''} {store.state} {store.zip}
-                      </Text>
+                      <Text className="text-sm text-muted">{formatStoreAddress(store)}</Text>
                       <Text className="mt-1 text-xs text-muted">
                         {store.distanceMiles != null ? `${store.distanceMiles.toFixed(1)} mi · ` : ''}
-                        {pricingBadgeForStore(store, { hasCommunityDeals: storeHasCommunityDeals(store) })}
+                        {pricingBadgeForStore(store, {
+                hasCommunityDeals: storeHasCommunityDeals(store),
+                resultMode,
+              })}
                       </Text>
                     </View>
                     <Ionicons

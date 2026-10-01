@@ -1,3 +1,4 @@
+import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { callKrogerProxy, fetchKrogerLocations, isKrogerServerConfigured, toKrogerStoreLocation } from './krogerClient';
 import { isKrogerProxyAvailable } from './krogerAvailability';
 import type { FetchDealsParams, NearbyStoresParams, PricingProvider } from './types';
@@ -13,7 +14,7 @@ export async function fetchKrogerNearbyStores(params: NearbyStoresParams) {
 
 export const krogerPricingProvider: PricingProvider = {
   id: 'kroger',
-  label: 'Kroger',
+  label: SMART_SHOP_COPY.pricingPartnerLabel,
   isConfigured: () => isKrogerProxyAvailable(),
   async fetchDeals(params: FetchDealsParams) {
     const krogerStores = params.stores
@@ -33,10 +34,10 @@ export const krogerPricingProvider: PricingProvider = {
         })),
         suggestion: {
           kind: 'single_store',
-          label: 'No Kroger locations selected',
+          label: SMART_SHOP_COPY.pricesUnavailable,
           storeIds: [],
           estimatedTotal: 0,
-          note: 'Pick a Kroger-family store for live prices.',
+          note: SMART_SHOP_COPY.livePricingNoMatches,
         },
       };
     }

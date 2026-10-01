@@ -1,5 +1,5 @@
 import { SMART_SHOP_COPY } from '../../config/smartShop';
-import type { DealsSearchResult, ItemStoreDeal } from '../deals/types';
+import type { DealsSearchResult, ItemStoreDeal, StoreCartTotal, StoreLocation } from '../deals/types';
 import type { GroceryListItem } from '../../types/mealprep';
 
 export function bestDealPerStoreForItem(deals: ItemStoreDeal[], groceryItemId: string, storeId: string): ItemStoreDeal | undefined {
@@ -22,38 +22,68 @@ export function formatMoney(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
+export function formatStoreTotal(value: number, isEstimate: boolean): string {
+  if (!isEstimate) return formatMoney(value);
+  return `${formatMoney(value)} ${SMART_SHOP_COPY.estimatedSuffix}`;
+}
+
+export function isEstimatePricingMode(result: DealsSearchResult): boolean {
+  return result.mode === 'sample';
+}
+
+export function storeHasPricedTotal(total: StoreCartTotal | undefined): boolean {
+  return Boolean(total?.pricesAvailable && total.itemCount > 0);
+}
+
 export function dealsSummaryLabel(result: DealsSearchResult): string {
   const hasCommunity = result.deals.some((d) => d.priceSource === 'community');
-  const communitySuffix = hasCommunity ? ' + community deals' : '';
+  const communitySuffix = hasCommunity ? ' · community deals' : '';
   if (result.mode === 'sample') {
-    return `SAMPLE deals · ${result.providerLabel}${communitySuffix}`;
+    return `${SMART_SHOP_COPY.estimatedPricesTitle}${communitySuffix}`;
   }
   return `${SMART_SHOP_COPY.livePricesLabel} · ${result.providerLabel}${communitySuffix}`;
 }
 
+export function dealsSummarySubtext(result: DealsSearchResult): string | undefined {
+  if (result.mode === 'sample') return undefined;
+  return result.pricingNote;
+}
+
 export function pricingBadgeForStore(
-  store: import('../deals/types').StoreLocation,
-  options?: { hasCommunityDeals?: boolean },
+  store: StoreLocation,
+  options?: {
+    hasCommunityDeals?: boolean;
+    resultMode?: DealsSearchResult['mode'];
+    storeTotal?: StoreCartTotal;
+  },
 ): string {
+  const priced = storeHasPricedTotal(options?.storeTotal);
+  if (!priced) return SMART_SHOP_COPY.pricesUnavailable;
+
+  const estimate =
+    options?.resultMode === 'sample' ||
+    store.pricingSource === 'sample' ||
+    (options?.storeTotal && options.storeTotal.pricesAvailable && store.pricingSource !== 'kroger');
+
+  if (estimate) {
+    return options?.hasCommunityDeals ? SMART_SHOP_COPY.estimatedWithCommunity : SMART_SHOP_COPY.estimatedBadge;
+  }
+
   if (store.pricingSource === 'kroger') {
     return options?.hasCommunityDeals ? SMART_SHOP_COPY.livePricesWithCommunity : SMART_SHOP_COPY.livePricesLabel;
   }
-  if (store.pricingSource === 'sample') {
-    return options?.hasCommunityDeals ? 'Sample + community deals' : 'Sample prices';
-  }
+
   if (options?.hasCommunityDeals) return 'Community deals';
-  return 'Prices not available';
+  return SMART_SHOP_COPY.estimatedBadge;
 }
 
 export interface SmartShopSavingsEstimate {
-  /** Highest store subtotal minus cheapest (same items priced). */
   savingsAmount: number;
   pricedItemCount: number;
   listItemCount: number;
   isDemoPricing: boolean;
 }
 
-/** Estimated savings when comparing store subtotals (real for Kroger live mode). */
 export function estimateSmartShopSavings(
   result: DealsSearchResult,
   listItemCount: number,

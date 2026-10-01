@@ -20,8 +20,8 @@ async function sampleDealsResult(
   return assembleDealsResult({
     mode: 'sample',
     providerId: 'sample',
-    providerLabel: 'Sample deals',
-    pricingNote,
+    providerLabel: SMART_SHOP_COPY.estimatedPricesTitle,
+    pricingNote: pricingNote ?? SMART_SHOP_COPY.estimatedPricesNote,
     stores: sample.stores,
     deals: sample.deals,
     items,
@@ -72,11 +72,7 @@ export async function searchDeals(params: FetchDealsParams): Promise<DealsSearch
   const { stores, items } = params;
 
   if (!isKrogerProxyAvailable()) {
-    return sampleDealsResult(
-      stores,
-      items,
-      'SAMPLE deals — sign in with Supabase to use the kroger-deals Edge Function.',
-    );
+    return sampleDealsResult(stores, items, SMART_SHOP_COPY.estimatedPricesNote);
   }
 
   const hasKrogerStore = stores.some((s) => s.pricingSource === 'kroger');
@@ -121,7 +117,7 @@ export async function searchDeals(params: FetchDealsParams): Promise<DealsSearch
     return sampleDealsResult(
       stores,
       items,
-      isNotConfigured ? KROGER_NOT_CONFIGURED_NOTE : `${message}. Showing SAMPLE deals.`,
+      isNotConfigured ? KROGER_NOT_CONFIGURED_NOTE : SMART_SHOP_COPY.estimatedPricesNote,
     );
   }
 }

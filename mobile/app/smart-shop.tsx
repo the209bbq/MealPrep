@@ -63,7 +63,7 @@ export default function SmartShopScreen() {
 
         {shop.dealsResult?.mode === 'sample' ? (
           <View className="mt-3 rounded-2xl border-2 border-amber-500 bg-amber-100 px-4 py-3">
-            <Text className="text-center text-sm font-bold text-amber-950">{SMART_SHOP_COPY.demoPricesBanner}</Text>
+            <Text className="text-center text-sm font-bold text-amber-950">{SMART_SHOP_COPY.estimatesBanner}</Text>
           </View>
         ) : null}
 
@@ -75,6 +75,7 @@ export default function SmartShopScreen() {
             loadingStores={shop.loadingStores}
             storeHasCommunityDeals={shop.storeHasCommunityDeals}
             onEditPress={() => shop.setStorePickerOpen(true)}
+            resultMode={shop.dealsResult?.mode}
           />
         ) : null}
 
@@ -136,6 +137,7 @@ export default function SmartShopScreen() {
         onToggleStore={(store) => void shop.toggleSavedStore(store)}
         onAddManualStore={(name, address) => void shop.addManualStore(name, address)}
         maxStores={SMART_SHOP.maxSavedStores}
+        resultMode={shop.dealsResult?.mode}
       />
     </View>
   );
