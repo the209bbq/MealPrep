@@ -1,4 +1,6 @@
 import type { PantryCategory, PantryItem, Recipe } from '../../types/mealprep';
+import { fuzzyNameScore, ingredientMatchScore } from '../recipeMatch/ingredientNormalize';
+import { formatDetectedIngredientName } from './detectionParse';
 import type { PantryScanReviewItem, PantryVisionDetection } from './types';
 
 export interface IngredientCatalogEntry {
@@ -8,17 +10,8 @@ export interface IngredientCatalogEntry {
   defaultUnit: string;
 }
 
-function normalizeName(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\[demo sample\]/gi, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function slugIngredientId(name: string): string {
-  const slug = normalizeName(name).replace(/\s+/g, '-');
+  const slug = formatDetectedIngredientName(name).toLowerCase().replace(/\s+/g, '-');
   return slug || 'ingredient';
 }
 
@@ -51,26 +44,21 @@ export function buildIngredientCatalog(pantry: PantryItem[], recipes: Recipe[]):
 }
 
 function scoreMatch(detectionName: string, candidateName: string): number {
-  const a = normalizeName(detectionName);
-  const b = normalizeName(candidateName);
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  if (a.includes(b) || b.includes(a)) return 0.85;
-  const aTokens = new Set(a.split(' '));
-  const bTokens = b.split(' ').filter((t) => aTokens.has(t));
-  if (bTokens.length === 0) return 0;
-  return Math.min(0.8, bTokens.length / Math.max(aTokens.size, 1));
+  const hierarchical = ingredientMatchScore(detectionName, candidateName);
+  if (hierarchical > 0) return hierarchical;
+  return fuzzyNameScore(detectionName, candidateName);
 }
 
 export function matchDetectionToCatalog(
   detection: PantryVisionDetection,
   catalog: IngredientCatalogEntry[],
 ): { ingredientId: string; name: string; category: PantryCategory; unit: string } {
+  const formatted = formatDetectedIngredientName(detection.name);
   let best: IngredientCatalogEntry | null = null;
   let bestScore = 0;
 
   for (const entry of catalog) {
-    const score = scoreMatch(detection.name, entry.name);
+    const score = scoreMatch(formatted, entry.name);
     if (score > bestScore) {
       bestScore = score;
       best = entry;
@@ -87,8 +75,8 @@ export function matchDetectionToCatalog(
   }
 
   return {
-    ingredientId: slugIngredientId(detection.name),
-    name: detection.name.replace(/^\[demo sample\]\s*/i, '').trim() || detection.name,
+    ingredientId: slugIngredientId(formatted),
+    name: formatted,
     category: detection.category,
     unit: detection.unit.trim() || 'each',
   };

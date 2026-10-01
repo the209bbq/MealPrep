@@ -51,7 +51,12 @@ import {
   PantryVisionScanError,
 } from '../../lib/pantryVision/client';
 import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
-import { detectionsToReviewItems } from '../../lib/pantryVision/reviewItems';
+import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
+import { PantryImageQualityError } from '../../lib/pantryVision/prepareImageShared';
+import {
+  detectionsToReviewItems,
+  mergeSecondScanIntoReview,
+} from '../../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem, PreparedPantryImage } from '../../lib/pantryVision/types';
 import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 import { ViewScanPhotoButton } from '../../components/ViewScanPhotoButton';
@@ -102,6 +107,7 @@ export default function PantryScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [modelLabel, setModelLabel] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [scanAgainBusy, setScanAgainBusy] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<PantryItem | null>(null);
@@ -210,6 +216,7 @@ export default function PantryScreen() {
         scanLocation,
       );
       if (rows.length === 0) {
+        logPantryScanFailure('EMPTY_DETECTIONS');
         setScanFailure(
           'No pantry items were detected. Try a clearer photo with labels visible.',
           'No items found',
@@ -219,6 +226,7 @@ export default function PantryScreen() {
         return;
       }
       clearScanFailure();
+      setLastScanAttempt(attempt);
       setModelLabel(result.model);
       setReviewItems(rows);
       setPhase('review');
@@ -256,11 +264,49 @@ export default function PantryScreen() {
       const prepared = await preparePantryImage(uri);
       await runVisionFromPrepared(prepared, scanLocation);
     } catch (error) {
-      if (error instanceof Error) {
-        console.warn('[pantry scan]', error.message);
+      if (error instanceof PantryImageQualityError) {
+        logPantryScanFailure(
+          error.reason === 'too_dark' ? 'IMAGE_TOO_DARK' : 'IMAGE_TOO_BLURRY',
+        );
+        setScanFailure(error.message, PHOTO_SCAN.scanFailedTitle, attempt);
+      } else if (error instanceof Error) {
+        logPantryScanFailure('BAD_IMAGE', error.message);
+        setScanFailure(PHOTO_SCAN.scanFailedMessage, PHOTO_SCAN.scanFailedTitle, attempt);
+      } else {
+        logPantryScanFailure('UNKNOWN');
+        setScanFailure(PHOTO_SCAN.scanFailedMessage, PHOTO_SCAN.scanFailedTitle, attempt);
       }
-      setScanFailure(PHOTO_SCAN.scanFailedMessage, PHOTO_SCAN.scanFailedTitle, attempt);
       setPhase('idle');
+    }
+  }
+
+  async function handleScanAgainFromReview() {
+    if (!lastScanAttempt) return;
+    setScanAgainBusy(true);
+    try {
+      const scanLocation = lastScanAttempt.location;
+      const prepared =
+        lastScanAttempt.kind === 'prepared'
+          ? lastScanAttempt.prepared
+          : await preparePantryImage(lastScanAttempt.uri);
+      const result = await analyzePantryPhoto(prepared, accessToken, {
+        scanLocation,
+        bypassCache: true,
+      });
+      setReviewItems((prev) =>
+        mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation),
+      );
+      setModelLabel(result.model);
+    } catch (error) {
+      const message =
+        error instanceof PantryVisionScanError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : PHOTO_SCAN.scanFailedMessage;
+      setSaveError(message);
+    } finally {
+      setScanAgainBusy(false);
     }
   }
 
@@ -560,6 +606,8 @@ export default function PantryScreen() {
               onChange={setReviewItems}
               onSave={() => void handleSaveReview()}
               onCancel={handleCancelReview}
+              onScanAgain={lastScanAttempt ? () => void handleScanAgainFromReview() : undefined}
+              scanAgainBusy={scanAgainBusy}
               saving={saving}
               modelLabel={modelLabel}
               saveError={saveError}

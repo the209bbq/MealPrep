@@ -37,6 +37,7 @@ import {
   topPantryRecipeRecommendations,
   type PantryMatchIndex,
 } from '../lib/recipeMatch';
+import { fuzzyNameScore, ingredientMatchScore } from '../lib/recipeMatch/ingredientNormalize';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import { runScanPhotoRetentionCleanupIfDue } from '../lib/scanPhotos/cleanup';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
@@ -1155,18 +1156,72 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const toSave = reviewItemsToPantryItems(items, scanPhotoPath);
       if (toSave.length === 0) return;
 
+      const findExisting = (candidate: PantryItem): PantryItem | undefined =>
+        pantry.find(
+          (row) =>
+            row.ingredientId === candidate.ingredientId ||
+            ingredientMatchScore(candidate.name, row.name) >= 1 ||
+            fuzzyNameScore(candidate.name, row.name) >= 0.92,
+        );
+
       if (demoMode) {
-        setPantry((prev) => [...toSave, ...prev]);
+        setPantry((prev) => {
+          const next = [...prev];
+          for (const item of toSave) {
+            const existing = next.find(
+              (row) =>
+                row.ingredientId === item.ingredientId ||
+                ingredientMatchScore(item.name, row.name) >= 1 ||
+                fuzzyNameScore(item.name, row.name) >= 0.92,
+            );
+            if (!existing) {
+              next.unshift(item);
+              continue;
+            }
+            const sameUnit = existing.unit.toLowerCase() === item.unit.toLowerCase();
+            existing.quantity = sameUnit
+              ? existing.quantity + item.quantity
+              : Math.max(existing.quantity, item.quantity);
+            existing.updatedAt = item.updatedAt;
+          }
+          return next;
+        });
         return;
       }
       if (!supabase || !userId) {
         throw new Error('Sign in to save pantry items.');
       }
 
-      const saved = await insertPantryItems(supabase, userId, toSave);
-      setPantry((prev) => [...saved, ...prev]);
+      const inserts: PantryItem[] = [];
+      const updatedRows: PantryItem[] = [];
+      for (const item of toSave) {
+        const existing = findExisting(item);
+        if (!existing) {
+          inserts.push(item);
+          continue;
+        }
+        const sameUnit = existing.unit.toLowerCase() === item.unit.toLowerCase();
+        updatedRows.push({
+          ...existing,
+          quantity: sameUnit ? existing.quantity + item.quantity : Math.max(existing.quantity, item.quantity),
+          scanPhotoPath: item.scanPhotoPath ?? existing.scanPhotoPath,
+          updatedAt: item.updatedAt,
+        });
+      }
+
+      const savedUpdates: PantryItem[] = [];
+      for (const row of updatedRows) {
+        savedUpdates.push(await updatePantryItem(supabase, userId, row));
+      }
+      const savedInserts = inserts.length > 0 ? await insertPantryItems(supabase, userId, inserts) : [];
+      const saved = [...savedInserts, ...savedUpdates];
+      setPantry((prev) => {
+        const ids = new Set(saved.map((s) => s.id));
+        const without = prev.filter((p) => !ids.has(p.id));
+        return [...saved, ...without];
+      });
     },
-    [demoMode, supabase, userId],
+    [demoMode, pantry, supabase, userId],
   );
 
   const setFeatureFlag = useCallback(
