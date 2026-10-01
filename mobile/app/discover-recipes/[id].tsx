@@ -120,7 +120,7 @@ export default function DiscoverRecipeDetailScreen() {
           {recipe.isDemoSample ? (
             <Text className="mt-4 text-[10px] font-bold uppercase text-amber-700">Demo sample — not from live search</Text>
           ) : null}
-          <Text className="mt-2 text-xs font-semibold uppercase text-emerald">{recipe.cuisine}</Text>
+          <Text className="mt-2 text-xs font-semibold uppercase text-primary">{recipe.cuisine}</Text>
           <Text className="text-2xl font-bold text-ink">{recipe.name}</Text>
           <Text className="mt-2 text-sm text-muted">{recipe.description}</Text>
           <Text className="mt-3 text-sm text-ink">
@@ -163,7 +163,7 @@ export default function DiscoverRecipeDetailScreen() {
             onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
             className={`mt-6 rounded-xl px-4 py-4 ${isOnMealPlan({ recipeApiId: recipeId }) ? 'bg-sand' : 'bg-slate'}`}
           >
-            <Text className="text-center text-base font-bold text-on-emerald">
+            <Text className="text-center text-base font-bold text-on-primary">
               {isOnMealPlan({ recipeApiId: recipeId }) ? 'Remove from meals to make' : 'Add to meals'}
             </Text>
           </Pressable>
@@ -171,9 +171,9 @@ export default function DiscoverRecipeDetailScreen() {
           <Pressable
             onPress={() => void onImport()}
             disabled={importing || imported || alreadyInLibrary}
-            className={`mt-3 rounded-xl px-4 py-4 ${imported || alreadyInLibrary ? 'bg-sand' : 'bg-emerald'}`}
+            className={`mt-3 rounded-xl px-4 py-4 ${imported || alreadyInLibrary ? 'bg-sand' : 'bg-primary'}`}
           >
-            <Text className={`text-center text-base font-bold ${imported || alreadyInLibrary ? 'text-muted' : 'text-on-emerald'}`}>
+            <Text className={`text-center text-base font-bold ${imported || alreadyInLibrary ? 'text-muted' : 'text-on-primary'}`}>
               {importing
                 ? 'Saving…'
                 : alreadyInLibrary || imported

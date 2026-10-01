@@ -57,7 +57,7 @@ export function PantryStorageScanButtons({
               setPickLocation(action.location);
               cameraRef.current?.click();
             }}
-            className={`rounded-lg p-2 ${disabled ? 'opacity-40' : 'bg-emerald-light'}`}
+            className={`rounded-lg p-2 ${disabled ? 'opacity-40' : 'bg-primary-light'}`}
             accessibilityLabel={`${action.scanTitle} with camera`}
           >
             <Ionicons name="camera-outline" size={20} color={THEME.primaryDark} />

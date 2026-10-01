@@ -22,9 +22,9 @@ export function CategoryChips({ selected, onSelect }: CategoryChipsProps) {
           <Pressable
             key={item.key}
             onPress={() => onSelect(item.key)}
-            className={`mr-2 rounded-full px-3 py-1.5 ${active ? 'bg-emerald' : 'border border-border bg-paper'}`}
+            className={`mr-2 rounded-full px-3 py-1.5 ${active ? 'bg-primary' : 'border border-border bg-paper'}`}
           >
-            <Text className={`text-xs font-semibold ${active ? 'text-on-emerald' : 'text-muted'}`}>
+            <Text className={`text-xs font-semibold ${active ? 'text-on-primary' : 'text-muted'}`}>
               {item.label}
             </Text>
           </Pressable>

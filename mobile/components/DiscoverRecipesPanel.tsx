@@ -178,7 +178,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
   }
 
   return (
-    <View className="mb-4 mt-6 overflow-hidden rounded-2xl border border-emerald bg-card px-4 py-5">
+    <View className="mb-4 mt-6 overflow-hidden rounded-2xl border border-primary bg-card px-4 py-5">
       <Pressable onPress={() => setExpanded(false)} className="mb-2 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-ink">Recipe List</Text>
         <Ionicons name="chevron-up" size={22} color={THEME.muted} />
@@ -208,7 +208,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
         onChangeText={setSearch}
         placeholder="Search recipes (e.g. chicken, pasta…)"
         placeholderTextColor={THEME.muted}
-        className="mt-4 rounded-2xl border-2 border-emerald/30 bg-paper px-5 py-4 text-lg text-ink"
+        className="mt-4 rounded-2xl border-2 border-primary/30 bg-paper px-5 py-4 text-lg text-ink"
         autoCapitalize="none"
         autoCorrect={false}
       />
@@ -249,9 +249,9 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
             <Pressable
               key={mins}
               onPress={() => setMaxMinutes(active ? '' : mins)}
-              className={`rounded-full px-3 py-1.5 ${active ? 'bg-emerald' : 'border border-border bg-paper'}`}
+              className={`rounded-full px-3 py-1.5 ${active ? 'bg-primary' : 'border border-border bg-paper'}`}
             >
-              <Text className={`text-xs font-semibold ${active ? 'text-on-emerald' : 'text-muted'}`}>
+              <Text className={`text-xs font-semibold ${active ? 'text-on-primary' : 'text-muted'}`}>
                 {mins} min
               </Text>
             </Pressable>
@@ -263,9 +263,9 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
       <View className="mt-1 flex-row flex-wrap items-center gap-2">
         <Pressable
           onPress={() => setMatchPantryOnly((v) => !v)}
-          className={`rounded-full px-3 py-1.5 ${matchPantryOnly ? 'bg-emerald' : 'border border-border bg-paper'}`}
+          className={`rounded-full px-3 py-1.5 ${matchPantryOnly ? 'bg-primary' : 'border border-border bg-paper'}`}
         >
-          <Text className={`text-xs font-semibold ${matchPantryOnly ? 'text-on-emerald' : 'text-muted'}`}>
+          <Text className={`text-xs font-semibold ${matchPantryOnly ? 'text-on-primary' : 'text-muted'}`}>
             Match my pantry
           </Text>
         </Pressable>
@@ -275,9 +275,9 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
             <Pressable
               key={pct}
               onPress={() => setMinPantryPercent(pct)}
-              className={`rounded-full px-3 py-1.5 ${active ? 'bg-emerald-light' : 'border border-border bg-paper'}`}
+              className={`rounded-full px-3 py-1.5 ${active ? 'bg-primary-light' : 'border border-border bg-paper'}`}
             >
-              <Text className={`text-xs font-semibold ${active ? 'text-emerald-dark' : 'text-muted'}`}>
+              <Text className={`text-xs font-semibold ${active ? 'text-primary-dark' : 'text-muted'}`}>
                 {pct === 0 ? 'Any %' : `${pct}%+`}
               </Text>
             </Pressable>
@@ -319,7 +319,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
                   ) : null}
                   <View className="flex-row items-start justify-between">
                     <View className="flex-1 pr-2">
-                      <Text className="text-xs font-semibold uppercase text-emerald">{recipe.cuisine}</Text>
+                      <Text className="text-xs font-semibold uppercase text-primary">{recipe.cuisine}</Text>
                       <Text className="text-base font-bold text-ink">{recipe.name}</Text>
                       <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{recipe.description}</Text>
                       <RecipePantryMatchBadge match={match} />
@@ -332,9 +332,9 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
                         e.stopPropagation?.();
                         onToggleMealPlan(recipe);
                       }}
-                      className={`rounded-full px-3 py-2 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                      className={`rounded-full px-3 py-2 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
                     >
-                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
+                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
                         {onPlan ? 'In meals' : 'Add to meals'}
                       </Text>
                     </Pressable>

@@ -37,10 +37,10 @@ export function PantryStorageLocationChips({
               key={option.id}
               onPress={() => onSelect(option.id)}
               className={`mr-2 rounded-full ${compact ? 'px-2 py-1' : 'px-3 py-1.5'} ${
-                active ? 'bg-emerald' : 'border border-border bg-paper'
+                active ? 'bg-primary' : 'border border-border bg-paper'
               }`}
             >
-              <Text className={`font-semibold ${compact ? 'text-[10px]' : 'text-xs'} ${active ? 'text-on-emerald' : 'text-muted'}`}>
+              <Text className={`font-semibold ${compact ? 'text-[10px]' : 'text-xs'} ${active ? 'text-on-primary' : 'text-muted'}`}>
                 {option.label}
               </Text>
             </Pressable>
@@ -85,7 +85,7 @@ export function PantryStorageLocationFilterChips({
               onPress={() => onSelect(item.key)}
               className={`mr-2 rounded-full px-3 py-1.5 ${active ? 'bg-slate' : 'border border-border bg-paper'}`}
             >
-              <Text className={`text-xs font-semibold ${active ? 'text-on-emerald' : 'text-muted'}`}>
+              <Text className={`text-xs font-semibold ${active ? 'text-on-primary' : 'text-muted'}`}>
                 {item.label} ({item.count})
               </Text>
             </Pressable>

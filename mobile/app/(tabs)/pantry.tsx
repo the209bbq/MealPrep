@@ -548,9 +548,9 @@ export default function PantryScreen() {
         </View>
 
         {scanRecipeCount != null && scanRecipeCount > 0 ? (
-          <View className="mt-4 rounded-2xl border border-emerald bg-emerald-light px-4 py-4">
-            <Text className="font-bold text-emerald-dark">Pantry updated</Text>
-            <Text className="mt-1 text-sm text-emerald-dark">
+          <View className="mt-4 rounded-2xl border border-primary bg-primary-light px-4 py-4">
+            <Text className="font-bold text-primary-dark">Pantry updated</Text>
+            <Text className="mt-1 text-sm text-primary-dark">
               See {scanRecipeCount} recipe{scanRecipeCount === 1 ? '' : 's'} you can make with default matches.
             </Text>
             <Pressable
@@ -558,9 +558,9 @@ export default function PantryScreen() {
                 setScanRecipeCount(null);
                 router.push('/recipes');
               }}
-              className="mt-3 items-center rounded-xl bg-emerald py-3"
+              className="mt-3 items-center rounded-xl bg-primary py-3"
             >
-              <Text className="text-sm font-bold text-on-emerald">See {scanRecipeCount} recipes</Text>
+              <Text className="text-sm font-bold text-on-primary">See {scanRecipeCount} recipes</Text>
             </Pressable>
           </View>
         ) : null}
@@ -611,7 +611,7 @@ export default function PantryScreen() {
                   onPress={retryLastScan}
                   className="mt-3 items-center rounded-xl border border-border bg-card py-2.5"
                 >
-                  <Text className="text-sm font-bold text-emerald-dark">{PHOTO_SCAN.tryAgainLabel}</Text>
+                  <Text className="text-sm font-bold text-primary-dark">{PHOTO_SCAN.tryAgainLabel}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -637,7 +637,7 @@ export default function PantryScreen() {
             onPress={openAddModal}
             className="mt-4 rounded-xl border border-border bg-card px-3 py-3"
           >
-            <Text className="text-center text-sm font-bold text-emerald-dark">Add item manually</Text>
+            <Text className="text-center text-sm font-bold text-primary-dark">Add item manually</Text>
           </Pressable>
         </Card>
 
@@ -731,9 +731,9 @@ export default function PantryScreen() {
                         setManualLocation(suggestStorageLocationForCategory(cat));
                       }
                     }}
-                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-emerald' : 'border border-border bg-card'}`}
+                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
                   >
-                    <Text className={`text-xs font-semibold ${selected ? 'text-on-emerald' : 'text-slate'}`}>
+                    <Text className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-slate'}`}>
                       {CATEGORY_LABELS[cat]}
                     </Text>
                   </Pressable>
@@ -762,8 +762,8 @@ export default function PantryScreen() {
               <Pressable onPress={closeManualModal} className="flex-1 rounded-2xl border border-border py-3">
                 <Text className="text-center font-bold text-slate">Cancel</Text>
               </Pressable>
-              <Pressable onPress={() => void submitManualForm()} className="flex-1 rounded-2xl bg-emerald py-3">
-                <Text className="text-center font-bold text-on-emerald">{editItem ? 'Save changes' : 'Add to pantry'}</Text>
+              <Pressable onPress={() => void submitManualForm()} className="flex-1 rounded-2xl bg-primary py-3">
+                <Text className="text-center font-bold text-on-primary">{editItem ? 'Save changes' : 'Add to pantry'}</Text>
               </Pressable>
             </View>
           </View>

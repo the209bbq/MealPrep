@@ -59,12 +59,12 @@ export default function AdminScreen() {
     return (
       <ScrollView className="flex-1 bg-paper px-4 pb-8">
         <Card className="mt-4 items-center" title="Your profile">
-          <View className="mt-4 h-16 w-16 items-center justify-center rounded-full bg-emerald-light">
-            <Text className="text-xl font-bold text-emerald-dark">{initials(profile.name)}</Text>
+          <View className="mt-4 h-16 w-16 items-center justify-center rounded-full bg-primary-light">
+            <Text className="text-xl font-bold text-primary-dark">{initials(profile.name)}</Text>
           </View>
           <Text className="mt-3 text-xl font-bold text-ink">{profile.name}</Text>
           <Text className="text-sm text-muted">{profile.email}</Text>
-          <Text className="mt-1 text-xs font-bold uppercase text-emerald">{ROLE_LABELS[profile.role]}</Text>
+          <Text className="mt-1 text-xs font-bold uppercase text-primary">{ROLE_LABELS[profile.role]}</Text>
           <Text className="mt-4 text-sm text-muted">Household: {profile.householdSize}</Text>
           <Text className="mt-1 text-sm text-muted">{profile.dietaryNotes}</Text>
         </Card>
@@ -235,9 +235,9 @@ function AuthPanel({
           <Pressable
             key={tab}
             onPress={() => setMode(tab)}
-            className={`flex-1 rounded-xl px-3 py-2 ${mode === tab ? 'bg-emerald' : 'border border-border bg-card'}`}
+            className={`flex-1 rounded-xl px-3 py-2 ${mode === tab ? 'bg-primary' : 'border border-border bg-card'}`}
           >
-            <Text className={`text-center text-sm font-bold ${mode === tab ? 'text-on-emerald' : 'text-muted'}`}>
+            <Text className={`text-center text-sm font-bold ${mode === tab ? 'text-on-primary' : 'text-muted'}`}>
               {tab === 'sign-in' ? 'Sign in' : 'Create account'}
             </Text>
           </Pressable>
@@ -278,9 +278,9 @@ function AuthPanel({
             mode === 'sign-in' ? 'Signed in.' : 'Check your email if confirmation is required.',
           )
         }
-        className={`mt-4 rounded-xl px-4 py-3 ${busy ? 'opacity-60 bg-emerald' : 'bg-emerald'}`}
+        className={`mt-4 rounded-xl px-4 py-3 ${busy ? 'opacity-60 bg-primary' : 'bg-primary'}`}
       >
-        <Text className="text-center font-bold text-on-emerald">{mode === 'sign-in' ? 'Sign in' : 'Create account'}</Text>
+        <Text className="text-center font-bold text-on-primary">{mode === 'sign-in' ? 'Sign in' : 'Create account'}</Text>
       </Pressable>
       <Pressable
         disabled={busy || !email.trim()}
@@ -290,7 +290,7 @@ function AuthPanel({
         <Text className="text-center font-bold text-slate">Email magic link</Text>
       </Pressable>
       {authError ? <Text className="mt-3 text-sm text-danger">{authError}</Text> : null}
-      {status ? <Text className="mt-2 text-sm text-emerald-dark">{status}</Text> : null}
+      {status ? <Text className="mt-2 text-sm text-primary-dark">{status}</Text> : null}
     </Card>
   );
 }
@@ -302,9 +302,9 @@ function RoleToggle({ current, onChange }: { current: UserRole; onChange: (role:
         <Pressable
           key={role}
           onPress={() => onChange(role)}
-          className={`flex-1 rounded-xl px-3 py-3 ${current === role ? 'bg-emerald' : 'border border-border bg-card'}`}
+          className={`flex-1 rounded-xl px-3 py-3 ${current === role ? 'bg-primary' : 'border border-border bg-card'}`}
         >
-          <Text className={`text-center text-sm font-bold ${current === role ? 'text-on-emerald' : 'text-muted'}`}>
+          <Text className={`text-center text-sm font-bold ${current === role ? 'text-on-primary' : 'text-muted'}`}>
             {ROLE_LABELS[role]}
           </Text>
         </Pressable>
