@@ -153,7 +153,8 @@ async function smartShopWithMockStores(page: Page): Promise<void> {
 
   const shopCta = page.getByText(/Find stores for this list/, { exact: false }).first();
   await shopCta.waitFor({ timeout: 15_000 });
-  await page.goto(`${origin}${basePath}/smart-shop`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await shopCta.click();
+  await page.waitForURL(/\/smart-shop/, { timeout: 15_000 });
   await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => undefined);
 
   await page.waitForFunction(
@@ -172,6 +173,8 @@ async function smartShopWithMockStores(page: Page): Promise<void> {
   }
 
   await page.getByText('E2E Test Mart', { exact: true }).first().waitFor({ timeout: 45_000 });
+  await page.getByText(/Shop whole list on Walmart/i).first().waitFor({ timeout: 45_000 });
+  await page.getByText('Store site', { exact: true }).first().waitFor({ timeout: 15_000 });
 }
 
 async function runGuestFlow(page: Page): Promise<void> {
@@ -197,6 +200,10 @@ async function main(): Promise<void> {
       localStorage.setItem('mealprep.onboarding.tourQueued', 'false');
       localStorage.setItem('mealprep.pantry', JSON.stringify([]));
       localStorage.setItem('mealprep.grocery', JSON.stringify([]));
+      localStorage.setItem('mealprep.guest.pantry', JSON.stringify([]));
+      localStorage.setItem('mealprep.guest.grocery', JSON.stringify([]));
+      localStorage.setItem('mealprep.guest.mealPlan', JSON.stringify([]));
+      localStorage.setItem('mealprep.guest.recipes', JSON.stringify([]));
       localStorage.setItem('mealprep.mealPlan', JSON.stringify([]));
       localStorage.setItem('mealprep.featureFlags', JSON.stringify(flags));
       localStorage.setItem('mealprep.smartShop.zip', JSON.stringify('95361'));
@@ -204,9 +211,18 @@ async function main(): Promise<void> {
         'mealprep.smartShop.coords',
         JSON.stringify({ lat: 37.7665, lng: -120.8471, updatedAt: new Date().toISOString() }),
       );
+      localStorage.removeItem('mealprep.smartShop.savedStoreIds');
+      localStorage.removeItem('mealprep.smartShop.savedStores');
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('mealprep.osmCache.')) localStorage.removeItem(key);
+      }
     }, FEATURE_FLAG_DEFAULTS);
 
-    await context.route(/\/api\/interpreter/, async (route) => {
+    await context.route('**/*interpreter*', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -218,6 +234,18 @@ async function main(): Promise<void> {
               lat: 37.7665,
               lon: -120.8471,
               tags: { shop: 'supermarket', name: 'E2E Test Mart' },
+            },
+            {
+              type: 'node',
+              id: 4243,
+              lat: 37.7672,
+              lon: -120.8462,
+              tags: {
+                shop: 'department_store',
+                name: 'Walmart Supercenter',
+                brand: 'Walmart',
+                'brand:wikidata': 'Q483551',
+              },
             },
           ],
         }),
@@ -241,4 +269,11 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    process.exit(process.exitCode ?? 0);
+  });

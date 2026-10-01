@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { DiscoverRecipesPanel } from '../../components/DiscoverRecipesPanel';
@@ -172,7 +172,9 @@ export default function RecipesScreen() {
     toggleMealPlanKitchenRecipe,
     onboarding,
   } = useApp();
-  const [activeId, setActiveId] = useState('');
+  const routeRecipeId =
+    typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
+  const [pickedRecipeId, setPickedRecipeId] = useState<string | null>(null);
   const [pantryFilter, setPantryFilter] = useState<RecipePantryFilterMode>('best_match');
   const minPantryMatchPercent = RECIPES_TAB.defaultMinPercent;
   const pantryEmpty = pantry.length === 0;
@@ -185,7 +187,7 @@ export default function RecipesScreen() {
   const activeMealCount = mealPlan.filter((m) => !m.made).length;
 
   function selectRecipe(recipeId: string) {
-    setActiveId(recipeId);
+    setPickedRecipeId(recipeId);
     onboarding.notifyTutorialStepComplete('recipes');
   }
 
@@ -260,21 +262,16 @@ export default function RecipesScreen() {
   const hasCookNowMatches = cookNowRecipes.length > 0 || cookNowDiscovery.length > 0;
   const hasNeedItemsMatches = needItemsRecipes.length > 0 || needItemsDiscovery.length > 0;
 
-  useEffect(() => {
-    if (typeof params.recipeId === 'string' && params.recipeId) {
-      setActiveId(params.recipeId);
+  const activeId = useMemo(() => {
+    if (filteredKitchenRecipes.length === 0) return '';
+    if (routeRecipeId && filteredKitchenRecipes.some((r) => r.id === routeRecipeId)) {
+      return routeRecipeId;
     }
-  }, [params.recipeId]);
-
-  useEffect(() => {
-    if (filteredKitchenRecipes.length === 0) {
-      setActiveId('');
-      return;
+    if (pickedRecipeId && filteredKitchenRecipes.some((r) => r.id === pickedRecipeId)) {
+      return pickedRecipeId;
     }
-    if (!filteredKitchenRecipes.some((r) => r.id === activeId)) {
-      setActiveId(filteredKitchenRecipes[0].id);
-    }
-  }, [activeId, filteredKitchenRecipes]);
+    return filteredKitchenRecipes[0]?.id ?? '';
+  }, [filteredKitchenRecipes, pickedRecipeId, routeRecipeId]);
 
   const active = kitchenRecipes.find((r) => r.id === activeId);
   const activeMatch = active ? pantryRecipeMatches.byRecipeId.get(active.id) : undefined;

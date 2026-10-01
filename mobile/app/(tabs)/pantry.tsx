@@ -44,7 +44,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { countDefaultKitchenMatches } from '../../config/recipeMatching';
 import { buildPantryMatchIndex } from '../../lib/recipeMatch';
-import { reviewItemsToPantryItems } from '../../lib/pantryVision/reviewItems';
+import { reviewItemsToPantryItems, detectionsToReviewItems, mergeSecondScanIntoReview } from '../../lib/pantryVision/reviewItems';
 import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
 import { readJson, writeJson } from '../../lib/storage';
 import {
@@ -58,10 +58,6 @@ import {
 import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
 import { PantryImageQualityError } from '../../lib/pantryVision/prepareImageShared';
-import {
-  detectionsToReviewItems,
-  mergeSecondScanIntoReview,
-} from '../../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem, PreparedPantryImage } from '../../lib/pantryVision/types';
 import {
   shouldBlockGuestPantryPhotoScan,
@@ -114,12 +110,13 @@ export default function PantryScreen() {
   } = useApp();
   const [filter, setFilter] = useState<PantryCategory | 'all'>('all');
   const hydrated = useHydrated();
-  const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>('all');
+  const [locationFilterOverride, setLocationFilterOverride] = useState<PantryStorageLocation | 'all' | null>(
+    null,
+  );
+  const locationFilter: PantryStorageLocation | 'all' = hydrated
+    ? (locationFilterOverride ?? readStoredPantryLocationFilter())
+    : 'all';
 
-  useEffect(() => {
-    if (!hydrated) return;
-    setLocationFilter(readStoredPantryLocationFilter());
-  }, [hydrated]);
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
@@ -193,7 +190,7 @@ export default function PantryScreen() {
   );
 
   function selectLocationFilter(next: PantryStorageLocation | 'all') {
-    setLocationFilter(next);
+    setLocationFilterOverride(next);
     writeJson(PANTRY_LOCATION_FILTER_STORAGE_KEY, next);
   }
 
@@ -500,13 +497,15 @@ export default function PantryScreen() {
     const key = wantsScan ? 'scan' : wantsManual ? 'manual' : null;
     if (!key || tutorialLaunchRef.current === key) return;
     tutorialLaunchRef.current = key;
-    if (key === 'manual') {
-      openAddModal();
-      return;
-    }
-    const source = Platform.OS === 'web' ? 'library' : 'camera';
-    void handleNativeScan(DEFAULT_PANTRY_STORAGE_LOCATION, source);
-  }, [params.tutorialManual, params.tutorialScan]);
+    queueMicrotask(() => {
+      if (key === 'manual') {
+        openAddModal();
+        return;
+      }
+      const source = Platform.OS === 'web' ? 'library' : 'camera';
+      void handleNativeScan(DEFAULT_PANTRY_STORAGE_LOCATION, source);
+    });
+  }, [params.tutorialManual, params.tutorialScan]); // eslint-disable-line react-hooks/exhaustive-deps -- tutorial one-shot
 
   function openEditModal(item: PantryItem) {
     setEditItem(item);
@@ -758,6 +757,7 @@ export default function PantryScreen() {
 
           {phase === 'review' ? (
             <PantryScanReview
+              key={`${scanLocationHint}-${reviewItems.map((i) => i.key).join(',')}`}
               items={reviewItems}
               onChange={setReviewItems}
               onSave={() => void handleSaveReview()}

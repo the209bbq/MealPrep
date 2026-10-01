@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -42,11 +42,27 @@ export default function DiscoverRecipeDetailScreen() {
   } = useApp();
   const accessToken = getRecipeDiscoveryAccessToken(session);
 
-  const [recipe, setRecipe] = useState<RecipeDiscoveryListItem | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [imported, setImported] = useState(false);
+  const invalidRecipeId = !Number.isFinite(recipeId);
+  const requestKey = invalidRecipeId ? 'invalid' : `${recipeId}:${accessToken ?? 'anon'}`;
+
+  const [loadState, setLoadState] = useState<{
+    key: string;
+    recipe: RecipeDiscoveryListItem | null;
+    error: string | null;
+    done: boolean;
+  }>({ key: '', recipe: null, error: null, done: false });
+
+  const loading = !invalidRecipeId && (loadState.key !== requestKey || !loadState.done);
+  const recipe = invalidRecipeId
+    ? null
+    : loadState.key === requestKey
+      ? loadState.recipe
+      : null;
+  const error = invalidRecipeId
+    ? 'Invalid recipe id'
+    : loadState.key === requestKey
+      ? loadState.error
+      : null;
 
   const ownerId = profile.id || 'demo-user';
   const alreadyInLibrary =
@@ -57,45 +73,47 @@ export default function DiscoverRecipeDetailScreen() {
     [recipe, pantry],
   );
 
-  const load = useCallback(async () => {
-    if (!Number.isFinite(recipeId)) {
-      setError('Invalid recipe id');
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const detail = await fetchDiscoveryRecipeDetail(recipeId, accessToken);
-      setRecipe(detail);
-      onboarding.notifyTutorialStepComplete('recipes');
-    } catch (err) {
-      if (err instanceof RecipeDiscoveryNotConfiguredError) {
-        setError('Recipe discovery is not set up on the server yet.');
-      } else if (err instanceof RecipeDiscoveryAuthError) {
-        setError(err.message);
-      } else {
-        setError(err instanceof Error ? err.message : 'Could not load recipe');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, onboarding, recipeId]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (invalidRecipeId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const detail = await fetchDiscoveryRecipeDetail(recipeId, accessToken);
+        if (cancelled) return;
+        setLoadState({ key: requestKey, recipe: detail, error: null, done: true });
+        onboarding.notifyTutorialStepComplete('recipes');
+      } catch (err) {
+        if (cancelled) return;
+        let message = 'Could not load recipe';
+        if (err instanceof RecipeDiscoveryNotConfiguredError) {
+          message = 'Recipe discovery is not set up on the server yet.';
+        } else if (err instanceof RecipeDiscoveryAuthError) {
+          message = err.message;
+        } else if (err instanceof Error) {
+          message = err.message;
+        }
+        setLoadState({ key: requestKey, recipe: null, error: message, done: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, invalidRecipeId, onboarding, recipeId, requestKey]);
+
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const onImport = async () => {
     if (!recipe) return;
     setImporting(true);
-    setError(null);
+    setImportError(null);
     try {
       const mapped = recipeApiToAppRecipe(recipe, { asMaster: isAdmin, userId: ownerId });
       await importDiscoveredRecipe(mapped, { asMaster: isAdmin, recipeApiId: recipeId });
       setImported(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed');
+      setImportError(err instanceof Error ? err.message : 'Import failed');
     } finally {
       setImporting(false);
     }
@@ -165,7 +183,7 @@ export default function DiscoverRecipeDetailScreen() {
             <Text className="mt-2 text-xs text-muted">Source: online recipe catalog</Text>
           </Card>
 
-          {error ? <Text className="mt-3 text-sm text-danger">{error}</Text> : null}
+          {importError ? <Text className="mt-3 text-sm text-danger">{importError}</Text> : null}
 
           {pantryMatch && pantryMatch.missingCount > 0 ? (
             <Pressable

@@ -4,7 +4,7 @@ import { BrandLogo } from '../../components/BrandLogo';
 import { Card } from '../../components/Card';
 import { TourReplayCard } from '../../components/onboarding/TourReplayCard';
 import { APP_BRAND } from '../../config/appBrand';
-import { ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
+import { ROLE_LABELS, THEME } from '../../config/appConfig';
 import { PLAN_LABELS } from '../../config/plans';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';

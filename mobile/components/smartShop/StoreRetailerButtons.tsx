@@ -1,7 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 import { useState } from 'react';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
-import type { RetailerShoppingConfig } from '../../config/smartShopRetailers';
 import { copyTextToClipboard } from '../../lib/smartShop/copyToClipboard';
 import { openGroceryItems } from '../../lib/smartShop/aggregateDeals';
 import { openExternalUrl } from '../../lib/smartShop/openExternalUrl';

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { CATEGORY_LABELS, PHOTO_SCAN } from '../config/appConfig';
 import {
@@ -44,14 +44,11 @@ export function PantryScanReview({
 }: PantryScanReviewProps) {
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
   const [batchLocation, setBatchLocation] = useState<PantryStorageLocation>(defaultBatchLocation);
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   const enabledCount = useMemo(() => items.filter((item) => item.enabled).length, [items]);
   const showFewItemsTip = items.length > 0 && items.length <= PANTRY_SCAN_TIP.fewItemsThreshold;
 
-  useEffect(() => {
-    setBatchLocation(defaultBatchLocation);
-  }, [defaultBatchLocation]);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   function updateItem(key: string, patch: Partial<PantryScanReviewItem>) {
     onChange(items.map((item) => (item.key === key ? { ...item, ...patch } : item)));

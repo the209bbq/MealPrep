@@ -68,6 +68,51 @@ type Props = {
   onSaved: () => void;
 };
 
+type AddPriceFormProps = Omit<Props, 'target'> & { target: SmartShopAddPriceTarget };
+
+function addPriceTargetKey(target: SmartShopAddPriceTarget): string {
+  return `${target.groceryItemId ?? ''}|${target.itemName ?? ''}|${target.store?.id ?? ''}`;
+}
+
+function initialAddPriceFields(
+  target: SmartShopAddPriceTarget,
+  ownerId: string,
+  groceryItems: GroceryListItem[],
+  nearbyStores: StoreLocation[],
+): {
+  activeStore: StoreLocation | null;
+  itemName: string;
+  groceryItemId: string | null;
+  sizeUnit: string;
+} {
+  const memory = readAddPriceMemory(ownerId);
+  const activeStore =
+    target.store ?? resolveStoreFromMemory(memory, nearbyStores) ?? nearbyStores[0] ?? null;
+  const matchedById = target.groceryItemId
+    ? groceryItems.find((i) => i.id === target.groceryItemId)
+    : undefined;
+  const matchedByName = target.itemName ? findGroceryItemByName(groceryItems, target.itemName) : undefined;
+  const groceryMatch = matchedById ?? matchedByName;
+  if (groceryMatch) {
+    return {
+      activeStore,
+      itemName: groceryMatch.name,
+      groceryItemId: groceryMatch.id,
+      sizeUnit: sizeUnitForGroceryItem(ownerId, groceryMatch),
+    };
+  }
+  const name = target.itemName?.trim() ?? '';
+  let sizeUnit = name ? (readRememberedSizeUnit(ownerId, name) ?? '') : '';
+  if (name) {
+    const remembered = findGroceryItemByName(groceryItems, name);
+    if (remembered) {
+      sizeUnit = sizeUnitForGroceryItem(ownerId, remembered);
+      return { activeStore, itemName: name, groceryItemId: remembered.id, sizeUnit };
+    }
+  }
+  return { activeStore, itemName: name, groceryItemId: null, sizeUnit };
+}
+
 function applyGroceryItemToForm(
   ownerId: string,
   item: GroceryListItem,
@@ -90,7 +135,20 @@ function clearPendingScan(
   scanUploadRef.current = null;
 }
 
-export function SmartShopAddPriceSheet({
+export function SmartShopAddPriceSheet(props: Props) {
+  const { target, onClose } = props;
+  return (
+    <Modal visible={Boolean(target)} animationType="slide" transparent onRequestClose={onClose}>
+      {target ? (
+        <SmartShopAddPriceSheetForm key={addPriceTargetKey(target)} {...props} target={target} />
+      ) : (
+        <View className="flex-1 justify-end bg-black/40" />
+      )}
+    </Modal>
+  );
+}
+
+function SmartShopAddPriceSheetForm({
   target,
   ownerId,
   groceryItems,
@@ -99,15 +157,15 @@ export function SmartShopAddPriceSheet({
   dealsResult,
   onClose,
   onSaved,
-}: Props) {
-  const visible = Boolean(target);
+}: AddPriceFormProps) {
   const { demoMode, authReady, session, profile, profileReady } = useApp();
+  const initialFields = initialAddPriceFields(target, ownerId, groceryItems, nearbyStores);
 
-  const [activeStore, setActiveStore] = useState<StoreLocation | null>(null);
-  const [itemName, setItemName] = useState('');
-  const [groceryItemId, setGroceryItemId] = useState<string | null>(null);
+  const [activeStore, setActiveStore] = useState<StoreLocation | null>(initialFields.activeStore);
+  const [itemName, setItemName] = useState(initialFields.itemName);
+  const [groceryItemId, setGroceryItemId] = useState<string | null>(initialFields.groceryItemId);
   const [price, setPrice] = useState('');
-  const [sizeUnit, setSizeUnit] = useState('');
+  const [sizeUnit, setSizeUnit] = useState(initialFields.sizeUnit);
   const [saleUntil, setSaleUntil] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -147,22 +205,6 @@ export function SmartShopAddPriceSheet({
   const suggestionChips = useMemo(() => suggestions.slice(0, 12), [suggestions]);
 
   useEffect(() => {
-    if (!target) {
-      setJustSaved(false);
-      return;
-    }
-    setJustSaved(false);
-    setPricedThisSession(new Set());
-    setPrice('');
-    setSaleUntil('');
-    setError(null);
-    clearPendingScan(setPendingScanPhotoPath, scanUploadRef);
-
-    const memory = readAddPriceMemory(ownerId);
-    const resolvedStore =
-      target.store ?? resolveStoreFromMemory(memory, nearbyStores) ?? nearbyStores[0] ?? null;
-    setActiveStore(resolvedStore);
-
     void getSupabase()
       ?.auth.getSession()
       .then(({ data }) => {
@@ -170,33 +212,7 @@ export function SmartShopAddPriceSheet({
         setUserId(id);
         setSignedIn(Boolean(id));
       });
-
-    const matchedById = target.groceryItemId
-      ? groceryItems.find((i) => i.id === target.groceryItemId)
-      : undefined;
-    const matchedByName = target.itemName ? findGroceryItemByName(groceryItems, target.itemName) : undefined;
-    const groceryMatch = matchedById ?? matchedByName;
-
-    if (groceryMatch) {
-      applyGroceryItemToForm(ownerId, groceryMatch, {
-        setItemName,
-        setSizeUnit,
-        setGroceryItemId,
-      });
-    } else {
-      const name = target.itemName?.trim() ?? '';
-      setItemName(name);
-      setGroceryItemId(null);
-      setSizeUnit(name ? (readRememberedSizeUnit(ownerId, name) ?? '') : '');
-      if (name) {
-        const remembered = findGroceryItemByName(groceryItems, name);
-        if (remembered) {
-          setSizeUnit(sizeUnitForGroceryItem(ownerId, remembered));
-          setGroceryItemId(remembered.id);
-        }
-      }
-    }
-  }, [target, ownerId, nearbyStores, groceryItems]);
+  }, []);
 
   function selectSuggestion(suggestion: (typeof suggestions)[number]) {
     applyGroceryItemToForm(ownerId, suggestion.item, {
@@ -393,11 +409,10 @@ export function SmartShopAddPriceSheet({
     }
   }
 
-  const showStorePicker = Boolean(target && !target.store && nearbyStores.length > 1);
+  const showStorePicker = Boolean(!target.store && nearbyStores.length > 1);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/40">
+    <View className="flex-1 justify-end bg-black/40">
         <View className="max-h-[90%] rounded-t-3xl border border-border bg-paper px-4 pb-8 pt-4">
           <View className="mb-2 flex-row items-center justify-between">
             <Text className="text-lg font-bold text-ink">{SMART_SHOP_COPY.addPriceSheetTitle}</Text>
@@ -569,6 +584,5 @@ export function SmartShopAddPriceSheet({
           )}
         </View>
       </View>
-    </Modal>
   );
 }

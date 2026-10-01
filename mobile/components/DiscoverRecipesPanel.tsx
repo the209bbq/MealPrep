@@ -103,34 +103,31 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMiss
   }, [accessToken, filters]);
 
   const discoveryQueryActive = isActiveRecipeDiscoverySearch(filters);
+  const discoveryIdle = RECIPES_TAB.discoverRequiresActiveQuery && !discoveryQueryActive;
+  const authBlocked = !demoMode && !accessToken && !discoveryIdle;
+  const searchRequestKey = useMemo(
+    () => `${accessToken ?? ''}:${JSON.stringify(filters)}`,
+    [accessToken, filters],
+  );
+  const [settledSearchKey, setSettledSearchKey] = useState('');
 
   useEffect(() => {
     if (!RECIPE_DISCOVERY.enabled) return;
-    if (RECIPES_TAB.discoverRequiresActiveQuery && !discoveryQueryActive) {
-      setItems([]);
-      setTotal(0);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+    if (discoveryIdle) return;
     if (demoMode) {
-      void runSearch();
+      queueMicrotask(() => {
+        void runSearch();
+      });
       return;
     }
-    if (!accessToken) {
-      setError(RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild);
-      setItems([]);
-      setTotal(0);
-      return;
-    }
-    setLoading(true);
+    if (!accessToken) return;
     debouncedSearch(
       filters,
       accessToken,
       (result) => {
         setItems(result.items);
         setTotal(result.meta?.total ?? result.items.length);
-        setLoading(false);
+        setSettledSearchKey(searchRequestKey);
         setError(null);
         setNotConfigured(false);
       },
@@ -141,13 +138,20 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMiss
         } else {
           setError(err.message);
         }
-        setLoading(false);
+        setSettledSearchKey(searchRequestKey);
       },
     );
-  }, [accessToken, demoMode, discoveryQueryActive, filters, runSearch]);
+  }, [accessToken, demoMode, discoveryIdle, filters, runSearch, searchRequestKey]);
+
+  const debouncedLoading =
+    !discoveryIdle && !demoMode && Boolean(accessToken) && searchRequestKey !== settledSearchKey;
+  const panelItems = useMemo(() => (discoveryIdle ? [] : items), [discoveryIdle, items]);
+  const panelTotal = discoveryIdle ? 0 : total;
+  const panelLoading = discoveryIdle ? false : demoMode ? loading : debouncedLoading;
+  const panelError = authBlocked ? RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild : error;
 
   const displayItems = useMemo(() => {
-    let list = items.map((recipe) => ({
+    let list = panelItems.map((recipe) => ({
       recipe,
       match: scoreDiscoveryRecipeAgainstPantry(recipe, pantry),
     }));
@@ -159,7 +163,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMiss
     }
     list.sort((a, b) => compareRecipePantryMatches(a.match, b.match));
     return list;
-  }, [items, matchPantryOnly, minPantryPercent, pantry]);
+  }, [panelItems, matchPantryOnly, minPantryPercent, pantry]);
 
   const showSetupHint = notConfigured || (!demoMode && !isRecipeDiscoveryConfigured());
 
@@ -284,7 +288,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMiss
         })}
       </View>
 
-      {error ? <Text className="mt-4 text-sm text-danger">{error}</Text> : null}
+      {panelError ? <Text className="mt-4 text-sm text-danger">{panelError}</Text> : null}
 
       {RECIPES_TAB.discoverRequiresActiveQuery && !discoveryQueryActive ? (
         <Text className="mt-4 text-sm text-muted">{RECIPES_COPY.discoveryPanel.idleHint}</Text>
@@ -292,16 +296,16 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMiss
         <>
           <View className="mt-4 flex-row items-center justify-between">
             <Text className="text-sm font-semibold text-ink">
-              {loading
+              {panelLoading
                 ? RECIPES_COPY.discoveryPanel.searching
-                : !loading && total > displayItems.length
-                  ? RECIPES_COPY.discoveryPanel.resultCountOfTotal(displayItems.length, total)
+                : !panelLoading && panelTotal > displayItems.length
+                  ? RECIPES_COPY.discoveryPanel.resultCountOfTotal(displayItems.length, panelTotal)
                   : RECIPES_COPY.discoveryPanel.resultCount(displayItems.length)}
             </Text>
-            {loading ? <ActivityIndicator color={THEME.primary} /> : null}
+            {panelLoading ? <ActivityIndicator color={THEME.primary} /> : null}
           </View>
 
-          {displayItems.length === 0 && !loading ? (
+          {displayItems.length === 0 && !panelLoading ? (
             <Text className="mt-3 text-sm text-muted">{RECIPES_COPY.discoveryPanel.noFilterResults}</Text>
           ) : null}
 

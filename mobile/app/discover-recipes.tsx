@@ -84,24 +84,29 @@ export default function DiscoverRecipesScreen() {
     }
   }, [accessToken, filters]);
 
+  const authBlocked = !demoMode && !accessToken;
+  const searchRequestKey = useMemo(
+    () => `${accessToken ?? ''}:${JSON.stringify(filters)}`,
+    [accessToken, filters],
+  );
+  const [settledSearchKey, setSettledSearchKey] = useState('');
+
   useEffect(() => {
     if (!RECIPE_DISCOVERY.enabled) return;
     if (demoMode) {
-      void runSearch();
+      queueMicrotask(() => {
+        void runSearch();
+      });
       return;
     }
-    if (!accessToken) {
-      setError(RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild);
-      return;
-    }
-    setLoading(true);
+    if (!accessToken) return;
     debouncedSearch(
       filters,
       accessToken,
       (result) => {
         setItems(result.items);
         setTotal(result.meta?.total ?? result.items.length);
-        setLoading(false);
+        setSettledSearchKey(searchRequestKey);
         setError(null);
         setNotConfigured(false);
       },
@@ -112,12 +117,16 @@ export default function DiscoverRecipesScreen() {
         } else {
           setError(err.message);
         }
-        setLoading(false);
+        setSettledSearchKey(searchRequestKey);
       },
     );
-  }, [accessToken, demoMode, filters, runSearch]);
+  }, [accessToken, demoMode, filters, runSearch, searchRequestKey]);
+
+  const debouncedLoading = !demoMode && Boolean(accessToken) && searchRequestKey !== settledSearchKey;
+  const screenLoading = demoMode ? loading : debouncedLoading;
 
   const showSetupHint = notConfigured || (!demoMode && !isRecipeDiscoveryConfigured());
+  const screenError = authBlocked ? RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild : error;
 
   return (
     <View className="flex-1 bg-paper" style={{ paddingTop: insets.top }}>
@@ -190,13 +199,13 @@ export default function DiscoverRecipesScreen() {
           onSelect={(id) => setDietaryTag((id as RecipeApiDietaryTag) || '')}
         />
 
-        {error ? <Text className="mt-4 text-sm text-danger">{error}</Text> : null}
+        {screenError ? <Text className="mt-4 text-sm text-danger">{screenError}</Text> : null}
 
         <View className="mt-4 flex-row items-center justify-between">
           <Text className="text-sm font-semibold text-ink">
-            {loading ? 'Searching…' : `${total} result${total === 1 ? '' : 's'}`}
+            {screenLoading ? 'Searching…' : `${total} result${total === 1 ? '' : 's'}`}
           </Text>
-          {loading ? <ActivityIndicator color={THEME.primary} /> : null}
+          {screenLoading ? <ActivityIndicator color={THEME.primary} /> : null}
         </View>
 
         {items.map((recipe) => (

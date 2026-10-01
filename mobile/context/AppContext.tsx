@@ -440,16 +440,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, supabase]);
 
   useEffect(() => {
+    if (!hydrated || demoMode) return;
+    if (userId) return;
+    setPantry(readGuestPantry());
+    setGrocery(readGuestGrocery());
+    setMealPlan(readGuestMealPlan());
+    setRecipes(readGuestRecipes());
+    setLiveDataLoaded(true);
+  }, [demoMode, hydrated, userId]);
+
+  useEffect(() => {
     if (demoMode) return;
     if (!userId) {
-      setLiveProfile(null);
-      setLiveAnalytics(null);
-      setRecipes(readGuestRecipes());
-      setMealPlan(readGuestMealPlan());
-      setServingOverrides({});
-      setPantry(readGuestPantry());
-      setGrocery(readGuestGrocery());
-      setLiveDataLoaded(true);
       return;
     }
     void loadLiveData().catch((error: unknown) => {

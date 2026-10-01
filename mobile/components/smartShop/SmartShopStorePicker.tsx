@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
-import { SMART_SHOP, THEME } from '../../config/appConfig';
+import { THEME } from '../../config/appConfig';
 import type { StoreLocation } from '../../lib/deals/types';
 import { pricingBadgeForStore } from '../../lib/smartShop/aggregateDeals';
 import { formatStoreAddress } from '../../lib/stores/formatAddress';

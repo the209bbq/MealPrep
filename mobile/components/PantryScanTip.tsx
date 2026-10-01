@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { PANTRY_SCAN_TIP } from '../config/pantryStorage';
 import { readJson, writeJson } from '../lib/storage';
@@ -8,12 +8,9 @@ interface PantryScanTipProps {
 }
 
 export function PantryScanTip({ className = '' }: PantryScanTipProps) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const dismissed = readJson<boolean>(PANTRY_SCAN_TIP.dismissStorageKey, false);
-    setVisible(!dismissed);
-  }, []);
+  const [visible, setVisible] = useState(
+    () => !readJson<boolean>(PANTRY_SCAN_TIP.dismissStorageKey, false),
+  );
 
   function dismiss() {
     writeJson(PANTRY_SCAN_TIP.dismissStorageKey, true);
