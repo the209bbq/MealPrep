@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   ActivityIndicator,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -14,7 +15,8 @@ import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { THEME } from '../../config/appConfig';
 import { addCommunityDeal } from '../../lib/communityDeals/client';
 import { isPastLocalDate } from '../../lib/communityDeals/localDate';
-import type { StoreLocation } from '../../lib/deals/types';
+import type { CommunityStoreDeal } from '../../lib/communityDeals/types';
+import type { DealsSearchResult, StoreLocation } from '../../lib/deals/types';
 import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import {
   PantryVisionAuthError,
@@ -23,27 +25,79 @@ import {
   PantryVisionScanError,
 } from '../../lib/pantryVision/client';
 import { analyzePriceTagPhoto } from '../../lib/priceTagVision/client';
+import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 import { getSupabase } from '../../lib/supabase';
 import { resolveStoreChainKey } from '../../config/weeklyAds';
+import {
+  rememberItemSizeUnit,
+  rememberLastAddPriceStore,
+  readAddPriceMemory,
+  readRememberedSizeUnit,
+  resolveStoreFromMemory,
+} from '../../lib/smartShop/addPriceMemory';
+import {
+  buildAddPriceItemSuggestions,
+  findGroceryItemByName,
+  nextUnpricedSuggestion,
+  sizeUnitForGroceryItem,
+} from '../../lib/smartShop/addPriceSuggestions';
+import type { GroceryListItem } from '../../types/mealprep';
 import { ViewScanPhotoButton } from '../ViewScanPhotoButton';
-import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 
 export type SmartShopAddPriceTarget = {
-  store: StoreLocation;
+  store?: StoreLocation;
   itemName?: string;
+  groceryItemId?: string;
 };
 
 type Props = {
   target: SmartShopAddPriceTarget | null;
+  ownerId: string;
+  groceryItems: GroceryListItem[];
+  nearbyStores: StoreLocation[];
+  communityDeals: CommunityStoreDeal[];
+  dealsResult?: DealsSearchResult | null;
   onClose: () => void;
   onSaved: () => void;
 };
 
-export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
-  const visible = Boolean(target);
-  const store = target?.store;
+function applyGroceryItemToForm(
+  ownerId: string,
+  item: GroceryListItem,
+  setters: {
+    setItemName: (v: string) => void;
+    setSizeUnit: (v: string) => void;
+    setGroceryItemId: (v: string) => void;
+  },
+): void {
+  setters.setItemName(item.name);
+  setters.setSizeUnit(sizeUnitForGroceryItem(ownerId, item));
+  setters.setGroceryItemId(item.id);
+}
 
+function clearPendingScan(
+  setPendingScanPhotoPath: (v: string | null) => void,
+  scanUploadRef: MutableRefObject<Promise<string | null> | null>,
+): void {
+  setPendingScanPhotoPath(null);
+  scanUploadRef.current = null;
+}
+
+export function SmartShopAddPriceSheet({
+  target,
+  ownerId,
+  groceryItems,
+  nearbyStores,
+  communityDeals,
+  dealsResult,
+  onClose,
+  onSaved,
+}: Props) {
+  const visible = Boolean(target);
+
+  const [activeStore, setActiveStore] = useState<StoreLocation | null>(null);
   const [itemName, setItemName] = useState('');
+  const [groceryItemId, setGroceryItemId] = useState<string | null>(null);
   const [price, setPrice] = useState('');
   const [sizeUnit, setSizeUnit] = useState('');
   const [saleUntil, setSaleUntil] = useState('');
@@ -54,16 +108,52 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
   const [userId, setUserId] = useState<string | null>(null);
   const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
   const scanUploadRef = useRef<Promise<string | null> | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
+  const [pricedThisSession, setPricedThisSession] = useState<Set<string>>(() => new Set());
+
+  const storeKey = useMemo(
+    () => (activeStore ? resolveStoreChainKey(activeStore) : null),
+    [activeStore],
+  );
+
+  const suggestions = useMemo(() => {
+    const base = buildAddPriceItemSuggestions({
+      groceryItems,
+      storeKey,
+      storeId: activeStore?.id ?? null,
+      communityDeals,
+      dealsResult,
+    });
+    const enriched = base.map((s) => ({
+      ...s,
+      hasPriceAtStore: s.hasPriceAtStore || pricedThisSession.has(s.item.id),
+    }));
+    enriched.sort((a, b) => {
+      if (a.hasPriceAtStore !== b.hasPriceAtStore) return a.hasPriceAtStore ? 1 : -1;
+      return a.item.name.localeCompare(b.item.name);
+    });
+    return enriched;
+  }, [groceryItems, storeKey, activeStore?.id, communityDeals, dealsResult, pricedThisSession]);
+
+  const suggestionChips = useMemo(() => suggestions.slice(0, 12), [suggestions]);
 
   useEffect(() => {
-    if (!target) return;
-    setItemName(target.itemName?.trim() ?? '');
+    if (!target) {
+      setJustSaved(false);
+      return;
+    }
+    setJustSaved(false);
+    setPricedThisSession(new Set());
     setPrice('');
-    setSizeUnit('');
     setSaleUntil('');
     setError(null);
-    setPendingScanPhotoPath(null);
-    scanUploadRef.current = null;
+    clearPendingScan(setPendingScanPhotoPath, scanUploadRef);
+
+    const memory = readAddPriceMemory(ownerId);
+    const resolvedStore =
+      target.store ?? resolveStoreFromMemory(memory, nearbyStores) ?? nearbyStores[0] ?? null;
+    setActiveStore(resolvedStore);
+
     void getSupabase()
       ?.auth.getSession()
       .then(({ data }) => {
@@ -71,28 +161,82 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
         setUserId(id);
         setSignedIn(Boolean(id));
       });
-  }, [target]);
+
+    const matchedById = target.groceryItemId
+      ? groceryItems.find((i) => i.id === target.groceryItemId)
+      : undefined;
+    const matchedByName = target.itemName ? findGroceryItemByName(groceryItems, target.itemName) : undefined;
+    const groceryMatch = matchedById ?? matchedByName;
+
+    if (groceryMatch) {
+      applyGroceryItemToForm(ownerId, groceryMatch, {
+        setItemName,
+        setSizeUnit,
+        setGroceryItemId,
+      });
+    } else {
+      const name = target.itemName?.trim() ?? '';
+      setItemName(name);
+      setGroceryItemId(null);
+      setSizeUnit(name ? (readRememberedSizeUnit(ownerId, name) ?? '') : '');
+      if (name) {
+        const remembered = findGroceryItemByName(groceryItems, name);
+        if (remembered) {
+          setSizeUnit(sizeUnitForGroceryItem(ownerId, remembered));
+          setGroceryItemId(remembered.id);
+        }
+      }
+    }
+  }, [target, ownerId, nearbyStores, groceryItems]);
+
+  function selectSuggestion(suggestion: (typeof suggestions)[number]) {
+    applyGroceryItemToForm(ownerId, suggestion.item, {
+      setItemName,
+      setSizeUnit,
+      setGroceryItemId,
+    });
+    setPrice('');
+    setError(null);
+    clearPendingScan(setPendingScanPhotoPath, scanUploadRef);
+  }
+
+  function resetFormForAnother(next: (typeof suggestions)[number]) {
+    applyGroceryItemToForm(ownerId, next.item, {
+      setItemName,
+      setSizeUnit,
+      setGroceryItemId,
+    });
+    setPrice('');
+    setSaleUntil('');
+    setError(null);
+    setJustSaved(false);
+    clearPendingScan(setPendingScanPhotoPath, scanUploadRef);
+  }
 
   async function handleSave() {
-    if (!store) return;
+    const store = activeStore;
+    if (!store) {
+      setError(SMART_SHOP_COPY.addPricePickStore);
+      return;
+    }
     const parsed = Number.parseFloat(price);
     if (!itemName.trim()) {
-      setError('Enter an item name.');
+      setError(SMART_SHOP_COPY.addPriceItemRequired);
       return;
     }
     if (!Number.isFinite(parsed) || parsed < 0) {
-      setError('Enter a valid price.');
+      setError(SMART_SHOP_COPY.addPricePriceRequired);
       return;
     }
     const sale = saleUntil.trim();
     if (sale && isPastLocalDate(sale)) {
-      setError('Sale end date must be today or later.');
+      setError(SMART_SHOP_COPY.addPriceSaleDateInvalid);
       return;
     }
 
-    const storeKey = resolveStoreChainKey(store);
-    if (!storeKey) {
-      setError('This store cannot accept prices yet.');
+    const resolvedStoreKey = resolveStoreChainKey(store);
+    if (!resolvedStoreKey) {
+      setError(SMART_SHOP_COPY.addPriceStoreUnsupported);
       return;
     }
 
@@ -104,7 +248,7 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
     }
 
     const res = await addCommunityDeal({
-      storeKey,
+      storeKey: resolvedStoreKey,
       osmStoreId: store.id.startsWith('kroger-') ? undefined : store.id,
       storeName: store.name,
       itemName: itemName.trim(),
@@ -115,11 +259,28 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
     });
     setSubmitting(false);
     if (!res.ok) {
-      setError(res.error ?? 'Could not save price.');
+      setError(res.error ?? SMART_SHOP_COPY.addPriceSaveFailed);
       return;
     }
+
+    rememberLastAddPriceStore(ownerId, store);
+    rememberItemSizeUnit(ownerId, itemName.trim(), sizeUnit);
+    const savedItemId =
+      groceryItemId ?? findGroceryItemByName(groceryItems, itemName.trim())?.id ?? null;
+    if (savedItemId) {
+      setPricedThisSession((prev) => new Set(prev).add(savedItemId));
+    }
     onSaved();
-    onClose();
+    setJustSaved(true);
+  }
+
+  function handleAddAnother() {
+    const next = nextUnpricedSuggestion(suggestions, groceryItemId);
+    if (!next) {
+      onClose();
+      return;
+    }
+    resetFormForAnother(next);
   }
 
   async function runScan(prepared: { base64: string; mimeType: string; uri?: string }) {
@@ -129,7 +290,7 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
     try {
       const session = await getSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token ?? null;
-      const uid = session?.data.session?.user?.id ?? null;
+      const uid = userId ?? session?.data.session?.user?.id ?? null;
       const imagePayload = {
         uri: prepared.uri ?? '',
         base64: prepared.base64,
@@ -185,7 +346,7 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
 
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      setError('Camera permission is needed to scan a shelf tag.');
+      setError(SMART_SHOP_COPY.addPriceCameraPermission);
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -201,99 +362,178 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
     }
   }
 
+  const showStorePicker = Boolean(target && !target.store && nearbyStores.length > 1);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View className="flex-1 justify-end bg-black/40">
-        <View className="rounded-t-3xl border border-border bg-paper px-4 pb-8 pt-4">
+        <View className="max-h-[90%] rounded-t-3xl border border-border bg-paper px-4 pb-8 pt-4">
           <View className="mb-2 flex-row items-center justify-between">
             <Text className="text-lg font-bold text-ink">{SMART_SHOP_COPY.addPriceSheetTitle}</Text>
             <Pressable onPress={onClose} className="rounded-full p-2">
               <Ionicons name="close" size={22} color={THEME.muted} />
             </Pressable>
           </View>
-          {store ? (
-            <Text className="mb-3 text-sm text-muted">{store.chain || store.name}</Text>
+
+          {activeStore ? (
+            <Text className="mb-3 text-sm text-muted">{activeStore.chain || activeStore.name}</Text>
+          ) : (
+            <Text className="mb-3 text-sm text-amber-900">{SMART_SHOP_COPY.addPricePickStore}</Text>
+          )}
+
+          {showStorePicker ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3 max-h-12">
+              {nearbyStores.map((store) => {
+                const selected = store.id === activeStore?.id;
+                return (
+                  <Pressable
+                    key={store.id}
+                    onPress={() => setActiveStore(store)}
+                    className={`mr-2 rounded-full border px-3 py-1.5 ${selected ? 'border-primary bg-primary-light' : 'border-border bg-card'}`}
+                  >
+                    <Text
+                      className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}
+                      numberOfLines={1}
+                    >
+                      {store.chain || store.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           ) : null}
 
           {signedIn === false ? (
             <Text className="mb-3 text-sm text-amber-900">{SMART_SHOP_COPY.addPriceSignIn}</Text>
           ) : null}
 
-          <Text className="text-xs font-bold text-muted">{SMART_SHOP_COPY.addPriceItemLabel}</Text>
-          <TextInput
-            value={itemName}
-            onChangeText={setItemName}
-            placeholder="Item on your list"
-            placeholderTextColor={THEME.muted}
-            className="mt-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
-          />
+          {justSaved ? (
+            <View className="py-2">
+              <Text className="text-base font-bold text-ink">{SMART_SHOP_COPY.addPriceSavedTitle}</Text>
+              <Text className="mt-2 text-sm text-muted">{SMART_SHOP_COPY.addPriceSavedBody}</Text>
+              <View className="mt-4 flex-row gap-2">
+                <Pressable
+                  onPress={() => handleAddAnother()}
+                  className="flex-1 rounded-xl bg-primary px-3 py-3"
+                >
+                  <Text className="text-center text-sm font-bold text-on-primary">
+                    {SMART_SHOP_COPY.addPriceAddAnother}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={onClose} className="rounded-xl border border-border px-4 py-3">
+                  <Text className="text-sm font-semibold text-muted">{SMART_SHOP_COPY.addPriceDone}</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {suggestionChips.length > 0 ? (
+                <View className="mb-3">
+                  <Text className="text-xs font-bold text-muted">{SMART_SHOP_COPY.addPriceFromListLabel}</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2 max-h-24">
+                    {suggestionChips.map((suggestion) => {
+                      const selected = suggestion.item.id === groceryItemId;
+                      return (
+                        <Pressable
+                          key={suggestion.item.id}
+                          onPress={() => selectSuggestion(suggestion)}
+                          className={`mr-2 rounded-full border px-3 py-1.5 ${selected ? 'border-primary bg-primary-light' : 'border-border bg-card'}`}
+                        >
+                          <Text
+                            className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}
+                            numberOfLines={1}
+                          >
+                            {suggestion.item.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
 
-          <View className="mt-3 flex-row gap-2">
-            <View className="flex-1">
-              <Text className="text-xs font-bold text-muted">{SMART_SHOP_COPY.addPricePriceLabel}</Text>
+              <Text className="text-xs font-bold text-muted">{SMART_SHOP_COPY.addPriceItemLabel}</Text>
               <TextInput
-                value={price}
-                onChangeText={setPrice}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
+                value={itemName}
+                onChangeText={(text) => {
+                  setItemName(text);
+                  setGroceryItemId(null);
+                }}
+                placeholder="Item on your list"
                 placeholderTextColor={THEME.muted}
                 className="mt-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
               />
-            </View>
-            <View className="flex-1">
-              <Text className="text-xs font-bold text-muted">{SMART_SHOP_COPY.addPriceSizeLabel}</Text>
+
+              <View className="mt-3 flex-row gap-2">
+                <View className="flex-1">
+                  <Text className="text-xs font-bold text-muted">{SMART_SHOP_COPY.addPricePriceLabel}</Text>
+                  <TextInput
+                    value={price}
+                    onChangeText={setPrice}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={THEME.muted}
+                    className="mt-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-bold text-muted">{SMART_SHOP_COPY.addPriceSizeLabel}</Text>
+                  <TextInput
+                    value={sizeUnit}
+                    onChangeText={setSizeUnit}
+                    placeholder={SMART_SHOP_COPY.addPriceSizePlaceholder}
+                    placeholderTextColor={THEME.muted}
+                    className="mt-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
+                  />
+                </View>
+              </View>
+
+              <Text className="mt-3 text-xs font-bold text-muted">{SMART_SHOP_COPY.addPriceSaleUntilLabel}</Text>
               <TextInput
-                value={sizeUnit}
-                onChangeText={setSizeUnit}
-                placeholder={SMART_SHOP_COPY.addPriceSizePlaceholder}
+                value={saleUntil}
+                onChangeText={setSaleUntil}
+                placeholder={SMART_SHOP_COPY.addPriceSaleUntilPlaceholder}
                 placeholderTextColor={THEME.muted}
                 className="mt-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
               />
-            </View>
-          </View>
 
-          <Text className="mt-3 text-xs font-bold text-muted">{SMART_SHOP_COPY.addPriceSaleUntilLabel}</Text>
-          <TextInput
-            value={saleUntil}
-            onChangeText={setSaleUntil}
-            placeholder={SMART_SHOP_COPY.addPriceSaleUntilPlaceholder}
-            placeholderTextColor={THEME.muted}
-            className="mt-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
-          />
+              {error ? <Text className="mt-2 text-xs text-danger">{error}</Text> : null}
 
-          {error ? <Text className="mt-2 text-xs text-danger">{error}</Text> : null}
+              <Pressable
+                onPress={() => void handleSnapTag()}
+                disabled={scanning || submitting}
+                className="mt-3 flex-row items-center justify-center gap-2 rounded-xl border border-primary bg-primary-light/40 px-3 py-3"
+              >
+                {scanning ? (
+                  <ActivityIndicator size="small" color={THEME.primary} />
+                ) : (
+                  <Ionicons name="camera-outline" size={20} color={THEME.primary} />
+                )}
+                <Text className="text-sm font-bold text-primary-dark">
+                  {scanning ? SMART_SHOP_COPY.addPriceScanning : SMART_SHOP_COPY.addPriceScanTag}
+                </Text>
+              </Pressable>
 
-          {pendingScanPhotoPath ? <ViewScanPhotoButton scanPhotoPath={pendingScanPhotoPath} /> : null}
+              {pendingScanPhotoPath ? (
+                <ViewScanPhotoButton scanPhotoPath={pendingScanPhotoPath} />
+              ) : null}
 
-          <Pressable
-            onPress={() => void handleSnapTag()}
-            disabled={scanning || submitting}
-            className="mt-3 flex-row items-center justify-center gap-2 rounded-xl border border-emerald bg-emerald-light/40 px-3 py-3"
-          >
-            {scanning ? (
-              <ActivityIndicator size="small" color={THEME.primary} />
-            ) : (
-              <Ionicons name="camera-outline" size={20} color={THEME.primary} />
-            )}
-            <Text className="text-sm font-bold text-emerald-dark">
-              {scanning ? SMART_SHOP_COPY.addPriceScanning : SMART_SHOP_COPY.addPriceScanTag}
-            </Text>
-          </Pressable>
-
-          <View className="mt-4 flex-row gap-2">
-            <Pressable
-              onPress={() => void handleSave()}
-              disabled={submitting || scanning || signedIn === false}
-              className="flex-1 rounded-xl bg-emerald px-3 py-3"
-            >
-              <Text className="text-center text-sm font-bold text-on-emerald">
-                {submitting ? 'Saving…' : SMART_SHOP_COPY.addPriceSave}
-              </Text>
-            </Pressable>
-            <Pressable onPress={onClose} className="rounded-xl border border-border px-4 py-3">
-              <Text className="text-sm font-semibold text-muted">{SMART_SHOP_COPY.addPriceCancel}</Text>
-            </Pressable>
-          </View>
+              <View className="mt-4 flex-row gap-2">
+                <Pressable
+                  onPress={() => void handleSave()}
+                  disabled={submitting || scanning || signedIn === false}
+                  className="flex-1 rounded-xl bg-primary px-3 py-3"
+                >
+                  <Text className="text-center text-sm font-bold text-on-primary">
+                    {submitting ? 'Saving…' : SMART_SHOP_COPY.addPriceSave}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={onClose} className="rounded-xl border border-border px-4 py-3">
+                  <Text className="text-sm font-semibold text-muted">{SMART_SHOP_COPY.addPriceCancel}</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          )}
         </View>
       </View>
     </Modal>
