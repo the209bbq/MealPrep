@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { BrandLogo } from '../../components/BrandLogo';
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
@@ -170,6 +171,7 @@ function AuthPanel({
 
   return (
     <Card className="mt-4" title="Sign in" subtitle="Supabase auth for your kitchen data">
+      <BrandLogo variant="auth" />
       <Text className="mt-2 text-sm text-muted">
         Use email + password or request a magic link. Redirects return to this Admin tab on GitHub Pages.
       </Text>

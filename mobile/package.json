@@ -39,8 +39,10 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test:recipe-match": "node scripts/recipe-match-examples.mjs",
+    "generate:brand": "node scripts/generate-brand-assets.mjs",
     "generate:pwa": "node scripts/generate-pwa-assets.mjs",
-    "export:web": "npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs"
+    "test": "npm run test:recipe-match",
+    "export:web": "npm run generate:brand && npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs"
   },
   "private": true
 }

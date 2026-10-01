@@ -1,0 +1,29 @@
+{
+  "name": "MealPlanatic",
+  "shortName": "MealPlanatic",
+  "pwaDescription": "Plan meals, use your pantry, and shop smarter.",
+  "colors": {
+    "brandCream": "#FCF8EC",
+    "themeEmerald": "#047857"
+  },
+  "sourceLogo": "assets/mealplanatic-logo-source.png",
+  "crops": {
+    "icon": { "left": 502, "top": 288, "width": 950, "height": 978 },
+    "full": { "left": 139, "top": 288, "width": 1730, "height": 1255 }
+  },
+  "assets": {
+    "icon": "assets/icon.png",
+    "splashIcon": "assets/splash-icon.png",
+    "favicon": "assets/favicon.png",
+    "androidIconForeground": "assets/android-icon-foreground.png",
+    "androidIconBackground": "assets/android-icon-background.png",
+    "androidIconMonochrome": "assets/android-icon-monochrome.png",
+    "logoFull": "assets/mealplanatic-logo-full.png",
+    "logoFullTransparent": "assets/mealplanatic-logo-full-transparent.png",
+    "logoMark": "assets/mealplanatic-logo-mark.png"
+  },
+  "ui": {
+    "headerLogoHeight": 34,
+    "authLogoWidth": 260
+  }
+}

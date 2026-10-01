@@ -12,15 +12,17 @@ const mobileRoot = path.resolve(__dirname, '..');
 const publicDir = path.join(mobileRoot, 'public');
 const iconsDir = path.join(publicDir, 'icons');
 const appJson = JSON.parse(fs.readFileSync(path.join(mobileRoot, 'app.json'), 'utf8'));
+const brand = JSON.parse(fs.readFileSync(path.join(mobileRoot, 'config', 'appBrand.json'), 'utf8'));
 
 const baseUrl = appJson.expo?.experiments?.baseUrl ?? '';
 const basePath = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 
 const THEME = {
-  emerald: '#047857',
-  cream: '#FAF7F2',
+  emerald: brand.colors.themeEmerald,
+  cream: brand.colors.brandCream,
 };
-const APP_SHORT_NAME = 'Meal Prep';
+const APP_SHORT_NAME = brand.shortName;
+const PWA_DESCRIPTION = brand.pwaDescription;
 
 function webPath(relative) {
   const normalized = relative.startsWith('/') ? relative : `/${relative}`;
@@ -41,7 +43,7 @@ async function generateIcons(sourceIcon) {
   for (const { name, size, maskable } of sizes) {
     const out = path.join(iconsDir, name);
     if (maskable) {
-      const padding = Math.round(size * 0.1);
+      const padding = Math.round(size * 0.14);
       const inner = size - padding * 2;
       const resized = await sharp(sourceIcon).resize(inner, inner, { fit: 'contain' }).png().toBuffer();
       await sharp({
@@ -49,7 +51,7 @@ async function generateIcons(sourceIcon) {
           width: size,
           height: size,
           channels: 4,
-          background: THEME.emerald,
+          background: THEME.cream,
         },
       })
         .composite([{ input: resized, gravity: 'centre' }])
@@ -66,7 +68,7 @@ function writeManifest() {
     id: webPath('/'),
     name: APP_SHORT_NAME,
     short_name: APP_SHORT_NAME,
-    description: 'Chef-crafted kitchen, ready when you are.',
+    description: PWA_DESCRIPTION,
     start_url: webPath('/'),
     scope: webPath('/'),
     display: 'standalone',
@@ -95,7 +97,7 @@ function writeManifest() {
 }
 
 async function main() {
-  const sourceIcon = path.join(mobileRoot, 'assets', 'icon.png');
+  const sourceIcon = path.join(mobileRoot, brand.assets.icon);
   if (!fs.existsSync(sourceIcon)) {
     throw new Error(`Missing source icon: ${sourceIcon}`);
   }
