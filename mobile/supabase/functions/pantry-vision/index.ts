@@ -142,6 +142,45 @@ type DetectedPantryItem = {
   confidence: number;
 };
 
+async function userHasPlusPhotoScanAccess(userId: string): Promise<boolean> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceKey) {
+    console.error('pantry-vision: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for plan check');
+    return false;
+  }
+
+  const url = `${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=plan,role`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    });
+  } catch (error) {
+    console.warn('pantry-vision: plan lookup network error', error);
+    return false;
+  }
+
+  if (!response.ok) {
+    console.warn(`pantry-vision: plan lookup http ${response.status}`);
+    return false;
+  }
+
+  try {
+    const rows = (await response.json()) as Array<{ plan?: string; role?: string }>;
+    const row = rows[0];
+    if (!row) return false;
+    if (row.role === 'admin') return true;
+    return row.plan === 'paid';
+  } catch (error) {
+    console.warn('pantry-vision: plan lookup parse error', error);
+    return false;
+  }
+}
+
 function checkUserRateLimit(userId: string): boolean {
   const now = Date.now();
   const bucket = userHits.get(userId);
@@ -877,6 +916,17 @@ Deno.serve(async (req) => {
   const userId = userIdFromJwt(req);
   if (!userId) {
     return jsonResponse({ error: 'Sign in required', code: 'UNAUTHENTICATED' }, 401);
+  }
+
+  const planAllowed = await userHasPlusPhotoScanAccess(userId);
+  if (!planAllowed) {
+    return jsonResponse(
+      {
+        error: 'Photo scanning requires MealPlanatic Plus.',
+        code: 'PLAN_REQUIRED',
+      },
+      403,
+    );
   }
 
   if (!checkUserRateLimit(userId)) {

@@ -1,6 +1,6 @@
 /**
- * Regression tests for pantry photo scan sign-in gate.
- * Run from mobile/: npx tsx scripts/photo-scan-gate-check.ts
+ * Regression tests for pantry photo scan sign-in + Plus plan gate.
+ * Run from mobile/: npm run test:photo-scan-gate
  */
 
 import {
@@ -8,6 +8,11 @@ import {
   shouldBlockGuestPantryPhotoScan,
   shouldDeferPantryPhotoScanForAuth,
 } from '../lib/guest/pantryPhotoScanGate';
+import {
+  photoScanAccessState,
+  shouldBlockPhotoScanForPlan,
+  shouldDeferPhotoScanForProfile,
+} from '../lib/plans/photoScanAccess';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -15,6 +20,8 @@ function assert(condition: boolean, message: string): void {
     process.exit(1);
   }
 }
+
+const guestBase = { demoMode: false, authReady: true, hasSession: true, profileReady: true };
 
 function main(): void {
   assert(pantryPhotoScanGateState({ demoMode: true, authReady: false, hasSession: false }) === 'allowed', 'demo skips gate');
@@ -45,6 +52,47 @@ function main(): void {
   assert(
     !shouldDeferPantryPhotoScanForAuth({ demoMode: false, authReady: true, hasSession: true }),
     'no defer when signed in',
+  );
+
+  assert(
+    photoScanAccessState({ ...guestBase, hasSession: false, plan: 'free', role: 'member' }) === 'guest_blocked',
+    'guest before plan check',
+  );
+  assert(
+    photoScanAccessState({ ...guestBase, authReady: false, plan: 'paid', role: 'member' }) === 'auth_loading',
+    'session loading defers before plan',
+  );
+  assert(
+    photoScanAccessState({ ...guestBase, profileReady: false, plan: 'paid', role: 'member' }) === 'profile_loading',
+    'profile loading defers',
+  );
+  assert(
+    photoScanAccessState({ ...guestBase, plan: 'free', role: 'member' }) === 'plan_blocked',
+    'free member blocked',
+  );
+  assert(
+    photoScanAccessState({ ...guestBase, plan: 'paid', role: 'member' }) === 'allowed',
+    'paid member allowed',
+  );
+  assert(
+    photoScanAccessState({ ...guestBase, plan: 'free', role: 'admin' }) === 'allowed',
+    'admin allowed on free plan',
+  );
+  assert(
+    photoScanAccessState({ demoMode: true, authReady: false, hasSession: false, plan: 'free', role: 'member', profileReady: false }) === 'allowed',
+    'demo skips plan gate',
+  );
+  assert(
+    shouldBlockPhotoScanForPlan({ ...guestBase, plan: 'free', role: 'member' }),
+    'shouldBlockPhotoScanForPlan free',
+  );
+  assert(
+    !shouldBlockPhotoScanForPlan({ ...guestBase, plan: 'paid', role: 'member' }),
+    'paid not blocked',
+  );
+  assert(
+    shouldDeferPhotoScanForProfile({ ...guestBase, profileReady: false, plan: 'paid', role: 'member' }),
+    'defer for profile',
   );
 
   console.log('photo-scan-gate-check: OK');

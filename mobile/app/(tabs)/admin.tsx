@@ -1,12 +1,20 @@
 import { Redirect } from 'expo-router';
-import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { TourReplayCard } from '../../components/onboarding/TourReplayCard';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
 import { APP_ROUTES } from '../../config/appRoutes';
+import { PLAN_LABELS, USER_PLANS, type UserPlan } from '../../config/plans';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
+import {
+  adminLookupUserByEmail,
+  adminSetUserPlan,
+  type AdminUserLookupRow,
+} from '../../lib/supabaseData';
+import { getSupabase } from '../../lib/supabase';
 import type { FeatureFlagKey, UserRole } from '../../types/mealprep';
 
 export default function AdminScreen() {
@@ -75,6 +83,8 @@ export default function AdminScreen() {
 
       <TourReplayCard onReplay={onboarding.requestTourReplay} />
 
+      {!demoMode ? <AdminUserPlanCard /> : null}
+
       <Card className="mt-4" title="Kitchen preferences">
         {(Object.keys(USER_PREFERENCE_LABELS) as (keyof typeof USER_PREFERENCE_LABELS)[]).map((key) => (
           <View key={key} className="mb-3 flex-row items-center justify-between gap-3 border-b border-border pb-3">
@@ -119,6 +129,115 @@ export default function AdminScreen() {
         <Text className="text-sm text-muted">Last active: {new Date(analytics.lastActiveAt).toLocaleString()}</Text>
       </Card>
     </ScrollView>
+  );
+}
+
+function AdminUserPlanCard() {
+  const [email, setEmail] = useState('');
+  const [matches, setMatches] = useState<AdminUserLookupRow[]>([]);
+  const [selected, setSelected] = useState<AdminUserLookupRow | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function runLookup() {
+    const client = getSupabase();
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    setSelected(null);
+    try {
+      const rows = await adminLookupUserByEmail(client, email);
+      setMatches(rows);
+      if (rows.length === 1) setSelected(rows[0]);
+      setStatus(rows.length === 0 ? 'No user found for that email.' : `Found ${rows.length} user(s).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Lookup failed');
+      setMatches([]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function savePlan(plan: UserPlan) {
+    const client = getSupabase();
+    if (!client || !selected) return;
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      await adminSetUserPlan(client, selected.id, plan);
+      setSelected({ ...selected, plan });
+      setMatches((prev) => prev.map((row) => (row.id === selected.id ? { ...row, plan } : row)));
+      setStatus(`Set ${selected.email} to ${PLAN_LABELS[plan]}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update plan');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="mt-4" title="User subscription plan" subtitle="Lookup by email, set Free or Plus">
+      <TextInput
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        placeholder="user@example.com"
+        className="mt-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
+      />
+      <Pressable
+        disabled={busy || !email.trim()}
+        onPress={() => void runLookup()}
+        className={`mt-3 rounded-xl px-4 py-3 ${busy ? 'opacity-60 bg-primary' : 'bg-primary'}`}
+      >
+        <Text className="text-center text-sm font-bold text-on-primary">Look up user</Text>
+      </Pressable>
+
+      {matches.length > 1 ? (
+        <View className="mt-3 gap-2">
+          {matches.map((row) => (
+            <Pressable
+              key={row.id}
+              onPress={() => setSelected(row)}
+              className={`rounded-xl border px-3 py-2 ${selected?.id === row.id ? 'border-primary bg-primary-light' : 'border-border bg-card'}`}
+            >
+              <Text className="text-sm font-semibold text-ink">{row.name}</Text>
+              <Text className="text-xs text-muted">{row.email} · {PLAN_LABELS[row.plan]}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {selected ? (
+        <View className="mt-3">
+          <Text className="text-sm text-muted">
+            {selected.name} ({selected.email}) — current: {PLAN_LABELS[selected.plan]}
+          </Text>
+          <View className="mt-2 flex-row gap-2">
+            {USER_PLANS.map((plan) => (
+              <Pressable
+                key={plan}
+                disabled={busy}
+                onPress={() => void savePlan(plan)}
+                className={`flex-1 rounded-xl px-3 py-3 ${selected.plan === plan ? 'bg-primary' : 'border border-border bg-card'}`}
+              >
+                <Text
+                  className={`text-center text-xs font-bold ${selected.plan === plan ? 'text-on-primary' : 'text-muted'}`}
+                >
+                  {PLAN_LABELS[plan]}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {error ? <Text className="mt-2 text-sm text-danger">{error}</Text> : null}
+      {status ? <Text className="mt-2 text-sm text-emerald-dark">{status}</Text> : null}
+    </Card>
   );
 }
 

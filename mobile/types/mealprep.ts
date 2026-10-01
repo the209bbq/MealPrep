@@ -3,6 +3,9 @@ import type { Href } from 'expo-router';
 export const USER_ROLES = ['admin', 'member'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+import type { UserPlan } from '../config/plans';
+export type { UserPlan } from '../config/plans';
+
 import type { PantryStorageLocation } from '../config/pantryStorage';
 export type { PantryStorageLocation } from '../config/pantryStorage';
 
@@ -39,6 +42,7 @@ export interface UserProfile {
   email: string;
   name: string;
   role: UserRole;
+  plan: UserPlan;
   photoUrl: string | null;
   householdSize: number;
   dietaryNotes: string;

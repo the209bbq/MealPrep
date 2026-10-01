@@ -1,5 +1,6 @@
 import type { PantryItem, UserProfile } from '../types/mealprep';
 import { DEMO_USERS, FEATURE_FLAG_DEFAULTS } from '../config/appConfig';
+import { DEFAULT_USER_PLAN } from '../config/plans';
 import { catalogToRecipes } from './kitchenCatalog';
 
 export const MOCK_RECIPES = catalogToRecipes();
@@ -74,6 +75,7 @@ export function profileForRole(role: 'admin' | 'member'): UserProfile {
     email: demo.email,
     name: demo.name,
     role,
+    plan: DEFAULT_USER_PLAN,
     photoUrl: null,
     householdSize: role === 'admin' ? 4 : 2,
     dietaryNotes: role === 'admin' ? 'High protein, no shellfish' : 'Gluten conscious',

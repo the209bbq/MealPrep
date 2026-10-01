@@ -8,6 +8,7 @@ import { deleteScanPhoto } from './scanPhotos/client';
 import { withTimeout } from './withTimeout';
 import { groceryDedupeKey } from './recipeMatch/groceryFromMissing';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
+import { DEFAULT_USER_PLAN, isUserPlan, type UserPlan } from '../config/plans';
 import type {
   FeatureFlagKey,
   FeatureFlags,
@@ -27,6 +28,7 @@ type ProfileRow = {
   email: string;
   name: string;
   role: UserRole;
+  plan?: string | null;
   photo_url: string | null;
   household_size: number;
   dietary_notes: string | null;
@@ -130,6 +132,7 @@ export function mapProfile(row: ProfileRow): UserProfile {
     email: row.email,
     name: row.name,
     role: row.role,
+    plan: row.plan && isUserPlan(row.plan) ? row.plan : DEFAULT_USER_PLAN,
     photoUrl: row.photo_url,
     householdSize: row.household_size,
     dietaryNotes: row.dietary_notes ?? '',
@@ -745,4 +748,58 @@ export async function deleteMealPlanItem(
 ): Promise<void> {
   const { error } = await client.from('meal_plan_items').delete().eq('user_id', userId).eq('id', id);
   if (error) throw error;
+}
+
+const USER_PLAN_MIGRATION_SQL = 'supabase/migrations/20261001230000_user_subscription_plan.sql';
+
+export type AdminUserLookupRow = {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  plan: UserPlan;
+};
+
+export async function adminLookupUserByEmail(
+  client: SupabaseClient,
+  email: string,
+): Promise<AdminUserLookupRow[]> {
+  const { data, error } = await client.rpc('admin_lookup_user_by_email', { p_email: email.trim() });
+  if (error) {
+    if (isMissingSchemaError(error)) {
+      throw new Error(formatSupabaseError(error, USER_PLAN_MIGRATION_SQL));
+    }
+    throw error;
+  }
+  const rows = (data ?? []) as Array<{
+    id: string;
+    email: string;
+    name: string;
+    role: UserRole;
+    plan: string;
+  }>;
+  return rows.map((row) => ({
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    role: row.role,
+    plan: isUserPlan(row.plan) ? row.plan : DEFAULT_USER_PLAN,
+  }));
+}
+
+export async function adminSetUserPlan(
+  client: SupabaseClient,
+  userId: string,
+  plan: UserPlan,
+): Promise<void> {
+  const { error } = await client.rpc('admin_set_user_plan', {
+    p_user_id: userId,
+    p_plan: plan,
+  });
+  if (error) {
+    if (isMissingSchemaError(error)) {
+      throw new Error(formatSupabaseError(error, USER_PLAN_MIGRATION_SQL));
+    }
+    throw error;
+  }
 }

@@ -1,6 +1,7 @@
 export type PantryScanFailureReason =
   | 'NOT_CONFIGURED'
   | 'UNAUTHENTICATED'
+  | 'PLAN_REQUIRED'
   | 'RATE_LIMIT'
   | 'BAD_IMAGE'
   | 'IMAGE_TOO_DARK'

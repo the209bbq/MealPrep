@@ -13,6 +13,11 @@ import {
 } from 'react-native';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { THEME } from '../../config/appConfig';
+import { PLANS_COPY } from '../../config/plans';
+import { useApp } from '../../context/AppContext';
+import { resolvePhotoScanAccess } from '../../lib/guest/resolvePhotoScanAccess';
+import { photoScanAccessUserMessage } from '../../lib/plans/photoScanAccess';
+import { PhotoScanPlusUpgradeCard } from '../PhotoScanPlusUpgradeCard';
 import { addCommunityDeal } from '../../lib/communityDeals/client';
 import { isPastLocalDate } from '../../lib/communityDeals/localDate';
 import type { CommunityStoreDeal } from '../../lib/communityDeals/types';
@@ -21,6 +26,7 @@ import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import {
   PantryVisionAuthError,
   PantryVisionNotConfiguredError,
+  PantryVisionPlanRequiredError,
   PantryVisionRateLimitError,
   PantryVisionScanError,
 } from '../../lib/pantryVision/client';
@@ -95,6 +101,7 @@ export function SmartShopAddPriceSheet({
   onSaved,
 }: Props) {
   const visible = Boolean(target);
+  const { demoMode, authReady, session, profile, profileReady } = useApp();
 
   const [activeStore, setActiveStore] = useState<StoreLocation | null>(null);
   const [itemName, setItemName] = useState('');
@@ -111,6 +118,7 @@ export function SmartShopAddPriceSheet({
   const scanUploadRef = useRef<Promise<string | null> | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [pricedThisSession, setPricedThisSession] = useState<Set<string>>(() => new Set());
+  const [showPlusGate, setShowPlusGate] = useState(false);
 
   const storeKey = useMemo(
     () => (activeStore ? resolveStoreChainKey(activeStore) : null),
@@ -315,6 +323,9 @@ export function SmartShopAddPriceSheet({
         setError(SMART_SHOP_COPY.addPriceScanNotConfigured);
       } else if (err instanceof PantryVisionAuthError) {
         setError(SMART_SHOP_COPY.addPriceSignIn);
+      } else if (err instanceof PantryVisionPlanRequiredError) {
+        setShowPlusGate(true);
+        setError(PLANS_COPY.photoScanUpgradeBody);
       } else if (err instanceof PantryVisionRateLimitError) {
         setError(err.message);
       } else if (err instanceof PantryVisionScanError) {
@@ -328,6 +339,29 @@ export function SmartShopAddPriceSheet({
   }
 
   async function handleSnapTag() {
+    setShowPlusGate(false);
+    const { access } = await resolvePhotoScanAccess(
+      {
+        demoMode,
+        authReady,
+        hasSession: Boolean(session),
+        plan: profile.plan,
+        role: profile.role,
+        profileReady,
+      },
+      session,
+    );
+    if (access !== 'allowed') {
+      const copy = photoScanAccessUserMessage(access);
+      if (access === 'plan_blocked') {
+        setShowPlusGate(true);
+      }
+      if (copy) {
+        setError(copy.message);
+      }
+      return;
+    }
+
     if (Platform.OS === 'web') {
       try {
         const file = await pickWebImageFile({ capture: 'environment' });
@@ -495,6 +529,8 @@ export function SmartShopAddPriceSheet({
               />
 
               {error ? <Text className="mt-2 text-xs text-danger">{error}</Text> : null}
+
+              {showPlusGate ? <PhotoScanPlusUpgradeCard onDismiss={() => setShowPlusGate(false)} /> : null}
 
               <Pressable
                 onPress={() => void handleSnapTag()}
