@@ -4,7 +4,7 @@ import {
   normalizeIngredientName,
 } from '../recipeMatch/ingredientNormalize';
 import { groceryDedupeKey } from '../recipeMatch/groceryFromMissing';
-import type { GroceryListItem, PantryItem } from '../../types/mealprep';
+import type { GroceryListItem, MealPlanItem, PantryItem } from '../../types/mealprep';
 
 function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
@@ -102,23 +102,62 @@ export function mergeGuestGroceryIntoAccount(
   return merged;
 }
 
+function activeMealPlanKey(item: MealPlanItem): string | null {
+  if (item.made) return null;
+  if (item.recipeApiId != null) return `api:${item.recipeApiId}`;
+  if (item.recipeSlug) return `slug:${item.recipeSlug}`;
+  return null;
+}
+
+export function mergeGuestMealPlanIntoAccount(
+  accountMealPlan: MealPlanItem[],
+  guestMealPlan: MealPlanItem[],
+): { mealPlan: MealPlanItem[]; inserts: MealPlanItem[] } {
+  if (guestMealPlan.length === 0) {
+    return { mealPlan: accountMealPlan, inserts: [] };
+  }
+
+  const merged = accountMealPlan.map((row) => ({ ...row }));
+  const accountKeys = new Set(
+    merged.map((row) => activeMealPlanKey(row)).filter((key): key is string => Boolean(key)),
+  );
+  const inserts: MealPlanItem[] = [];
+
+  for (const guestItem of guestMealPlan) {
+    const key = activeMealPlanKey(guestItem);
+    if (key && accountKeys.has(key)) continue;
+    merged.unshift(guestItem);
+    inserts.push(guestItem);
+    if (key) accountKeys.add(key);
+  }
+
+  return { mealPlan: merged, inserts };
+}
+
 export function mergeGuestKitchenIntoAccount(
   accountPantry: PantryItem[],
   accountGrocery: GroceryListItem[],
   guestPantry: PantryItem[],
   guestGrocery: GroceryListItem[],
+  accountMealPlan: MealPlanItem[] = [],
+  guestMealPlan: MealPlanItem[] = [],
 ): {
   pantry: PantryItem[];
   grocery: GroceryListItem[];
+  mealPlan: MealPlanItem[];
   pantryInserts: PantryItem[];
   pantryUpdates: PantryItem[];
+  mealPlanInserts: MealPlanItem[];
 } {
   const pantryMerge = mergeGuestPantryIntoAccount(accountPantry, guestPantry);
   const grocery = mergeGuestGroceryIntoAccount(accountGrocery, guestGrocery);
+  const mealPlanMerge = mergeGuestMealPlanIntoAccount(accountMealPlan, guestMealPlan);
   return {
     pantry: pantryMerge.pantry,
     grocery,
+    mealPlan: mealPlanMerge.mealPlan,
     pantryInserts: pantryMerge.inserts,
     pantryUpdates: pantryMerge.updates,
+    mealPlanInserts: mealPlanMerge.inserts,
   };
 }

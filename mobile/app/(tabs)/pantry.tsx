@@ -28,6 +28,7 @@ import {
   PantryStorageLocationFilterChips,
 } from '../../components/PantryStorageLocationChips';
 import { CATEGORY_LABELS, isPantryVisionConfigured, PHOTO_SCAN, THEME } from '../../config/appConfig';
+import { APP_ROUTES } from '../../config/appRoutes';
 import { GUEST_MODE_COPY } from '../../config/guestMode';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import {
@@ -88,6 +89,7 @@ export default function PantryScreen() {
     recipes,
     featureFlags,
     demoMode,
+    isGuest,
     session,
     savePantryScanReview,
     addManualPantryItem,
@@ -200,7 +202,7 @@ export default function PantryScreen() {
       return;
     }
     if (!demoMode && !session) {
-      Alert.alert(GUEST_MODE_COPY.pantryScanSignInTitle, GUEST_MODE_COPY.pantryScanSignIn);
+      promptGuestPhotoScanSignIn();
       return;
     }
 
@@ -325,7 +327,18 @@ export default function PantryScreen() {
     }
   }
 
+  function promptGuestPhotoScanSignIn() {
+    Alert.alert(GUEST_MODE_COPY.pantryScanSignInTitle, GUEST_MODE_COPY.pantryScanSignIn, [
+      { text: GUEST_MODE_COPY.pantryScanSignInCta, onPress: () => router.push(APP_ROUTES.profile) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   async function handleNativeScan(scanLocation: PantryStorageLocation, source: 'camera' | 'library') {
+    if (!demoMode && isGuest) {
+      promptGuestPhotoScanSignIn();
+      return;
+    }
     if (source === 'camera') {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -585,6 +598,7 @@ export default function PantryScreen() {
             <>
               <PantryStorageScanButtons
                 disabled={phase === 'loading' || !featureFlags.photoScan}
+                guestPhotoScanBlocked={!demoMode && isGuest}
                 onImagePrepared={(location, prepared) => void runVisionFromPrepared(prepared, location)}
                 onRequestNativeScan={(location, source) => void handleNativeScan(location, source)}
               />

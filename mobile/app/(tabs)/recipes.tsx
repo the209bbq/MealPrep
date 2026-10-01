@@ -11,12 +11,10 @@ import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
 import { DEFAULT_MIN_MATCHED_INGREDIENTS, DEFAULT_MIN_PANTRY_MATCH_PERCENT } from '../../config/recipeMatching';
 import { RECIPES_COPY, type RecipesPantryFilterCopyId } from '../../config/recipesCopy';
+import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
 import { useApp } from '../../context/AppContext';
-import {
-  fetchPantryDiscoverySuggestions,
-  type PantryDiscoverySuggestion,
-} from '../../lib/recipeDiscovery/pantrySuggestions';
-import { getRecipeDiscoveryAccessToken } from '../../lib/recipeDiscovery/accessToken';
+import { splitDiscoveryCookNowLists } from '../../lib/recipeDiscovery/pantryCookNow';
+import type { PantryDiscoverySuggestion } from '../../lib/recipeDiscovery/pantrySuggestions';
 import {
   filterRankedMatches,
   type PantryMatchIndex,
@@ -30,6 +28,53 @@ const FILTER_OPTIONS: { id: RecipePantryFilterMode; label: string }[] = (
 ).map((id) => ({ id, label: RECIPES_COPY.pantryFilterLabels[id] }));
 
 const MIN_PERCENT_CHIPS = [0, 50, 70, 90] as const;
+
+function DiscoveryRecipeListSection({
+  title,
+  subtitle,
+  list,
+  isOnMealPlan,
+  toggleMealPlanDiscoveryRecipe,
+}: {
+  title: string;
+  subtitle: string;
+  list: PantryDiscoverySuggestion[];
+  isOnMealPlan: (recipeApiId: number) => boolean;
+  toggleMealPlanDiscoveryRecipe: (
+    item: PantryDiscoverySuggestion['recipe'],
+  ) => Promise<void>;
+}) {
+  if (list.length === 0) return null;
+  return (
+    <>
+      <Text className="mb-1 mt-4 text-sm font-bold uppercase tracking-wide text-muted">{title}</Text>
+      <Text className="mb-2 text-xs text-muted">{subtitle}</Text>
+      {list.map(({ recipe, match }) => {
+        const onPlan = isOnMealPlan(recipe.id);
+        return (
+          <Pressable key={`discovery-${recipe.id}`} onPress={() => router.push(`/discover-recipes/${recipe.id}`)}>
+            <Card className="mb-3">
+              <View className="flex-row items-start justify-between">
+                <View className="flex-1 pr-2">
+                  <Text className="text-base font-bold text-ink">{recipe.name}</Text>
+                  <RecipePantryMatchBadge match={match} />
+                </View>
+                <Pressable
+                  onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
+                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
+                >
+                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
+                    {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
+                  </Text>
+                </Pressable>
+              </View>
+            </Card>
+          </Pressable>
+        );
+      })}
+    </>
+  );
+}
 
 function RecipeListSection({
   title,
@@ -108,12 +153,13 @@ export default function RecipesScreen() {
   const [activeId, setActiveId] = useState('');
   const [pantryFilter, setPantryFilter] = useState<RecipePantryFilterMode>('best_match');
   const [minPercent, setMinPercent] = useState(DEFAULT_MIN_PANTRY_MATCH_PERCENT);
-  const [discoverySuggestions, setDiscoverySuggestions] = useState<PantryDiscoverySuggestion[]>([]);
-  const [discoveryLoading, setDiscoveryLoading] = useState(false);
-  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
-
   const pantryEmpty = pantry.length === 0;
-  const accessToken = getRecipeDiscoveryAccessToken(session);
+  const discoveryEnabled = !pantryEmpty;
+  const {
+    suggestions: discoverySuggestions,
+    loading: discoveryLoading,
+    error: discoveryError,
+  } = usePantryDiscoverySuggestions(pantry, session, { enabled: discoveryEnabled, minPercent });
   const activeMealCount = mealPlan.filter((m) => !m.made).length;
 
   function selectRecipe(recipeId: string) {
@@ -161,6 +207,14 @@ export default function RecipesScreen() {
     );
   }, [discoverySuggestions, minPercent, pantryEmpty]);
 
+  const { cookNow: cookNowDiscovery, needItems: needItemsDiscovery } = useMemo(
+    () => splitDiscoveryCookNowLists(filteredDiscoverySuggestions, pantryFilter, minPercent, pantry.length),
+    [filteredDiscoverySuggestions, minPercent, pantry.length, pantryFilter],
+  );
+
+  const hasCookNowMatches = cookNowRecipes.length > 0 || cookNowDiscovery.length > 0;
+  const hasNeedItemsMatches = needItemsRecipes.length > 0 || needItemsDiscovery.length > 0;
+
   useEffect(() => {
     if (typeof params.recipeId === 'string' && params.recipeId) {
       setActiveId(params.recipeId);
@@ -177,42 +231,16 @@ export default function RecipesScreen() {
     }
   }, [activeId, filteredKitchenRecipes]);
 
-  useEffect(() => {
-    if (pantryEmpty) {
-      setDiscoverySuggestions([]);
-      setDiscoveryError(null);
-      return;
-    }
-    let cancelled = false;
-    setDiscoveryLoading(true);
-    void fetchPantryDiscoverySuggestions(pantry, accessToken, { minPercent })
-      .then((result) => {
-        if (!cancelled) {
-          setDiscoverySuggestions(result.suggestions);
-          setDiscoveryError(result.errorMessage);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDiscoverySuggestions([]);
-          setDiscoveryError(RECIPES_COPY.discoveryErrors.loadFailed);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDiscoveryLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, minPercent, pantry, pantryEmpty]);
-
   const active = recipes.find((r) => r.id === activeId);
   const activeMatch = active ? pantryRecipeMatches.byRecipeId.get(active.id) : undefined;
   const servings = active ? servingOverrides[active.id] ?? active.servings : 4;
   const scale = active && active.servings > 0 ? servings / active.servings : 1;
 
   const showKitchenEmpty =
-    pantryEmpty || (filteredKitchenRecipes.length === 0 && !discoveryLoading && filteredDiscoverySuggestions.length === 0);
+    pantryEmpty ||
+    (!discoveryLoading &&
+      filteredKitchenRecipes.length === 0 &&
+      filteredDiscoverySuggestions.length === 0);
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8">
@@ -265,26 +293,50 @@ export default function RecipesScreen() {
         <Text className="mt-3 text-sm text-muted">{RECIPES_COPY.kitchenFilteredEmptyWithDiscovery}</Text>
       ) : null}
 
-      <RecipeListSection
-        title={RECIPES_COPY.readyToCook.title}
-        subtitle={RECIPES_COPY.readyToCook.subtitle}
-        list={cookNowRecipes}
-        activeId={activeId}
-        setActiveId={selectRecipe}
-        pantryRecipeMatches={pantryRecipeMatches}
-        isOnMealPlan={isOnMealPlan}
-        toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+      {hasCookNowMatches ? (
+        <RecipeListSection
+          title={RECIPES_COPY.readyToCook.title}
+          subtitle={RECIPES_COPY.readyToCook.subtitle}
+          list={cookNowRecipes}
+          activeId={activeId}
+          setActiveId={selectRecipe}
+          pantryRecipeMatches={pantryRecipeMatches}
+          isOnMealPlan={isOnMealPlan}
+          toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+        />
+      ) : null}
+
+      <DiscoveryRecipeListSection
+        title={cookNowRecipes.length > 0 ? RECIPES_COPY.readyToCook.discoveryTitle : RECIPES_COPY.readyToCook.title}
+        subtitle={RECIPES_COPY.readyToCook.discoverySubtitle}
+        list={cookNowDiscovery}
+        isOnMealPlan={(recipeApiId) => isOnMealPlan({ recipeApiId })}
+        toggleMealPlanDiscoveryRecipe={toggleMealPlanDiscoveryRecipe}
       />
 
-      <RecipeListSection
-        title={RECIPES_COPY.needAFewItems.title}
-        subtitle={RECIPES_COPY.needAFewItems.subtitle}
-        list={needItemsRecipes}
-        activeId={activeId}
-        setActiveId={selectRecipe}
-        pantryRecipeMatches={pantryRecipeMatches}
-        isOnMealPlan={isOnMealPlan}
-        toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+      {hasNeedItemsMatches ? (
+        <RecipeListSection
+          title={RECIPES_COPY.needAFewItems.title}
+          subtitle={RECIPES_COPY.needAFewItems.subtitle}
+          list={needItemsRecipes}
+          activeId={activeId}
+          setActiveId={selectRecipe}
+          pantryRecipeMatches={pantryRecipeMatches}
+          isOnMealPlan={isOnMealPlan}
+          toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+        />
+      ) : null}
+
+      <DiscoveryRecipeListSection
+        title={
+          needItemsRecipes.length > 0
+            ? RECIPES_COPY.needAFewItems.discoveryTitle
+            : RECIPES_COPY.needAFewItems.title
+        }
+        subtitle={RECIPES_COPY.needAFewItems.discoverySubtitle}
+        list={needItemsDiscovery}
+        isOnMealPlan={(recipeApiId) => isOnMealPlan({ recipeApiId })}
+        toggleMealPlanDiscoveryRecipe={toggleMealPlanDiscoveryRecipe}
       />
 
       {!pantryEmpty ? (
