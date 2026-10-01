@@ -1,5 +1,11 @@
 import { CATEGORY_LABELS } from '../config/appConfig';
 import type { GroceryListItem, PantryCategory, PantryItem, Recipe } from '../types/mealprep';
+import { isGroceryDismissed } from './grocery/dismissals';
+import {
+  findPantryItemsForIngredient,
+  totalPantryQuantityInUnit,
+} from './recipeMatch/pantryStock';
+import { normalizeIngredientName } from './recipeMatch/normalize';
 
 /** Store aisle order for grouped grocery UI. */
 export const GROCERY_AISLE_ORDER: PantryCategory[] = [
@@ -49,63 +55,98 @@ function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function categoryForIngredient(
+  ingredientName: string,
+  ingredientId: string,
+  pantry: PantryItem[],
+): GroceryListItem['category'] {
+  const matches = findPantryItemsForIngredient(
+    { name: ingredientName, ingredientId, quantity: 0, unit: 'each' },
+    pantry,
+  );
+  return matches[0]?.category ?? 'dry_goods';
+}
+
+export interface BuildGroceryListOptions {
+  groceryDismissals?: Set<string>;
+}
+
 export function buildGroceryList(
   recipes: Recipe[],
   selectedRecipeIds: string[],
   pantry: PantryItem[],
   servingOverrides: Record<string, number>,
   previous: GroceryListItem[],
+  options?: BuildGroceryListOptions,
 ): GroceryListItem[] {
-  const needed = new Map<string, { name: string; unit: string; quantity: number; recipeIds: string[]; category: GroceryListItem['category'] }>();
+  const dismissals = options?.groceryDismissals ?? new Set<string>();
+  const needed = new Map<
+    string,
+    { name: string; unit: string; quantity: number; recipeIds: string[]; category: GroceryListItem['category'] }
+  >();
 
   for (const recipe of recipes) {
     if (!selectedRecipeIds.includes(recipe.id)) continue;
     const servings = servingOverrides[recipe.id] ?? recipe.servings;
     const scale = recipe.servings > 0 ? servings / recipe.servings : 1;
     for (const ingredient of recipe.ingredients) {
-      const key = `${ingredient.ingredientId}::${ingredient.unit}`;
-      const current = needed.get(key);
+      const key = `${normalizeIngredientName(ingredient.name)}::${ingredient.unit.trim().toLowerCase()}`;
       const qty = ingredient.quantity * scale;
+      const current = needed.get(key);
       if (current) {
         current.quantity += qty;
         if (!current.recipeIds.includes(recipe.id)) current.recipeIds.push(recipe.id);
       } else {
-        const pantryMatch = pantry.find((item) => item.ingredientId === ingredient.ingredientId);
         needed.set(key, {
           name: ingredient.name,
           unit: ingredient.unit,
           quantity: qty,
           recipeIds: [recipe.id],
-          category: pantryMatch?.category ?? 'dry_goods',
+          category: categoryForIngredient(ingredient.name, ingredient.ingredientId, pantry),
         });
       }
     }
   }
 
-  const pantryByIngredient = new Map<string, number>();
-  for (const item of pantry) {
-    pantryByIngredient.set(item.ingredientId, (pantryByIngredient.get(item.ingredientId) ?? 0) + item.quantity);
-  }
-
-  const checked = new Map(previous.map((item) => [item.ingredientId + '::' + item.unit, item.checked]));
+  const checked = new Map(previous.map((item) => [normalizeIngredientName(item.name) + '::' + item.unit.trim().toLowerCase(), item.checked]));
 
   const manualItems = previous.filter((item) => isManualGroceryItem(item));
 
   const list: GroceryListItem[] = [];
   for (const [key, value] of needed) {
-    const ingredientId = key.split('::')[0] ?? key;
-    const have = pantryByIngredient.get(ingredientId) ?? 0;
-    const remaining = roundQty(Math.max(0, value.quantity - have));
+    const dismissedForAllRecipes = value.recipeIds.every((recipeId) =>
+      isGroceryDismissed(dismissals, recipeId, value.name, value.unit),
+    );
+    if (dismissedForAllRecipes) continue;
+
+    const pantryMatches = findPantryItemsForIngredient(
+      {
+        name: value.name,
+        ingredientId: key.split('::')[0] ?? value.name,
+        quantity: value.quantity,
+        unit: value.unit,
+      },
+      pantry,
+    );
+    const have = totalPantryQuantityInUnit(pantryMatches, value.unit);
+    const remaining = have === null ? value.quantity : roundQty(Math.max(0, value.quantity - have));
     if (remaining <= 0) continue;
+
+    const ingredientId =
+      pantryMatches[0]?.ingredientId ??
+      value.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+
     list.push({
-      id: `groc-${key}`,
+      id: `groc-${ingredientId}::${value.unit}`,
       ingredientId,
       name: value.name,
       category: value.category,
       quantity: remaining,
       unit: value.unit,
       checked: checked.get(key) ?? false,
-      sourceRecipeIds: value.recipeIds,
+      sourceRecipeIds: value.recipeIds.filter(
+        (recipeId) => !isGroceryDismissed(dismissals, recipeId, value.name, value.unit),
+      ),
     });
   }
 

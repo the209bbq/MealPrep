@@ -11,6 +11,11 @@ export {
   tokenizeIngredientName,
 } from './normalize';
 export {
+  findPantryItemsForIngredient,
+  ingredientShortfall,
+  totalPantryQuantityInUnit,
+} from './pantryStock';
+export {
   buildPantryMatchIndex,
   compareRecipePantryMatches,
   filterRankedMatches,
