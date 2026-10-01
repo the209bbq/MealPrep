@@ -84,6 +84,16 @@ type GroceryRow = {
 
 type FlagRow = { key: string; enabled: boolean };
 
+type AdminAnalyticsJson = {
+  user_count: number;
+  admin_count: number;
+  member_count: number;
+  pantry_items_total: number;
+  recipes_total: number;
+  grocery_open_total: number;
+  meal_plan_items_total?: number;
+};
+
 type MealPlanRow = {
   id: string;
   user_id: string;
@@ -207,7 +217,7 @@ export function mapFeatureFlags(rows: FlagRow[]): FeatureFlags {
 }
 
 export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
-  const [profileRes, pantryRes, recipesRes, groceryRes, flagsRes, countsRes, mealPlanRes] = await Promise.all([
+  const [profileRes, pantryRes, recipesRes, groceryRes, flagsRes, mealPlanRes] = await Promise.all([
     client.from('profiles').select('*').eq('id', userId).maybeSingle(),
     client.from('pantry_items').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
     client
@@ -217,7 +227,6 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
       .order('created_at', { ascending: true }),
     client.from('grocery_list_items').select('*').eq('user_id', userId).order('name'),
     client.from('feature_flags').select('key, enabled'),
-    client.from('profiles').select('role', { count: 'exact', head: false }),
     client
       .from('meal_plan_items')
       .select('*')
@@ -232,18 +241,33 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
   if (flagsRes.error) throw flagsRes.error;
   if (mealPlanRes.error && mealPlanRes.error.code !== 'PGRST205') throw mealPlanRes.error;
 
-  const profiles = (countsRes.data ?? []) as { role: UserRole }[];
-  const adminCount = profiles.filter((p) => p.role === 'admin').length;
+  const profileRole = profileRes.data ? (profileRes.data as ProfileRow).role : null;
 
-  const analytics: UserAnalytics = {
-    userCount: profiles.length,
-    adminCount,
-    memberCount: profiles.length - adminCount,
-    pantryItems: pantryRes.data?.length ?? 0,
-    recipes: recipesRes.data?.length ?? 0,
-    groceryOpen: (groceryRes.data ?? []).filter((g: GroceryRow) => !g.checked).length,
-    lastActiveAt: new Date().toISOString(),
-  };
+  let analytics: UserAnalytics;
+  if (profileRole === 'admin') {
+    const { data: agg, error: aggError } = await client.rpc('admin_analytics');
+    if (aggError) throw aggError;
+    const counts = agg as AdminAnalyticsJson;
+    analytics = {
+      userCount: Number(counts.user_count),
+      adminCount: Number(counts.admin_count),
+      memberCount: Number(counts.member_count),
+      pantryItems: Number(counts.pantry_items_total),
+      recipes: Number(counts.recipes_total),
+      groceryOpen: Number(counts.grocery_open_total),
+      lastActiveAt: new Date().toISOString(),
+    };
+  } else {
+    analytics = {
+      userCount: 1,
+      adminCount: 0,
+      memberCount: 1,
+      pantryItems: pantryRes.data?.length ?? 0,
+      recipes: recipesRes.data?.length ?? 0,
+      groceryOpen: (groceryRes.data ?? []).filter((g: GroceryRow) => !g.checked).length,
+      lastActiveAt: new Date().toISOString(),
+    };
+  }
 
   return {
     profile: profileRes.data ? mapProfile(profileRes.data as ProfileRow) : null,
