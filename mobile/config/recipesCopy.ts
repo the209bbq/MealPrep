@@ -101,7 +101,8 @@ export const RECIPES_COPY = {
       50: 'About half',
       70: 'Most of it',
     } as const satisfies Record<0 | 50 | 70, string>,
-    signInToSearch: 'Sign in from Profile to search for new recipes.',
+    /** Shown when the app cannot obtain a recipe-proxy token (misconfigured build). Guests use the anon key. */
+    searchNotAvailableInBuild: 'Recipe search is not available in this build.',
     idleHint:
       'Type a search or pick a filter to see results. Your pantry-based recipes stay listed above.',
     noFilterResults: 'No recipes fit these filters. Try a broader search or loosen the pantry filters.',
@@ -114,7 +115,13 @@ export const RECIPES_COPY = {
     loadFailed: 'Could not load recipe ideas right now. Your saved recipes are still above.',
     pantrySuggestionsUnavailable:
       'Recipe ideas are unavailable right now. Check your connection or try again shortly.',
-    pantrySuggestionsSignIn: 'Sign in to see recipe ideas based on your pantry.',
+  },
+
+  guestSaveNudge: {
+    title: 'Save across devices',
+    body:
+      'Sign in anytime to sync your pantry and grocery list to your account. Your list stays on this device until then.',
+    cta: 'Sign in',
   },
 
   pantryOverlap: {

@@ -19,6 +19,7 @@ import {
   RecipeDiscoveryAuthError,
   RecipeDiscoveryNotConfiguredError,
 } from '../../lib/recipeDiscovery/client';
+import { getRecipeDiscoveryAccessToken } from '../../lib/recipeDiscovery/accessToken';
 import { recipeApiToAppRecipe } from '../../lib/recipeDiscovery/mapToAppRecipe';
 import { isRecipeApiInLibrary } from '../../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
@@ -37,7 +38,7 @@ export default function DiscoverRecipeDetailScreen() {
     isOnMealPlan,
     onboarding,
   } = useApp();
-  const accessToken = session?.access_token ?? null;
+  const accessToken = getRecipeDiscoveryAccessToken(session);
 
   const [recipe, setRecipe] = useState<RecipeDiscoveryListItem | null>(null);
   const [loading, setLoading] = useState(true);

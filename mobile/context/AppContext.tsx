@@ -7,7 +7,9 @@ import {
   DEMO_USERS,
   FEATURE_FLAG_DEFAULTS,
   isDemoMode,
+  isSupabaseConfigured,
 } from '../config/appConfig';
+import { GUEST_OWNER_ID } from '../config/guestMode';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   normalizePantryItemList,
@@ -43,6 +45,15 @@ import { fuzzyNameScore, ingredientMatchScore } from '../lib/recipeMatch/ingredi
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import { runScanPhotoRetentionCleanupIfDue } from '../lib/scanPhotos/cleanup';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
+import {
+  clearGuestKitchenStorage,
+  readGuestGrocery,
+  readGuestKitchenSnapshot,
+  readGuestPantry,
+  writeGuestGrocery,
+  writeGuestPantry,
+} from '../lib/guest/localKitchenStore';
+import { mergeGuestKitchenIntoAccount } from '../lib/guest/mergeGuestKitchen';
 import { readJson, removeStorageKey, writeJson } from '../lib/storage';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
 import { getSupabase } from '../lib/supabase';
@@ -150,6 +161,8 @@ interface MealMadeReviewState {
 interface AppContextValue {
   appName: string;
   demoMode: boolean;
+  /** Signed-out user on a live Supabase build (local pantry/grocery). */
+  isGuest: boolean;
   authReady: boolean;
   authError: string | null;
   session: Session | null;
@@ -234,17 +247,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
 
   const [role, setRole] = useState<UserRole>(() => readJson(STORAGE_KEYS.role, 'admin'));
-  const [pantry, setPantry] = useState<PantryItem[]>(() =>
-    demoMode
-      ? normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY))
-      : [],
-  );
+  const [pantry, setPantry] = useState<PantryItem[]>(() => {
+    if (demoMode) {
+      return normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY));
+    }
+    if (isSupabaseConfigured()) {
+      return readGuestPantry();
+    }
+    return [];
+  });
   const [recipes, setRecipes] = useState<Recipe[]>(() =>
     demoMode ? readJson(STORAGE_KEYS.recipes, MOCK_RECIPES) : [],
   );
-  const [grocery, setGrocery] = useState<GroceryListItem[]>(() =>
-    demoMode ? readJson(STORAGE_KEYS.grocery, []) : [],
-  );
+  const [grocery, setGrocery] = useState<GroceryListItem[]>(() => {
+    if (demoMode) return readJson(STORAGE_KEYS.grocery, []);
+    if (isSupabaseConfigured()) return readGuestGrocery();
+    return [];
+  });
   const [mealPlan, setMealPlan] = useState<MealPlanItem[]>(() => initialMealPlan(demoMode));
   const [liveDataLoaded, setLiveDataLoaded] = useState(demoMode);
   const [servingOverrides, setServingOverrides] = useState<Record<string, number>>(() =>
@@ -274,7 +293,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = profile.role === 'admin';
   const maintenanceActive = featureFlags.maintenanceMode && !isAdmin;
   const userId = session?.user.id ?? null;
-  const ownerId = profile.id || 'demo-user';
+  const isGuest = !demoMode && !userId;
+  const ownerId = userId ?? (demoMode ? profile.id || 'demo-user' : GUEST_OWNER_ID);
 
   const onboarding = useOnboarding({ session, authReady });
   const notifyTutorialStepCompleteRef = useRef<(stepId: HandsOnTutorialStepId) => void>(() => {});
@@ -288,19 +308,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const loadLiveData = useCallback(async () => {
     if (!supabase || !userId) return;
     setLiveDataLoaded(false);
+    const guestKitchen = readGuestKitchenSnapshot();
     const bundle = await fetchLiveBundle(supabase, userId);
     if (bundle.profile) {
       setLiveProfile(bundle.profile);
       setUserPreferences(bundle.profile.preferences);
       hydrateLocationFromProfile(bundle.profile);
     }
+
+    let nextPantry = normalizePantryItemList(bundle.pantry);
+    let nextGrocery = bundle.grocery;
+
+    if (guestKitchen.pantry.length > 0 || guestKitchen.grocery.length > 0) {
+      const merged = mergeGuestKitchenIntoAccount(
+        nextPantry,
+        nextGrocery,
+        guestKitchen.pantry,
+        guestKitchen.grocery,
+      );
+      nextPantry = normalizePantryItemList(merged.pantry);
+      nextGrocery = merged.grocery;
+
+      for (const row of merged.pantryUpdates) {
+        await updatePantryItem(supabase, userId, row);
+      }
+      if (merged.pantryInserts.length > 0) {
+        const inserted = await insertPantryItems(supabase, userId, merged.pantryInserts);
+        const insertIds = new Set(merged.pantryInserts.map((row) => row.id));
+        nextPantry = [
+          ...inserted,
+          ...nextPantry.filter((row) => !insertIds.has(row.id)),
+        ];
+      }
+      nextGrocery = await replaceGroceryList(supabase, userId, nextGrocery);
+      clearGuestKitchenStorage();
+    }
+
     removeStorageKey(STORAGE_KEYS.pantry);
     removeStorageKey(STORAGE_KEYS.grocery);
     removeStorageKey(STORAGE_KEYS.mealPlan);
     removeStorageKey(STORAGE_KEYS.recipes);
-    setPantry(normalizePantryItemList(bundle.pantry));
+    setPantry(nextPantry);
     setRecipes(bundle.recipes.length > 0 ? bundle.recipes : []);
-    setGrocery(bundle.grocery);
+    setGrocery(nextGrocery);
     setFeatureFlags(bundle.featureFlags);
     setMealPlan(bundle.mealPlan ?? []);
     setLiveAnalytics(bundle.analytics);
@@ -329,17 +379,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, supabase]);
 
   useEffect(() => {
-    if (demoMode || !userId) {
-      if (!demoMode && !userId) {
-        setLiveProfile(null);
-        setLiveAnalytics(null);
-        setPantry([]);
-        setRecipes([]);
-        setGrocery([]);
-        setMealPlan([]);
-        setServingOverrides({});
-        setLiveDataLoaded(false);
-      }
+    if (demoMode) return;
+    if (!userId) {
+      setLiveProfile(null);
+      setLiveAnalytics(null);
+      setRecipes([]);
+      setMealPlan([]);
+      setServingOverrides({});
+      setPantry(readGuestPantry());
+      setGrocery(readGuestGrocery());
+      setLiveDataLoaded(true);
       return;
     }
     void loadLiveData().catch((error: unknown) => {
@@ -365,6 +414,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         writeJson(STORAGE_KEYS.grocery, next);
         return next;
       }
+      if (isGuest) {
+        writeGuestGrocery(next);
+        return next;
+      }
       if (supabase && userId) {
         void enqueueGroceryPersist(() =>
           replaceGroceryList(supabase, userId, next).then((persisted) => {
@@ -379,6 +432,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [
     demoMode,
+    isGuest,
     featureFlags.grocerySync,
     liveDataLoaded,
     ownerId,
@@ -400,7 +454,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.pantry, pantry);
-  }, [demoMode, pantry]);
+    else if (isGuest) writeGuestPantry(pantry);
+  }, [demoMode, isGuest, pantry]);
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.recipes, recipes);
@@ -518,6 +573,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setMealMadeReview(null);
     setMealMadeUndo(null);
     setLiveDataLoaded(false);
+    setPantry(readGuestPantry());
+    setGrocery(readGuestGrocery());
     for (const key of Object.values(STORAGE_KEYS)) {
       removeStorageKey(key);
     }
@@ -532,6 +589,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const persistGroceryList = useCallback(
     (next: GroceryListItem[]) => {
       if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+      else if (isGuest) writeGuestGrocery(next);
       if (!demoMode && supabase && userId) {
         void enqueueGroceryPersist(() =>
           replaceGroceryList(supabase, userId, next).then((persisted) => {
@@ -543,7 +601,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [demoMode, supabase, userId],
+    [demoMode, isGuest, supabase, userId],
   );
 
   const showGroceryAddedToast = useCallback(
@@ -835,6 +893,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setGrocery((prev) => {
         const next = prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item));
         if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        else if (isGuest) writeGuestGrocery(next);
         if (supabase && userId) {
           const changed = next.find((item) => item.id === id);
           if (changed && !changed.id.startsWith('groc-')) {
@@ -846,7 +905,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [demoMode, supabase, userId],
+    [demoMode, isGuest, supabase, userId],
   );
 
   const addManualGroceryItem = useCallback(
@@ -857,6 +916,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setGrocery((prev) => {
         const next = [...prev, item];
         if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        else if (isGuest) writeGuestGrocery(next);
         if (supabase && userId) {
           void enqueueGroceryPersist(() => insertGroceryItem(supabase, userId, item))
             .then((saved) => setGrocery((current) => [...current.filter((g) => g.id !== item.id), saved]))
@@ -868,7 +928,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       notifyTutorialStepCompleteRef.current('grocery');
     },
-    [demoMode, supabase, userId],
+    [demoMode, isGuest, supabase, userId],
   );
 
   const clearCheckedGroceryItems = useCallback(() => {
@@ -876,6 +936,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const removedIds = prev.filter((item) => item.checked).map((item) => item.id);
       const next = prev.filter((item) => !item.checked);
       if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+      else if (isGuest) writeGuestGrocery(next);
       if (supabase && userId && removedIds.length > 0) {
         void deleteGroceryItems(supabase, userId, removedIds)
           .then(() => setGrocery(next))
@@ -885,7 +946,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return next;
     });
-  }, [demoMode, supabase, userId]);
+  }, [demoMode, isGuest, supabase, userId]);
 
   const seedPantry = useCallback(() => {
     if (demoMode) {
@@ -1027,7 +1088,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         expiresOn: null,
         updatedAt: new Date().toISOString(),
       };
-      if (demoMode) {
+      if (demoMode || isGuest) {
         setPantry((prev) => [item, ...prev]);
         return;
       }
@@ -1038,7 +1099,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setAuthError(error instanceof Error ? error.message : 'Failed to add pantry item');
         });
     },
-    [demoMode, supabase, userId],
+    [demoMode, isGuest, supabase, userId],
   );
 
   const addManualPantryItem = useCallback(
@@ -1062,7 +1123,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         expiresOn: null,
         updatedAt: new Date().toISOString(),
       };
-      if (demoMode) {
+      if (demoMode || isGuest) {
         setPantry((prev) => [item, ...prev]);
         notifyTutorialStepCompleteRef.current('scan');
         return;
@@ -1074,12 +1135,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPantry((prev) => [saved, ...prev]);
       notifyTutorialStepCompleteRef.current('scan');
     },
-    [demoMode, supabase, userId],
+    [demoMode, isGuest, supabase, userId],
   );
 
   const updatePantryItemEntry = useCallback(
     async (item: PantryItem) => {
-      if (demoMode) {
+      if (demoMode || isGuest) {
         setPantry((prev) => prev.map((row) => (row.id === item.id ? { ...item, updatedAt: new Date().toISOString() } : row)));
         return;
       }
@@ -1089,12 +1150,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const saved = await updatePantryItem(supabase, userId, item);
       setPantry((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
     },
-    [demoMode, supabase, userId],
+    [demoMode, isGuest, supabase, userId],
   );
 
   const deletePantryItemEntry = useCallback(
     async (id: string) => {
-      if (demoMode) {
+      if (demoMode || isGuest) {
         setPantry((prev) => prev.filter((row) => row.id !== id));
         return;
       }
@@ -1104,14 +1165,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await deletePantryItemsByIds(supabase, userId, [id]);
       setPantry((prev) => prev.filter((row) => row.id !== id));
     },
-    [demoMode, supabase, userId],
+    [demoMode, isGuest, supabase, userId],
   );
 
   const clearPantryLocation = useCallback(
     async (location: PantryStorageLocation) => {
       const ids = pantry.filter((item) => item.location === location).map((item) => item.id);
       if (ids.length === 0) return;
-      if (demoMode) {
+      if (demoMode || isGuest) {
         setPantry((prev) => prev.filter((item) => item.location !== location));
         return;
       }
@@ -1121,7 +1182,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await deletePantryItemsByIds(supabase, userId, ids);
       setPantry((prev) => prev.filter((item) => item.location !== location));
     },
-    [demoMode, pantry, supabase, userId],
+    [demoMode, isGuest, pantry, supabase, userId],
   );
 
   const previewPantryResort = useCallback(() => previewResortFromDefaultPantry(pantry), [pantry]);
@@ -1133,7 +1194,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const next = pantry.map((item) => resortPantryItemIfDefault(item));
     const changed = next.filter((item, index) => item.location !== pantry[index].location);
 
-    if (demoMode) {
+    if (demoMode || isGuest) {
       setPantry(next);
       return preview;
     }
@@ -1146,12 +1207,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setPantry(next);
     return preview;
-  }, [demoMode, pantry, supabase, userId]);
+  }, [demoMode, isGuest, pantry, supabase, userId]);
 
   const clearAllPantry = useCallback(async () => {
     if (pantry.length === 0) return;
     if (demoMode) {
       removeStorageKey(STORAGE_KEYS.pantry);
+      setPantry([]);
+      return;
+    }
+    if (isGuest) {
+      writeGuestPantry([]);
       setPantry([]);
       return;
     }
@@ -1161,7 +1227,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await deleteAllPantryItems(supabase, userId);
     removeStorageKey(STORAGE_KEYS.pantry);
     setPantry([]);
-  }, [demoMode, pantry.length, supabase, userId]);
+  }, [demoMode, isGuest, pantry.length, supabase, userId]);
 
   const savePantryScanReview = useCallback(
     async (items: PantryScanReviewItem[], scanPhotoPath?: string | null) => {
@@ -1176,7 +1242,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             fuzzyNameScore(candidate.name, row.name) >= 0.92,
         );
 
-      if (demoMode) {
+      if (demoMode || isGuest) {
         setPantry((prev) => {
           const next = [...prev];
           for (const item of toSave) {
@@ -1235,7 +1301,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       notifyTutorialStepCompleteRef.current('scan');
     },
-    [demoMode, pantry, supabase, userId],
+    [demoMode, isGuest, pantry, supabase, userId],
   );
 
   const setFeatureFlag = useCallback(
@@ -1292,6 +1358,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => ({
       appName: APP_NAME,
       demoMode,
+      isGuest,
       authReady,
       authError,
       session,
@@ -1367,6 +1434,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       authError,
       authReady,
       demoMode,
+      isGuest,
       featureFlags,
       grocery,
       isAdmin,

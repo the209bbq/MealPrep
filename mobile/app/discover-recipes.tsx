@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card } from '../components/Card';
 import { FilterChips } from '../components/FilterChips';
 import { isRecipeDiscoveryConfigured, RECIPE_DISCOVERY, THEME } from '../config/appConfig';
+import { RECIPES_COPY } from '../config/recipesCopy';
 import { useApp } from '../context/AppContext';
 import {
   debouncedSearch,
@@ -20,6 +21,7 @@ import {
   RecipeDiscoveryNotConfiguredError,
   searchDiscoveryRecipes,
 } from '../lib/recipeDiscovery/client';
+import { getRecipeDiscoveryAccessToken } from '../lib/recipeDiscovery/accessToken';
 import {
   RECIPE_DISCOVERY_CUISINES,
   RECIPE_DISCOVERY_DIFFICULTIES,
@@ -31,7 +33,7 @@ import type { RecipeApiCuisine, RecipeApiDietaryTag, RecipeApiDifficulty, Recipe
 export default function DiscoverRecipesScreen() {
   const insets = useSafeAreaInsets();
   const { session, demoMode } = useApp();
-  const accessToken = session?.access_token ?? null;
+  const accessToken = getRecipeDiscoveryAccessToken(session);
 
   const [search, setSearch] = useState('');
   const [cuisine, setCuisine] = useState<RecipeApiCuisine | ''>('');
@@ -89,7 +91,7 @@ export default function DiscoverRecipesScreen() {
       return;
     }
     if (!accessToken) {
-      setError('Sign in from Admin/Profile to search external recipes.');
+      setError(RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild);
       return;
     }
     setLoading(true);

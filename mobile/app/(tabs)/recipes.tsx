@@ -7,6 +7,7 @@ import { DiscoverRecipesPanel } from '../../components/DiscoverRecipesPanel';
 import { FilterChips } from '../../components/FilterChips';
 import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
+import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
 import { DEFAULT_MIN_MATCHED_INGREDIENTS, DEFAULT_MIN_PANTRY_MATCH_PERCENT } from '../../config/recipeMatching';
 import { RECIPES_COPY, type RecipesPantryFilterCopyId } from '../../config/recipesCopy';
@@ -15,6 +16,7 @@ import {
   fetchPantryDiscoverySuggestions,
   type PantryDiscoverySuggestion,
 } from '../../lib/recipeDiscovery/pantrySuggestions';
+import { getRecipeDiscoveryAccessToken } from '../../lib/recipeDiscovery/accessToken';
 import {
   filterRankedMatches,
   type PantryMatchIndex,
@@ -111,7 +113,7 @@ export default function RecipesScreen() {
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
 
   const pantryEmpty = pantry.length === 0;
-  const accessToken = session?.access_token ?? null;
+  const accessToken = getRecipeDiscoveryAccessToken(session);
   const activeMealCount = mealPlan.filter((m) => !m.made).length;
 
   function selectRecipe(recipeId: string) {
@@ -223,6 +225,8 @@ export default function RecipesScreen() {
           <Ionicons name="chevron-forward" size={18} color={THEME.muted} />
         </Pressable>
       ) : null}
+
+      <GuestSaveNudge />
 
       <Card
         className="mt-4"

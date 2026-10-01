@@ -153,7 +153,7 @@ export async function fetchPantryDiscoverySuggestions(
     failures === plans.length && ranked.length === 0
       ? accessToken
         ? RECIPES_COPY.discoveryErrors.pantrySuggestionsUnavailable
-        : RECIPES_COPY.discoveryErrors.pantrySuggestionsSignIn
+        : RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild
       : null;
 
   const result: PantryDiscoveryResult = {
