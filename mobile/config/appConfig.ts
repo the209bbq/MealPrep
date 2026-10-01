@@ -83,6 +83,10 @@ export const RECIPE_DISCOVERY = {
 } as const;
 
 import { RECIPE_MATCHING } from './recipeMatching';
+import {
+  DEFAULT_GEMINI_VISION_FALLBACK_MODELS,
+  DEFAULT_GEMINI_VISION_MODEL,
+} from './geminiVision';
 
 /** Recipes tab: pantry-ranked kitchen list + optional discover search. */
 export const RECIPES_TAB = {
@@ -109,11 +113,17 @@ export const PHOTO_SCAN = {
   jpegQuality: 0.72,
   maxPayloadBytes: 2_000_000,
   /** Documented default for the Edge Function secret GEMINI_MODEL (not sent from the client). */
-  defaultGeminiModel: 'gemini-2.5-flash',
+  defaultGeminiModel: DEFAULT_GEMINI_VISION_MODEL,
+  /** Documented default fallback chain on the Edge Function (override via GEMINI_FALLBACK_MODELS secret). */
+  defaultGeminiFallbackModels: DEFAULT_GEMINI_VISION_FALLBACK_MODELS,
   proxyUrl: process.env.EXPO_PUBLIC_PANTRY_VISION_URL ?? '',
   notConfiguredMessage:
     'Pantry photo scan is not set up yet. Deploy the pantry-vision Edge Function and add GEMINI_API_KEY in Supabase secrets.',
   rateLimitMessage: 'Too many scans — wait a minute and try again.',
+  scanFailedTitle: 'Couldn’t read that photo',
+  scanFailedMessage:
+    'Something went wrong while analyzing your photo. Check your connection and try again.',
+  tryAgainLabel: 'Try again',
   /** Max wait for saving reviewed scan items to Supabase (web/PWA). */
   saveTimeoutMs: 15_000,
   saveTimeoutMessage: 'Saving pantry items timed out. Check your connection and try again.',

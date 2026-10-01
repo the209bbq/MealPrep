@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { COMMUNITY_DEALS } from '../../config/communityDeals';
 import { THEME } from '../../config/appConfig';
@@ -8,9 +8,12 @@ import type { StoreLocation } from '../../lib/deals/types';
 import { formatMoney } from '../../lib/smartShop/aggregateDeals';
 import {
   addCommunityDeal,
+  deleteCommunityDeal,
   formatReportedAgo,
   voteCommunityDeal,
 } from '../../lib/communityDeals/client';
+import { isPastLocalDate, localDateString } from '../../lib/communityDeals/localDate';
+import { getSupabase } from '../../lib/supabase';
 import type { CommunityStoreDeal } from '../../lib/communityDeals/types';
 
 interface StoreCommunityDealsSectionProps {
@@ -25,7 +28,7 @@ interface StoreCommunityDealsSectionProps {
 function defaultValidUntilIso(): string {
   const d = new Date();
   d.setDate(d.getDate() + COMMUNITY_DEALS.defaultValidDays);
-  return d.toISOString().slice(0, 10);
+  return localDateString(d);
 }
 
 export function StoreCommunityDealsSection({
@@ -51,8 +54,25 @@ export function StoreCommunityDealsSection({
   const [validUntil, setValidUntil] = useState(defaultValidUntilIso);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getSupabase()
+      ?.auth.getSession()
+      .then(({ data }) => setCurrentUserId(data.session?.user?.id ?? null));
+  }, []);
 
   if (!storeKey) return null;
+
+  async function handleDelete(dealId: string) {
+    const res = await deleteCommunityDeal(dealId);
+    if (!res.ok) {
+      setFormError(res.error ?? 'Could not delete deal');
+      return;
+    }
+    setFormError(null);
+    onRefresh();
+  }
 
   async function handleVote(dealId: string, vote: 'confirm' | 'expired') {
     const res = await voteCommunityDeal(dealId, vote);
@@ -72,6 +92,11 @@ export function StoreCommunityDealsSection({
     }
     if (!Number.isFinite(parsed) || parsed < 0) {
       setFormError('Enter a valid price.');
+      return;
+    }
+    const until = validUntil.trim() || defaultValidUntilIso();
+    if (isPastLocalDate(until)) {
+      setFormError('Valid until must be today or a future date.');
       return;
     }
     setSubmitting(true);
@@ -129,7 +154,12 @@ export function StoreCommunityDealsSection({
             <Text className="text-xs text-muted">No community deals yet — add one below.</Text>
           ) : null}
 
-          {storeDeals.map((deal) => (
+          {storeDeals.map((deal) => {
+            const expired =
+              Boolean(deal.validUntil && isPastLocalDate(deal.validUntil)) ||
+              deal.expiredCount >= COMMUNITY_DEALS.expiredVoteThreshold;
+            const isOwn = currentUserId && deal.reportedBy === currentUserId;
+            return (
             <View key={deal.id} className="mb-2 rounded-xl border border-border bg-paper px-3 py-2">
               <View className="flex-row items-start justify-between gap-2">
                 <View className="min-w-0 flex-1">
@@ -143,6 +173,7 @@ export function StoreCommunityDealsSection({
                     Reported {formatReportedAgo(deal.createdAt)}
                     {deal.confirmCount ? ` · ${deal.confirmCount} confirmed` : ''}
                     {deal.isSample ? ' · SAMPLE' : ''}
+                    {expired ? ' · Expired' : ''}
                   </Text>
                 </View>
               </View>
@@ -164,10 +195,19 @@ export function StoreCommunityDealsSection({
                   >
                     <Text className="text-xs font-semibold text-danger">Expired</Text>
                   </Pressable>
+                  {isOwn ? (
+                    <Pressable
+                      onPress={() => void handleDelete(deal.id)}
+                      className="rounded-lg border border-danger/40 px-2 py-1"
+                    >
+                      <Text className="text-xs font-semibold text-danger">Delete</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : null}
             </View>
-          ))}
+          );
+          })}
 
           {formError ? (
             <Text className="mb-2 text-xs text-danger">{formError}</Text>

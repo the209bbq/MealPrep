@@ -8,6 +8,7 @@ create table if not exists public.meal_plan_items (
   title text not null,
   image_url text,
   made boolean not null default false,
+  made_at timestamptz,
   added_at timestamptz not null default now(),
   constraint meal_plan_has_ref check (recipe_slug is not null or recipe_api_id is not null)
 );
@@ -37,3 +38,9 @@ drop policy if exists "meal_plan_delete_own" on public.meal_plan_items;
 create policy "meal_plan_delete_own"
   on public.meal_plan_items for delete
   using (auth.uid() = user_id);
+
+alter table public.meal_plan_items
+  add column if not exists made_at timestamptz;
+
+alter table public.profiles
+  add column if not exists auto_add_missing_to_grocery boolean not null default true;

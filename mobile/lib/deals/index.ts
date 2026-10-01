@@ -27,18 +27,6 @@ async function sampleDealsResult(
   });
 }
 
-async function isKrogerServerReady(stores: StoreLocation[]): Promise<boolean> {
-  const anchor = stores.find((s) => s.lat != null && s.lng != null) ?? stores[0];
-  if (!anchor) return false;
-  const { serverConfigured } = await fetchKrogerLocations({
-    lat: anchor.lat,
-    lng: anchor.lng,
-    zip: anchor.zip,
-    radiusMiles: SMART_SHOP.defaultRadiusMiles,
-  });
-  return serverConfigured;
-}
-
 export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
   stores: StoreLocation[];
   originLabel: string;
@@ -92,9 +80,24 @@ export async function searchDeals(params: FetchDealsParams): Promise<DealsSearch
 
   const hasKrogerStore = stores.some((s) => s.pricingSource === 'kroger');
   if (!hasKrogerStore) {
-    const ready = await isKrogerServerReady(stores);
-    if (!ready) {
+    const anchor = stores.find((s) => s.lat != null && s.lng != null) ?? stores[0];
+    const { serverConfigured, stores: krogerRows } = anchor
+      ? await fetchKrogerLocations({
+          lat: anchor.lat,
+          lng: anchor.lng,
+          zip: anchor.zip,
+          radiusMiles: SMART_SHOP.defaultRadiusMiles,
+        })
+      : { serverConfigured: false, stores: [] };
+    if (!serverConfigured) {
       return sampleDealsResult(stores, items, KROGER_NOT_CONFIGURED_NOTE);
+    }
+    if (krogerRows.length === 0) {
+      return sampleDealsResult(
+        stores,
+        items,
+        'No Kroger-family stores near you; showing sample prices (estimates).',
+      );
     }
   }
 
