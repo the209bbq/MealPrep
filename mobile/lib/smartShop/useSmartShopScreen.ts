@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { readCachedZipPlaceLabel, resolveZipPlaceLabel } from '../stores/zipPlaceLabel';
 import { Linking } from 'react-native';
 import { SMART_SHOP_COPY, SMART_SHOP_STORES } from '../../config/smartShop';
 import { SMART_SHOP } from '../../config/appConfig';
@@ -41,6 +42,7 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
   const [storeSearchWarning, setStoreSearchWarning] = useState<string | null>(null);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [storePickerOpen, setStorePickerOpen] = useState(false);
+  const [zipPlaceLabel, setZipPlaceLabel] = useState<string | null>(null);
   const initialLocationChecked = useRef(false);
 
   const hasLocation = useMemo(() => {
@@ -49,11 +51,31 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
   }, [profile, zip]);
 
   const locationSummary = useMemo(() => {
-    if (isValidUsZip(zip)) return zip.trim();
+    if (isValidUsZip(zip)) {
+      const normalized = zip.trim().slice(0, 5);
+      return zipPlaceLabel ?? readCachedZipPlaceLabel(normalized) ?? normalized;
+    }
     const saved = readSavedZip();
-    if (saved) return saved;
+    if (saved && isValidUsZip(saved)) {
+      const normalized = saved.trim().slice(0, 5);
+      return zipPlaceLabel ?? readCachedZipPlaceLabel(normalized) ?? normalized;
+    }
     return originLabel ?? 'your area';
-  }, [originLabel, zip]);
+  }, [originLabel, zip, zipPlaceLabel]);
+
+  useEffect(() => {
+    const code = isValidUsZip(zip) ? zip.trim().slice(0, 5) : readSavedZip();
+    if (!code || !isValidUsZip(code)) {
+      setZipPlaceLabel(null);
+      return;
+    }
+    const cached = readCachedZipPlaceLabel(code);
+    if (cached) {
+      setZipPlaceLabel(cached);
+      return;
+    }
+    void resolveZipPlaceLabel(code).then((label) => setZipPlaceLabel(label));
+  }, [zip]);
 
   const sortedNearbyStores = useMemo(
     () => sortStoreLocationsForDisplay(nearbyStores, savedStoreIds),

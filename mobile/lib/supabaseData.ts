@@ -502,10 +502,6 @@ function groceryNameUnitKey(name: string, unit: string): string {
   return groceryDedupeKey(name, unit);
 }
 
-function isManualGroceryRow(row: GroceryRow): boolean {
-  return row.ingredient_id.startsWith('manual-');
-}
-
 function isPersistedGroceryId(id: string, existingIds: Set<string>): boolean {
   return existingIds.has(id);
 }
@@ -569,9 +565,7 @@ export async function replaceGroceryList(
     persisted.push(mapGrocery(data as GroceryRow));
   }
 
-  const toRemove = existing
-    .filter((row) => !keptIds.has(row.id) && !isManualGroceryRow(row))
-    .map((row) => row.id);
+  const toRemove = existing.filter((row) => !keptIds.has(row.id)).map((row) => row.id);
   if (toRemove.length > 0) {
     const { error: deleteError } = await client.from('grocery_list_items').delete().eq('user_id', userId).in('id', toRemove);
     if (deleteError) throw deleteError;

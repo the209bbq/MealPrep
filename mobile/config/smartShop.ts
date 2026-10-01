@@ -52,14 +52,16 @@ export const SMART_SHOP_COPY = {
   estimatesBanner: 'Demo mode — sample prices only, not real comparisons.',
   noLivePricesLabel: 'No live prices',
   noLivePricesHint:
-    'We do not have live prices for these stores yet. Check each store’s weekly ad, delivery apps, or add a price you saw.',
+    'No verified prices for your list yet. Open a weekly ad, check delivery apps, or add a price you saw in the aisle.',
   noLiveStoresNearbyHint:
-    'No Kroger-family stores with live prices near this area. Use weekly ads, delivery, or community deals below.',
+    'No verified store prices near you yet. Use weekly ads, delivery apps, or add prices you see while shopping.',
   noPricesYetStore: 'No prices yet — check this week’s ad or add a price you saw.',
   noRealPriceComparison:
     'No verified prices to compare yet. Pick stores below, open weekly ads, or add prices you see in the aisle.',
   estimatedBadge: 'Estimated',
-  estimatedWithCommunity: 'Estimated · community deals',
+  estimatedWithCommunity: 'Estimated · shopper reports',
+  communityDealsOnlyBadge: 'Shopper-reported deals only',
+  communityDealsSummarySuffix: ' · shopper reports',
   estimatedSuffix: 'est.',
   pricesUnavailable: 'No prices yet',
   loadingStores: 'Finding nearby grocery stores…',

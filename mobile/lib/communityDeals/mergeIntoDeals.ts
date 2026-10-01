@@ -3,6 +3,7 @@ import { resolveStoreChainKey } from '../../config/weeklyAds';
 import type { CommunityStoreDeal } from './types';
 import type { DealsSearchResult, ItemStoreDeal, StoreLocation } from '../deals/types';
 import { assembleDealsResult } from '../deals/buildShopResult';
+import { communityDealsForGroceryList } from './filterDeals';
 import { matchCommunityDealToGroceryItem } from './matchItem';
 import { COMMUNITY_DEALS } from '../../config/communityDeals';
 import { communityLineTotalForItem } from './communityLineTotal';
@@ -42,8 +43,11 @@ export function mergeCommunityDealsIntoSearchResult(
 ): DealsSearchResult {
   if (communityDeals.length === 0 || items.length === 0) return result;
 
+  const eligibleDeals = communityDealsForGroceryList(communityDeals, items);
+  if (eligibleDeals.length === 0) return result;
+
   const dealsByStoreKey = new Map<string, CommunityStoreDeal[]>();
-  for (const deal of communityDeals) {
+  for (const deal of eligibleDeals) {
     const list = dealsByStoreKey.get(deal.storeKey) ?? [];
     list.push(deal);
     dealsByStoreKey.set(deal.storeKey, list);

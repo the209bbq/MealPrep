@@ -24,6 +24,7 @@ export function findBestCommunityDealForItem(
 ): GroceryCommunityDealBadge | null {
   let best: GroceryCommunityDealBadge | null = null;
   for (const deal of deals) {
+    if (deal.isSample) continue;
     const score = matchCommunityDealToGroceryItem(item, deal);
     if (score < COMMUNITY_DEALS.fuzzyMatchMinScore) continue;
     const storeLabel = storeLabelByKey.get(deal.storeKey) ?? deal.storeName ?? deal.storeKey;

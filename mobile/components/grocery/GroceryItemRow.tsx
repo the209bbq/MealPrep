@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { THEME } from '../../config/appConfig';
+import { GROCERY_COPY } from '../../config/grocery';
 import type { GroceryCommunityDealBadge } from '../../lib/communityDeals/matchItem';
 import { formatMoney } from '../../lib/smartShop/aggregateDeals';
 import type { GroceryListItem } from '../../types/mealprep';
@@ -9,11 +10,12 @@ interface GroceryItemRowProps {
   item: GroceryListItem;
   recipeLabels: string;
   onToggle: () => void;
+  onRemove: () => void;
   dimmed?: boolean;
   communityDeal?: GroceryCommunityDealBadge;
 }
 
-export function GroceryItemRow({ item, recipeLabels, onToggle, dimmed, communityDeal }: GroceryItemRowProps) {
+export function GroceryItemRow({ item, recipeLabels, onToggle, onRemove, dimmed, communityDeal }: GroceryItemRowProps) {
   const qtyLabel = `${item.quantity} ${item.unit}`;
 
   return (
@@ -50,6 +52,18 @@ export function GroceryItemRow({ item, recipeLabels, onToggle, dimmed, community
           <Text className="mt-1 text-xs text-muted">Added manually</Text>
         )}
       </View>
+      <Pressable
+        onPress={(event) => {
+          event.stopPropagation?.();
+          onRemove();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={GROCERY_COPY.removeItem}
+        hitSlop={8}
+        className="ml-2 rounded-xl border border-border bg-paper px-2 py-2"
+      >
+        <Ionicons name="trash-outline" size={20} color={THEME.muted} />
+      </Pressable>
     </Pressable>
   );
 }

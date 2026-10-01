@@ -1,5 +1,6 @@
 import { CATEGORY_LABELS } from '../config/appConfig';
 import type { GroceryListItem, PantryCategory, PantryItem, Recipe } from '../types/mealprep';
+import { inferGroceryCategoryFromName } from './grocery/categorize';
 import { isGroceryDismissed } from './grocery/dismissals';
 import {
   findPantryItemsForIngredient,
@@ -159,14 +160,16 @@ export function createManualGroceryItem(input: {
   name: string;
   quantity: number;
   unit: string;
-  category: PantryCategory;
+  category?: PantryCategory;
 }): GroceryListItem {
   const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+  const trimmedName = input.name.trim();
+  const category = input.category ?? inferGroceryCategoryFromName(trimmedName);
   return {
     id: `manual-${Date.now()}-${slug}`,
     ingredientId: `manual-${slug}-${Date.now()}`,
-    name: input.name.trim(),
-    category: input.category,
+    name: trimmedName,
+    category,
     quantity: input.quantity,
     unit: input.unit.trim() || 'each',
     checked: false,
