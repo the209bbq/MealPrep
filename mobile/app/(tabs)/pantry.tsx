@@ -54,6 +54,7 @@ import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import { detectionsToReviewItems } from '../../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem, PreparedPantryImage } from '../../lib/pantryVision/types';
 import { uploadScanPhoto } from '../../lib/scanPhotos/client';
+import { TabEmptyState } from '../../components/onboarding/TabEmptyState';
 import { ViewScanPhotoButton } from '../../components/ViewScanPhotoButton';
 import { PANTRY_CATEGORIES, type PantryCategory, type PantryItem } from '../../types/mealprep';
 
@@ -586,12 +587,16 @@ export default function PantryScreen() {
 
         {actionError ? <Text className="mb-2 text-xs font-semibold text-danger">{actionError}</Text> : null}
 
-        <PantryFilteredItemList
-          items={pantry}
-          categoryFilter={filter}
-          locationFilter={locationFilter}
-          onPressItem={openEditModal}
-        />
+        {pantry.length === 0 ? (
+          <TabEmptyState tab="pantry" />
+        ) : (
+          <PantryFilteredItemList
+            items={pantry}
+            categoryFilter={filter}
+            locationFilter={locationFilter}
+            onPressItem={openEditModal}
+          />
+        )}
         </ScrollView>
 
         {phase === 'review' ? (
