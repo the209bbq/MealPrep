@@ -108,7 +108,7 @@ export default function HomeScreen() {
         </View>
 
         {demoMode ? (
-          <Text className="mt-3 text-xs text-muted">Demo mode — local data only until Supabase is connected.</Text>
+          <Text className="mt-3 text-xs text-muted">Demo mode — local data only until you sign in with a connected account.</Text>
         ) : null}
 
         <MealsToMakePanel

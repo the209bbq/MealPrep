@@ -8,7 +8,8 @@
 const USDA_SEARCH = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 const USDA_FOOD = 'https://api.nal.usda.gov/fdc/v1/food';
 
-const SEARCH_DATA_TYPE = 'Foundation,SR Legacy,Survey (FNDDS)';
+/** USDA rejects a single comma-joined value with parentheses; send repeated `dataType` params. */
+const DEFAULT_SEARCH_DATA_TYPES = ['Foundation', 'SR Legacy'];
 
 /** GitHub Pages PWA + common Expo web dev origins (Origin header has no path). */
 const ALLOWED_ORIGINS = new Set([
@@ -46,19 +47,34 @@ function corsHeaders(req: Request): Record<string, string> {
   };
 }
 
+function appendDataTypeParams(params: URLSearchParams, raw: string | undefined): void {
+  const parts = (raw ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  const types = parts.length > 0 ? parts : DEFAULT_SEARCH_DATA_TYPES;
+  for (const dataType of types) {
+    params.append('dataType', dataType);
+  }
+}
+
 function pickSearchQuery(
   input: Record<string, string | number | undefined> | undefined,
 ): URLSearchParams {
   const params = new URLSearchParams();
-  if (!input) return params;
-  for (const [key, value] of Object.entries(input)) {
-    if (!SEARCH_QUERY_KEYS.has(key)) continue;
-    if (value === undefined || value === null || value === '') continue;
-    params.set(key, String(value));
+  let dataTypeRaw: string | undefined;
+  if (input) {
+    for (const [key, value] of Object.entries(input)) {
+      if (!SEARCH_QUERY_KEYS.has(key)) continue;
+      if (value === undefined || value === null || value === '') continue;
+      if (key === 'dataType') {
+        dataTypeRaw = String(value);
+        continue;
+      }
+      params.set(key, String(value));
+    }
   }
-  if (!params.has('dataType')) {
-    params.set('dataType', SEARCH_DATA_TYPE);
-  }
+  appendDataTypeParams(params, dataTypeRaw);
   return params;
 }
 
