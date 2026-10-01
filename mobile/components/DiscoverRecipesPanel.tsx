@@ -169,7 +169,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
         className="mb-4 mt-6 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-4"
       >
         <View className="flex-1 pr-3">
-          <Text className="text-base font-bold text-ink">Search more ideas</Text>
+          <Text className="text-base font-bold text-ink">Recipe List</Text>
           <Text className="mt-1 text-sm text-muted">Optional RecipeAPI search when you want new meals beyond your pantry matches.</Text>
         </View>
         <Ionicons name="chevron-down" size={22} color={THEME.muted} />
@@ -180,7 +180,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
   return (
     <View className="mb-4 mt-6 overflow-hidden rounded-2xl border border-emerald bg-card px-4 py-5">
       <Pressable onPress={() => setExpanded(false)} className="mb-2 flex-row items-center justify-between">
-        <Text className="text-2xl font-bold text-ink">Search more ideas</Text>
+        <Text className="text-2xl font-bold text-ink">Recipe List</Text>
         <Ionicons name="chevron-up" size={22} color={THEME.muted} />
       </Pressable>
       <Text className="mt-1 text-sm text-muted">
