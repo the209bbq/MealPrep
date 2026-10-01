@@ -21,6 +21,7 @@ import {
   type SmartShopAddPriceTarget,
 } from '../components/smartShop/SmartShopAddPriceSheet';
 import type { StoreLocation } from '../lib/deals';
+import { communityDealsForGroceryList } from '../lib/communityDeals/filterDeals';
 
 export default function SmartShopScreen() {
   const insets = useSafeAreaInsets();
@@ -50,6 +51,7 @@ export default function SmartShopScreen() {
 
   const cheapestStoreId = shop.dealsResult ? resolveCheapestStoreId(shop.dealsResult) : null;
   const showComparisonSkeleton = shop.loadingDeals && !shop.dealsResult && shop.items.length > 0 && shop.hasLocation;
+  const listCommunityDeals = communityDealsForGroceryList(shop.community.deals, shop.items);
 
   return (
     <View className="flex-1 bg-paper" style={{ paddingTop: insets.top }}>
@@ -123,7 +125,7 @@ export default function SmartShopScreen() {
             activeStores={shop.activeStores}
             nearbyStores={shop.nearbyStores}
             storeHasCommunityDeals={shop.storeHasCommunityDeals}
-            communityDeals={shop.community.deals}
+            communityDeals={listCommunityDeals}
             loadingCommunityDeals={shop.community.loading}
             communityTableMissing={shop.community.tableMissing}
             communityMigrationHint={shop.community.hint}
@@ -159,7 +161,7 @@ export default function SmartShopScreen() {
         ownerId={profile.id}
         groceryItems={shop.items}
         nearbyStores={shop.sortedNearbyStores}
-        communityDeals={shop.community.deals}
+        communityDeals={listCommunityDeals}
         dealsResult={shop.dealsResult}
         onClose={() => setAddPriceTarget(null)}
         onSaved={handlePriceSaved}

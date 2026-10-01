@@ -2,7 +2,6 @@ import { COMMUNITY_DEALS } from '../../config/communityDeals';
 import { isDemoMode } from '../../config/appConfig';
 import { getSupabase } from '../supabase';
 import { deleteScanPhoto } from '../scanPhotos/client';
-import { demoCommunityDeals } from './demoSamples';
 import { isPastLocalDate, localDateString } from './localDate';
 import { resolvePriceValidity } from './priceValidity';
 import type { CommunityPriceKind } from './types';
@@ -94,18 +93,18 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
   }
 
   if (isDemoMode()) {
-    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), null), tableMissing: false };
+    return { deals: [], tableMissing: false };
   }
 
   const client = getSupabase();
   if (!client) {
-    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), null), tableMissing: false };
+    return { deals: [], tableMissing: false };
   }
 
   const { data: sessionData } = await client.auth.getSession();
   const userId = sessionData.session?.user?.id ?? null;
   if (!userId) {
-    return { deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), null), tableMissing: false };
+    return { deals: [], tableMissing: false };
   }
 
   const { data: dealRows, error: dealsError } = await client
@@ -118,7 +117,7 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
 
   if (isMissingTableError(dealsError)) {
     return {
-      deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), userId),
+      deals: [],
       tableMissing: true,
       hint: COMMUNITY_DEALS.migrationHint,
     };
@@ -136,7 +135,7 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
 
   if (isMissingTableError(votesError)) {
     return {
-      deals: filterVisibleCommunityDeals(demoCommunityDeals(uniqueKeys), userId),
+      deals: [],
       tableMissing: true,
       hint: COMMUNITY_DEALS.migrationHint,
     };

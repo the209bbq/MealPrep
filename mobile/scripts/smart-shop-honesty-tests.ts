@@ -5,6 +5,7 @@
 
 import { assembleDealsResult } from '../lib/deals/buildShopResult';
 import { coordsForStoreSearch } from '../lib/smartShop/coordsResolve';
+import { parseCityStateFromNominatimDisplay } from '../lib/stores/zipPlaceParse';
 import { estimateSmartShopSavings } from '../lib/smartShop/aggregateDeals';
 import type { ItemStoreDeal, StoreLocation } from '../lib/deals/types';
 import type { GroceryListItem } from '../types/mealprep';
@@ -131,6 +132,11 @@ assert(
     profileLng: -120.82,
   })?.lat === 37.5,
   'saved coords win when present',
+);
+
+assert(
+  parseCityStateFromNominatimDisplay('95361, Oakdale, Stanislaus County, California, United States') === 'Oakdale, CA',
+  'ZIP geocode display should resolve to city, state',
 );
 
 console.log('Smart Shop honesty tests passed.');

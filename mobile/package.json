@@ -41,7 +41,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test:recipe-match": "npx tsx scripts/recipe-match-regression.ts",
-    "test:grocery": "npx tsx scripts/grocery-regression.ts",
+    "test:grocery": "npx tsx scripts/grocery-regression.ts && npx tsx scripts/grocery-categorize-check.ts",
     "test:smart-shop": "npx tsx scripts/smart-shop-filter-examples.ts && npx tsx scripts/smart-shop-honesty-tests.ts",
     "test:package-pricing": "node --experimental-strip-types scripts/package-pricing-check.mjs",
     "test:community-prices": "npx tsx scripts/community-price-comparison-check.mjs",

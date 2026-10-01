@@ -1,5 +1,6 @@
 import { mapsDirectionsUrl, SMART_SHOP_COPY, SMART_SHOP_STORES } from '../../config/smartShop';
 import { geocodeUsZip } from './nominatim';
+import { placeLabelFromGeocodePoint } from './zipPlaceParse';
 import { fetchOverpassStores } from './overpass';
 import type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
 
@@ -40,7 +41,12 @@ export async function resolveSearchOrigin(params: NearbyStoreSearchParams): Prom
   if (params.zip) {
     const result = await geocodeUsZip(params.zip);
     if (!result.ok) throw new Error(zipGeocodeMessage(result.reason));
-    return { lat: result.point.lat, lng: result.point.lng, label: `ZIP ${params.zip.slice(0, 5)}` };
+    const zip = params.zip.slice(0, 5);
+    return {
+      lat: result.point.lat,
+      lng: result.point.lng,
+      label: placeLabelFromGeocodePoint(result.point, zip),
+    };
   }
   throw new Error('Set your location or enter a ZIP code to find stores.');
 }

@@ -1,11 +1,14 @@
 import type { PantryCategory, Recipe, RecipeIngredient } from '../../types/mealprep';
+import { inferGroceryCategoryFromName } from '../grocery/categorize';
 import type { RecipeApiRecipe } from './types';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './slugs';
 
-function mapIngredientCategory(apiCategory: string): PantryCategory {
+function mapIngredientCategory(apiCategory: string, ingredientName: string): PantryCategory {
+  const fromName = inferGroceryCategoryFromName(ingredientName);
   const c = apiCategory.toLowerCase();
   if (c.includes('spice') || c.includes('herb')) return 'spices';
   if (c.includes('meat') || c.includes('fish') || c.includes('seafood') || c.includes('poultry')) return 'meats';
+  if (fromName === 'dry_goods') return 'dry_goods';
   if (
     c.includes('vegetable') ||
     c.includes('fruit') ||
@@ -17,7 +20,7 @@ function mapIngredientCategory(apiCategory: string): PantryCategory {
   if (c.includes('dairy') || c.includes('cheese') || c.includes('milk')) return 'dairy';
   if (c.includes('frozen')) return 'frozen';
   if (c.includes('condiment') || c.includes('sauce')) return 'condiments';
-  return 'dry_goods';
+  return fromName;
 }
 
 export function recipeApiToAppRecipe(
@@ -62,5 +65,6 @@ export function recipeApiToAppRecipe(
 }
 
 export function pantryCategoryForImportedIngredient(name: string, notes?: string): PantryCategory {
-  return mapIngredientCategory([notes, name].filter(Boolean).join(' '));
+  const hint = [notes, name].filter(Boolean).join(' ');
+  return mapIngredientCategory(hint, name);
 }

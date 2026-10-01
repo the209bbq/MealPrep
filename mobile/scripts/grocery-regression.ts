@@ -4,6 +4,8 @@
  */
 
 import { buildGroceryList, createManualGroceryItem, isManualGroceryItem } from '../lib/grocery';
+import { inferGroceryCategoryFromName } from '../lib/grocery/categorize';
+import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import {
   addGroceryDismissals,
   clearGroceryDismissals,
@@ -145,6 +147,34 @@ await enqueueGroceryPersist(async () => {
 });
 assert(order === 'ab', 'grocery persist queue should serialize');
 clearGroceryDismissals(owner);
+
+assert(inferGroceryCategoryFromName('rice') === 'dry_goods', 'rice should be dry goods');
+assert(inferGroceryCategoryFromName('pasta') === 'dry_goods', 'pasta should be dry goods');
+assert(inferGroceryCategoryFromName('black beans') === 'dry_goods', 'beans should be dry goods');
+assert(inferGroceryCategoryFromName('spinach') === 'produce', 'spinach should be produce');
+
+const checkedRecipeItem: GroceryListItem = {
+  id: 'groc-limes::each',
+  ingredientId: 'limes',
+  name: 'Limes',
+  category: 'produce',
+  quantity: 2,
+  unit: 'each',
+  checked: true,
+  sourceRecipeIds: [recipe.id],
+};
+const dismissalKeys = groceryDismissalKeysForItem(checkedRecipeItem);
+addGroceryDismissals(owner, dismissalKeys);
+const afterClearSim = buildGroceryList(
+  [recipe],
+  [recipe.id],
+  [],
+  {},
+  [],
+  { groceryDismissals: readGroceryDismissals(owner) },
+);
+assert(!afterClearSim.some((g) => g.name === 'Limes'), 'cleared checked recipe item stays off after dismissals');
+
 console.log('All grocery regression checks passed.');
 }
 

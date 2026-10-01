@@ -43,7 +43,7 @@ export function storeHasPricedTotal(
 
 export function dealsSummaryLabel(result: DealsSearchResult): string {
   const hasCommunity = result.deals.some((d) => d.priceSource === 'community');
-  const communitySuffix = hasCommunity ? ' · community deals' : '';
+  const communitySuffix = hasCommunity ? SMART_SHOP_COPY.communityDealsSummarySuffix : '';
   if (result.mode === 'sample') {
     return `${SMART_SHOP_COPY.estimatedPricesTitle}${communitySuffix}`;
   }
@@ -67,7 +67,7 @@ export function pricingBadgeForStore(
   const priced = storeHasPricedTotal(options?.storeTotal, options?.result);
   if (!priced) {
     return options?.hasCommunityDeals
-      ? 'Community deals only'
+      ? SMART_SHOP_COPY.communityDealsOnlyBadge
       : SMART_SHOP_COPY.noPricesYetStore;
   }
 

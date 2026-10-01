@@ -7,6 +7,7 @@ import {
   FEATURE_FLAG_DEFAULTS,
   isDemoMode,
 } from '../config/appConfig';
+import { GROCERY_COPY } from '../config/grocery';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   normalizePantryItemList,
@@ -24,6 +25,7 @@ import {
 } from '../lib/grocery/dismissals';
 import { enqueueGroceryPersist } from '../lib/grocery/persistQueue';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
+import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
 import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
 import {
@@ -52,7 +54,6 @@ import { activeMealPlanRecipeIds, isRecipeOnMealPlan, resolveMealPlanRecipeId } 
 import { hydrateLocationFromProfile } from '../lib/smartShop/profileLocation';
 import {
   fetchLiveBundle,
-  deleteGroceryItems,
   deleteMealPlanItem,
   insertGroceryItem,
   insertMealPlanItem,
@@ -192,6 +193,7 @@ interface AppContextValue {
   toggleGroceryItem: (id: string) => void;
   addManualGroceryItem: (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => void;
   clearCheckedGroceryItems: () => void;
+  removeGroceryItem: (id: string) => void;
   seedPantry: () => void;
   updateRecipe: (recipe: Recipe) => void;
   importDiscoveredRecipe: (
@@ -874,19 +876,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearCheckedGroceryItems = useCallback(() => {
     setGrocery((prev) => {
-      const removedIds = prev.filter((item) => item.checked).map((item) => item.id);
+      const removed = prev.filter((item) => item.checked);
+      if (removed.length === 0) return prev;
+
+      const dismissalKeys = removed.flatMap((item) => groceryDismissalKeysForItem(item));
+      addGroceryDismissals(ownerId, dismissalKeys);
+
+      const previous = prev;
       const next = prev.filter((item) => !item.checked);
       if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
-      if (supabase && userId && removedIds.length > 0) {
-        void deleteGroceryItems(supabase, userId, removedIds)
-          .then(() => setGrocery(next))
-          .catch((error: unknown) => {
-            setAuthError(error instanceof Error ? error.message : 'Failed to clear checked items');
-          });
+      if (!demoMode && supabase && userId) {
+        persistGroceryList(next);
       }
+
+      setUndoToast({
+        message: GROCERY_COPY.undoCleared(removed.length),
+        onUndo: () => {
+          setGrocery(previous);
+          if (demoMode) writeJson(STORAGE_KEYS.grocery, previous);
+          if (!demoMode && supabase && userId) persistGroceryList(previous);
+          setUndoToast(null);
+        },
+      });
+
       return next;
     });
-  }, [demoMode, supabase, userId]);
+  }, [demoMode, ownerId, persistGroceryList, supabase, userId]);
+
+  const removeGroceryItem = useCallback(
+    (id: string) => {
+      setGrocery((prev) => {
+        const removed = prev.find((item) => item.id === id);
+        if (!removed) return prev;
+
+        const dismissalKeys = groceryDismissalKeysForItem(removed);
+        addGroceryDismissals(ownerId, dismissalKeys);
+
+        const previous = prev;
+        const next = prev.filter((item) => item.id !== id);
+        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        if (!demoMode && supabase && userId) {
+          persistGroceryList(next);
+        }
+
+        setUndoToast({
+          message: GROCERY_COPY.undoRemoved(removed.name),
+          onUndo: () => {
+            setGrocery(previous);
+            if (demoMode) writeJson(STORAGE_KEYS.grocery, previous);
+            if (!demoMode && supabase && userId) persistGroceryList(previous);
+            setUndoToast(null);
+          },
+        });
+
+        return next;
+      });
+    },
+    [demoMode, ownerId, persistGroceryList, supabase, userId],
+  );
 
   const seedPantry = useCallback(() => {
     if (demoMode) {
@@ -1332,6 +1379,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleGroceryItem,
       addManualGroceryItem,
       clearCheckedGroceryItems,
+      removeGroceryItem,
       seedPantry,
       updateRecipe,
       importDiscoveredRecipe,
@@ -1389,6 +1437,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleGroceryItem,
       addManualGroceryItem,
       clearCheckedGroceryItems,
+      removeGroceryItem,
       toggleMealPlanKitchenRecipe,
       toggleMealPlanDiscoveryRecipe,
       removeMealPlanItem,
