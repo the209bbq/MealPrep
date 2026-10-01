@@ -6,7 +6,6 @@ import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../confi
 import { useApp } from '../../context/AppContext';
 import { UsdaNutritionPanel } from '../../components/UsdaNutritionPanel';
 import { initials } from '../../lib/initials';
-import { nutritionLabel } from '../../lib/nutrition';
 import type { FeatureFlagKey, UserRole } from '../../types/mealprep';
 
 export default function AdminScreen() {
@@ -29,10 +28,6 @@ export default function AdminScreen() {
     recipes,
     updateRecipe,
   } = useApp();
-  const [editId, setEditId] = useState(recipes[0]?.id ?? '');
-  const recipe = recipes.find((r) => r.id === editId) ?? recipes[0];
-  const [editName, setEditName] = useState(recipe?.name ?? '');
-  const [editDesc, setEditDesc] = useState(recipe?.description ?? '');
 
   if (!demoMode && !session) {
     if (!authReady) {
@@ -105,58 +100,11 @@ export default function AdminScreen() {
         </Card>
       ) : null}
 
-      <Card className="mt-4" title="Recipe master table" subtitle={demoMode ? 'Edit global recipes (demo/local)' : 'Edit global recipes in Supabase'}>
-        <Text className="mb-2 text-sm text-muted">Select recipe</Text>
-        <View className="mb-3 flex-row flex-wrap gap-2">
-          {recipes.map((r) => (
-            <Pressable
-              key={r.id}
-              onPress={() => {
-                setEditId(r.id);
-                setEditName(r.name);
-                setEditDesc(r.description);
-              }}
-              className={`rounded-full px-3 py-1 ${editId === r.id ? 'bg-emerald' : 'bg-paper border border-border'}`}
-            >
-              <Text className={`text-xs font-semibold ${editId === r.id ? 'text-on-emerald' : 'text-muted'}`}>
-                {r.name.split(' ')[0]}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        {featureFlags.recipeMasterEdit && recipe ? (
-          <>
-            <TextInput
-              value={editName}
-              onChangeText={setEditName}
-              className="mb-2 rounded-xl border border-border bg-card px-3 py-2 text-ink"
-              placeholder="Recipe name"
-            />
-            <TextInput
-              value={editDesc}
-              onChangeText={setEditDesc}
-              multiline
-              className="mb-3 rounded-xl border border-border bg-card px-3 py-2 text-ink"
-              placeholder="Description"
-            />
-            <Text className="mb-2 text-xs text-muted">{nutritionLabel(recipe)}</Text>
-            <Pressable
-              onPress={() => updateRecipe({ ...recipe, name: editName, description: editDesc })}
-              className="rounded-xl bg-emerald px-4 py-3"
-            >
-              <Text className="text-center font-bold text-on-emerald">Save master recipe</Text>
-            </Pressable>
-            <UsdaNutritionPanel
-              recipe={recipe}
-              onSave={(next) => {
-                updateRecipe({ ...next, name: editName, description: editDesc });
-              }}
-            />
-          </>
-        ) : (
-          <Text className="text-sm text-muted">Recipe master edit is disabled.</Text>
-        )}
-      </Card>
+      {recipes.length > 0 ? (
+        <Card className="mt-4">
+          <UsdaNutritionPanel recipes={recipes} onSave={updateRecipe} />
+        </Card>
+      ) : null}
 
       <Card className="mt-4" title="Seed test pantry" subtitle="Reset demo inventory">
         <Pressable onPress={seedPantry} className="mt-2 rounded-xl border border-border bg-card px-4 py-3">

@@ -62,7 +62,6 @@ export const FEATURE_FLAG_DEFAULTS: FeatureFlags = {
   grocerySync: true,
   smartShop: true,
   maintenanceMode: false,
-  recipeMasterEdit: true,
 };
 
 /** Smart Shop / store pricing (no secrets in repo — use env + optional Supabase Edge Function). */
@@ -173,10 +172,6 @@ export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; bl
   maintenanceMode: {
     title: 'Maintenance mode',
     blurb: 'Non-admins see a full-screen maintenance page. Admins keep working.',
-  },
-  recipeMasterEdit: {
-    title: 'Recipe master table',
-    blurb: 'Allow admins to edit the global recipe catalog.',
   },
 };
 
