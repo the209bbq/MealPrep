@@ -223,12 +223,13 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
     const coords = readInitialCoords(profile);
     const initialZip = readInitialZip(profile);
     if (coords || isValidUsZip(initialZip)) {
-      void loadStores(coords);
+      setLocationModalOpen(false);
+      void loadStores(coords ?? undefined);
     } else if (!initialLocationChecked.current) {
       initialLocationChecked.current = true;
       setLocationModalOpen(true);
     }
-  }, [hydrated]);
+  }, [hydrated, loadStores, profile.homeZip, profile.homeLat, profile.homeLng, profile.id, zip]);
 
   useEffect(() => {
     if (!dealsResult || community.deals.length === 0) return;

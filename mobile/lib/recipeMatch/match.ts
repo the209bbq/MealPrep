@@ -3,6 +3,8 @@ import {
   DEFAULT_MIN_MATCHED_INGREDIENTS,
   KITCHEN_LIST_DEFAULT_MIN_PERCENT,
   RECIPE_MATCHING,
+  RECIPES_TAB_PARTIAL_MATCH_LIMIT,
+  RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT,
 } from '../../config/recipeMatching';
 import { FUZZY_MATCH_THRESHOLD, PANTRY_STAPLES } from '../../config/recipeMatchingConfig';
 import { fuzzyNameScore, ingredientMatchScore, normalizeIngredientName } from './normalize';
@@ -178,6 +180,10 @@ export interface FilterRankedMatchesOptions {
   pantryItemCount?: number;
 }
 
+function effectiveFilterMode(mode: RecipePantryFilterMode): Exclude<RecipePantryFilterMode, 'best_match'> {
+  return mode === 'best_match' ? 'all' : mode;
+}
+
 export function filterRankedMatches(
   ranked: RecipePantryMatch[],
   mode: RecipePantryFilterMode,
@@ -187,13 +193,52 @@ export function filterRankedMatches(
   if (options?.pantryItemCount === 0) return [];
 
   const minMatched = options?.minMatchedCount ?? DEFAULT_MIN_MATCHED_INGREDIENTS;
+  const filterMode = effectiveFilterMode(mode);
   return ranked.filter((m) => {
     if (m.matchedCount < minMatched) return false;
     if (m.percentMatch < minPercent) return false;
-    if (mode === 'have_all') return m.missingCount === 0;
-    if (mode === 'missing_1_2') return m.missingCount >= 1 && m.missingCount <= 2;
+    if (filterMode === 'have_all') return m.missingCount === 0;
+    if (filterMode === 'missing_1_2') return m.missingCount >= 1 && m.missingCount <= 2;
     return true;
   });
+}
+
+export interface FilterRankedMatchesWithFallbackResult {
+  matches: RecipePantryMatch[];
+  usedPartialFallback: boolean;
+}
+
+export interface FilterRankedMatchesWithFallbackOptions extends FilterRankedMatchesOptions {
+  partialMinMatchedCount?: number;
+  partialMatchMax?: number;
+}
+
+/** Applies default thresholds; if nothing passes, surfaces best partial pantry overlaps. */
+export function filterRankedMatchesWithPartialFallback(
+  ranked: RecipePantryMatch[],
+  mode: RecipePantryFilterMode,
+  minPercent: number,
+  options?: FilterRankedMatchesWithFallbackOptions,
+): FilterRankedMatchesWithFallbackResult {
+  const strict = filterRankedMatches(ranked, mode, minPercent, options);
+  if (strict.length > 0) {
+    return { matches: strict, usedPartialFallback: false };
+  }
+  if (options?.pantryItemCount === 0) {
+    return { matches: [], usedPartialFallback: false };
+  }
+
+  const partialMin = options?.partialMinMatchedCount ?? RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT;
+  const partialMax = options?.partialMatchMax ?? RECIPES_TAB_PARTIAL_MATCH_LIMIT;
+  const partial = filterRankedMatches(ranked, mode, 0, {
+    ...options,
+    minMatchedCount: partialMin,
+  });
+
+  return {
+    matches: partial.slice(0, partialMax),
+    usedPartialFallback: partial.length > 0,
+  };
 }
 
 export function topPantryRecipeRecommendations(

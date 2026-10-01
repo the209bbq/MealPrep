@@ -132,6 +132,10 @@ export const RECIPES_COPY = {
     addMissingShort: 'Add missing to list',
     seeAllOnRecipes: 'See all recipes',
   },
+
+  recipeCard: {
+    addMissingCta: 'Add missing to grocery list',
+  },
 } as const;
 
 /** Compact label for recipe list badges (no percentages). */

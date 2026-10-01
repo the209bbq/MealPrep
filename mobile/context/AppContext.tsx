@@ -31,6 +31,8 @@ import { enqueueGroceryPersist } from '../lib/grocery/persistQueue';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
 import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
+import { router } from 'expo-router';
+import { APP_ROUTES } from '../config/appRoutes';
 import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
 import {
   applyPantryDeductions,
@@ -44,6 +46,7 @@ import {
   topPantryRecipeRecommendations,
   type PantryMatchIndex,
 } from '../lib/recipeMatch';
+import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
 import { fuzzyNameScore, ingredientMatchScore } from '../lib/recipeMatch/ingredientNormalize';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import { runScanPhotoRetentionCleanupIfDue } from '../lib/scanPhotos/cleanup';
@@ -156,6 +159,8 @@ const GUEST_PROFILE: UserProfile = {
 interface UndoToastState {
   message: string;
   onUndo: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface MealMadeUndoState {
@@ -550,15 +555,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [demoMode, grocery, liveAnalytics, pantry.length, recipes.length]);
 
-  const pantryRecipeMatches = useMemo(
-    () => buildPantryMatchIndex(recipes, pantry),
-    [pantry, recipes],
-  );
+  const pantryRecipeMatches = useMemo(() => {
+    const kitchenRecipes = kitchenRecipesForPantryMatch(recipes);
+    return buildPantryMatchIndex(kitchenRecipes, pantry);
+  }, [pantry, recipes]);
 
-  const pantryRecipeRecommendations = useMemo(
-    () => topPantryRecipeRecommendations(recipes, pantry, 3),
-    [pantry, recipes],
-  );
+  const pantryRecipeRecommendations = useMemo(() => {
+    const kitchenRecipes = kitchenRecipesForPantryMatch(recipes);
+    return topPantryRecipeRecommendations(kitchenRecipes, pantry, 3);
+  }, [pantry, recipes]);
 
   const setDemoRole = useCallback((next: UserRole) => {
     setRole(next);
@@ -658,14 +663,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const showGroceryAddedToast = useCallback(
-    (added: GroceryListItem[], previous: GroceryListItem[]) => {
-      if (added.length === 0) return;
+    (added: GroceryListItem[], previous: GroceryListItem[], options?: { alreadyOnList?: boolean }) => {
       const label =
-        added.length === 1
-          ? `Added ${added[0].name} to your grocery list`
-          : `Added ${added.length} missing items to your grocery list`;
+        options?.alreadyOnList
+          ? GROCERY_COPY.alreadyOnGroceryList
+          : added.length === 1
+            ? GROCERY_COPY.addedMissingSingle(added[0].name)
+            : GROCERY_COPY.addedMissingPlural(added.length);
       setUndoToast({
         message: label,
+        actionLabel: GROCERY_COPY.viewGroceryListAction,
+        onAction: () => {
+          setUndoToast(null);
+          router.push(APP_ROUTES.grocery);
+        },
         onUndo: () => {
           const dismissalKeys = added.flatMap((item) =>
             item.sourceRecipeIds.map((recipeId) =>
@@ -698,9 +709,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           groceryDismissals: dismissals,
         });
         addedCount = added.length;
-        if (added.length > 0) {
-          persistGroceryList(next);
-          if (options?.showToast) showGroceryAddedToast(added, prev);
+        persistGroceryList(next);
+        if (options?.showToast) {
+          if (added.length > 0) {
+            showGroceryAddedToast(added, prev);
+          } else if (match.missing.length > 0) {
+            showGroceryAddedToast([], prev, { alreadyOnList: true });
+          }
         }
         return next;
       });

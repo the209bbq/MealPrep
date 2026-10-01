@@ -21,6 +21,10 @@ export const KITCHEN_LIST_DEFAULT_MIN_PERCENT = 0;
 /** Recipes must match at least this many pantry ingredients (non-staples) to appear. */
 export const DEFAULT_MIN_MATCHED_INGREDIENTS = 2;
 
+/** When strict % + count filters hide everything, still show best partial overlaps (Recipes tab). */
+export const RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT = 1;
+export const RECIPES_TAB_PARTIAL_MATCH_LIMIT = 12;
+
 /** Max pantry ingredient names to use as RecipeAPI search queries per refresh. */
 export const PANTRY_DISCOVERY_MAX_QUERIES = 5;
 

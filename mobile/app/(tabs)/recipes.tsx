@@ -16,10 +16,11 @@ import { useApp } from '../../context/AppContext';
 import { splitDiscoveryCookNowLists } from '../../lib/recipeDiscovery/pantryCookNow';
 import type { PantryDiscoverySuggestion } from '../../lib/recipeDiscovery/pantrySuggestions';
 import {
-  filterRankedMatches,
+  filterRankedMatchesWithPartialFallback,
   type PantryMatchIndex,
   type RecipePantryFilterMode,
 } from '../../lib/recipeMatch';
+import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { nutritionLabel } from '../../lib/nutrition';
 import type { Recipe } from '../../types/mealprep';
 
@@ -83,6 +84,7 @@ function RecipeListSection({
   pantryRecipeMatches,
   isOnMealPlan,
   toggleMealPlanKitchenRecipe,
+  onAddMissing,
 }: {
   title: string;
   subtitle: string;
@@ -92,6 +94,7 @@ function RecipeListSection({
   pantryRecipeMatches: PantryMatchIndex;
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
   toggleMealPlanKitchenRecipe: (recipeId: string) => Promise<void>;
+  onAddMissing?: (recipeId: string) => void;
 }) {
   if (list.length === 0) return null;
   return (
@@ -101,9 +104,10 @@ function RecipeListSection({
       {list.map((recipe) => {
         const onPlan = isOnMealPlan({ recipeSlug: recipe.id });
         const match = pantryRecipeMatches.byRecipeId.get(recipe.id);
+        const missingCount = match?.missingCount ?? 0;
         return (
-          <Pressable key={recipe.id} onPress={() => setActiveId(recipe.id)}>
-            <Card className={`mb-3 ${activeId === recipe.id ? 'border-primary' : ''}`}>
+          <Card key={recipe.id} className={`mb-3 ${activeId === recipe.id ? 'border-primary' : ''}`}>
+            <Pressable onPress={() => setActiveId(recipe.id)}>
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 pr-2">
                   <Text className="text-xs font-semibold uppercase text-primary">{recipe.tag}</Text>
@@ -123,8 +127,16 @@ function RecipeListSection({
                   </Text>
                 </Pressable>
               </View>
-            </Card>
-          </Pressable>
+            </Pressable>
+            {missingCount > 0 && onAddMissing ? (
+              <Pressable
+                onPress={() => onAddMissing(recipe.id)}
+                className="mt-3 items-center rounded-xl bg-primary py-3"
+              >
+                <Text className="text-sm font-bold text-on-primary">{RECIPES_COPY.recipeCard.addMissingCta}</Text>
+              </Pressable>
+            ) : null}
+          </Card>
         );
       })}
     </>
@@ -165,25 +177,38 @@ export default function RecipesScreen() {
     onboarding.notifyTutorialStepComplete('recipes');
   }
 
+  const kitchenRecipes = useMemo(() => kitchenRecipesForPantryMatch(recipes), [recipes]);
+
   const filteredKitchenRecipes = useMemo(() => {
     if (pantryEmpty) return [];
-    const mode = pantryFilter === 'best_match' ? 'all' : pantryFilter;
     const minMatchedCount =
       pantryFilter === 'all'
         ? 0
         : RECIPES_TAB.hideZeroPantryMatches
           ? DEFAULT_MIN_MATCHED_INGREDIENTS
           : 0;
-    const ranked = filterRankedMatches(pantryRecipeMatches.ranked, mode, minPantryMatchPercent, {
-      minMatchedCount,
-      pantryItemCount: pantry.length,
-    });
+    const { matches: ranked } = filterRankedMatchesWithPartialFallback(
+      pantryRecipeMatches.ranked,
+      pantryFilter,
+      minPantryMatchPercent,
+      {
+        minMatchedCount,
+        pantryItemCount: pantry.length,
+      },
+    );
     const rankedIds = ranked.map((m) => m.recipeId);
     const idSet = new Set(rankedIds);
-    const list = recipes.filter((r) => idSet.has(r.id));
+    const list = kitchenRecipes.filter((r) => idSet.has(r.id));
     list.sort((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
     return list;
-  }, [minPantryMatchPercent, pantry.length, pantryEmpty, pantryFilter, pantryRecipeMatches.ranked, recipes]);
+  }, [
+    minPantryMatchPercent,
+    pantry.length,
+    pantryEmpty,
+    pantryFilter,
+    pantryRecipeMatches.ranked,
+    kitchenRecipes,
+  ]);
 
   const cookNowRecipes = useMemo(
     () =>
@@ -199,12 +224,15 @@ export default function RecipesScreen() {
 
   const filteredDiscoverySuggestions = useMemo(() => {
     if (pantryEmpty) return [];
-    return discoverySuggestions.filter(
-      (row) =>
-        row.match.percentMatch >= minPantryMatchPercent &&
-        row.match.matchedCount >= DEFAULT_MIN_MATCHED_INGREDIENTS,
+    const { matches } = filterRankedMatchesWithPartialFallback(
+      discoverySuggestions.map((row) => row.match),
+      pantryFilter,
+      minPantryMatchPercent,
+      { pantryItemCount: pantry.length },
     );
-  }, [discoverySuggestions, minPantryMatchPercent, pantryEmpty]);
+    const allowed = new Set(matches.map((m) => m.recipeId));
+    return discoverySuggestions.filter((row) => allowed.has(row.match.recipeId));
+  }, [discoverySuggestions, minPantryMatchPercent, pantry.length, pantryEmpty, pantryFilter]);
 
   const { cookNow: cookNowDiscovery, needItems: needItemsDiscovery } = useMemo(
     () =>
@@ -236,7 +264,7 @@ export default function RecipesScreen() {
     }
   }, [activeId, filteredKitchenRecipes]);
 
-  const active = recipes.find((r) => r.id === activeId);
+  const active = kitchenRecipes.find((r) => r.id === activeId);
   const activeMatch = active ? pantryRecipeMatches.byRecipeId.get(active.id) : undefined;
   const servings = active ? servingOverrides[active.id] ?? active.servings : 4;
   const scale = active && active.servings > 0 ? servings / active.servings : 1;
@@ -291,6 +319,7 @@ export default function RecipesScreen() {
           pantryRecipeMatches={pantryRecipeMatches}
           isOnMealPlan={isOnMealPlan}
           toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+          onAddMissing={addMissingRecipeIngredientsToGrocery}
         />
       ) : null}
 
@@ -312,6 +341,7 @@ export default function RecipesScreen() {
           pantryRecipeMatches={pantryRecipeMatches}
           isOnMealPlan={isOnMealPlan}
           toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+          onAddMissing={addMissingRecipeIngredientsToGrocery}
         />
       ) : null}
 
