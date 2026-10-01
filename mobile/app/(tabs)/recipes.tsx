@@ -16,10 +16,11 @@ import { useApp } from '../../context/AppContext';
 import { splitDiscoveryCookNowLists } from '../../lib/recipeDiscovery/pantryCookNow';
 import type { PantryDiscoverySuggestion } from '../../lib/recipeDiscovery/pantrySuggestions';
 import {
-  filterRankedMatches,
+  filterRankedMatchesWithPartialFallback,
   type PantryMatchIndex,
   type RecipePantryFilterMode,
 } from '../../lib/recipeMatch';
+import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { nutritionLabel } from '../../lib/nutrition';
 import type { Recipe } from '../../types/mealprep';
 
@@ -165,25 +166,38 @@ export default function RecipesScreen() {
     onboarding.notifyTutorialStepComplete('recipes');
   }
 
+  const kitchenRecipes = useMemo(() => kitchenRecipesForPantryMatch(recipes), [recipes]);
+
   const filteredKitchenRecipes = useMemo(() => {
     if (pantryEmpty) return [];
-    const mode = pantryFilter === 'best_match' ? 'all' : pantryFilter;
     const minMatchedCount =
       pantryFilter === 'all'
         ? 0
         : RECIPES_TAB.hideZeroPantryMatches
           ? DEFAULT_MIN_MATCHED_INGREDIENTS
           : 0;
-    const ranked = filterRankedMatches(pantryRecipeMatches.ranked, mode, minPantryMatchPercent, {
-      minMatchedCount,
-      pantryItemCount: pantry.length,
-    });
+    const { matches: ranked } = filterRankedMatchesWithPartialFallback(
+      pantryRecipeMatches.ranked,
+      pantryFilter,
+      minPantryMatchPercent,
+      {
+        minMatchedCount,
+        pantryItemCount: pantry.length,
+      },
+    );
     const rankedIds = ranked.map((m) => m.recipeId);
     const idSet = new Set(rankedIds);
-    const list = recipes.filter((r) => idSet.has(r.id));
+    const list = kitchenRecipes.filter((r) => idSet.has(r.id));
     list.sort((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
     return list;
-  }, [minPantryMatchPercent, pantry.length, pantryEmpty, pantryFilter, pantryRecipeMatches.ranked, recipes]);
+  }, [
+    minPantryMatchPercent,
+    pantry.length,
+    pantryEmpty,
+    pantryFilter,
+    pantryRecipeMatches.ranked,
+    kitchenRecipes,
+  ]);
 
   const cookNowRecipes = useMemo(
     () =>
@@ -199,12 +213,15 @@ export default function RecipesScreen() {
 
   const filteredDiscoverySuggestions = useMemo(() => {
     if (pantryEmpty) return [];
-    return discoverySuggestions.filter(
-      (row) =>
-        row.match.percentMatch >= minPantryMatchPercent &&
-        row.match.matchedCount >= DEFAULT_MIN_MATCHED_INGREDIENTS,
+    const { matches } = filterRankedMatchesWithPartialFallback(
+      discoverySuggestions.map((row) => row.match),
+      pantryFilter,
+      minPantryMatchPercent,
+      { pantryItemCount: pantry.length },
     );
-  }, [discoverySuggestions, minPantryMatchPercent, pantryEmpty]);
+    const allowed = new Set(matches.map((m) => m.recipeId));
+    return discoverySuggestions.filter((row) => allowed.has(row.match.recipeId));
+  }, [discoverySuggestions, minPantryMatchPercent, pantry.length, pantryEmpty, pantryFilter]);
 
   const { cookNow: cookNowDiscovery, needItems: needItemsDiscovery } = useMemo(
     () =>
@@ -236,7 +253,7 @@ export default function RecipesScreen() {
     }
   }, [activeId, filteredKitchenRecipes]);
 
-  const active = recipes.find((r) => r.id === activeId);
+  const active = kitchenRecipes.find((r) => r.id === activeId);
   const activeMatch = active ? pantryRecipeMatches.byRecipeId.get(active.id) : undefined;
   const servings = active ? servingOverrides[active.id] ?? active.servings : 4;
   const scale = active && active.servings > 0 ? servings / active.servings : 1;

@@ -19,11 +19,15 @@ export {
   buildPantryMatchIndex,
   compareRecipePantryMatches,
   filterRankedMatches,
+  filterRankedMatchesWithPartialFallback,
   scoreRecipeAgainstPantry,
   topPantryRecipeRecommendations,
   type FilterRankedMatchesOptions,
+  type FilterRankedMatchesWithFallbackOptions,
+  type FilterRankedMatchesWithFallbackResult,
   type MatchedIngredient,
   type PantryMatchIndex,
   type RecipePantryFilterMode,
   type RecipePantryMatch,
 } from './match';
+export { builtInKitchenCatalogRecipes, kitchenRecipesForPantryMatch } from './kitchenCatalogMerge';
