@@ -9,7 +9,12 @@ import { fileURLToPath } from 'node:url';
 import { buildPantryDeductionLines, applyPantryDeductions } from '../lib/mealPlan/pantryDeduction';
 import { mergeGroceryWithMissing } from '../lib/recipeMatch/groceryFromMissing';
 import { buildPantryMatchIndex, filterRankedMatches, scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
-import { expandSynonymKeys, fuzzyNameScore } from '../lib/recipeMatch/normalize';
+import {
+  canonicalIngredientPhrase,
+  expandSynonymKeys,
+  fuzzyNameScore,
+  ingredientMatchScore,
+} from '../lib/recipeMatch/normalize';
 import type { PantryItem, Recipe, RecipeIngredient } from '../types/mealprep';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -59,6 +64,30 @@ assert(fuzzyNameScore('rice', 'Rice vinegar') < 0.72, 'rice vs rice vinegar');
 assert(fuzzyNameScore('Bell pepper', 'pepper') < 0.72, 'bell pepper vs pantry pepper only');
 assert(fuzzyNameScore('White pepper', 'bell pepper') < 0.72, 'white pepper vs bell pepper');
 
+// --- hierarchical identity (cuts / forms) ---
+assert(
+  canonicalIngredientPhrase('Boneless chicken breast 2 lb') === 'chicken breast',
+  'package chicken breast normalizes to chicken breast',
+);
+assert(
+  ingredientMatchScore('chicken breast', 'Boneless chicken breast 2 lb') >= 0.72,
+  'specific pantry satisfies specific recipe',
+);
+assert(
+  ingredientMatchScore('chicken breast', 'chicken') < 0.72,
+  'generic chicken must not satisfy chicken breast recipe',
+);
+assert(
+  ingredientMatchScore('chicken breast', 'chicken thigh') < 0.72,
+  'wrong cut must not satisfy chicken breast recipe',
+);
+assert(ingredientMatchScore('chicken', 'chicken breast') >= 0.72, 'specific pantry satisfies generic chicken recipe');
+assert(ingredientMatchScore('ground beef', 'beef') < 0.72, 'generic beef must not satisfy ground beef recipe');
+assert(ingredientMatchScore('beef', 'ground beef') >= 0.72, 'ground beef satisfies generic beef recipe');
+assert(ingredientMatchScore('cheddar', 'cheese') < 0.72, 'generic cheese must not satisfy cheddar recipe');
+assert(ingredientMatchScore('cheese', 'cheddar') >= 0.72, 'cheddar satisfies generic cheese recipe');
+assert(ingredientMatchScore('cheddar', 'mozzarella') < 0.72, 'cheddar must not match mozzarella');
+
 // --- live catalog repro ---
 const recipesPath = join(mobileRoot, 'test-fixtures', 'live-recipes.json');
 const raw = JSON.parse(readFileSync(recipesPath, 'utf8')) as Array<{
@@ -83,7 +112,7 @@ const recipes: Recipe[] = raw.map((r) => ({
   createdAt: '',
 }));
 
-const flowPantry = pantryFrom(['chicken breast', 'rice', 'onion', 'garlic', 'bell pepper']);
+const flowPantry = pantryFrom(['chicken breast', 'jasmine rice', 'onion', 'garlic', 'bell pepper']);
 const { ranked } = buildPantryMatchIndex(recipes, flowPantry);
 const shown = filterRankedMatches(ranked, 'all', 50, {
   minMatchedCount: 2,
@@ -99,12 +128,53 @@ assert(
   'shrimp must not match chicken breast',
 );
 
+const realisticPantry = pantryFrom([
+  'Boneless chicken breast 2 lb',
+  'Jasmine rice 5 lb bag',
+  'Yellow onion 3 lb',
+  'Garlic bulb',
+  'Bell peppers tri-color',
+  'Broccoli crowns',
+  'Ground beef 93% lean 1 lb',
+  'Shredded cheddar cheese 8 oz',
+  'Large eggs dozen',
+  'Whole milk gallon',
+  'Sour cream 16 oz',
+  'Tortillas flour 10 ct',
+  'Black beans canned',
+  'Diced tomatoes 14.5 oz',
+  'Chicken broth 32 oz',
+  'Olive oil',
+  'Salt',
+  'Black pepper grinder',
+  'Pasta penne 16 oz',
+  'Marinara sauce jar',
+  'Lemons bag',
+  'Limes',
+  'Fresh cilantro bunch',
+  'Romaine lettuce head',
+  'Greek yogurt plain',
+]);
+const realisticIndex = buildPantryMatchIndex(recipes, realisticPantry);
+const realisticShown = filterRankedMatches(realisticIndex.ranked, 'all', 0, {
+  minMatchedCount: 2,
+  pantryItemCount: realisticPantry.length,
+});
+assert(
+  realisticShown.length >= 1,
+  `realistic 25-item pantry should surface kitchen recipes, got ${realisticShown.length}`,
+);
+assert(
+  realisticShown.some((m) => m.recipeName.includes('Lemon Herb Chicken')),
+  'realistic pantry should match lemon herb chicken',
+);
+
 // --- Made it deduction repro ---
 const lemon = recipes.find((r) => r.id === 'lemon-chicken');
 assert(lemon, 'lemon-chicken fixture');
 const madePantry: PantryItem[] = [
   ['chicken breast', 2, 'lb'],
-  ['rice', 5, 'lb'],
+  ['jasmine rice', 5, 'lb'],
   ['onion', 3, 'each'],
   ['garlic', 1, 'each'],
   ['bell pepper', 2, 'each'],
@@ -130,7 +200,7 @@ assert(
 const lines = buildPantryDeductionLines(match, lemon!, {}, new Set());
 const { nextPantry } = applyPantryDeductions(madePantry, lines);
 const chickenAfter = nextPantry.find((p) => p.name === 'chicken breast');
-const riceAfter = nextPantry.find((p) => p.name === 'rice');
+const riceAfter = nextPantry.find((p) => p.name === 'jasmine rice');
 assert(chickenAfter && chickenAfter.quantity > 0 && chickenAfter.quantity < 2, 'chicken partially deducted in lb');
 assert(riceAfter && riceAfter.quantity === 5, 'rice left unchanged when cups vs lb');
 

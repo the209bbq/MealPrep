@@ -1,11 +1,11 @@
 import type { PantryItem, Recipe, RecipeIngredient } from '../../types/mealprep';
 import {
   DEFAULT_MIN_MATCHED_INGREDIENTS,
-  DEFAULT_MIN_PANTRY_MATCH_PERCENT,
+  KITCHEN_LIST_DEFAULT_MIN_PERCENT,
   RECIPE_MATCHING,
 } from '../../config/recipeMatching';
 import { FUZZY_MATCH_THRESHOLD, PANTRY_STAPLES } from '../../config/recipeMatchingConfig';
-import { expandSynonymKeys, fuzzyNameScore, normalizeIngredientName } from './normalize';
+import { fuzzyNameScore, ingredientMatchScore, normalizeIngredientName } from './normalize';
 import { findPantryItemsForIngredient, totalPantryQuantityInUnit } from './pantryStock';
 
 export interface MatchedIngredient {
@@ -43,29 +43,12 @@ function isConfiguredStaple(name: string, ingredientId: string): boolean {
   return false;
 }
 
-function pantryLookupKeys(item: PantryItem): string[] {
-  const keys = new Set<string>();
-  keys.add(item.ingredientId);
-  keys.add(normalizeIngredientName(item.ingredientId.replace(/-/g, ' ')));
-  for (const k of expandSynonymKeys(item.name)) keys.add(k);
-  for (const k of expandSynonymKeys(item.ingredientId.replace(/-/g, ' '))) keys.add(k);
-  return [...keys];
-}
-
-function ingredientLookupKeys(ing: RecipeIngredient): string[] {
-  const keys = new Set<string>();
-  keys.add(ing.ingredientId);
-  keys.add(normalizeIngredientName(ing.ingredientId.replace(/-/g, ' ')));
-  for (const k of expandSynonymKeys(ing.name)) keys.add(k);
-  return [...keys];
-}
-
-function keysOverlap(ingKeys: string[], pantryKeys: string[]): boolean {
-  const pantrySet = new Set(pantryKeys.filter(Boolean));
-  for (const ik of ingKeys) {
-    if (ik && pantrySet.has(ik)) return true;
-  }
-  return false;
+function keysOverlap(ingredient: RecipeIngredient, item: PantryItem): boolean {
+  const idAsName = item.ingredientId.replace(/-/g, ' ');
+  return (
+    ingredientMatchScore(ingredient.name, item.name) >= FUZZY_MATCH_THRESHOLD ||
+    ingredientMatchScore(ingredient.name, idAsName) >= FUZZY_MATCH_THRESHOLD
+  );
 }
 
 function findPantryMatch(
@@ -77,15 +60,18 @@ function findPantryMatch(
     return { item: null, reason: 'fuzzy_name', score: 0 };
   }
 
-  const ingKeys = ingredientLookupKeys(ingredient);
   for (const item of pantry) {
     if (usedPantryIds.has(item.id)) continue;
     if (item.ingredientId === ingredient.ingredientId) {
       return { item, reason: 'ingredient_id', score: 1 };
     }
-    const pantryKeys = pantryLookupKeys(item);
-    if (keysOverlap(ingKeys, pantryKeys)) {
-      return { item, reason: 'ingredient_id', score: 0.98 };
+    if (keysOverlap(ingredient, item)) {
+      const score = Math.max(
+        ingredientMatchScore(ingredient.name, item.name),
+        ingredientMatchScore(ingredient.name, item.ingredientId.replace(/-/g, ' ')),
+        0.98,
+      );
+      return { item, reason: 'ingredient_id', score };
     }
   }
 
@@ -217,7 +203,7 @@ export function topPantryRecipeRecommendations(
 ): RecipePantryMatch[] {
   if (pantry.length === 0) return [];
   const { ranked } = buildPantryMatchIndex(recipes, pantry);
-  return filterRankedMatches(ranked, 'all', DEFAULT_MIN_PANTRY_MATCH_PERCENT, {
+  return filterRankedMatches(ranked, 'all', KITCHEN_LIST_DEFAULT_MIN_PERCENT, {
     minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
     pantryItemCount: pantry.length,
   }).slice(0, limit);

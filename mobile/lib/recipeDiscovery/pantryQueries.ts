@@ -1,7 +1,7 @@
-import { PANTRY_STAPLES } from '../recipeMatch/config';
-import { normalizeIngredientName, tokenizeIngredientName } from '../recipeMatch/normalize';
-import type { PantryItem } from '../../types/mealprep';
 import { PANTRY_DISCOVERY_MAX_QUERIES } from '../../config/recipeMatching';
+import { PANTRY_STAPLES } from '../recipeMatch/config';
+import { canonicalIngredientSearchLabel, tokenizeIngredientName } from '../recipeMatch/normalize';
+import type { PantryItem } from '../../types/mealprep';
 
 const STAPLE_TOKEN_SET = new Set(
   PANTRY_STAPLES.flatMap((s) => tokenizeIngredientName(s)),
@@ -26,10 +26,10 @@ export function pantryIngredientSearchQueries(
     .sort((a, b) => b.name.trim().length - a.name.trim().length);
 
   for (const item of candidates) {
-    const normalized = normalizeIngredientName(item.name);
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    queries.push(item.name.trim());
+    const label = canonicalIngredientSearchLabel(item.name).toLowerCase();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    queries.push(label);
     if (queries.length >= maxQueries) break;
   }
 
