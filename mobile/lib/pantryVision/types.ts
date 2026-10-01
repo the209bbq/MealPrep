@@ -47,4 +47,6 @@ export interface PreparedPantryImage {
   byteLength: number;
   /** SHA-256 of payload; set before analyze for scan cache. */
   contentHash?: string;
+  /** Non-blocking quality hints; scan still uploads to vision. */
+  qualityWarnings?: string[];
 }

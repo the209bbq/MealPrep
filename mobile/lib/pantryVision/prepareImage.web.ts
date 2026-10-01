@@ -1,6 +1,14 @@
 import { PHOTO_SCAN } from '../../config/appConfig';
-import { inferImageMimeType, isHeicMimeType } from '../web/inferImageMimeType';
-import { assessGrayscaleQuality, computeLongEdgeResize, PantryImageQualityError } from './prepareImageShared';
+import {
+  inferImageMimeType,
+  isHeicMimeType,
+  resolveImageMimeType,
+} from '../web/inferImageMimeType';
+import {
+  computeLongEdgeResize,
+  evaluateImageQuality,
+  PantryImageQualityError,
+} from './prepareImageShared';
 import type { PreparedPantryImage } from './types';
 
 function readFileAsDataUrl(file: Blob): Promise<string> {
@@ -46,9 +54,8 @@ async function heicBlobToJpegBlob(file: File): Promise<Blob> {
   return Array.isArray(converted) ? converted[0]! : converted;
 }
 
-/** Decode camera-roll HEIC/HEIF and other formats browsers cannot paint directly. */
-async function fileToDecodableBlob(file: File): Promise<Blob> {
-  const mimeType = inferImageMimeType(file);
+/** Decode camera-roll HEIC/HEIF when the browser cannot paint them directly. */
+async function fileToDecodableBlob(file: File, mimeType: string): Promise<Blob> {
   if (isHeicMimeType(mimeType)) {
     try {
       return await heicBlobToJpegBlob(file);
@@ -56,19 +63,19 @@ async function fileToDecodableBlob(file: File): Promise<Blob> {
       /* fall through — try native decode (Safari) */
     }
   }
-  if (!file.type || file.type === 'application/octet-stream') {
+  if (!file.type || file.type === 'application/octet-stream' || file.type === 'image/*') {
     return new Blob([file], { type: mimeType });
   }
   return file;
 }
 
 async function loadBitmap(file: File): Promise<ImageBitmap> {
-  const decodable = await fileToDecodableBlob(file);
+  const mimeType = await resolveImageMimeType(file);
+  const decodable = await fileToDecodableBlob(file, mimeType);
   try {
     return await blobToImageBitmap(decodable);
   } catch {
-    const mime = inferImageMimeType(file);
-    if (isHeicMimeType(mime)) {
+    if (isHeicMimeType(mimeType)) {
       throw new Error('Could not load HEIC photo. Try JPG or PNG, or turn off HEIC in camera settings.');
     }
     throw new Error('Could not load image. Try JPG or PNG.');
@@ -84,16 +91,18 @@ function canvasToJpegBase64(canvas: HTMLCanvasElement, quality: number): string 
   return base64;
 }
 
-function assessCanvasQuality(canvas: HTMLCanvasElement): ReturnType<typeof assessGrayscaleQuality> {
+function evaluateCanvasQuality(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d');
-  if (!ctx) return { ok: true, meanLuminance: 0.5, laplacianVariance: 100 };
+  if (!ctx) {
+    return evaluateImageQuality(new Float32Array([0.5]), 1, 1);
+  }
   const { width, height } = canvas;
   const { data } = ctx.getImageData(0, 0, width, height);
   const luma = new Float32Array(width * height);
   for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
     luma[p] = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
   }
-  return assessGrayscaleQuality(luma, width, height);
+  return evaluateImageQuality(luma, width, height);
 }
 
 export async function preparePantryImageFromFile(file: File): Promise<PreparedPantryImage> {
@@ -116,13 +125,12 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
   ctx.drawImage(bitmap, 0, 0, targetW, targetH);
   bitmap.close?.();
 
-  const qualityAssessment = assessCanvasQuality(canvas);
-  if (!qualityAssessment.ok && qualityAssessment.rejectReason === 'too_dark') {
-    throw new PantryImageQualityError('too_dark', PHOTO_SCAN.imageTooDarkMessage);
+  const qualityAssessment = evaluateCanvasQuality(canvas);
+  if (qualityAssessment.hardReject === 'blank') {
+    throw new PantryImageQualityError('blank', qualityAssessment.hardRejectMessage ?? PHOTO_SCAN.imageBlankMessage);
   }
-  if (!qualityAssessment.ok && qualityAssessment.rejectReason === 'too_blurry') {
-    throw new PantryImageQualityError('too_blurry', PHOTO_SCAN.imageTooBlurryMessage);
-  }
+  const qualityWarnings =
+    qualityAssessment.warnings.length > 0 ? qualityAssessment.warnings : undefined;
 
   let quality = PHOTO_SCAN.jpegQuality;
   let base64 = canvasToJpegBase64(canvas, quality);
@@ -152,6 +160,7 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
     base64,
     byteLength,
     contentHash: undefined,
+    qualityWarnings,
   };
 }
 
@@ -168,7 +177,7 @@ export async function preparePantryImage(uri: string): Promise<PreparedPantryIma
     throw new Error('Could not read image from picker. Try choosing the photo again.');
   }
 
-  const mimeType = blob.type || inferImageMimeType({ name: 'photo.jpg', type: blob.type });
+  const mimeType = blob.type ? inferImageMimeType({ name: 'photo.jpg', type: blob.type }) : 'image/jpeg';
   const file = new File([blob], 'pantry.jpg', { type: mimeType });
   return preparePantryImageFromFile(file);
 }
