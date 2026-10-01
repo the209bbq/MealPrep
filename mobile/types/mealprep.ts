@@ -22,7 +22,6 @@ export const FEATURE_FLAG_KEYS = [
   'grocerySync',
   'smartShop',
   'maintenanceMode',
-  'recipeMasterEdit',
 ] as const;
 export type FeatureFlagKey = (typeof FEATURE_FLAG_KEYS)[number];
 

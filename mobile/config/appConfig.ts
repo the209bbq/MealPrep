@@ -62,7 +62,6 @@ export const FEATURE_FLAG_DEFAULTS: FeatureFlags = {
   grocerySync: true,
   smartShop: true,
   maintenanceMode: false,
-  recipeMasterEdit: true,
 };
 
 /** Smart Shop / store pricing (no secrets in repo — use env + optional Supabase Edge Function). */
@@ -133,6 +132,18 @@ export const isPantryVisionConfigured = (): boolean =>
 export const isRecipeDiscoveryConfigured = (): boolean =>
   RECIPE_DISCOVERY.enabled && (isDemoMode() || getRecipeApiProxyUrl().length > 0);
 
+/** USDA FoodData Central (API key stays on Supabase Edge Function `usda-proxy`). */
+export const USDA_PROXY = {
+  enabled: true,
+  functionName: 'usda-proxy',
+  cacheTtlMs: 10 * 60 * 1000,
+  /** PWA origin allowed by the Edge Function CORS policy. */
+  githubPagesOrigin: 'https://the209bbq.github.io',
+} as const;
+
+export const isUsdaProxyConfigured = (): boolean =>
+  USDA_PROXY.enabled && !isDemoMode();
+
 export const getKrogerProxyUrl = (): string => {
   const override = SMART_SHOP.krogerProxyUrl.trim();
   if (override) return override;
@@ -161,10 +172,6 @@ export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; bl
   maintenanceMode: {
     title: 'Maintenance mode',
     blurb: 'Non-admins see a full-screen maintenance page. Admins keep working.',
-  },
-  recipeMasterEdit: {
-    title: 'Recipe master table',
-    blurb: 'Allow admins to edit the global recipe catalog.',
   },
 };
 
@@ -200,12 +207,12 @@ export const DEMO_USERS: Record<UserRole, { id: string; email: string; name: str
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-/** USDA FoodData Central — same endpoints as New/nutrition.js */
+/** USDA FoodData Central — direct fallback only (no repo secrets; prefer `usda-proxy`). */
 export const USDA_FDC_SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 export const USDA_FDC_FOOD_URL = 'https://api.nal.usda.gov/fdc/v1/food';
 export const USDA_DEMO_API_KEY = 'DEMO_KEY';
-export const USDA_FDC_API_KEY = (process.env.EXPO_PUBLIC_USDA_FDC_API_KEY ?? '').trim();
 export const USDA_SETTINGS_STORAGE_KEY = 'mealprep.usdaApiKey';
+export const USDA_SEARCH_DATA_TYPE = 'Foundation,SR Legacy,Survey (FNDDS)';
 
 export const isSupabaseConfigured = (): boolean =>
   SUPABASE_URL.trim().length > 0 && SUPABASE_ANON_KEY.trim().length > 0;
