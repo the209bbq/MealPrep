@@ -1,5 +1,7 @@
+import type { ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, Text, View } from 'react-native';
+import { HydrationSafeIonicon } from './HydrationSafeIonicon';
 import { THEME } from '../config/appConfig';
 import type { HomeNextStep } from '../lib/home/nextStep';
 
@@ -8,7 +10,7 @@ interface NextStepCardProps {
   onPress: () => void;
 }
 
-const ICONS: Record<HomeNextStep['kind'], keyof typeof Ionicons.glyphMap> = {
+const ICONS: Record<HomeNextStep['kind'], ComponentProps<typeof Ionicons>['name']> = {
   scan_pantry: 'camera',
   shop_list: 'pricetags',
   add_missing: 'list',
@@ -22,7 +24,7 @@ export function NextStepCard({ step, onPress }: NextStepCardProps) {
       <Text className="text-xs font-bold uppercase tracking-widest text-primary-dark">Next step</Text>
       <View className="mt-3 flex-row items-start gap-3">
         <View className="rounded-2xl bg-primary-light p-3">
-          <Ionicons name={ICONS[step.kind]} size={26} color={THEME.primary} />
+          <HydrationSafeIonicon name={ICONS[step.kind]} size={26} color={THEME.primary} />
         </View>
         <View className="flex-1">
           <Text className="text-xl font-bold leading-snug text-ink">{step.title}</Text>

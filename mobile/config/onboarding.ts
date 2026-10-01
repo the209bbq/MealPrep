@@ -1,5 +1,6 @@
 import type { Href } from 'expo-router';
 import type { HandsOnTutorialStepId } from '../lib/onboarding/tutorialProgress';
+import { APP_ROUTES } from './appRoutes';
 
 export type OnboardingBenefitId = 'scan' | 'recipes' | 'grocery' | 'smartShop';
 
@@ -119,7 +120,7 @@ export const ONBOARDING_COPY: OnboardingCopy = {
           'Start with a quick photo of your pantry, fridge, or spice rack. We turn it into ingredients you can cook from.',
         primaryCta: 'Scan an item now',
         secondaryCta: 'Add one by hand',
-        primaryHref: '/pantry',
+        primaryHref: APP_ROUTES.pantry,
         primaryPantryAction: 'scan',
       },
       {
@@ -128,7 +129,7 @@ export const ONBOARDING_COPY: OnboardingCopy = {
         title: 'See recipes that fit',
         body: 'Recipes are ranked by what is already in your kitchen. Open one you like or add it to Meals to make.',
         primaryCta: 'See my recipes',
-        primaryHref: '/recipes',
+        primaryHref: APP_ROUTES.recipes,
       },
       {
         id: 'grocery',
@@ -136,7 +137,7 @@ export const ONBOARDING_COPY: OnboardingCopy = {
         title: 'Your grocery list fills itself',
         body: 'When a recipe needs something you do not have, it lands on your grocery list automatically.',
         primaryCta: 'Open my list',
-        primaryHref: '/grocery',
+        primaryHref: APP_ROUTES.grocery,
       },
       {
         id: 'shop',
@@ -144,7 +145,7 @@ export const ONBOARDING_COPY: OnboardingCopy = {
         title: 'Compare nearby stores',
         body: 'Smart Shop totals your open list at stores near you so you can pick the cheapest run.',
         primaryCta: 'Compare stores',
-        primaryHref: '/smart-shop',
+        primaryHref: APP_ROUTES.smartShop,
       },
     ],
     recap: {
@@ -164,28 +165,28 @@ export const ONBOARDING_COPY: OnboardingCopy = {
       title: 'Your kitchen hub',
       body: 'Scan your pantry first — we will show your next step here.',
       ctaLabel: 'Scan pantry',
-      href: '/pantry',
+      href: APP_ROUTES.pantry,
     },
     pantry: {
       icon: 'camera-outline',
       title: 'Your pantry is empty',
       body: 'Scan a shelf or add a few items so we know what you can cook.',
       ctaLabel: 'Scan pantry',
-      href: '/pantry',
+      href: APP_ROUTES.pantry,
     },
     recipes: {
       icon: 'restaurant-outline',
       title: 'Add your pantry to see recipes',
       body: 'We match meals to what you already have — start with a quick scan.',
       ctaLabel: 'Go to Pantry',
-      href: '/pantry',
+      href: APP_ROUTES.pantry,
     },
     grocery: {
       icon: 'cart-outline',
       title: 'Nothing on your list yet',
       body: 'Pick a recipe or add missing items from your pantry — we build the list for you.',
       ctaLabel: 'Browse recipes',
-      href: '/recipes',
+      href: APP_ROUTES.recipes,
     },
   },
 };

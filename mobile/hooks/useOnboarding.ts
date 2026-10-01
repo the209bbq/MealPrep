@@ -1,6 +1,7 @@
 import { router, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { APP_ROUTES } from '../config/appRoutes';
 import { ONBOARDING_COPY } from '../config/onboarding';
 import {
   readTourCompleted,
@@ -22,6 +23,7 @@ import {
   type HandsOnTutorialProgress,
   type HandsOnTutorialStepId,
 } from '../lib/onboarding/tutorialProgress';
+import { useHydrated } from './useHydrated';
 
 export type TutorialPantryLaunch = 'scan' | 'manual';
 
@@ -35,7 +37,7 @@ function tutorialUserScope(session: Session | null): string {
 
 function hrefWithPantryAction(href: Href, action?: TutorialPantryLaunch): Href {
   if (!action) return href;
-  const base = typeof href === 'string' ? href : href.pathname ?? '/pantry';
+  const base = typeof href === 'string' ? href : href.pathname ?? APP_ROUTES.pantry;
   const query = action === 'scan' ? 'tutorialScan=1' : 'tutorialManual=1';
   return `${base}?${query}` as Href;
 }
@@ -46,20 +48,30 @@ export function useOnboarding(input: {
 }) {
   const { session, authReady } = input;
   const signedIn = session != null;
+  const hydrated = useHydrated();
   const userScope = tutorialUserScope(session);
 
-  const [welcomeDismissed, setWelcomeDismissed] = useState(() => readWelcomeDismissed());
-  const [tourCompleted, setTourCompleted] = useState(() => readTourCompleted());
-  const [tourQueued, setTourQueued] = useState(() => readTourQueued());
-  const [progress, setProgress] = useState<HandsOnTutorialProgress>(() => readTutorialProgress(userScope));
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const [tourCompleted, setTourCompleted] = useState(false);
+  const [tourQueued, setTourQueued] = useState(false);
+  const [progress, setProgress] = useState<HandsOnTutorialProgress>(() => defaultTutorialProgress());
   const hadSessionRef = useRef(signedIn);
   const scopeRef = useRef(userScope);
 
   useEffect(() => {
+    if (!hydrated) return;
+    setWelcomeDismissed(readWelcomeDismissed());
+    setTourCompleted(readTourCompleted());
+    setTourQueued(readTourQueued());
+    setProgress(readTutorialProgress(userScope));
+  }, [hydrated, userScope]);
+
+  useEffect(() => {
     if (scopeRef.current === userScope) return;
     scopeRef.current = userScope;
+    if (!hydrated) return;
     setProgress(readTutorialProgress(userScope));
-  }, [userScope]);
+  }, [hydrated, userScope]);
 
   const persistProgress = useCallback(
     (next: HandsOnTutorialProgress) => {
@@ -69,8 +81,8 @@ export function useOnboarding(input: {
     [userScope],
   );
 
-  const showWelcome = authReady && !signedIn && !welcomeDismissed;
-  const showTour = authReady && tourQueued && !tourCompleted && !showWelcome;
+  const showWelcome = hydrated && authReady && !signedIn && !welcomeDismissed;
+  const showTour = hydrated && authReady && tourQueued && !tourCompleted && !showWelcome;
   const showTutorialModal = showTour && !progress.taskInProgress;
   const showTutorialPill = showTour && progress.taskInProgress;
 
@@ -83,20 +95,24 @@ export function useOnboarding(input: {
     writeTourQueued(true);
   }, [signedIn, tourCompleted]);
 
-  const dismissWelcomeForBrowse = useCallback(() => {
-    setWelcomeDismissed(true);
-    writeWelcomeDismissed(true);
+  const queueTutorial = useCallback(() => {
     if (!tourCompleted) {
       setTourQueued(true);
       writeTourQueued(true);
     }
   }, [tourCompleted]);
 
+  const dismissWelcomeForBrowse = useCallback(() => {
+    setWelcomeDismissed(true);
+    writeWelcomeDismissed(true);
+    queueTutorial();
+  }, [queueTutorial]);
+
   const dismissWelcomeForSignUp = useCallback(() => {
     setWelcomeDismissed(true);
     writeWelcomeDismissed(true);
-    router.push('/admin');
-  }, []);
+    queueTutorial();
+  }, [queueTutorial]);
 
   const finishTutorial = useCallback(() => {
     setTourCompleted(true);
@@ -104,7 +120,7 @@ export function useOnboarding(input: {
     writeTourCompleted(true);
     writeTourQueued(false);
     persistProgress({ ...progress, taskInProgress: false });
-    router.push('/pantry');
+    router.push(APP_ROUTES.pantry);
   }, [persistProgress, progress]);
 
   const skipTour = useCallback(() => {
@@ -131,7 +147,7 @@ export function useOnboarding(input: {
       const stepCopy = ONBOARDING_COPY.tutorial.steps.find((s) => s.id === stepId);
       persistProgress({ ...progress, taskInProgress: true });
       if (launch.kind === 'pantry') {
-        router.push(hrefWithPantryAction('/pantry', launch.action));
+        router.push(hrefWithPantryAction(APP_ROUTES.pantry, launch.action));
         return;
       }
       const pantryAction =

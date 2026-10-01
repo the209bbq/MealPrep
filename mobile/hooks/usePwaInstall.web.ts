@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useHydrated } from './useHydrated';
 
 const DISMISS_KEY = 'mealprep.pwaInstallDismissed';
 
@@ -28,9 +29,16 @@ function detectIos(): boolean {
 }
 
 export function usePwaInstall() {
+  const hydrated = useHydrated();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [dismissed, setDismissed] = useState(readDismissed);
-  const [standalone, setStandalone] = useState(detectStandalone);
+  const [dismissed, setDismissed] = useState(false);
+  const [standalone, setStandalone] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setDismissed(readDismissed());
+    setStandalone(detectStandalone());
+  }, [hydrated]);
 
   useEffect(() => {
     const onBeforeInstall = (event: Event) => {
@@ -70,7 +78,7 @@ export function usePwaInstall() {
 
   const isIos = useMemo(() => detectIos(), []);
 
-  const showHint = !standalone && !dismissed && (Boolean(deferredPrompt) || isIos);
+  const showHint = hydrated && !standalone && !dismissed && (Boolean(deferredPrompt) || isIos);
 
   return {
     isWeb: true,

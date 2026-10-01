@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { THEME } from '../config/appConfig';
+import { APP_ROUTES } from '../config/appRoutes';
 import { RECIPES_COPY } from '../config/recipesCopy';
 import { useApp } from '../context/AppContext';
 
@@ -11,7 +12,7 @@ export function GuestSaveNudge({ className = 'mt-4' }: { className?: string }) {
 
   return (
     <Pressable
-      onPress={() => router.push('/admin')}
+      onPress={() => router.push(APP_ROUTES.profile)}
       className={`flex-row items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3 ${className}`}
       accessibilityRole="button"
     >

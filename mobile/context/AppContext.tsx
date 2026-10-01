@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../hooks/useOnboarding';
+import { useHydrated } from '../hooks/useHydrated';
 import type { HandsOnTutorialStepId } from '../lib/onboarding/tutorialProgress';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -242,41 +243,37 @@ const AppContext = createContext<AppContextValue | undefined>(undefined);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const demoMode = isDemoMode();
   const supabase = demoMode ? null : getSupabase();
+  const hydrated = useHydrated();
 
   const [authReady, setAuthReady] = useState(demoMode);
   const [authError, setAuthError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
 
-  const [role, setRole] = useState<UserRole>(() => readJson(STORAGE_KEYS.role, 'admin'));
-  const [pantry, setPantry] = useState<PantryItem[]>(() => {
-    if (demoMode) {
-      return normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY));
-    }
-    if (isSupabaseConfigured()) {
-      return readGuestPantry();
-    }
-    return [];
-  });
-  const [recipes, setRecipes] = useState<Recipe[]>(() =>
-    demoMode ? readJson(STORAGE_KEYS.recipes, MOCK_RECIPES) : [],
+  const [role, setRole] = useState<UserRole>('admin');
+  const [pantry, setPantry] = useState<PantryItem[]>(() =>
+    demoMode ? normalizePantryItemList(MOCK_PANTRY) : [],
   );
-  const [grocery, setGrocery] = useState<GroceryListItem[]>(() => {
-    if (demoMode) return readJson(STORAGE_KEYS.grocery, []);
-    if (isSupabaseConfigured()) return readGuestGrocery();
-    return [];
-  });
+  const [recipes, setRecipes] = useState<Recipe[]>(() => (demoMode ? MOCK_RECIPES : []));
+  const [grocery, setGrocery] = useState<GroceryListItem[]>([]);
   const [mealPlan, setMealPlan] = useState<MealPlanItem[]>(() => initialMealPlan(demoMode));
   const [liveDataLoaded, setLiveDataLoaded] = useState(demoMode);
-  const [servingOverrides, setServingOverrides] = useState<Record<string, number>>(() =>
-    readJson(STORAGE_KEYS.servingOverrides, {}),
-  );
-  const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(() =>
-    readJson(STORAGE_KEYS.flags, DEFAULT_FEATURE_FLAGS),
-  );
-  const [userPreferences, setUserPreferences] = useState<UserPreferences>(() =>
-    readJson(STORAGE_KEYS.userPreferences, USER_PREFERENCE_DEFAULTS),
-  );
+  const [servingOverrides, setServingOverrides] = useState<Record<string, number>>({});
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>(USER_PREFERENCE_DEFAULTS);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setUserPreferences(readJson(STORAGE_KEYS.userPreferences, USER_PREFERENCE_DEFAULTS));
+    setServingOverrides(readJson(STORAGE_KEYS.servingOverrides, {}));
+    if (!demoMode) return;
+    setRole(readJson(STORAGE_KEYS.role, 'admin'));
+    setPantry(normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY)));
+    setRecipes(readJson(STORAGE_KEYS.recipes, MOCK_RECIPES));
+    setGrocery(readJson(STORAGE_KEYS.grocery, []));
+    setMealPlan(initialMealPlan(true));
+    setFeatureFlags(readJson(STORAGE_KEYS.flags, DEFAULT_FEATURE_FLAGS));
+  }, [demoMode, hydrated]);
   const [undoToast, setUndoToast] = useState<UndoToastState | null>(null);
   const [mealMadeReview, setMealMadeReview] = useState<MealMadeReviewState | null>(null);
   const [mealMadeUndo, setMealMadeUndo] = useState<MealMadeUndoState | null>(null);
@@ -533,7 +530,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         email,
         password,
         options: {
-          emailRedirectTo: getAuthRedirectUrl('/admin'),
+          emailRedirectTo: getAuthRedirectUrl(),
           data: { name: name.trim() || email.split('@')[0] },
         },
       });
@@ -548,7 +545,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAuthError(null);
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: getAuthRedirectUrl('/admin') },
+        options: { emailRedirectTo: getAuthRedirectUrl() },
       });
       if (error) setAuthError(error.message);
     },

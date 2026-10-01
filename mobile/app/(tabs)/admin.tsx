@@ -1,14 +1,12 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
-import { BrandLogo } from '../../components/BrandLogo';
+import { Redirect } from 'expo-router';
+import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
-import { APP_BRAND } from '../../config/appBrand';
-import { ONBOARDING_COPY } from '../../config/onboarding';
+import { TourReplayCard } from '../../components/onboarding/TourReplayCard';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
+import { APP_ROUTES } from '../../config/appRoutes';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
-import { initials } from '../../lib/initials';
 import type { FeatureFlagKey, UserRole } from '../../types/mealprep';
 
 export default function AdminScreen() {
@@ -16,13 +14,9 @@ export default function AdminScreen() {
     profile,
     isAdmin,
     demoMode,
-    session,
     authReady,
     authError,
     setDemoRole,
-    signInWithPassword,
-    signUpWithPassword,
-    signInWithMagicLink,
     signOut,
     featureFlags,
     setFeatureFlag,
@@ -31,83 +25,25 @@ export default function AdminScreen() {
     seedPantry,
     analytics,
     onboarding,
+    session,
   } = useApp();
 
-  if (!demoMode && !session) {
-    if (!authReady) {
-      return (
-        <ScrollView className="flex-1 bg-paper px-4 pb-8">
-          <Card className="mt-4" title="Sign in" subtitle="Connecting…">
-            <Text className="mt-2 text-sm text-muted">Loading authentication.</Text>
-          </Card>
-        </ScrollView>
-      );
-    }
+  if (!authReady) {
     return (
       <ScrollView className="flex-1 bg-paper px-4 pb-8">
-        <AuthPanel
-          authError={authError}
-          onSignIn={signInWithPassword}
-          onSignUp={signUpWithPassword}
-          onMagicLink={signInWithMagicLink}
-        />
+        <Card className="mt-4" title="Admin" subtitle="Loading…">
+          <Text className="mt-2 text-sm text-muted">Checking access.</Text>
+        </Card>
       </ScrollView>
     );
   }
 
+  if (!demoMode && !session) {
+    return <Redirect href={APP_ROUTES.profile} />;
+  }
+
   if (!isAdmin) {
-    return (
-      <ScrollView className="flex-1 bg-paper px-4 pb-8">
-        <Card className="mt-4 items-center" title="Your profile">
-          <View className="mt-4 h-16 w-16 items-center justify-center rounded-full bg-primary-light">
-            <Text className="text-xl font-bold text-primary-dark">{initials(profile.name)}</Text>
-          </View>
-          <Text className="mt-3 text-xl font-bold text-ink">{profile.name}</Text>
-          <Text className="text-sm text-muted">{profile.email}</Text>
-          <Text className="mt-1 text-xs font-bold uppercase text-primary">{ROLE_LABELS[profile.role]}</Text>
-          <Text className="mt-4 text-sm text-muted">Household: {profile.householdSize}</Text>
-          <Text className="mt-1 text-sm text-muted">{profile.dietaryNotes}</Text>
-        </Card>
-        <Card
-          className="mt-4"
-          title={ONBOARDING_COPY.profile.showTourAgainTitle}
-          subtitle={ONBOARDING_COPY.profile.showTourAgainBlurb}
-        >
-          <Pressable
-            onPress={onboarding.requestTourReplay}
-            className="mt-2 min-h-[48px] items-center justify-center rounded-2xl border border-border bg-card px-4 py-3"
-          >
-            <Text className="font-bold text-primary">{ONBOARDING_COPY.profile.showTourAgainButton}</Text>
-          </Pressable>
-        </Card>
-        <Card className="mt-4" title="Kitchen preferences">
-          {(Object.keys(USER_PREFERENCE_LABELS) as (keyof typeof USER_PREFERENCE_LABELS)[]).map((key) => (
-            <View key={key} className="mb-3 flex-row items-center justify-between gap-3 border-b border-border pb-3">
-              <View className="flex-1">
-                <Text className="font-semibold text-ink">{USER_PREFERENCE_LABELS[key].title}</Text>
-                <Text className="text-xs text-muted">{USER_PREFERENCE_LABELS[key].blurb}</Text>
-              </View>
-              <Switch
-                value={userPreferences[key]}
-                onValueChange={(value) => setUserPreference(key, value)}
-                trackColor={{ true: THEME.primary, false: THEME.border }}
-              />
-            </View>
-          ))}
-        </Card>
-        {demoMode ? (
-          <Card className="mt-4" title="Demo mode" subtitle="Switch role without Supabase">
-            <RoleToggle current={profile.role} onChange={setDemoRole} />
-          </Card>
-        ) : (
-          <Card className="mt-4" title="Account">
-            <Pressable onPress={() => void signOut()} className="mt-2 rounded-xl border border-border bg-card px-4 py-3">
-              <Text className="text-center font-bold text-slate">Sign out</Text>
-            </Pressable>
-          </Card>
-        )}
-      </ScrollView>
-    );
+    return <Redirect href={APP_ROUTES.profile} />;
   }
 
   return (
@@ -137,18 +73,7 @@ export default function AdminScreen() {
         </Pressable>
       </Card>
 
-      <Card
-        className="mt-4"
-        title={ONBOARDING_COPY.profile.showTourAgainTitle}
-        subtitle={ONBOARDING_COPY.profile.showTourAgainBlurb}
-      >
-        <Pressable
-          onPress={onboarding.requestTourReplay}
-          className="mt-2 min-h-[48px] items-center justify-center rounded-2xl border border-border bg-card px-4 py-3"
-        >
-          <Text className="font-bold text-primary">{ONBOARDING_COPY.profile.showTourAgainButton}</Text>
-        </Pressable>
-      </Card>
+      <TourReplayCard onReplay={onboarding.requestTourReplay} />
 
       <Card className="mt-4" title="Kitchen preferences">
         {(Object.keys(USER_PREFERENCE_LABELS) as (keyof typeof USER_PREFERENCE_LABELS)[]).map((key) => (
@@ -194,104 +119,6 @@ export default function AdminScreen() {
         <Text className="text-sm text-muted">Last active: {new Date(analytics.lastActiveAt).toLocaleString()}</Text>
       </Card>
     </ScrollView>
-  );
-}
-
-function AuthPanel({
-  authError,
-  onSignIn,
-  onSignUp,
-  onMagicLink,
-}: {
-  authError: string | null;
-  onSignIn: (email: string, password: string) => Promise<void>;
-  onSignUp: (email: string, password: string, name: string) => Promise<void>;
-  onMagicLink: (email: string) => Promise<void>;
-  }) {
-  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function run(action: () => Promise<void>, success: string) {
-    setBusy(true);
-    setStatus(null);
-    try {
-      await action();
-      setStatus(success);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card className="mt-4" title="Sign in" subtitle={APP_BRAND.copy.authCardSubtitle}>
-      <BrandLogo variant="auth" />
-      <Text className="mt-2 text-sm text-muted">{APP_BRAND.copy.authCardBlurb}</Text>
-      <View className="mt-4 flex-row gap-2">
-        {(['sign-in', 'sign-up'] as const).map((tab) => (
-          <Pressable
-            key={tab}
-            onPress={() => setMode(tab)}
-            className={`flex-1 rounded-xl px-3 py-2 ${mode === tab ? 'bg-primary' : 'border border-border bg-card'}`}
-          >
-            <Text className={`text-center text-sm font-bold ${mode === tab ? 'text-on-primary' : 'text-muted'}`}>
-              {tab === 'sign-in' ? 'Sign in' : 'Create account'}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      {mode === 'sign-up' ? (
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-          className="mt-3 rounded-xl border border-border bg-card px-3 py-2 text-ink"
-          placeholder="Display name"
-        />
-      ) : null}
-      <TextInput
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        className="mt-3 rounded-xl border border-border bg-card px-3 py-2 text-ink"
-        placeholder="Email"
-      />
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        className="mt-3 rounded-xl border border-border bg-card px-3 py-2 text-ink"
-        placeholder={mode === 'sign-up' ? 'Password (min 6 chars)' : 'Password'}
-      />
-      <Pressable
-        disabled={busy || !email.trim()}
-        onPress={() =>
-          void run(
-            () =>
-              mode === 'sign-in'
-                ? onSignIn(email.trim(), password)
-                : onSignUp(email.trim(), password, name.trim()),
-            mode === 'sign-in' ? 'Signed in.' : 'Check your email if confirmation is required.',
-          )
-        }
-        className={`mt-4 rounded-xl px-4 py-3 ${busy ? 'opacity-60 bg-primary' : 'bg-primary'}`}
-      >
-        <Text className="text-center font-bold text-on-primary">{mode === 'sign-in' ? 'Sign in' : 'Create account'}</Text>
-      </Pressable>
-      <Pressable
-        disabled={busy || !email.trim()}
-        onPress={() => void run(() => onMagicLink(email.trim()), 'Magic link sent — check your email.')}
-        className="mt-3 rounded-xl border border-border bg-card px-4 py-3"
-      >
-        <Text className="text-center font-bold text-slate">Email magic link</Text>
-      </Pressable>
-      {authError ? <Text className="mt-3 text-sm text-danger">{authError}</Text> : null}
-      {status ? <Text className="mt-2 text-sm text-primary-dark">{status}</Text> : null}
-    </Card>
   );
 }
 

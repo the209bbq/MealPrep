@@ -47,9 +47,10 @@
     "test:community-prices": "npx tsx scripts/community-price-comparison-check.mjs",
     "test:add-price": "npx tsx scripts/add-price-suggestions-check.ts",
     "test:pantry-vision": "npx tsx scripts/pantry-vision-postprocess-check.ts",
+    "test:onboarding": "npx tsx scripts/onboarding-routing-check.ts",
     "test:guest-mode": "npx tsx scripts/guest-mode-check.ts",
     "test:tutorial": "npx tsx scripts/tutorial-progress-check.ts",
-    "test": "npm run test:recipe-match && npm run test:grocery && npm run test:smart-shop && npm run test:package-pricing && npm run test:community-prices && npm run test:add-price && npm run test:pantry-vision && npm run test:tutorial && npm run test:guest-mode",
+    "test": "npm run test:recipe-match && npm run test:grocery && npm run test:smart-shop && npm run test:package-pricing && npm run test:community-prices && npm run test:add-price && npm run test:pantry-vision && npm run test:tutorial && npm run test:guest-mode && npm run test:onboarding",
     "generate:brand": "node scripts/generate-brand-assets.mjs",
     "generate:pwa": "node scripts/generate-pwa-assets.mjs",
     "export:web": "npm run generate:brand && npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs"

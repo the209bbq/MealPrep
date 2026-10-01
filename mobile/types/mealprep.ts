@@ -1,3 +1,5 @@
+import type { Href } from 'expo-router';
+
 export const USER_ROLES = ['admin', 'member'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
@@ -172,11 +174,13 @@ export interface UserAnalytics {
 }
 
 export interface TabConfig {
-  name: 'index' | 'pantry' | 'recipes' | 'grocery' | 'admin';
+  name: 'index' | 'pantry' | 'recipes' | 'grocery' | 'profile' | 'admin';
   title: string;
-  href: string;
+  href: Href;
   icon: string;
   iconActive: string;
+  /** Hidden from the tab bar unless the signed-in user is an admin. */
+  adminOnly?: boolean;
 }
 
 export interface ThemeTokens {

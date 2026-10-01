@@ -4,6 +4,7 @@ import type {
   TabConfig,
   UserRole,
 } from '../types/mealprep';
+import { APP_ROUTES } from './appRoutes';
 import { SMART_SHOP_STORES } from './smartShop';
 import appBrand from './appBrand.json';
 
@@ -32,11 +33,19 @@ export const TABS: TabConfig[] = [
     iconActive: 'cart',
   },
   {
-    name: 'admin',
+    name: 'profile',
     title: 'Profile',
-    href: '/admin',
+    href: APP_ROUTES.profile,
     icon: 'person-circle-outline',
     iconActive: 'person-circle',
+  },
+  {
+    name: 'admin',
+    title: 'Admin',
+    href: APP_ROUTES.admin,
+    icon: 'shield-checkmark-outline',
+    iconActive: 'shield-checkmark',
+    adminOnly: true,
   },
 ];
 
