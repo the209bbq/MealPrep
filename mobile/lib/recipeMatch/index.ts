@@ -31,3 +31,8 @@ export {
   type RecipePantryMatch,
 } from './match';
 export { builtInKitchenCatalogRecipes, kitchenRecipesForPantryMatch } from './kitchenCatalogMerge';
+export {
+  recipeServingScale,
+  scaleRecipeIngredients,
+  withServingScale,
+} from './servingScale';

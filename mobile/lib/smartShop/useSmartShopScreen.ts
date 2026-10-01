@@ -13,7 +13,7 @@ import { mapsDirectionsUrl, manualStoreFromInput } from '../stores';
 import { sortStoreLocationsForDisplay } from '../stores/groceryFilter';
 import { resolveStoreChainKey } from '../../config/weeklyAds';
 import { openGroceryItems } from './aggregateDeals';
-import { isValidUsZip, requestDeviceLocation } from './location';
+import { isValidUsZip, normalizeUsZipInput, requestDeviceLocation } from './location';
 import {
   loadFavoriteStoreIds,
   persistFavoriteStores,
@@ -52,7 +52,7 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
 
   useEffect(() => {
     if (!hydrated) return;
-    const initial = readInitialZip(profile);
+    const initial = normalizeUsZipInput(readInitialZip(profile));
     if (initial) setZip(initial);
   }, [hydrated, profile.homeZip, profile.id]);
 

@@ -53,6 +53,7 @@
     "test:pantry-vision-gemini": "npx tsx scripts/pantry-vision-gemini-inline-check.ts && npx tsx scripts/pantry-vision-gemini-budget-check.ts",
     "test:onboarding": "npx tsx scripts/onboarding-routing-check.ts",
     "test:web-hydration": "npx tsx scripts/web-hydration-check.ts",
+    "test:web-e2e": "npx tsx scripts/web-core-flow-e2e.ts",
     "test:guest-mode": "npx tsx scripts/guest-mode-check.ts",
     "test:photo-scan-gate": "npx tsx scripts/photo-scan-gate-check.ts",
     "test:pantry-image-quality": "npx tsx scripts/pantry-image-quality-check.ts",

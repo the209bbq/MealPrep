@@ -8,6 +8,7 @@ node_modules/
 dist/
 web-build/
 .hydration-serve-root/
+.e2e-serve-root/
 .pantry-scan-serve-root/
 expo-env.d.ts
 .prepare-image-web-test/

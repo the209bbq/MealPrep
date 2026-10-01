@@ -41,9 +41,10 @@ import type {
 interface DiscoverRecipesPanelProps {
   onToggleMealPlan: (item: Awaited<ReturnType<typeof searchDiscoveryRecipes>>['items'][number]) => void;
   isOnMealPlan: (recipeApiId: number) => boolean;
+  onAddMissing?: (item: Awaited<ReturnType<typeof searchDiscoveryRecipes>>['items'][number]) => void;
 }
 
-export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: DiscoverRecipesPanelProps) {
+export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMissing }: DiscoverRecipesPanelProps) {
   const { session, demoMode, pantry } = useApp();
   const accessToken = getRecipeDiscoveryAccessToken(session);
   const [expanded, setExpanded] = useState(false);
@@ -306,16 +307,13 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
 
           {displayItems.map(({ recipe, match }) => {
             const onPlan = isOnMealPlan(recipe.id);
+            const missingCount = match.missingCount;
             return (
-              <Pressable
-                key={recipe.id}
-                onPress={() => router.push(`/discover-recipes/${recipe.id}`)}
-                className="mt-3"
-              >
-                <Card>
-                  {recipe.isDemoSample ? (
-                    <Text className="mb-1 text-[10px] font-bold uppercase text-amber-700">Demo sample</Text>
-                  ) : null}
+              <Card key={recipe.id} className="mt-3">
+                {recipe.isDemoSample ? (
+                  <Text className="mb-1 text-[10px] font-bold uppercase text-amber-700">Demo sample</Text>
+                ) : null}
+                <Pressable onPress={() => router.push(`/discover-recipes/${recipe.id}`)}>
                   <View className="flex-row items-start justify-between">
                     <View className="flex-1 pr-2">
                       <Text className="text-xs font-semibold uppercase text-primary">{recipe.cuisine}</Text>
@@ -327,10 +325,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
                       </Text>
                     </View>
                     <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation?.();
-                        onToggleMealPlan(recipe);
-                      }}
+                      onPress={() => onToggleMealPlan(recipe)}
                       className={`rounded-full px-3 py-2 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
                     >
                       <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
@@ -338,8 +333,16 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
                       </Text>
                     </Pressable>
                   </View>
-                </Card>
-              </Pressable>
+                </Pressable>
+                {missingCount > 0 && onAddMissing ? (
+                  <Pressable
+                    onPress={() => onAddMissing(recipe)}
+                    className="mt-3 items-center rounded-xl bg-primary py-3"
+                  >
+                    <Text className="text-sm font-bold text-on-primary">{RECIPES_COPY.recipeCard.addMissingCta}</Text>
+                  </Pressable>
+                ) : null}
+              </Card>
             );
           })}
         </>

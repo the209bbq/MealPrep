@@ -791,15 +791,20 @@ export async function adminSetUserPlan(
   client: SupabaseClient,
   userId: string,
   plan: UserPlan,
-): Promise<void> {
-  const { error } = await client.rpc('admin_set_user_plan', {
+): Promise<UserPlan> {
+  const { data, error } = await client.rpc('admin_set_user_plan', {
     p_user_id: userId,
     p_plan: plan,
   });
   if (error) {
-    if (isMissingSchemaError(error)) {
-      throw new Error(formatSupabaseError(error, USER_PLAN_MIGRATION_SQL));
-    }
-    throw error;
+    throw new Error(formatSupabaseError(error, USER_PLAN_MIGRATION_SQL));
   }
+  const applied = data as string | null;
+  if (!applied || !isUserPlan(applied)) {
+    throw new Error('Plan update did not apply. Check admin access and try again.');
+  }
+  if (applied !== plan) {
+    throw new Error(`Plan update returned ${applied} instead of ${plan}.`);
+  }
+  return applied;
 }

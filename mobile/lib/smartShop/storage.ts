@@ -13,7 +13,12 @@ export interface SavedCoords {
 }
 
 export function readSavedZip(): string {
-  return readJson(KEYS.zip, '');
+  const raw = readJson<unknown>(KEYS.zip, '');
+  if (typeof raw === 'string') return raw.trim();
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return String(Math.trunc(raw)).padStart(5, '0').slice(0, 5);
+  }
+  return '';
 }
 
 export function writeSavedZip(zip: string): void {

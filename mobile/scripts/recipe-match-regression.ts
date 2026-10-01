@@ -10,6 +10,7 @@ import { buildPantryDeductionLines, applyPantryDeductions } from '../lib/mealPla
 import { mergeGroceryWithMissing } from '../lib/recipeMatch/groceryFromMissing';
 import { buildPantryMatchIndex, filterRankedMatches, filterRankedMatchesWithPartialFallback, scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
 import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
+import { withServingScale } from '../lib/recipeMatch/servingScale';
 import {
   canonicalIngredientPhrase,
   expandSynonymKeys,
@@ -294,6 +295,25 @@ assert(
   ingredientMatchScore('Black beans', 'canned beans') >= 0.72,
   'canned beans should satisfy black beans recipe line',
 );
+
+const scaleRecipe = kitchenForGuest.find((r) => r.id === guestScanVisible.matches[0].recipeId);
+assert(scaleRecipe, 'scale test needs a matched catalog recipe');
+const baseMissing = scoreRecipeAgainstPantry(scaleRecipe, scannedStaplesPantry).missing;
+const doubled = withServingScale(scaleRecipe, { [scaleRecipe.id]: scaleRecipe.servings * 2 });
+const scaledMissing = scoreRecipeAgainstPantry(doubled, scannedStaplesPantry).missing;
+assert(
+  scaledMissing.length === baseMissing.length,
+  'serving scale should not change missing ingredient count',
+);
+if (baseMissing.length > 0 && baseMissing[0].quantity > 0) {
+  assert(
+    scaledMissing[0].quantity >= baseMissing[0].quantity * 1.9,
+    'doubled servings should scale missing quantities',
+  );
+}
+const scaledMerge = mergeGroceryWithMissing([], scaledMissing, scaleRecipe.id, scannedStaplesPantry);
+const repeatMerge = mergeGroceryWithMissing(scaledMerge.items, scaledMissing, scaleRecipe.id, scannedStaplesPantry);
+assert(repeatMerge.added.length === 0, 'repeat add at same servings should not duplicate rows');
 
 console.log('Flow pantry recipes shown:', shown.map((m) => m.recipeName).join(', '));
 console.log(
