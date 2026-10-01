@@ -4,7 +4,11 @@ import {
   isHeicMimeType,
   resolveImageMimeType,
 } from '../web/inferImageMimeType';
-import { assessGrayscaleQuality, computeLongEdgeResize, PantryImageQualityError } from './prepareImageShared';
+import {
+  computeLongEdgeResize,
+  evaluateImageQuality,
+  PantryImageQualityError,
+} from './prepareImageShared';
 import type { PreparedPantryImage } from './types';
 
 function readFileAsDataUrl(file: Blob): Promise<string> {
@@ -87,16 +91,18 @@ function canvasToJpegBase64(canvas: HTMLCanvasElement, quality: number): string 
   return base64;
 }
 
-function assessCanvasQuality(canvas: HTMLCanvasElement): ReturnType<typeof assessGrayscaleQuality> {
+function evaluateCanvasQuality(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d');
-  if (!ctx) return { ok: true, meanLuminance: 0.5, laplacianVariance: 100 };
+  if (!ctx) {
+    return evaluateImageQuality(new Float32Array([0.5]), 1, 1);
+  }
   const { width, height } = canvas;
   const { data } = ctx.getImageData(0, 0, width, height);
   const luma = new Float32Array(width * height);
   for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
     luma[p] = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
   }
-  return assessGrayscaleQuality(luma, width, height);
+  return evaluateImageQuality(luma, width, height);
 }
 
 export async function preparePantryImageFromFile(file: File): Promise<PreparedPantryImage> {
@@ -119,13 +125,12 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
   ctx.drawImage(bitmap, 0, 0, targetW, targetH);
   bitmap.close?.();
 
-  const qualityAssessment = assessCanvasQuality(canvas);
-  if (!qualityAssessment.ok && qualityAssessment.rejectReason === 'too_dark') {
-    throw new PantryImageQualityError('too_dark', PHOTO_SCAN.imageTooDarkMessage);
+  const qualityAssessment = evaluateCanvasQuality(canvas);
+  if (qualityAssessment.hardReject === 'blank') {
+    throw new PantryImageQualityError('blank', qualityAssessment.hardRejectMessage ?? PHOTO_SCAN.imageBlankMessage);
   }
-  if (!qualityAssessment.ok && qualityAssessment.rejectReason === 'too_blurry') {
-    throw new PantryImageQualityError('too_blurry', PHOTO_SCAN.imageTooBlurryMessage);
-  }
+  const qualityWarnings =
+    qualityAssessment.warnings.length > 0 ? qualityAssessment.warnings : undefined;
 
   let quality = PHOTO_SCAN.jpegQuality;
   let base64 = canvasToJpegBase64(canvas, quality);
@@ -155,6 +160,7 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
     base64,
     byteLength,
     contentHash: undefined,
+    qualityWarnings,
   };
 }
 

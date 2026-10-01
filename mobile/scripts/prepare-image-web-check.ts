@@ -177,8 +177,11 @@ type PrepareResult =
       ok: true;
       mimeType: string;
       byteLength: number;
+      base64: string;
+      qualityWarnings: string[];
       bitmapWidth: number;
       bitmapHeight: number;
+      visionStatus?: number;
     }
   | { ok: false; errorName: string; errorMessage: string };
 
@@ -197,8 +200,16 @@ async function testUserPhotosInBrowser(): Promise<void> {
   const page = await context.newPage();
 
   await page.route('**/*', (route) => {
-    if (route.request().url().includes('heic2any')) {
+    const url = route.request().url();
+    if (url.includes('heic2any')) {
       heicModuleRequested = true;
+    }
+    if (url.includes('pantry-vision-mock.test')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [{ name: 'Beans', category: 'pantry', confidence: 0.9 }], model: 'mock' }),
+      });
     }
     return route.continue();
   });
@@ -217,24 +228,29 @@ async function testUserPhotosInBrowser(): Promise<void> {
               runPrepareTest: (f: File) => Promise<PrepareResult>;
             }
           ).runPrepareTest(file);
-          return prepared;
+          if (!prepared.ok) return prepared;
+          const vision = await fetch('https://pantry-vision-mock.test/scan', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer test-token',
+            },
+            body: JSON.stringify({
+              imageBase64: prepared.base64,
+              mimeType: prepared.mimeType,
+              location: 'pantry',
+            }),
+          });
+          return { ...prepared, visionStatus: vision.status };
         },
         { fileBytes: [...bytes], fileName: androidName },
       );
 
-      if (!result.ok) {
-        const blockedByQuality = result.errorName === 'PantryImageQualityError';
-        assert(
-          !/heic|Could not load|empty|too large|encode/i.test(result.errorMessage),
-          `${name} must not fail prepare path (${result.errorName}: ${result.errorMessage})`,
-        );
-        console.log(
-          `${name} prepare path OK (quality gate: ${blockedByQuality ? result.errorMessage : result.errorMessage})`,
-        );
-        continue;
-      }
+      assert(result.ok, `${name} prepare failed: ${!result.ok ? result.errorMessage : ''}`);
+      if (!result.ok) continue;
 
       assert(result.mimeType === 'image/jpeg', `${name} prepared mime`);
+      assert(result.visionStatus === 200, `${name} must reach vision request after quality gate`);
       assert(
         result.byteLength > 10_000 && result.byteLength <= PHOTO_SCAN.maxPayloadBytes,
         `${name} prepared byteLength ${result.byteLength} must be <= ${PHOTO_SCAN.maxPayloadBytes}`,
