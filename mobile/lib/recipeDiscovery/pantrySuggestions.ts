@@ -4,6 +4,7 @@ import {
   RECIPE_MATCHING,
 } from '../../config/recipeMatching';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
+import { GUEST_MODE_COPY } from '../../config/guestMode';
 import type { PantryItem } from '../../types/mealprep';
 import { searchDiscoveryRecipes } from './client';
 import { pantryIngredientSearchQueries } from './pantryQueries';
@@ -151,8 +152,8 @@ export async function fetchPantryDiscoverySuggestions(
   const errorMessage =
     failures === plans.length && ranked.length === 0
       ? accessToken
-        ? 'Online recipe search is unavailable. Check your connection or try again shortly.'
-        : 'Sign in to load online recipe suggestions for your pantry.'
+        ? GUEST_MODE_COPY.recipeSearchUnavailable
+        : GUEST_MODE_COPY.recipeSearchUnavailable
       : null;
 
   const result: PantryDiscoveryResult = {

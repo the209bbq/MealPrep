@@ -19,6 +19,7 @@ import {
   RecipeDiscoveryNotConfiguredError,
   searchDiscoveryRecipes,
 } from '../lib/recipeDiscovery/client';
+import { getRecipeDiscoveryAccessToken } from '../lib/recipeDiscovery/accessToken';
 import {
   isActiveRecipeDiscoverySearch,
   RECIPE_DISCOVERY_CUISINES,
@@ -43,7 +44,7 @@ interface DiscoverRecipesPanelProps {
 
 export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: DiscoverRecipesPanelProps) {
   const { session, demoMode, pantry } = useApp();
-  const accessToken = session?.access_token ?? null;
+  const accessToken = getRecipeDiscoveryAccessToken(session);
   const [expanded, setExpanded] = useState(false);
 
   const [search, setSearch] = useState('');
@@ -115,7 +116,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
       return;
     }
     if (!accessToken) {
-      setError('Sign in from Profile to search external recipes.');
+      setError('Recipe search is not available in this build.');
       setItems([]);
       setTotal(0);
       return;
