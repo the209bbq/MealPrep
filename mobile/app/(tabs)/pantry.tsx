@@ -125,6 +125,7 @@ export default function PantryScreen() {
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanErrorTitle, setScanErrorTitle] = useState<string | null>(null);
+  const [scanNotice, setScanNotice] = useState<{ title: string; message: string } | null>(null);
   const [scanQualityWarning, setScanQualityWarning] = useState<string | null>(null);
   const [lastScanAttempt, setLastScanAttempt] = useState<
     | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
@@ -201,8 +202,23 @@ export default function PantryScreen() {
   function clearScanFailure() {
     setScanError(null);
     setScanErrorTitle(null);
+    setScanNotice(null);
     setScanQualityWarning(null);
     setLastScanAttempt(null);
+  }
+
+  function setScanNoItemsFound(
+    attempt:
+      | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
+      | { kind: 'uri'; uri: string; location: PantryStorageLocation },
+  ) {
+    setScanError(null);
+    setScanErrorTitle(null);
+    setScanNotice({
+      title: PHOTO_SCAN.noItemsFoundTitle,
+      message: PHOTO_SCAN.noItemsFoundMessage,
+    });
+    setLastScanAttempt(attempt);
   }
 
   function setScanFailure(
@@ -213,6 +229,7 @@ export default function PantryScreen() {
       | { kind: 'uri'; uri: string; location: PantryStorageLocation }
       | null,
   ) {
+    setScanNotice(null);
     setScanError(message);
     setScanErrorTitle(title);
     setLastScanAttempt(attempt);
@@ -284,11 +301,7 @@ export default function PantryScreen() {
       );
       if (rows.length === 0) {
         logPantryScanFailure('EMPTY_DETECTIONS');
-        setScanFailure(
-          'No pantry items were detected. Try a clearer photo with labels visible.',
-          'No items found',
-          attempt,
-        );
+        setScanNoItemsFound(attempt);
         setPhase('idle');
         return;
       }
@@ -684,6 +697,9 @@ export default function PantryScreen() {
             <View className="mt-4 items-center py-6">
               <ActivityIndicator size="large" color={THEME.primary} />
               <Text className="mt-2 text-sm text-muted">Analyzing photo…</Text>
+              <Text className="mt-2 max-w-sm text-center text-xs text-muted">
+                {PHOTO_SCAN.analyzingPhotoMessage}
+              </Text>
             </View>
           ) : null}
 
@@ -707,6 +723,21 @@ export default function PantryScreen() {
           {scanQualityWarning ? (
             <View className="mt-3 rounded-xl border border-border bg-paper p-3">
               <Text className="text-xs text-muted">{scanQualityWarning}</Text>
+            </View>
+          ) : null}
+
+          {scanNotice ? (
+            <View className="mt-3 rounded-xl border border-border bg-paper p-3">
+              <Text className="text-sm font-bold text-ink">{scanNotice.title}</Text>
+              <Text className="mt-1 text-xs text-muted">{scanNotice.message}</Text>
+              {lastScanAttempt ? (
+                <Pressable
+                  onPress={retryLastScan}
+                  className="mt-3 items-center rounded-xl border border-border bg-card py-2.5"
+                >
+                  <Text className="text-sm font-bold text-primary-dark">{PHOTO_SCAN.tryAgainLabel}</Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
 

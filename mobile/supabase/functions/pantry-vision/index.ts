@@ -765,7 +765,12 @@ async function callPantryGeminiPass(
     schema: RESPONSE_JSON_SCHEMA,
     maxOutputTokens,
   }, budget);
-  if ('error' in result) return result;
+  if ('error' in result) {
+    if (result.error.detail === 'Empty model response') {
+      return { items: [] };
+    }
+    return result;
+  }
 
   if (result.finishReason === 'MAX_TOKENS') {
     const retry = await callGeminiOnce(apiKey, model, mimeType, imageBase64, {
@@ -773,21 +778,15 @@ async function callPantryGeminiPass(
       schema: RESPONSE_JSON_SCHEMA,
       maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS_RETRY,
     }, budget);
-    if ('error' in retry) return retry;
+    if ('error' in retry) {
+      if (retry.error.detail === 'Empty model response') {
+        return { items: [] };
+      }
+      return retry;
+    }
     try {
       const parsed = JSON.parse(retry.text) as unknown;
-      const items = sanitizeItems(parsed);
-      if (items.length === 0) {
-        return {
-          error: {
-            kind: 'http',
-            status: 502,
-            detail: 'Model output truncated (MAX_TOKENS)',
-            retryable: true,
-          },
-        };
-      }
-      return { items };
+      return { items: sanitizeItems(parsed) };
     } catch {
       return {
         error: {
@@ -802,18 +801,7 @@ async function callPantryGeminiPass(
 
   try {
     const parsed = JSON.parse(result.text) as unknown;
-    const items = sanitizeItems(parsed);
-    if (items.length === 0) {
-      return {
-        error: {
-          kind: 'http',
-          status: 502,
-          detail: 'Empty or invalid pantry JSON',
-          retryable: true,
-        },
-      };
-    }
-    return { items };
+    return { items: sanitizeItems(parsed) };
   } catch {
     return {
       error: {
