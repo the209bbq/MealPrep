@@ -15,4 +15,16 @@ assert.equal(packagesNeededForLine(24, 'oz', lbPkg), 2);
 
 assert.equal(packagesNeededForLine(24, 'oz', null), 1);
 
+assert.equal(
+  packagesNeededForLine(12, 'each', parsePackageSizeFromText('Large Eggs 12 ct')),
+  1,
+  '12 eggs vs 12-count carton',
+);
+
+assert.equal(
+  packagesNeededForLine(1, 'gal', parsePackageSizeFromText('Half Gallon Milk')),
+  2,
+  '1 gallon vs half-gallon jug',
+);
+
 console.log('package-pricing-check: ok');
