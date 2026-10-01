@@ -72,10 +72,24 @@ function patchServiceWorker(version, precacheUrls) {
     throw new Error(`Missing ${swPath} — ensure public/sw.js exists before export`);
   }
   let source = fs.readFileSync(swPath, 'utf8');
-  source = source.replace("'__CACHE_VERSION__'", `'${version}'`);
-  source = source.replace('__CACHE_VERSION__', version);
-  source = source.replace('__PRECACHE_URLS__', JSON.stringify(precacheUrls, null, 2));
+  source = source.replaceAll('__CACHE_VERSION__', version);
+  source = source.replaceAll('__PRECACHE_URLS__', JSON.stringify(precacheUrls, null, 2));
+  if (source.includes('__PRECACHE_URLS__') || source.includes('__CACHE_VERSION__')) {
+    throw new Error('Service worker still contains unfilled PWA placeholders after patch');
+  }
   fs.writeFileSync(swPath, source);
+}
+
+function patchPwaRegister() {
+  const registerPath = path.join(distDir, 'pwa-register.js');
+  if (!fs.existsSync(registerPath)) return;
+  const scopeBase = basePath.endsWith('/') ? basePath : `${basePath}/`;
+  const swAbsolute = `${basePath}/sw.js`;
+  let source = fs.readFileSync(registerPath, 'utf8');
+  source = source.replaceAll('__PWA_BASE_PATH__', basePath);
+  source = source.replaceAll('__PWA_SW_URL__', swAbsolute);
+  source = source.replaceAll('__PWA_SW_SCOPE__', scopeBase);
+  fs.writeFileSync(registerPath, source);
 }
 
 function ensureNestedRouteIndexes() {
@@ -115,6 +129,7 @@ function main() {
   const precacheUrls = collectPrecacheUrls();
   const version = cacheVersion(precacheUrls);
   patchServiceWorker(version, precacheUrls);
+  patchPwaRegister();
   assertArtifacts();
   console.log(`PWA export ready (cache ${version}, ${precacheUrls.length} precache URLs)`);
 }
