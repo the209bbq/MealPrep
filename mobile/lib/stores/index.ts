@@ -2,6 +2,7 @@ import { mapsDirectionsUrl, SMART_SHOP_COPY, SMART_SHOP_STORES } from '../../con
 import { geocodeUsZip } from './nominatim';
 import { placeLabelFromGeocodePoint } from './zipPlaceParse';
 import { fetchOverpassStores } from './overpass';
+import { loadSavedStoresFallback } from './savedStoresFallback';
 import type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
 
 export type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
@@ -58,8 +59,22 @@ export async function searchNearbyGroceryStores(params: NearbyStoreSearchParams)
 }> {
   const origin = await resolveSearchOrigin(params);
   const overpass = await fetchOverpassStores(origin, params);
-  const osmStores = overpass.ok ? overpass.stores : [];
-  const osmWarning = overpass.ok ? undefined : overpassWarning(overpass.reason);
+  let osmStores: StoreRecord[] = overpass.ok ? overpass.stores : [];
+  let osmWarning: string | undefined;
+
+  if (overpass.ok && overpass.fromStaleCache) {
+    osmWarning = SMART_SHOP_COPY.osmNetworkRetry;
+  } else if (!overpass.ok) {
+    osmWarning = overpassWarning(overpass.reason);
+  }
+
+  if (osmStores.length === 0) {
+    const fallback = loadSavedStoresFallback(params.zip);
+    if (fallback.length > 0) {
+      osmStores = fallback;
+      osmWarning = SMART_SHOP_COPY.osmNetworkRetry;
+    }
+  }
 
   return {
     origin,

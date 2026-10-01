@@ -18,7 +18,7 @@ No GitHub Pages env changes beyond existing `EXPO_PUBLIC_SUPABASE_URL` / anon ke
 
 ## Architecture
 
-- `lib/stores/` — Nominatim (ZIP + `email` param on web), Overpass (graceful fallback on rate limits).
+- `lib/stores/` — built-in Central Valley ZIP labels, `api.zippopotam.us` + Nominatim fallback (persistent cache), Overpass mirrors with timeouts and saved-store fallback.
 - `lib/deals/` — always calls `kroger-deals` for Kroger **locations** and **deals** when Supabase is configured; 503 → SAMPLE mode.
 - `config/smartShop.ts` — radius (~10 mi), endpoints, contact email for Nominatim.
 - `config/smartShopChains.ts` — grocery chain allowlist, exclusions, delivery slugs.

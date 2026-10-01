@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readCachedZipPlaceLabel, resolveZipPlaceLabel } from '../stores/zipPlaceLabel';
 import { Linking } from 'react-native';
+import { useHydrated } from '../../hooks/useHydrated';
 import { SMART_SHOP_COPY, SMART_SHOP_STORES } from '../../config/smartShop';
 import { SMART_SHOP } from '../../config/appConfig';
 import type { GroceryListItem, UserProfile } from '../../types/mealprep';
@@ -28,9 +29,10 @@ export interface UseSmartShopScreenInput {
 }
 
 export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput) {
+  const hydrated = useHydrated();
   const items = useMemo(() => openGroceryItems(grocery), [grocery]);
 
-  const [zip, setZip] = useState(() => readInitialZip(profile) || '');
+  const [zip, setZip] = useState('');
   const [savedStoreIds, setSavedStoreIds] = useState<string[]>([]);
   const [nearbyStores, setNearbyStores] = useState<StoreLocation[]>([]);
   const [originLabel, setOriginLabel] = useState<string | null>(null);
@@ -45,25 +47,34 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
   const [zipPlaceLabel, setZipPlaceLabel] = useState<string | null>(null);
   const initialLocationChecked = useRef(false);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    const initial = readInitialZip(profile);
+    if (initial) setZip(initial);
+  }, [hydrated, profile.homeZip, profile.id]);
+
   const hasLocation = useMemo(() => {
+    if (!hydrated) return isValidUsZip(zip);
     const coords = readInitialCoords(profile);
     return Boolean(coords) || isValidUsZip(zip);
-  }, [profile, zip]);
+  }, [hydrated, profile, zip]);
 
   const locationSummary = useMemo(() => {
     if (isValidUsZip(zip)) {
       const normalized = zip.trim().slice(0, 5);
       return zipPlaceLabel ?? readCachedZipPlaceLabel(normalized) ?? normalized;
     }
+    if (!hydrated) return originLabel ?? 'your area';
     const saved = readSavedZip();
     if (saved && isValidUsZip(saved)) {
       const normalized = saved.trim().slice(0, 5);
       return zipPlaceLabel ?? readCachedZipPlaceLabel(normalized) ?? normalized;
     }
     return originLabel ?? 'your area';
-  }, [originLabel, zip, zipPlaceLabel]);
+  }, [hydrated, originLabel, zip, zipPlaceLabel]);
 
   useEffect(() => {
+    if (!hydrated) return;
     const code = isValidUsZip(zip) ? zip.trim().slice(0, 5) : readSavedZip();
     if (!code || !isValidUsZip(code)) {
       setZipPlaceLabel(null);
@@ -75,7 +86,7 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
       return;
     }
     void resolveZipPlaceLabel(code).then((label) => setZipPlaceLabel(label));
-  }, [zip]);
+  }, [hydrated, zip]);
 
   const sortedNearbyStores = useMemo(
     () => sortStoreLocationsForDisplay(nearbyStores, savedStoreIds),
@@ -173,6 +184,7 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
   }, [activeStores, community.deals, items]);
 
   useEffect(() => {
+    if (!hydrated) return;
     void loadFavoriteStoreIds().then(setSavedStoreIds);
     const coords = readInitialCoords(profile);
     const initialZip = readInitialZip(profile);
@@ -182,7 +194,7 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
       initialLocationChecked.current = true;
       setLocationModalOpen(true);
     }
-  }, []);
+  }, [hydrated]);
 
   useEffect(() => {
     if (!dealsResult || community.deals.length === 0) return;

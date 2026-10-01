@@ -1,6 +1,9 @@
 import { SMART_SHOP_STORES } from '../../config/smartShop';
 import { readCache, writeCache } from './cache';
+import { lookupLocalZipGeocode } from './localZipTable';
 import { isRateLimitedStatus, nominatimSearchParams, osmRequestHeaders } from './osmHttp';
+import { readPersistentCache, writePersistentCache } from './osmPersistentCache';
+import { geocodeUsZipViaZippopotam } from './zippopotam';
 
 export interface GeocodedPoint {
   lat: number;
@@ -19,6 +22,26 @@ export async function geocodeUsZip(zip: string): Promise<GeocodeResult> {
   const cacheKey = `nominatim:zip:${normalized}`;
   const cached = readCache<GeocodedPoint>(cacheKey);
   if (cached) return { ok: true, point: cached };
+
+  const persistent = readPersistentCache<GeocodedPoint>(cacheKey);
+  if (persistent) {
+    writeCache(cacheKey, persistent, SMART_SHOP_STORES.cacheTtlMs);
+    return { ok: true, point: persistent };
+  }
+
+  const local = lookupLocalZipGeocode(normalized);
+  if (local) {
+    writeCache(cacheKey, local, SMART_SHOP_STORES.cacheTtlMs);
+    writePersistentCache(cacheKey, local, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
+    return { ok: true, point: local };
+  }
+
+  const zippo = await geocodeUsZipViaZippopotam(normalized);
+  if (zippo) {
+    writeCache(cacheKey, zippo, SMART_SHOP_STORES.cacheTtlMs);
+    writePersistentCache(cacheKey, zippo, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
+    return { ok: true, point: zippo };
+  }
 
   const url = `${SMART_SHOP_STORES.nominatimBaseUrl}/search?${nominatimSearchParams({
     postalcode: normalized,
@@ -44,6 +67,7 @@ export async function geocodeUsZip(zip: string): Promise<GeocodeResult> {
     if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return { ok: false, reason: 'not_found' };
 
     writeCache(cacheKey, point, SMART_SHOP_STORES.cacheTtlMs);
+    writePersistentCache(cacheKey, point, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
     return { ok: true, point };
   } catch {
     return { ok: false, reason: 'network' };
