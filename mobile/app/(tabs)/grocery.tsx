@@ -20,6 +20,7 @@ import { GROCERY_COPY } from '../../config/grocery';
 import { useApp } from '../../context/AppContext';
 import { groupGroceryByAisle } from '../../lib/grocery';
 import { inferGroceryCategoryFromName } from '../../lib/grocery/categorize';
+import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { useGroceryCommunityDealBadges } from '../../lib/communityDeals/useCommunityDeals';
 import { PANTRY_CATEGORIES, type PantryCategory } from '../../types/mealprep';
 
@@ -63,7 +64,10 @@ export default function GroceryScreen() {
   const openItemIds = useMemo(() => open.map((g) => g.id), [open]);
   const { badges: communityBadges } = useGroceryCommunityDealBadges(openItemIds, grocery);
 
-  const recipeNameById = useMemo(() => new Map(recipes.map((r) => [r.id, r.name])), [recipes]);
+  const recipeNameById = useMemo(() => {
+    const kitchen = kitchenRecipesForPantryMatch(recipes);
+    return new Map(kitchen.map((r) => [r.id, r.name]));
+  }, [recipes]);
 
   function recipeLabelFor(item: (typeof grocery)[number]): string {
     if (item.sourceRecipeIds.length === 0) return '';
@@ -239,7 +243,7 @@ export default function GroceryScreen() {
               className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3"
             >
               <Ionicons name="pricetags" size={22} color={THEME.onPrimary} />
-              <Text className="text-base font-bold text-on-primary">{GROCERY_COPY.shopThisList(open.length)}</Text>
+              <Text className="text-base font-bold text-on-primary">{GROCERY_COPY.findStoresForList(open.length)}</Text>
             </Pressable>
           </View>
         ) : null}

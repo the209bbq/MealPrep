@@ -4,13 +4,22 @@ export interface UndoToastProps {
   message: string;
   onUndo: () => void;
   onDismiss: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
-export function UndoToast({ message, onUndo, onDismiss }: UndoToastProps) {
+export function UndoToast({ message, onUndo, onDismiss, actionLabel, onAction }: UndoToastProps) {
   return (
     <View className="absolute bottom-6 left-4 right-4 z-50">
-      <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-border bg-ink px-4 py-3 shadow-lg">
-        <Text className="flex-1 text-sm font-medium text-paper" numberOfLines={2}>{message}</Text>
+      <View className="flex-row items-center justify-between gap-2 rounded-2xl border border-border bg-ink px-4 py-3 shadow-lg">
+        <Text className="flex-1 text-sm font-medium text-paper" numberOfLines={2}>
+          {message}
+        </Text>
+        {actionLabel && onAction ? (
+          <Pressable onPress={onAction} className="rounded-full border border-primary-accent bg-primary/20 px-3 py-1.5">
+            <Text className="text-xs font-bold text-primary-accent">{actionLabel}</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={onUndo} className="rounded-full bg-primary px-3 py-1.5">
           <Text className="text-xs font-bold text-on-primary">Undo</Text>
         </Pressable>

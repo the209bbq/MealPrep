@@ -27,7 +27,13 @@ export function AppOverlays() {
       />
       <TutorialContinuePill visible={onboarding.showTutorialPill} onPress={onboarding.returnToTutorial} />
       {undoToast ? (
-        <UndoToast message={undoToast.message} onUndo={undoToast.onUndo} onDismiss={dismissUndoToast} />
+        <UndoToast
+          message={undoToast.message}
+          onUndo={undoToast.onUndo}
+          onDismiss={dismissUndoToast}
+          actionLabel={undoToast.actionLabel}
+          onAction={undoToast.onAction}
+        />
       ) : null}
     </View>
   );
