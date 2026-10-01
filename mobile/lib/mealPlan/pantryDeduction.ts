@@ -1,25 +1,19 @@
 import type { PantryItem, Recipe, RecipeIngredient } from '../../types/mealprep';
 import type { MatchedIngredient, RecipePantryMatch } from '../recipeMatch/match';
+import { convertQuantity, unitKind, unitsAreConvertible } from '../units/conversion';
 
 export interface PantryDeductionLine {
   pantryItemId: string;
   ingredient: RecipeIngredient;
   deductQuantity: number;
   previous: PantryItem;
+  /** When false, incompatible units — pantry row is left unchanged unless user removes manually. */
+  quantityApplied: boolean;
 }
 
 export interface PantryDeductionResult {
   lines: PantryDeductionLine[];
   nextPantry: PantryItem[];
-}
-
-function unitsCompatible(pantryUnit: string, recipeUnit: string): boolean {
-  const a = pantryUnit.trim().toLowerCase();
-  const b = recipeUnit.trim().toLowerCase();
-  if (!a || !b) return true;
-  if (a === b) return true;
-  if (a === 'each' || b === 'each') return true;
-  return false;
 }
 
 function recipeScale(recipe: Recipe, servingOverrides: Record<string, number>): number {
@@ -44,11 +38,13 @@ export function buildPantryDeductionLines(
     const deductQuantity = roundQty(row.ingredient.quantity * scale);
     if (deductQuantity <= 0) continue;
 
+    const convertible = unitsAreConvertible(pantryItem.unit, row.ingredient.unit);
     lines.push({
       pantryItemId: pantryItem.id,
       ingredient: row.ingredient,
       deductQuantity,
       previous: { ...pantryItem },
+      quantityApplied: convertible,
     });
   }
 
@@ -64,19 +60,29 @@ export function applyPantryDeductions(pantry: PantryItem[], lines: PantryDeducti
   const updates = new Map<string, PantryItem>();
 
   for (const line of lines) {
+    if (!line.quantityApplied) continue;
+
     const current = updates.get(line.pantryItemId) ?? pantry.find((item) => item.id === line.pantryItemId);
     if (!current) continue;
 
-    const tracksQuantity =
-      current.quantity > 0 && unitsCompatible(current.unit, line.ingredient.unit);
+    const convertedDeduct = convertQuantity(
+      line.deductQuantity,
+      line.ingredient.unit,
+      current.unit,
+    );
 
-    if (!tracksQuantity) {
-      removedIds.add(line.pantryItemId);
-      updates.delete(line.pantryItemId);
+    if (convertedDeduct === null) {
       continue;
     }
 
-    const nextQty = roundQty(current.quantity - line.deductQuantity);
+    const pantryKind = unitKind(current.unit);
+    const tracksQuantity = current.quantity > 0 && pantryKind !== null;
+
+    if (!tracksQuantity) {
+      continue;
+    }
+
+    const nextQty = roundQty(current.quantity - convertedDeduct);
     if (nextQty <= 0) {
       removedIds.add(line.pantryItemId);
       updates.delete(line.pantryItemId);

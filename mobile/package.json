@@ -38,7 +38,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test:recipe-match": "node scripts/recipe-match-examples.mjs",
+    "test:recipe-match": "npx tsx scripts/recipe-match-regression.ts",
     "generate:pwa": "node scripts/generate-pwa-assets.mjs",
     "export:web": "npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs"
   },
