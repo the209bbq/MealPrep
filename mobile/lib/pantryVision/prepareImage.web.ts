@@ -1,8 +1,9 @@
 import { PHOTO_SCAN } from '../../config/appConfig';
+import { inferImageMimeType, isHeicMimeType } from '../web/inferImageMimeType';
 import { assessGrayscaleQuality, computeLongEdgeResize, PantryImageQualityError } from './prepareImageShared';
 import type { PreparedPantryImage } from './types';
 
-function readFileAsDataUrl(file: File): Promise<string> {
+function readFileAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -11,15 +12,15 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-async function loadBitmap(file: File): Promise<ImageBitmap> {
+async function blobToImageBitmap(blob: Blob): Promise<ImageBitmap> {
   if (typeof createImageBitmap === 'function') {
     try {
-      return await createImageBitmap(file, { imageOrientation: 'from-image' });
+      return await createImageBitmap(blob, { imageOrientation: 'from-image' });
     } catch {
-      return await createImageBitmap(file);
+      return await createImageBitmap(blob);
     }
   }
-  const dataUrl = await readFileAsDataUrl(file);
+  const dataUrl = await readFileAsDataUrl(blob);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image();
     el.onload = () => resolve(el);
@@ -35,9 +36,52 @@ async function loadBitmap(file: File): Promise<ImageBitmap> {
   return createImageBitmap(canvas);
 }
 
+async function heicBlobToJpegBlob(file: File): Promise<Blob> {
+  const { default: heic2any } = await import('heic2any');
+  const converted = await heic2any({
+    blob: file,
+    toType: 'image/jpeg',
+    quality: 0.92,
+  });
+  return Array.isArray(converted) ? converted[0]! : converted;
+}
+
+/** Decode camera-roll HEIC/HEIF and other formats browsers cannot paint directly. */
+async function fileToDecodableBlob(file: File): Promise<Blob> {
+  const mimeType = inferImageMimeType(file);
+  if (isHeicMimeType(mimeType)) {
+    try {
+      return await heicBlobToJpegBlob(file);
+    } catch {
+      /* fall through — try native decode (Safari) */
+    }
+  }
+  if (!file.type || file.type === 'application/octet-stream') {
+    return new Blob([file], { type: mimeType });
+  }
+  return file;
+}
+
+async function loadBitmap(file: File): Promise<ImageBitmap> {
+  const decodable = await fileToDecodableBlob(file);
+  try {
+    return await blobToImageBitmap(decodable);
+  } catch {
+    const mime = inferImageMimeType(file);
+    if (isHeicMimeType(mime)) {
+      throw new Error('Could not load HEIC photo. Try JPG or PNG, or turn off HEIC in camera settings.');
+    }
+    throw new Error('Could not load image. Try JPG or PNG.');
+  }
+}
+
 function canvasToJpegBase64(canvas: HTMLCanvasElement, quality: number): string {
   const dataUrl = canvas.toDataURL('image/jpeg', quality);
-  return dataUrl.split(',')[1] ?? '';
+  const base64 = dataUrl.split(',')[1] ?? '';
+  if (!base64) {
+    throw new Error('Could not encode image for upload.');
+  }
+  return base64;
 }
 
 function assessCanvasQuality(canvas: HTMLCanvasElement): ReturnType<typeof assessGrayscaleQuality> {
@@ -53,6 +97,10 @@ function assessCanvasQuality(canvas: HTMLCanvasElement): ReturnType<typeof asses
 }
 
 export async function preparePantryImageFromFile(file: File): Promise<PreparedPantryImage> {
+  if (file.size <= 0) {
+    throw new Error('That photo file looks empty. Try picking it again.');
+  }
+
   const bitmap = await loadBitmap(file);
   const { width: targetW, height: targetH } = computeLongEdgeResize(
     bitmap.width,
@@ -109,8 +157,18 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
 
 /** Resize an object URL / data URL (from image picker on web). */
 export async function preparePantryImage(uri: string): Promise<PreparedPantryImage> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  const file = new File([blob], 'pantry.jpg', { type: blob.type || 'image/jpeg' });
+  let blob: Blob;
+  try {
+    const response = await fetch(uri);
+    if (!response.ok) {
+      throw new Error('Could not read image URL');
+    }
+    blob = await response.blob();
+  } catch {
+    throw new Error('Could not read image from picker. Try choosing the photo again.');
+  }
+
+  const mimeType = blob.type || inferImageMimeType({ name: 'photo.jpg', type: blob.type });
+  const file = new File([blob], 'pantry.jpg', { type: mimeType });
   return preparePantryImageFromFile(file);
 }

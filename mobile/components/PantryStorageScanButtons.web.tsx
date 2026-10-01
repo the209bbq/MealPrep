@@ -7,6 +7,7 @@ import { THEME } from '../config/appConfig';
 import { GUEST_MODE_COPY } from '../config/guestMode';
 import { resolvePhotoScanSession } from '../lib/guest/resolvePhotoScanSession';
 import { pantryStorageScanActions, type PantryStorageLocation } from '../config/pantryStorage';
+import { PantryImageQualityError } from '../lib/pantryVision/prepareImageShared';
 import { preparePantryImageFromFile } from '../lib/pantryVision/prepareImage.web';
 import { pickWebImageFile } from '../lib/web/pickWebImageFile';
 import type { PantryStorageScanButtonsProps } from './PantryStorageScanButtons';
@@ -56,7 +57,12 @@ export function PantryStorageScanButtons({
       const prepared = await preparePantryImageFromFile(file);
       onImagePrepared(location, prepared);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Could not prepare photo';
+      const message =
+        error instanceof PantryImageQualityError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Could not prepare photo';
       onPrepareError?.(message);
     } finally {
       setPickerBusy(false);

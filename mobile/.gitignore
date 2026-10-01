@@ -46,3 +46,4 @@ yarn-error.*
 /public/icons/
 /public/manifest.webmanifest
 .pantry-scan-serve-root/
+.tmp-prepare-web-*
