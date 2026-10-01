@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,8 @@ import {
   PantryStorageLocationFilterChips,
 } from '../../components/PantryStorageLocationChips';
 import { CATEGORY_LABELS, isPantryVisionConfigured, PHOTO_SCAN, THEME } from '../../config/appConfig';
+import { GUEST_MODE_COPY } from '../../config/guestMode';
+import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   isPantryStorageLocation,
@@ -79,6 +81,7 @@ function readStoredPantryLocationFilter(): PantryStorageLocation | 'all' {
 }
 
 export default function PantryScreen() {
+  const params = useLocalSearchParams<{ tutorialScan?: string; tutorialManual?: string }>();
   const {
     pantry,
     recipes,
@@ -187,6 +190,10 @@ export default function PantryScreen() {
   ) {
     if (!featureFlags.photoScan) {
       Alert.alert('Feature off', 'Photo scan is disabled in feature toggles.');
+      return;
+    }
+    if (!demoMode && !session) {
+      Alert.alert(GUEST_MODE_COPY.pantryScanSignInTitle, GUEST_MODE_COPY.pantryScanSignIn);
       return;
     }
 
@@ -388,6 +395,21 @@ export default function PantryScreen() {
     setAddOpen(true);
   }
 
+  const tutorialLaunchRef = useRef<'scan' | 'manual' | null>(null);
+  useEffect(() => {
+    const wantsScan = params.tutorialScan === '1';
+    const wantsManual = params.tutorialManual === '1';
+    const key = wantsScan ? 'scan' : wantsManual ? 'manual' : null;
+    if (!key || tutorialLaunchRef.current === key) return;
+    tutorialLaunchRef.current = key;
+    if (key === 'manual') {
+      openAddModal();
+      return;
+    }
+    const source = Platform.OS === 'web' ? 'library' : 'camera';
+    void handleNativeScan(DEFAULT_PANTRY_STORAGE_LOCATION, source);
+  }, [params.tutorialManual, params.tutorialScan]);
+
   function openEditModal(item: PantryItem) {
     setEditItem(item);
     setManualName(item.name);
@@ -531,10 +553,12 @@ export default function PantryScreen() {
           ) : null}
         </View>
 
+        <GuestSaveNudge />
+
         {scanRecipeCount != null && scanRecipeCount > 0 ? (
-          <View className="mt-4 rounded-2xl border border-emerald bg-emerald-light px-4 py-4">
-            <Text className="font-bold text-emerald-dark">Pantry updated</Text>
-            <Text className="mt-1 text-sm text-emerald-dark">
+          <View className="mt-4 rounded-2xl border border-primary bg-primary-light px-4 py-4">
+            <Text className="font-bold text-primary-dark">Pantry updated</Text>
+            <Text className="mt-1 text-sm text-primary-dark">
               See {scanRecipeCount} recipe{scanRecipeCount === 1 ? '' : 's'} you can make with default matches.
             </Text>
             <Pressable
@@ -542,9 +566,9 @@ export default function PantryScreen() {
                 setScanRecipeCount(null);
                 router.push('/recipes');
               }}
-              className="mt-3 items-center rounded-xl bg-emerald py-3"
+              className="mt-3 items-center rounded-xl bg-primary py-3"
             >
-              <Text className="text-sm font-bold text-on-emerald">See {scanRecipeCount} recipes</Text>
+              <Text className="text-sm font-bold text-on-primary">See {scanRecipeCount} recipes</Text>
             </Pressable>
           </View>
         ) : null}
@@ -595,7 +619,7 @@ export default function PantryScreen() {
                   onPress={retryLastScan}
                   className="mt-3 items-center rounded-xl border border-border bg-card py-2.5"
                 >
-                  <Text className="text-sm font-bold text-emerald-dark">{PHOTO_SCAN.tryAgainLabel}</Text>
+                  <Text className="text-sm font-bold text-primary-dark">{PHOTO_SCAN.tryAgainLabel}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -621,7 +645,7 @@ export default function PantryScreen() {
             onPress={openAddModal}
             className="mt-4 rounded-xl border border-border bg-card px-3 py-3"
           >
-            <Text className="text-center text-sm font-bold text-emerald-dark">Add item manually</Text>
+            <Text className="text-center text-sm font-bold text-primary-dark">Add item manually</Text>
           </Pressable>
         </Card>
 
@@ -715,9 +739,9 @@ export default function PantryScreen() {
                         setManualLocation(suggestStorageLocationForCategory(cat));
                       }
                     }}
-                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-emerald' : 'border border-border bg-card'}`}
+                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
                   >
-                    <Text className={`text-xs font-semibold ${selected ? 'text-on-emerald' : 'text-slate'}`}>
+                    <Text className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-slate'}`}>
                       {CATEGORY_LABELS[cat]}
                     </Text>
                   </Pressable>
@@ -746,8 +770,8 @@ export default function PantryScreen() {
               <Pressable onPress={closeManualModal} className="flex-1 rounded-2xl border border-border py-3">
                 <Text className="text-center font-bold text-slate">Cancel</Text>
               </Pressable>
-              <Pressable onPress={() => void submitManualForm()} className="flex-1 rounded-2xl bg-emerald py-3">
-                <Text className="text-center font-bold text-on-emerald">{editItem ? 'Save changes' : 'Add to pantry'}</Text>
+              <Pressable onPress={() => void submitManualForm()} className="flex-1 rounded-2xl bg-primary py-3">
+                <Text className="text-center font-bold text-on-primary">{editItem ? 'Save changes' : 'Add to pantry'}</Text>
               </Pressable>
             </View>
           </View>

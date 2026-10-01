@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SmartShopComparisonResults, resolveCheapestStoreId } from '../components/smartShop/SmartShopComparisonResults';
@@ -25,7 +25,7 @@ import { communityDealsForGroceryList } from '../lib/communityDeals/filterDeals'
 
 export default function SmartShopScreen() {
   const insets = useSafeAreaInsets();
-  const { grocery, featureFlags, profile } = useApp();
+  const { grocery, featureFlags, profile, onboarding } = useApp();
   const shop = useSmartShopScreen({ grocery, profile });
   const [addPriceTarget, setAddPriceTarget] = useState<SmartShopAddPriceTarget | null>(null);
 
@@ -38,12 +38,18 @@ export default function SmartShopScreen() {
     void shop.refreshComparison();
   }, [shop.community.refresh, shop.refreshComparison]);
 
+  useEffect(() => {
+    if (shop.dealsResult) {
+      onboarding.notifyTutorialStepComplete('shop');
+    }
+  }, [onboarding, shop.dealsResult]);
+
   if (!featureFlags.smartShop) {
     return (
       <View className="flex-1 bg-paper px-4" style={{ paddingTop: insets.top }}>
         <Text className="mt-8 text-lg font-bold text-ink">Smart Shop is turned off</Text>
-        <Pressable onPress={() => router.back()} className="mt-4 rounded-2xl bg-emerald px-4 py-3">
-          <Text className="text-center font-bold text-on-emerald">Back</Text>
+        <Pressable onPress={() => router.back()} className="mt-4 rounded-2xl bg-primary px-4 py-3">
+          <Text className="text-center font-bold text-on-primary">Back</Text>
         </Pressable>
       </View>
     );

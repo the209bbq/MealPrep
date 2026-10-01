@@ -49,7 +49,7 @@ export function ViewScanPhotoButton({ scanPhotoPath, className }: Props) {
         ) : (
           <Ionicons name="image-outline" size={16} color={THEME.primary} />
         )}
-        <Text className="text-xs font-bold text-emerald-dark">
+        <Text className="text-xs font-bold text-primary-dark">
           {loading ? SCAN_PHOTOS.loadingPhoto : SCAN_PHOTOS.viewPhotoLabel}
         </Text>
       </Pressable>

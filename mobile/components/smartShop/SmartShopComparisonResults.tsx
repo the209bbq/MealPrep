@@ -161,10 +161,10 @@ export function SmartShopComparisonResults({
             ) : null}
             <View className="mt-2 flex-row flex-wrap items-center gap-2">
               <Pressable onPress={() => onAddPrice(store)} className="self-start">
-                <Text className="text-xs font-bold text-emerald-dark">{SMART_SHOP_COPY.addPriceButton}</Text>
+                <Text className="text-xs font-bold text-primary-dark">{SMART_SHOP_COPY.addPriceButton}</Text>
               </Pressable>
               <Pressable onPress={() => onOpenDirections(store)} className="self-start">
-                <Text className="text-xs font-semibold text-emerald-dark">Directions</Text>
+                <Text className="text-xs font-semibold text-primary-dark">Directions</Text>
               </Pressable>
               <StoreWeeklyAdButton store={store} />
             </View>
@@ -231,7 +231,7 @@ export function SmartShopComparisonResults({
                 <View className="mt-2 flex-row flex-wrap gap-3">
                   {activeStores.map((store) => (
                     <Pressable key={`add-${store.id}-${item.id}`} onPress={() => onAddPrice(store, item.name)}>
-                      <Text className="text-xs font-bold text-emerald-dark">
+                      <Text className="text-xs font-bold text-primary-dark">
                         {SMART_SHOP_COPY.addPriceButton} · {store.chain}
                       </Text>
                     </Pressable>
@@ -239,7 +239,7 @@ export function SmartShopComparisonResults({
                 </View>
                 {best?.productUrl ? (
                   <Pressable onPress={() => void Linking.openURL(best.productUrl!)} className="mt-2">
-                    <Text className="text-xs font-semibold text-emerald-dark">View at store</Text>
+                    <Text className="text-xs font-semibold text-primary-dark">View at store</Text>
                   </Pressable>
                 ) : null}
               </View>

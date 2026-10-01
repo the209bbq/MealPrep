@@ -29,7 +29,7 @@ export function BrandLogo({ variant, style }: BrandLogoProps) {
             resizeMode="contain"
           />
         </View>
-        <Text className="shrink text-sm font-bold text-on-emerald" numberOfLines={1}>
+        <Text className="shrink text-sm font-bold text-on-primary" numberOfLines={1}>
           {APP_BRAND.shortName}
         </Text>
       </View>

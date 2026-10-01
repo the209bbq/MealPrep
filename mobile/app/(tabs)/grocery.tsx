@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { GroceryEmptyState } from '../../components/grocery/GroceryEmptyState';
+import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { GroceryItemRow } from '../../components/grocery/GroceryItemRow';
 import { CATEGORY_LABELS, THEME } from '../../config/appConfig';
 import { GROCERY_COPY } from '../../config/grocery';
@@ -32,7 +33,14 @@ export default function GroceryScreen() {
     addManualGroceryItem,
     clearCheckedGroceryItems,
     removeGroceryItem,
+    onboarding,
   } = useApp();
+
+  useFocusEffect(
+    useCallback(() => {
+      onboarding.notifyTutorialStepComplete('grocery');
+    }, [onboarding]),
+  );
 
   const insets = useSafeAreaInsets();
   const [cartExpanded, setCartExpanded] = useState(true);
@@ -117,7 +125,7 @@ export default function GroceryScreen() {
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: showShopCta ? 100 + insets.bottom : 32 }}>
           <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-5">
             <Text className="text-xs font-bold uppercase tracking-widest text-on-primary-muted">{GROCERY_COPY.listTitle}</Text>
-            <Text className="mt-1 text-2xl font-bold text-on-emerald">
+            <Text className="mt-1 text-2xl font-bold text-on-primary">
               {GROCERY_COPY.toBuyInCartLine(open.length, checkedCount)}
             </Text>
             <View className="mt-3 h-2 overflow-hidden rounded-full bg-on-primary-muted/30">
@@ -142,10 +150,12 @@ export default function GroceryScreen() {
                 onPress={refreshGrocery}
                 className="min-h-[48px] rounded-2xl border border-on-primary-muted/40 bg-primary/30 px-4 py-3"
               >
-                <Text className="text-center text-sm font-bold text-on-emerald">{GROCERY_COPY.refresh}</Text>
+                <Text className="text-center text-sm font-bold text-on-primary">{GROCERY_COPY.refresh}</Text>
               </Pressable>
             </View>
           </View>
+
+          <GuestSaveNudge className="mt-3" />
 
           {totalCount === 0 ? (
             <View className="mt-6">
@@ -164,7 +174,7 @@ export default function GroceryScreen() {
                 openSections.map((section) => (
                   <View key={section.category} className="mb-4">
                     <View className="mb-2 flex-row items-center gap-2">
-                      <View className="h-8 w-1 rounded-full bg-emerald" />
+                      <View className="h-8 w-1 rounded-full bg-primary" />
                       <Text className="text-base font-bold text-ink">{section.label}</Text>
                       <Text className="text-sm text-muted">({section.items.length})</Text>
                     </View>
@@ -225,10 +235,10 @@ export default function GroceryScreen() {
           >
             <Pressable
               onPress={() => router.push('/smart-shop')}
-              className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-emerald px-4 py-3"
+              className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3"
             >
               <Ionicons name="pricetags" size={22} color={THEME.onPrimary} />
-              <Text className="text-base font-bold text-on-emerald">{GROCERY_COPY.shopThisList(open.length)}</Text>
+              <Text className="text-base font-bold text-on-primary">{GROCERY_COPY.shopThisList(open.length)}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -310,9 +320,9 @@ export default function GroceryScreen() {
                       setAisleTouched(true);
                       setManualCategory(cat);
                     }}
-                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-emerald' : 'border border-border bg-card'}`}
+                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
                   >
-                    <Text className={`text-xs font-semibold ${selected ? 'text-on-emerald' : 'text-slate'}`}>
+                    <Text className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-slate'}`}>
                       {CATEGORY_LABELS[cat]}
                     </Text>
                   </Pressable>
@@ -323,8 +333,8 @@ export default function GroceryScreen() {
               <Pressable onPress={() => setAddOpen(false)} className="flex-1 rounded-2xl border border-border py-3">
                 <Text className="text-center font-bold text-slate">{GROCERY_COPY.cancel}</Text>
               </Pressable>
-              <Pressable onPress={submitManualItem} className="flex-1 rounded-2xl bg-emerald py-3">
-                <Text className="text-center font-bold text-on-emerald">{GROCERY_COPY.addToList}</Text>
+              <Pressable onPress={submitManualItem} className="flex-1 rounded-2xl bg-primary py-3">
+                <Text className="text-center font-bold text-on-primary">{GROCERY_COPY.addToList}</Text>
               </Pressable>
             </View>
           </View>

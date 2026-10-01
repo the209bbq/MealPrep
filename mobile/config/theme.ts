@@ -25,7 +25,7 @@ export const THEME: ThemeTokens = {
   danger: themeColors.danger,
 };
 
-/** Tailwind / NativeWind color map (legacy `emerald` class names = primary navy). */
+/** Tailwind / NativeWind color map (semantic tokens from theme.colors.json). */
 export function tailwindThemeColors(): Record<string, string> {
   const c = themeColors;
   return {
@@ -44,11 +44,6 @@ export function tailwindThemeColors(): Record<string, string> {
     'on-primary-muted': c.onPrimaryMuted,
     slate: c.primaryDark,
     'slate-muted': c.slateMuted,
-    emerald: c.primary,
-    'emerald-dark': c.primaryDark,
-    'emerald-light': c.primaryLight,
-    'emerald-accent': c.primaryAccent,
-    'on-emerald': c.onPrimary,
     success: c.success,
     'success-dark': c.successDark,
     'success-light': c.successLight,

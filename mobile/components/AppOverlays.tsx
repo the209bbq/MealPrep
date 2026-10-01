@@ -1,6 +1,7 @@
 import { View } from 'react-native';
 import { useApp } from '../context/AppContext';
-import { FirstRunTour } from './onboarding/FirstRunTour';
+import { HandsOnTutorial } from './onboarding/HandsOnTutorial';
+import { TutorialContinuePill } from './onboarding/TutorialContinuePill';
 import { WelcomeScreen } from './onboarding/WelcomeScreen';
 import { UndoToast } from './UndoToast';
 
@@ -15,11 +16,16 @@ export function AppOverlays() {
         onGetStarted={onboarding.dismissWelcomeForSignUp}
         onLookAround={onboarding.dismissWelcomeForBrowse}
       />
-      <FirstRunTour
-        visible={onboarding.showTour}
-        onFinish={onboarding.completeTour}
-        onSkip={onboarding.skipTour}
+      <HandsOnTutorial
+        visible={onboarding.showTutorialModal}
+        progress={onboarding.tutorialProgress}
+        recapVisible={onboarding.tutorialRecapVisible}
+        onBeginTask={onboarding.beginTutorialTask}
+        onSkipStep={onboarding.skipTutorialStep}
+        onSkipTutorial={onboarding.skipTour}
+        onFinish={onboarding.finishTutorial}
       />
+      <TutorialContinuePill visible={onboarding.showTutorialPill} onPress={onboarding.returnToTutorial} />
       {undoToast ? (
         <UndoToast message={undoToast.message} onUndo={undoToast.onUndo} onDismiss={dismissUndoToast} />
       ) : null}

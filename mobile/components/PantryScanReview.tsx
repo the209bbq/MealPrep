@@ -89,9 +89,9 @@ export function PantryScanReview({
       <Pressable
         disabled={saving || enabledCount === 0}
         onPress={onSave}
-        className={`flex-1 rounded-xl px-3 py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-emerald'}`}
+        className={`flex-1 rounded-xl px-3 py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-primary'}`}
       >
-        <Text className="text-center text-sm font-bold text-on-emerald">
+        <Text className="text-center text-sm font-bold text-on-primary">
           {saving ? 'Saving…' : `Save ${enabledCount} item${enabledCount === 1 ? '' : 's'}`}
         </Text>
       </Pressable>
@@ -126,7 +126,7 @@ export function PantryScanReview({
                 className="flex-row items-center gap-2"
               >
                 <View
-                  className={`h-5 w-5 rounded border ${item.enabled ? 'border-emerald bg-emerald' : 'border-muted bg-card'}`}
+                  className={`h-5 w-5 rounded border ${item.enabled ? 'border-primary bg-primary' : 'border-muted bg-card'}`}
                 />
               </Pressable>
               <Pressable onPress={() => toggleExpanded(item.key)} className="flex-1">
@@ -148,7 +148,7 @@ export function PantryScanReview({
                 </Text>
               </Pressable>
               <Pressable onPress={() => toggleExpanded(item.key)}>
-                <Text className="text-xs font-bold text-emerald-dark">{expanded ? 'Less' : 'Edit'}</Text>
+                <Text className="text-xs font-bold text-primary-dark">{expanded ? 'Less' : 'Edit'}</Text>
               </Pressable>
             </View>
 
@@ -158,7 +158,7 @@ export function PantryScanReview({
                   <Text className="text-xs font-semibold text-danger">Demo sample (not from your photo)</Text>
                 ) : null}
                 <Pressable onPress={() => toggleMerge(item.key)} className="mt-1">
-                  <Text className={`text-xs ${mergeSelection.includes(item.key) ? 'font-bold text-emerald' : 'text-muted'}`}>
+                  <Text className={`text-xs ${mergeSelection.includes(item.key) ? 'font-bold text-primary' : 'text-muted'}`}>
                     {mergeSelection.includes(item.key) ? 'Selected to merge' : 'Select to merge duplicates'}
                   </Text>
                 </Pressable>
@@ -195,7 +195,7 @@ export function PantryScanReview({
                           location: suggestStorageLocationForPantryItem(item.name, category as PantryCategory),
                         })
                       }
-                      className={`rounded-full px-2 py-1 ${item.category === category ? 'bg-emerald-light' : 'bg-card'}`}
+                      className={`rounded-full px-2 py-1 ${item.category === category ? 'bg-primary-light' : 'bg-card'}`}
                     >
                       <Text className="text-[10px] font-semibold text-slate">{CATEGORY_LABELS[category]}</Text>
                     </Pressable>
@@ -216,8 +216,8 @@ export function PantryScanReview({
       })}
 
       {mergeSelection.length >= 2 ? (
-        <Pressable onPress={applyMerge} className="mt-3 rounded-xl border border-emerald px-3 py-2">
-          <Text className="text-center text-xs font-bold text-emerald-dark">Merge {mergeSelection.length} selected</Text>
+        <Pressable onPress={applyMerge} className="mt-3 rounded-xl border border-primary px-3 py-2">
+          <Text className="text-center text-xs font-bold text-primary-dark">Merge {mergeSelection.length} selected</Text>
         </Pressable>
       ) : null}
 
@@ -260,9 +260,9 @@ export function PantryScanReviewStickyFooter(props: {
         <Pressable
           disabled={saving || enabledCount === 0}
           onPress={onSave}
-          className={`flex-[2] rounded-xl py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-emerald'}`}
+          className={`flex-[2] rounded-xl py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-primary'}`}
         >
-          <Text className="text-center text-sm font-bold text-on-emerald">
+          <Text className="text-center text-sm font-bold text-on-primary">
             {saving ? 'Saving…' : `Save ${enabledCount} item${enabledCount === 1 ? '' : 's'}`}
           </Text>
         </Pressable>
