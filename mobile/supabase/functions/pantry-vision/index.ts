@@ -18,8 +18,6 @@ const DEFAULT_GEMINI_FALLBACK_MODELS = [
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
 ] as const;
 const GEMINI_REQUEST_TIMEOUT_MS = 90_000;
 const GEMINI_RETRY_BACKOFF_MS = 450;

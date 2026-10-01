@@ -21,8 +21,11 @@ export function pantryIngredientSearchQueries(
   const seen = new Set<string>();
   const queries: string[] = [];
 
-  for (const item of pantry) {
-    if (isPantryItemStapleLike(item)) continue;
+  const candidates = pantry
+    .filter((item) => !isPantryItemStapleLike(item))
+    .sort((a, b) => b.name.trim().length - a.name.trim().length);
+
+  for (const item of candidates) {
     const normalized = normalizeIngredientName(item.name);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);

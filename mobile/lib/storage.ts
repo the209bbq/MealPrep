@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 function memory(): StorageLike {
   const map = new Map<string, string>();
   return {
@@ -23,7 +21,7 @@ let cached: StorageLike | null = null;
 
 function getStore(): StorageLike {
   if (cached) return cached;
-  if (Platform.OS === 'web' && typeof globalThis.localStorage !== 'undefined') {
+  if (typeof globalThis.localStorage !== 'undefined') {
     cached = globalThis.localStorage;
     return cached;
   }

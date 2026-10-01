@@ -190,7 +190,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
       {demoMode ? (
         <View className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
           <Text className="text-xs font-semibold text-amber-900">Demo mode</Text>
-          <Text className="mt-1 text-xs text-amber-800">Sample results only until you sign in for live search.</Text>
+          <Text className="mt-1 text-xs text-amber-800">Sample results only until you sign in with a connected account.</Text>
         </View>
       ) : null}
 
@@ -198,7 +198,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan }: Discove
         <Card className="mt-3 border-dashed">
           <Text className="text-sm font-semibold text-ink">Not set up yet</Text>
           <Text className="mt-2 text-sm text-muted">
-            Recipe search is not set up yet. Try again later.
+            Recipe search isn’t connected yet. Ask an admin to finish setup, then try again.
           </Text>
         </Card>
       ) : null}

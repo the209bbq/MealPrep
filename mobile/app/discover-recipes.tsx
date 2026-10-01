@@ -136,7 +136,7 @@ export default function DiscoverRecipesScreen() {
           <View className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
             <Text className="text-xs font-semibold text-amber-900">Demo mode</Text>
             <Text className="mt-1 text-xs text-amber-800">
-              Results below are labeled sample data only. Sign in for live search.
+              Results below are labeled sample data only. Sign in with a connected account for live search.
             </Text>
           </View>
         ) : null}
@@ -145,7 +145,7 @@ export default function DiscoverRecipesScreen() {
           <Card className="mt-4 border-dashed">
             <Text className="text-sm font-semibold text-ink">Not set up yet</Text>
             <Text className="mt-2 text-sm text-muted">
-              Recipe search is not set up yet. Try again later or ask the app owner to finish setup.
+              Recipe search isn’t connected yet. Ask an admin to finish setup, then try again.
             </Text>
           </Card>
         ) : null}

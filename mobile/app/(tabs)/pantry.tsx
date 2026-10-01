@@ -222,11 +222,10 @@ export default function PantryScreen() {
       const prepared = await preparePantryImage(uri);
       await runVisionFromPrepared(prepared, scanLocation);
     } catch (error) {
-      setScanFailure(
-        error instanceof Error ? error.message : PHOTO_SCAN.scanFailedMessage,
-        PHOTO_SCAN.scanFailedTitle,
-        attempt,
-      );
+      if (error instanceof Error) {
+        console.warn('[pantry scan]', error.message);
+      }
+      setScanFailure(PHOTO_SCAN.scanFailedMessage, PHOTO_SCAN.scanFailedTitle, attempt);
       setPhase('idle');
     }
   }

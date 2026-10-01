@@ -116,7 +116,7 @@ export default function DiscoverRecipeDetailScreen() {
       {recipe ? (
         <ScrollView className="flex-1 px-4 pb-10">
           {recipe.isDemoSample ? (
-            <Text className="mt-4 text-[10px] font-bold uppercase text-amber-700">Demo sample recipe</Text>
+            <Text className="mt-4 text-[10px] font-bold uppercase text-amber-700">Demo sample — not from live search</Text>
           ) : null}
           <Text className="mt-2 text-xs font-semibold uppercase text-emerald">{recipe.cuisine}</Text>
           <Text className="text-2xl font-bold text-ink">{recipe.name}</Text>
@@ -152,7 +152,7 @@ export default function DiscoverRecipeDetailScreen() {
               {recipe.carbs != null ? ` · ${recipe.carbs}g carbs` : ''}
               {recipe.fat != null ? ` · ${recipe.fat}g fat` : ''}
             </Text>
-            <Text className="mt-2 text-xs text-muted">Recipe source</Text>
+            <Text className="mt-2 text-xs text-muted">Source: online recipe catalog</Text>
           </Card>
 
           {error ? <Text className="mt-3 text-sm text-danger">{error}</Text> : null}

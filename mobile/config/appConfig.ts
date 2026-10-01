@@ -117,11 +117,13 @@ export const PHOTO_SCAN = {
   /** Documented default fallback chain on the Edge Function (override via GEMINI_FALLBACK_MODELS secret). */
   defaultGeminiFallbackModels: DEFAULT_GEMINI_VISION_FALLBACK_MODELS,
   proxyUrl: process.env.EXPO_PUBLIC_PANTRY_VISION_URL ?? '',
-  notConfiguredMessage: 'Pantry photo scan is not set up yet. Try again later.',
+  notConfiguredMessage:
+    'Pantry photo scan is not available on this app yet. Ask an admin to finish setup.',
   rateLimitMessage: 'Too many scans — wait a minute and try again.',
   scanFailedTitle: 'Couldn’t read that photo',
   scanFailedMessage:
     'Something went wrong while analyzing your photo. Check your connection and try again.',
+  scanBusyMessage: 'Scanning is busy right now. Try again in a moment.',
   tryAgainLabel: 'Try again',
   /** Max wait for saving reviewed scan items to Supabase (web/PWA). */
   saveTimeoutMs: 15_000,
@@ -222,7 +224,7 @@ export const USDA_FDC_SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search
 export const USDA_FDC_FOOD_URL = 'https://api.nal.usda.gov/fdc/v1/food';
 export const USDA_DEMO_API_KEY = 'DEMO_KEY';
 export const USDA_SETTINGS_STORAGE_KEY = 'mealprep.usdaApiKey';
-export const USDA_SEARCH_DATA_TYPE = 'Foundation,SR Legacy,Survey (FNDDS)';
+export const USDA_SEARCH_DATA_TYPES = ['Foundation', 'SR Legacy'] as const;
 
 export const isSupabaseConfigured = (): boolean =>
   SUPABASE_URL.trim().length > 0 && SUPABASE_ANON_KEY.trim().length > 0;

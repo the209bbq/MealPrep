@@ -6,6 +6,7 @@ import {
 } from '../../config/recipeMatching';
 import { FUZZY_MATCH_THRESHOLD, PANTRY_STAPLES } from '../../config/recipeMatchingConfig';
 import { expandSynonymKeys, fuzzyNameScore, normalizeIngredientName } from './normalize';
+import { findPantryItemsForIngredient, totalPantryQuantityInUnit } from './pantryStock';
 
 export interface MatchedIngredient {
   ingredient: RecipeIngredient;
@@ -124,13 +125,20 @@ export function scoreRecipeAgainstPantry(recipe: Recipe, pantry: PantryItem[]): 
 
     const result = findPantryMatch(ingredient, pantry, usedPantryIds);
     if (result.item) {
-      usedPantryIds.add(result.item.id);
-      matched.push({
-        ingredient,
-        matchedPantryItem: result.item,
-        matchReason: result.reason,
-        score: result.score,
-      });
+      const pantryMatches = findPantryItemsForIngredient(ingredient, pantry);
+      const have = totalPantryQuantityInUnit(pantryMatches, ingredient.unit);
+      if (have !== null && have < ingredient.quantity) {
+        const missingQty = Math.round((ingredient.quantity - have) * 100) / 100;
+        missing.push({ ...ingredient, quantity: missingQty });
+      } else {
+        usedPantryIds.add(result.item.id);
+        matched.push({
+          ingredient,
+          matchedPantryItem: result.item,
+          matchReason: result.reason,
+          score: result.score,
+        });
+      }
     } else {
       missing.push(ingredient);
     }

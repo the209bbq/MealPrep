@@ -103,8 +103,19 @@ function ensureNestedRouteIndexes() {
   }
 }
 
+/** GitHub Pages serves 404.html for unknown paths — SPA shell for deep links (e.g. discover-recipes/10879). */
+function ensureSpa404Fallback() {
+  const indexFile = path.join(distDir, 'index.html');
+  const fallbackFile = path.join(distDir, '404.html');
+  if (!fs.existsSync(indexFile)) {
+    throw new Error('dist/index.html missing — cannot create SPA 404 fallback');
+  }
+  fs.copyFileSync(indexFile, fallbackFile);
+}
+
 function assertArtifacts() {
   const required = [
+    '404.html',
     'manifest.webmanifest',
     'sw.js',
     'icons/icon-192.png',
@@ -126,6 +137,7 @@ function main() {
     throw new Error('dist/ not found — run expo export -p web first');
   }
   ensureNestedRouteIndexes();
+  ensureSpa404Fallback();
   const precacheUrls = collectPrecacheUrls();
   const version = cacheVersion(precacheUrls);
   patchServiceWorker(version, precacheUrls);

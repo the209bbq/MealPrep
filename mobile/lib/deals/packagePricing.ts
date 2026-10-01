@@ -12,6 +12,12 @@ function normalizeUnit(unit: string): string {
   if (u === 'grams' || u === 'gram') return 'g';
   if (u === 'kilograms' || u === 'kilogram' || u === 'kgs') return 'kg';
   if (u === 'ct' || u === 'ea' || u === 'item' || u === 'items') return 'each';
+  if (u === 'gal' || u === 'gallon' || u === 'gallons') return 'gal';
+  if (u === 'qt' || u === 'quart' || u === 'quarts') return 'qt';
+  if (u === 'pt' || u === 'pint' || u === 'pints') return 'pt';
+  if (u === 'l' || u === 'liter' || u === 'liters' || u === 'litre' || u === 'litres') return 'l';
+  if (u === 'ml' || u === 'milliliter' || u === 'milliliters') return 'ml';
+  if (u === 'fl' || u === 'floz' || u === 'fl oz' || u === 'fl-oz') return 'floz';
   return u;
 }
 
@@ -23,6 +29,12 @@ export function amountToOunces(quantity: number, unit: string): number | null {
   if (u === 'lb') return quantity * OZ_PER_LB;
   if (u === 'g') return quantity / G_PER_OZ;
   if (u === 'kg') return (quantity * 1000) / G_PER_OZ;
+  if (u === 'floz') return quantity;
+  if (u === 'gal') return quantity * 128;
+  if (u === 'qt') return quantity * 32;
+  if (u === 'pt') return quantity * 16;
+  if (u === 'l') return quantity * 33.814;
+  if (u === 'ml') return (quantity / 1000) * 33.814;
   return null;
 }
 
@@ -32,10 +44,16 @@ export interface ProductPackageSize {
 }
 
 const SIZE_IN_TEXT_RE =
-  /(\d+(?:\.\d+)?)\s*(oz|ounce|ounces|lb|lbs|pound|pounds|g|gram|grams|kg|kilogram|kilograms)\b/i;
+  /(\d+(?:\.\d+)?)\s*(oz|ounce|ounces|lb|lbs|pound|pounds|g|gram|grams|kg|kilogram|kilograms|gal|gallon|gallons|qt|quart|quarts|pt|pint|pints|l|liter|liters|ml|milliliter|milliliters|ct|count|ea|each)\b/i;
+
+const HALF_GALLON_RE = /\bhalf[\s-]?gallon\b/i;
+const DOZEN_RE = /\b(dozen|dz)\b/i;
 
 /** Parse a sell size from product title/description (e.g. "Chicken Breast 24 oz"). */
 export function parsePackageSizeFromText(text: string): ProductPackageSize | null {
+  if (HALF_GALLON_RE.test(text)) return { amount: 0.5, unit: 'gal' };
+  if (DOZEN_RE.test(text)) return { amount: 12, unit: 'each' };
+
   const match = text.match(SIZE_IN_TEXT_RE);
   if (!match) return null;
   const amount = Number.parseFloat(match[1] ?? '');
@@ -57,6 +75,12 @@ export function packagesNeededForLine(
 
   const needU = normalizeUnit(neededUnit);
   if (needU === 'each' || needU === 'count') {
+    if (packageSize) {
+      const pkgU = normalizeUnit(packageSize.unit);
+      if (pkgU === 'each' || pkgU === 'count') {
+        return Math.max(1, Math.ceil(neededQuantity / packageSize.amount));
+      }
+    }
     return Math.max(1, Math.ceil(neededQuantity));
   }
 

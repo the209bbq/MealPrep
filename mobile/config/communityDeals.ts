@@ -11,5 +11,5 @@ export const COMMUNITY_DEALS = {
   fuzzyMatchMinScore: 0.88,
   migrationFilePath: 'mobile/supabase/migrations/20261001120000_store_community_deals.sql',
   migrationHint:
-    'Community prices are not available yet. Ask the app owner to finish setup, then try again.',
+    'Community prices aren’t available yet. Ask an admin to finish setup.',
 } as const;
