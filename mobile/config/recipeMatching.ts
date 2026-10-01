@@ -6,13 +6,18 @@ import { filterRankedMatches, type RecipePantryMatch } from '../lib/recipeMatch'
 
 export {
   FUZZY_MATCH_THRESHOLD,
+  INGREDIENT_CATEGORY_GROUPS,
   INGREDIENT_STRIP_TOKENS,
   INGREDIENT_SYNONYMS,
   PANTRY_STAPLES,
+  RECIPE_MATCHING_COPY,
 } from './recipeMatchingConfig';
 
-/** Default minimum match % when the user has not changed the filter chips. */
-export const DEFAULT_MIN_PANTRY_MATCH_PERCENT = 50;
+/** Default minimum match % chip on Recipes (0 = show best-ranked matches). */
+export const DEFAULT_MIN_PANTRY_MATCH_PERCENT = 0;
+
+/** Kitchen catalog list is ranked by match %; percent filter only applies when user raises the chip. */
+export const KITCHEN_LIST_DEFAULT_MIN_PERCENT = 0;
 
 /** Recipes must match at least this many pantry ingredients (non-staples) to appear. */
 export const DEFAULT_MIN_MATCHED_INGREDIENTS = 2;
@@ -34,7 +39,7 @@ export function filterDefaultKitchenMatches(
   ranked: RecipePantryMatch[],
   pantryItemCount?: number,
 ): RecipePantryMatch[] {
-  return filterRankedMatches(ranked, 'all', DEFAULT_MIN_PANTRY_MATCH_PERCENT, {
+  return filterRankedMatches(ranked, 'all', KITCHEN_LIST_DEFAULT_MIN_PERCENT, {
     minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
     pantryItemCount,
   });

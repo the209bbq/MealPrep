@@ -109,6 +109,7 @@ export default function RecipesScreen() {
   const [minPercent, setMinPercent] = useState(DEFAULT_MIN_PANTRY_MATCH_PERCENT);
   const [discoverySuggestions, setDiscoverySuggestions] = useState<PantryDiscoverySuggestion[]>([]);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
 
   const pantryEmpty = pantry.length === 0;
   const accessToken = session?.access_token ?? null;
@@ -173,16 +174,23 @@ export default function RecipesScreen() {
   useEffect(() => {
     if (pantryEmpty) {
       setDiscoverySuggestions([]);
+      setDiscoveryError(null);
       return;
     }
     let cancelled = false;
     setDiscoveryLoading(true);
-    void fetchPantryDiscoverySuggestions(pantry, accessToken)
-      .then((rows) => {
-        if (!cancelled) setDiscoverySuggestions(rows);
+    void fetchPantryDiscoverySuggestions(pantry, accessToken, { minPercent })
+      .then((result) => {
+        if (!cancelled) {
+          setDiscoverySuggestions(result.suggestions);
+          setDiscoveryError(result.errorMessage);
+        }
       })
       .catch(() => {
-        if (!cancelled) setDiscoverySuggestions([]);
+        if (!cancelled) {
+          setDiscoverySuggestions([]);
+          setDiscoveryError('Could not load online recipes right now.');
+        }
       })
       .finally(() => {
         if (!cancelled) setDiscoveryLoading(false);
@@ -190,7 +198,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, pantry, pantryEmpty]);
+  }, [accessToken, minPercent, pantry, pantryEmpty]);
 
   const active = recipes.find((r) => r.id === activeId);
   const activeMatch = active ? pantryRecipeMatches.byRecipeId.get(active.id) : undefined;
@@ -277,7 +285,10 @@ export default function RecipesScreen() {
               <Text className="text-sm text-muted">Finding recipes for your ingredients…</Text>
             </View>
           ) : null}
-          {!discoveryLoading && filteredDiscoverySuggestions.length === 0 ? (
+          {!discoveryLoading && discoveryError ? (
+            <Text className="mt-3 text-sm text-muted">{discoveryError}</Text>
+          ) : null}
+          {!discoveryLoading && !discoveryError && filteredDiscoverySuggestions.length === 0 ? (
             <Text className="mt-3 text-sm text-muted">
               No external recipes meet a {minPercent}% match with at least {DEFAULT_MIN_MATCHED_INGREDIENTS} pantry
               ingredients.

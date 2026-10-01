@@ -1,7 +1,7 @@
 import {
   DEFAULT_MIN_MATCHED_INGREDIENTS,
-  DEFAULT_MIN_PANTRY_MATCH_PERCENT,
   PANTRY_DISCOVERY_PER_QUERY,
+  RECIPE_MATCHING,
 } from '../../config/recipeMatching';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
 import type { PantryItem } from '../../types/mealprep';
@@ -15,19 +15,26 @@ export interface PantryDiscoverySuggestion {
   match: ReturnType<typeof scoreDiscoveryRecipeAgainstPantry>;
 }
 
-interface PantrySuggestionsCacheEntry {
+export interface PantryDiscoveryResult {
   suggestions: PantryDiscoverySuggestion[];
+  /** Set when every query failed (network/auth/proxy). */
+  errorMessage: string | null;
+  fromCache: boolean;
+}
+
+interface CacheEntry {
+  result: PantryDiscoveryResult;
   expiresAt: number;
 }
 
-const pantrySuggestionsCache = new Map<string, PantrySuggestionsCacheEntry>();
+const suggestionCache = new Map<string, CacheEntry>();
 
 /** Max RecipeAPI list page to randomize within (keeps free-tier usage predictable). */
 const PANTRY_DISCOVERY_MAX_PAGE = 12;
 
-function pantrySignature(pantry: PantryItem[]): string {
+function pantryCacheKey(pantry: PantryItem[]): string {
   return pantry
-    .map((item) => `${item.id}:${item.name}`)
+    .map((p) => `${p.id}:${p.name}`)
     .sort()
     .join('|');
 }
@@ -42,7 +49,7 @@ function hashString(input: string): number {
 
 function discoveryPageForQuery(pantry: PantryItem[], search: string, queryIndex: number): number {
   const bucket = Math.floor(Date.now() / RECIPE_DISCOVERY.cacheTtlMs);
-  const seed = `${pantrySignature(pantry)}:${search}:${queryIndex}:${bucket}`;
+  const seed = `${pantryCacheKey(pantry)}:${search}:${queryIndex}:${bucket}`;
   const page = 1 + (Math.abs(hashString(seed)) % PANTRY_DISCOVERY_MAX_PAGE);
   return page;
 }
@@ -72,22 +79,46 @@ function buildPantrySearchPlans(pantry: PantryItem[]): { search: string; ingredi
   });
 }
 
+function rankSuggestions(rows: PantryDiscoverySuggestion[]): PantryDiscoverySuggestion[] {
+  return rows
+    .filter((row) => row.match.matchedCount >= DEFAULT_MIN_MATCHED_INGREDIENTS)
+    .sort((a, b) => {
+      if (b.match.percentMatch !== a.match.percentMatch) {
+        return b.match.percentMatch - a.match.percentMatch;
+      }
+      if (b.match.matchedCount !== a.match.matchedCount) {
+        return b.match.matchedCount - a.match.matchedCount;
+      }
+      return a.match.missingCount - b.match.missingCount;
+    });
+}
+
 export async function fetchPantryDiscoverySuggestions(
   pantry: PantryItem[],
   accessToken: string | null,
-): Promise<PantryDiscoverySuggestion[]> {
-  if (pantry.length === 0) return [];
+  options?: { minPercent?: number; forceRefresh?: boolean },
+): Promise<PantryDiscoveryResult> {
+  if (pantry.length === 0) {
+    return { suggestions: [], errorMessage: null, fromCache: false };
+  }
 
-  const cacheKey = pantrySignature(pantry);
-  const cached = pantrySuggestionsCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.suggestions;
+  const cacheKey = pantryCacheKey(pantry);
+  if (!options?.forceRefresh) {
+    const hit = suggestionCache.get(cacheKey);
+    if (hit && hit.expiresAt > Date.now()) {
+      return { ...hit.result, fromCache: true };
+    }
   }
 
   const plans = buildPantrySearchPlans(pantry);
-  if (plans.length === 0) return [];
+  if (plans.length === 0) {
+    const empty: PantryDiscoveryResult = { suggestions: [], errorMessage: null, fromCache: false };
+    suggestionCache.set(cacheKey, { result: empty, expiresAt: Date.now() + RECIPE_DISCOVERY.cacheTtlMs });
+    return empty;
+  }
 
   const byId = new Map<number, RecipeDiscoveryListItem>();
+  let failures = 0;
 
   for (let queryIndex = 0; queryIndex < plans.length; queryIndex += 1) {
     const plan = plans[queryIndex];
@@ -105,7 +136,7 @@ export async function fetchPantryDiscoverySuggestions(
         if (!byId.has(item.id)) byId.set(item.id, item);
       }
     } catch {
-      // Skip failed query; other pantry terms may still return results.
+      failures += 1;
     }
   }
 
@@ -114,23 +145,22 @@ export async function fetchPantryDiscoverySuggestions(
     match: scoreDiscoveryRecipeAgainstPantry(recipe, pantry),
   }));
 
-  const ranked = scored
-    .filter(
-      (row) =>
-        row.match.matchedCount >= DEFAULT_MIN_MATCHED_INGREDIENTS &&
-        row.match.percentMatch >= DEFAULT_MIN_PANTRY_MATCH_PERCENT,
-    )
-    .sort((a, b) => {
-      if (b.match.percentMatch !== a.match.percentMatch) {
-        return b.match.percentMatch - a.match.percentMatch;
-      }
-      return a.match.missingCount - b.match.missingCount;
-    });
+  const minPercent = options?.minPercent ?? 0;
+  const ranked = rankSuggestions(scored).filter((row) => row.match.percentMatch >= minPercent);
 
-  pantrySuggestionsCache.set(cacheKey, {
-    suggestions: ranked,
-    expiresAt: Date.now() + RECIPE_DISCOVERY.cacheTtlMs,
-  });
+  const errorMessage =
+    failures === plans.length && ranked.length === 0
+      ? accessToken
+        ? 'Online recipe search is unavailable. Check your connection or try again shortly.'
+        : 'Sign in to load online recipe suggestions for your pantry.'
+      : null;
 
-  return ranked;
+  const result: PantryDiscoveryResult = {
+    suggestions: ranked.slice(0, RECIPE_MATCHING.homeRecommendationsLimit * 4),
+    errorMessage,
+    fromCache: false,
+  };
+
+  suggestionCache.set(cacheKey, { result, expiresAt: Date.now() + RECIPE_DISCOVERY.cacheTtlMs });
+  return result;
 }
