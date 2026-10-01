@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -25,6 +25,8 @@ import {
 import { analyzePriceTagPhoto } from '../../lib/priceTagVision/client';
 import { getSupabase } from '../../lib/supabase';
 import { resolveStoreChainKey } from '../../config/weeklyAds';
+import { ViewScanPhotoButton } from '../ViewScanPhotoButton';
+import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 
 export type SmartShopAddPriceTarget = {
   store: StoreLocation;
@@ -49,6 +51,9 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
+  const scanUploadRef = useRef<Promise<string | null> | null>(null);
 
   useEffect(() => {
     if (!target) return;
@@ -57,9 +62,15 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
     setSizeUnit('');
     setSaleUntil('');
     setError(null);
+    setPendingScanPhotoPath(null);
+    scanUploadRef.current = null;
     void getSupabase()
       ?.auth.getSession()
-      .then(({ data }) => setSignedIn(Boolean(data.session?.user?.id)));
+      .then(({ data }) => {
+        const id = data.session?.user?.id ?? null;
+        setUserId(id);
+        setSignedIn(Boolean(id));
+      });
   }, [target]);
 
   async function handleSave() {
@@ -87,6 +98,11 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
 
     setSubmitting(true);
     setError(null);
+    let scanPhotoPath = pendingScanPhotoPath;
+    if (!scanPhotoPath && scanUploadRef.current) {
+      scanPhotoPath = await scanUploadRef.current;
+    }
+
     const res = await addCommunityDeal({
       storeKey,
       osmStoreId: store.id.startsWith('kroger-') ? undefined : store.id,
@@ -95,6 +111,7 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
       price: parsed,
       unit: sizeUnit.trim() || undefined,
       saleValidUntil: sale || undefined,
+      scanPhotoPath,
     });
     setSubmitting(false);
     if (!res.ok) {
@@ -105,21 +122,28 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
     onClose();
   }
 
-  async function runScan(prepared: { base64: string; mimeType: string }) {
+  async function runScan(prepared: { base64: string; mimeType: string; uri?: string }) {
     setScanning(true);
     setError(null);
+    setPendingScanPhotoPath(null);
     try {
       const session = await getSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token ?? null;
-      const result = await analyzePriceTagPhoto(
-        {
-          uri: '',
-          base64: prepared.base64,
-          mimeType: prepared.mimeType as 'image/jpeg' | 'image/png' | 'image/webp',
-          byteLength: Math.floor((prepared.base64.length * 3) / 4),
-        },
-        token,
-      );
+      const uid = session?.data.session?.user?.id ?? null;
+      const imagePayload = {
+        uri: prepared.uri ?? '',
+        base64: prepared.base64,
+        mimeType: prepared.mimeType as 'image/jpeg' | 'image/png' | 'image/webp',
+        byteLength: Math.floor((prepared.base64.length * 3) / 4),
+      };
+      if (uid) {
+        const uploadPromise = uploadScanPhoto(imagePayload, 'price-tag', uid);
+        scanUploadRef.current = uploadPromise;
+        void uploadPromise.then(setPendingScanPhotoPath);
+      } else {
+        scanUploadRef.current = null;
+      }
+      const result = await analyzePriceTagPhoto(imagePayload, token);
       if (result.itemName) setItemName(result.itemName);
       if (Number.isFinite(result.price)) setPrice(String(result.price));
       if (result.sizeUnit) setSizeUnit(result.sizeUnit);
@@ -238,6 +262,8 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
           />
 
           {error ? <Text className="mt-2 text-xs text-danger">{error}</Text> : null}
+
+          {pendingScanPhotoPath ? <ViewScanPhotoButton scanPhotoPath={pendingScanPhotoPath} /> : null}
 
           <Pressable
             onPress={() => void handleSnapTag()}

@@ -25,6 +25,8 @@ export interface CommunityStoreDeal {
   expiredCount: number;
   myVote?: StoreDealVoteKind;
   isSample?: boolean;
+  /** Storage path for the shelf-tag photo used when reporting (owner can reopen). */
+  scanPhotoPath?: string | null;
 }
 
 export interface AddCommunityDealInput {
@@ -38,6 +40,7 @@ export interface AddCommunityDealInput {
   validUntil?: string;
   /** When set, item is on sale until this date (YYYY-MM-DD). Omit for a regular shelf price. */
   saleValidUntil?: string | null;
+  scanPhotoPath?: string | null;
 }
 
 export interface FetchCommunityDealsResult {
