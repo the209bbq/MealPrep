@@ -1,4 +1,5 @@
 import { SMART_SHOP } from '../../config/appConfig';
+import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { mergeKrogerLocations } from '../stores/krogerMerge';
 import { searchNearbyGroceryStores, type StoreRecord } from '../stores';
 import { assembleDealsResult, remapKrogerDealsToStores, storeRecordToLocation } from './buildShopResult';
@@ -53,10 +54,10 @@ export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
       if (serverConfigured) {
         merged = mergeKrogerLocations(stores, krogerRows);
       } else if (!warning) {
-        warning = 'Kroger locations unavailable until API secrets are added on Supabase.';
+        warning = SMART_SHOP_COPY.livePricingUnavailable;
       }
     } catch {
-      if (!warning) warning = 'Kroger location lookup failed. Showing OpenStreetMap stores only.';
+      if (!warning) warning = SMART_SHOP_COPY.livePricingUnavailable;
     }
   }
 
@@ -96,7 +97,7 @@ export async function searchDeals(params: FetchDealsParams): Promise<DealsSearch
       return sampleDealsResult(
         stores,
         items,
-        'No Kroger-family stores near you; showing sample prices (estimates).',
+        SMART_SHOP_COPY.noLiveStoresNearby,
       );
     }
   }
@@ -107,17 +108,15 @@ export async function searchDeals(params: FetchDealsParams): Promise<DealsSearch
     return assembleDealsResult({
       mode: 'live',
       providerId: 'kroger',
-      providerLabel: 'Kroger',
+      providerLabel: SMART_SHOP_COPY.pricingPartnerLabel,
       pricingNote:
-        deals.length > 0
-          ? 'Live Kroger prices at Kroger-family stores. Other nearby chains: prices not available.'
-          : 'No Kroger prices matched this list at selected stores.',
+        deals.length > 0 ? SMART_SHOP_COPY.livePricingMatched : SMART_SHOP_COPY.livePricingNoMatches,
       stores,
       deals,
       items,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Kroger pricing unavailable';
+    const message = err instanceof Error ? err.message : SMART_SHOP_COPY.livePricingUnavailable;
     const isNotConfigured = /not configured/i.test(message);
     return sampleDealsResult(
       stores,

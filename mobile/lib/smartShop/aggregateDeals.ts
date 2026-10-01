@@ -1,3 +1,4 @@
+import { SMART_SHOP_COPY } from '../../config/smartShop';
 import type { DealsSearchResult, ItemStoreDeal } from '../deals/types';
 import type { GroceryListItem } from '../../types/mealprep';
 
@@ -27,7 +28,7 @@ export function dealsSummaryLabel(result: DealsSearchResult): string {
   if (result.mode === 'sample') {
     return `SAMPLE deals · ${result.providerLabel}${communitySuffix}`;
   }
-  return `Live Kroger prices · ${result.providerLabel}${communitySuffix}`;
+  return `${SMART_SHOP_COPY.livePricesLabel} · ${result.providerLabel}${communitySuffix}`;
 }
 
 export function pricingBadgeForStore(
@@ -35,7 +36,7 @@ export function pricingBadgeForStore(
   options?: { hasCommunityDeals?: boolean },
 ): string {
   if (store.pricingSource === 'kroger') {
-    return options?.hasCommunityDeals ? 'Kroger + community deals' : 'Kroger prices';
+    return options?.hasCommunityDeals ? SMART_SHOP_COPY.livePricesWithCommunity : SMART_SHOP_COPY.livePricesLabel;
   }
   if (store.pricingSource === 'sample') {
     return options?.hasCommunityDeals ? 'Sample + community deals' : 'Sample prices';

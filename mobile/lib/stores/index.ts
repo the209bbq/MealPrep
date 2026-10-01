@@ -1,4 +1,4 @@
-import { mapsDirectionsUrl, SMART_SHOP_STORES } from '../../config/smartShop';
+import { mapsDirectionsUrl, SMART_SHOP_COPY, SMART_SHOP_STORES } from '../../config/smartShop';
 import { geocodeUsZip } from './nominatim';
 import { fetchOverpassStores } from './overpass';
 import type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
@@ -23,11 +23,11 @@ function zipGeocodeMessage(reason: string): string {
 function overpassWarning(reason: string): string | undefined {
   switch (reason) {
     case 'rate_limited':
-      return 'OpenStreetMap is busy (rate limit). Showing Kroger locations only if available.';
+      return SMART_SHOP_COPY.osmRateLimited;
     case 'network':
-      return 'Could not reach OpenStreetMap. Showing Kroger locations only if available.';
+      return SMART_SHOP_COPY.osmNetwork;
     case 'empty':
-      return 'No OSM grocery pins nearby. Kroger locations may still appear below.';
+      return SMART_SHOP_COPY.osmEmpty;
     default:
       return undefined;
   }

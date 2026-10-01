@@ -5,6 +5,8 @@ import { GROCERY_NAME_EXCLUDE_PATTERNS, SPECIALTY_SHOP_TAGS } from './smartShopC
 export const SMART_SHOP_STORES = {
   defaultRadiusMiles: 10,
   maxSavedStores: 8,
+  /** Stores pre-selected for price comparison when the user has no favorites yet. */
+  defaultComparisonStoreCount: 3,
   /** Initial store cards shown before "Show more". */
   defaultVisibleStores: 8,
   /** Dedupe same name within this radius (meters). */
@@ -24,6 +26,39 @@ export const SMART_SHOP_STORES = {
   cacheTtlMs: 15 * 60 * 1000,
   /** Merge Kroger location rows within this distance (miles). */
   krogerMergeRadiusMiles: 0.35,
+} as const;
+
+/** User-facing Smart Shop copy (screens import from here — no inline marketing strings). */
+export const SMART_SHOP_COPY = {
+  locationModalTitle: 'Where are you shopping?',
+  locationModalBody:
+    'We use your area to find nearby grocery stores and compare list prices. Saved to your profile when signed in.',
+  locationUseDevice: 'Use my location',
+  locationZipPlaceholder: 'ZIP code',
+  locationContinue: 'Continue',
+  locationUnavailable: 'Location unavailable — enter a ZIP code.',
+  locationNearPrefix: 'Near',
+  locationChange: 'Change',
+  compareStoresTitle: 'Compare at these stores',
+  compareStoresEdit: 'Edit stores',
+  compareStoresPickerTitle: 'Stores to compare',
+  compareStoresPickerDone: 'Done',
+  compareStoresEmpty: 'No grocery stores found nearby. Try a different ZIP or widen your search later.',
+  deliveryBlurb: 'Copy your list, then paste into search on Instacart or DoorDash.',
+  demoPricesBanner: 'Demo prices — not real savings',
+  loadingStores: 'Finding nearby grocery stores…',
+  loadingComparison: 'Comparing prices for your list…',
+  osmRateLimited: 'OpenStreetMap is busy (rate limit). Try again in a minute.',
+  osmNetwork: 'Could not reach OpenStreetMap. Try again or use a ZIP code.',
+  osmEmpty: 'No grocery stores from OpenStreetMap near this area.',
+  livePricesLabel: 'Live store prices',
+  livePricesWithCommunity: 'Store prices + community deals',
+  pricingPartnerLabel: 'partner stores',
+  livePricingNotConfigured: 'Live store pricing is not set up yet. Showing sample (estimate) prices.',
+  livePricingUnavailable: 'Live price lookup failed. Showing sample (estimate) prices.',
+  noLiveStoresNearby: 'No live-price stores near you; showing sample prices (estimates).',
+  livePricingMatched: 'Live prices at selected stores with API coverage. Other chains may be estimates only.',
+  livePricingNoMatches: 'No live prices matched this list at selected stores.',
 } as const;
 
 export const KROGER_CHAINS = [
