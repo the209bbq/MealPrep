@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -29,7 +29,14 @@ export default function GroceryScreen() {
     refreshGrocery,
     addManualGroceryItem,
     clearCheckedGroceryItems,
+    onboarding,
   } = useApp();
+
+  useFocusEffect(
+    useCallback(() => {
+      onboarding.notifyTutorialStepComplete('grocery');
+    }, [onboarding]),
+  );
 
   const insets = useSafeAreaInsets();
   const [cartExpanded, setCartExpanded] = useState(true);
