@@ -19,6 +19,8 @@ interface PantryScanReviewProps {
   onChange: (items: PantryScanReviewItem[]) => void;
   onSave: () => void;
   onCancel: () => void;
+  onScanAgain?: () => void;
+  scanAgainBusy?: boolean;
   saving: boolean;
   modelLabel?: string;
   saveError?: string | null;
@@ -32,6 +34,8 @@ export function PantryScanReview({
   onChange,
   onSave,
   onCancel,
+  onScanAgain,
+  scanAgainBusy = false,
   saving,
   modelLabel,
   saveError,
@@ -126,9 +130,19 @@ export function PantryScanReview({
                 />
               </Pressable>
               <Pressable onPress={() => toggleExpanded(item.key)} className="flex-1">
-                <Text className={`font-semibold text-ink ${item.enabled ? '' : 'text-muted line-through'}`} numberOfLines={1}>
-                  {item.name}
-                </Text>
+                <View className="flex-row flex-wrap items-center gap-1">
+                  <Text
+                    className={`font-semibold text-ink ${item.enabled ? '' : 'text-muted line-through'}`}
+                    numberOfLines={1}
+                  >
+                    {item.name}
+                  </Text>
+                  {item.needsReview ? (
+                    <Text className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">
+                      Check this
+                    </Text>
+                  ) : null}
+                </View>
                 <Text className="text-[10px] text-muted">
                   {item.quantity} {item.unit} · {CATEGORY_LABELS[item.category]}
                 </Text>
@@ -204,6 +218,18 @@ export function PantryScanReview({
       {mergeSelection.length >= 2 ? (
         <Pressable onPress={applyMerge} className="mt-3 rounded-xl border border-emerald px-3 py-2">
           <Text className="text-center text-xs font-bold text-emerald-dark">Merge {mergeSelection.length} selected</Text>
+        </Pressable>
+      ) : null}
+
+      {onScanAgain ? (
+        <Pressable
+          disabled={scanAgainBusy || saving}
+          onPress={onScanAgain}
+          className={`mt-3 rounded-xl border border-border px-3 py-2.5 ${scanAgainBusy ? 'opacity-60' : ''}`}
+        >
+          <Text className="text-center text-xs font-bold text-slate">
+            {scanAgainBusy ? 'Scanning again…' : 'Scan again (merge new finds)'}
+          </Text>
         </Pressable>
       ) : null}
 

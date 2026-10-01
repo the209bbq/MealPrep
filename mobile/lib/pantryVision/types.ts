@@ -13,6 +13,8 @@ export interface PantryVisionDetection {
 export interface PantryVisionResponse {
   items: PantryVisionDetection[];
   model?: string;
+  cached?: boolean;
+  itemCount?: number;
 }
 
 export interface PantryVisionErrorEnvelope {
@@ -34,6 +36,8 @@ export interface PantryScanReviewItem {
   /** Local preview URI (not sent to Supabase unless you upload separately). */
   photoUri: string | null;
   isDemoSample: boolean;
+  /** Low model confidence — show “Check this” in review. */
+  needsReview?: boolean;
 }
 
 export interface PreparedPantryImage {
@@ -41,4 +45,6 @@ export interface PreparedPantryImage {
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
   base64: string;
   byteLength: number;
+  /** SHA-256 of payload; set before analyze for scan cache. */
+  contentHash?: string;
 }

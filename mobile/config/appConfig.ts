@@ -92,9 +92,15 @@ export const getRecipeApiProxyUrl = (): string => {
 /** Pantry shelf photo recognition (Gemini key stays on Supabase Edge Function `pantry-vision`). */
 export const PHOTO_SCAN = {
   enabled: true,
-  maxImageDimension: 1280,
-  jpegQuality: 0.72,
-  maxPayloadBytes: 2_000_000,
+  /** Long edge sent to pantry-vision (native + web use the same rule). */
+  maxImageDimension: 1600,
+  jpegQuality: 0.82,
+  maxPayloadBytes: 2_800_000,
+  /** Quality gate before upload (thumb analysis). */
+  minMeanLuminance: 0.12,
+  minLaplacianVariance: 18,
+  imageTooDarkMessage: 'This photo looks too dark. Turn on more light and try again.',
+  imageTooBlurryMessage: 'This photo looks blurry. Hold steady and tap to focus, then try again.',
   /** Documented default for the Edge Function secret GEMINI_MODEL (not sent from the client). */
   defaultGeminiModel: DEFAULT_GEMINI_VISION_MODEL,
   /** Documented default fallback chain on the Edge Function (override via GEMINI_FALLBACK_MODELS secret). */

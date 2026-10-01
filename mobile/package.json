@@ -15,6 +15,7 @@
     "expo-router": "~57.0.24",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
+    "jpeg-js": "^0.4.4",
     "nativewind": "^4.2.7",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -45,7 +46,8 @@
     "test:package-pricing": "node --experimental-strip-types scripts/package-pricing-check.mjs",
     "test:community-prices": "npx tsx scripts/community-price-comparison-check.mjs",
     "test:add-price": "npx tsx scripts/add-price-suggestions-check.ts",
-    "test": "npm run test:recipe-match && npm run test:grocery && npm run test:smart-shop && npm run test:package-pricing && npm run test:community-prices && npm run test:add-price",
+    "test:pantry-vision": "npx tsx scripts/pantry-vision-postprocess-check.ts",
+    "test": "npm run test:recipe-match && npm run test:grocery && npm run test:smart-shop && npm run test:package-pricing && npm run test:community-prices && npm run test:add-price && npm run test:pantry-vision",
     "generate:brand": "node scripts/generate-brand-assets.mjs",
     "generate:pwa": "node scripts/generate-pwa-assets.mjs",
     "export:web": "npm run generate:brand && npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs"

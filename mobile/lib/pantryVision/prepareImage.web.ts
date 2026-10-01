@@ -1,4 +1,5 @@
 import { PHOTO_SCAN } from '../../config/appConfig';
+import { assessGrayscaleQuality, computeLongEdgeResize, PantryImageQualityError } from './prepareImageShared';
 import type { PreparedPantryImage } from './types';
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -10,43 +11,77 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Could not load image'));
-    img.src = src;
+async function loadBitmap(file: File): Promise<ImageBitmap> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch {
+      return await createImageBitmap(file);
+    }
+  }
+  const dataUrl = await readFileAsDataUrl(file);
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error('Could not load image'));
+    el.src = dataUrl;
   });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not available');
+  ctx.drawImage(img, 0, 0);
+  return createImageBitmap(canvas);
 }
 
 function canvasToJpegBase64(canvas: HTMLCanvasElement, quality: number): string {
   const dataUrl = canvas.toDataURL('image/jpeg', quality);
-  const base64 = dataUrl.split(',')[1] ?? '';
-  return base64;
+  return dataUrl.split(',')[1] ?? '';
+}
+
+function assessCanvasQuality(canvas: HTMLCanvasElement): ReturnType<typeof assessGrayscaleQuality> {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return { ok: true, meanLuminance: 0.5, laplacianVariance: 100 };
+  const { width, height } = canvas;
+  const { data } = ctx.getImageData(0, 0, width, height);
+  const luma = new Float32Array(width * height);
+  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+    luma[p] = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
+  }
+  return assessGrayscaleQuality(luma, width, height);
 }
 
 export async function preparePantryImageFromFile(file: File): Promise<PreparedPantryImage> {
-  const dataUrl = await readFileAsDataUrl(file);
-  const img = await loadImage(dataUrl);
-
-  const maxDim = PHOTO_SCAN.maxImageDimension;
-  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-  const width = Math.max(1, Math.round(img.width * scale));
-  const height = Math.max(1, Math.round(img.height * scale));
+  const bitmap = await loadBitmap(file);
+  const { width: targetW, height: targetH } = computeLongEdgeResize(
+    bitmap.width,
+    bitmap.height,
+    PHOTO_SCAN.maxImageDimension,
+  );
 
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = targetW;
+  canvas.height = targetH;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas not available');
-  ctx.drawImage(img, 0, 0, width, height);
+  ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+  bitmap.close?.();
+
+  const qualityAssessment = assessCanvasQuality(canvas);
+  if (!qualityAssessment.ok && qualityAssessment.rejectReason === 'too_dark') {
+    throw new PantryImageQualityError('too_dark', PHOTO_SCAN.imageTooDarkMessage);
+  }
+  if (!qualityAssessment.ok && qualityAssessment.rejectReason === 'too_blurry') {
+    throw new PantryImageQualityError('too_blurry', PHOTO_SCAN.imageTooBlurryMessage);
+  }
 
   let quality = PHOTO_SCAN.jpegQuality;
   let base64 = canvasToJpegBase64(canvas, quality);
   let byteLength = Math.floor((base64.length * 3) / 4);
 
-  while (byteLength > PHOTO_SCAN.maxPayloadBytes && quality > 0.35) {
-    quality -= 0.08;
+  while (byteLength > PHOTO_SCAN.maxPayloadBytes && quality > 0.42) {
+    quality -= 0.06;
     base64 = canvasToJpegBase64(canvas, quality);
     byteLength = Math.floor((base64.length * 3) / 4);
   }
@@ -68,6 +103,7 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
     mimeType: 'image/jpeg',
     base64,
     byteLength,
+    contentHash: undefined,
   };
 }
 
