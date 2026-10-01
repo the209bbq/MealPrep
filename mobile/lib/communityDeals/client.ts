@@ -209,6 +209,7 @@ export async function deleteCommunityDeal(dealId: string): Promise<{ ok: boolean
 export async function voteCommunityDeal(
   dealId: string,
   vote: StoreDealVoteKind,
+  options?: { reportedBy?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   if (isDemoMode()) {
     return { ok: false, error: 'Votes are disabled in demo mode.' };
@@ -220,6 +221,10 @@ export async function voteCommunityDeal(
   const { data: userData } = await client.auth.getUser();
   const userId = userData.user?.id;
   if (!userId) return { ok: false, error: 'Sign in to vote on deals.' };
+
+  if (options?.reportedBy && options.reportedBy === userId) {
+    return { ok: false, error: 'You cannot vote on a deal you reported.' };
+  }
 
   const { error } = await client.from('store_deal_votes').upsert(
     { deal_id: dealId, user_id: userId, vote },

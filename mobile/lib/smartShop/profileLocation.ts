@@ -5,12 +5,14 @@ import {
   readSavedCoords,
   readSavedStoreIds,
   readSavedZip,
+  type SavedCoords,
   writeSavedCoords,
   writeSavedStoreIds,
   writeSavedStoreSummaries,
   writeSavedZip,
 } from './storage';
 import type { StoreLocation } from '../deals/types';
+import { coordsForStoreSearch } from './coordsResolve';
 
 export interface HomeLocationPatch {
   zip?: string;
@@ -37,6 +39,8 @@ export async function persistHomeLocation(patch: HomeLocationPatch): Promise<voi
       lng: patch.lng,
       updatedAt: new Date().toISOString(),
     });
+  } else if (patch.zip) {
+    writeSavedCoords(null);
   }
 
   if (isDemoMode() || !isSupabaseConfigured()) return;
@@ -52,6 +56,10 @@ export async function persistHomeLocation(patch: HomeLocationPatch): Promise<voi
   if (patch.zip) row.home_zip = patch.zip.slice(0, 10);
   if (patch.lat != null) row.home_lat = patch.lat;
   if (patch.lng != null) row.home_lng = patch.lng;
+  if (patch.zip && patch.lat == null && patch.lng == null) {
+    row.home_lat = null;
+    row.home_lng = null;
+  }
 
   await client.from('profiles').update(row).eq('id', userId);
 }
@@ -99,37 +107,62 @@ export async function persistFavoriteStores(stores: StoreLocation[]): Promise<vo
   const userId = userData.user?.id;
   if (!userId) return;
 
-  await client.from('user_favorite_stores').delete().eq('user_id', userId);
+  const desiredKeys = new Set(keys);
+  const { data: existingRows, error: readError } = await client
+    .from('user_favorite_stores')
+    .select('store_key')
+    .eq('user_id', userId);
 
-  if (stores.length === 0) return;
+  if (readError) return;
 
-  const rows = stores.map((store, index) => ({
-    user_id: userId,
-    store_key: storeKey(store),
-    name: store.name,
-    chain: store.chain,
-    address_line: store.addressLine,
-    city: store.city,
-    state: store.state,
-    zip: store.zip,
-    lat: store.lat ?? null,
-    lng: store.lng ?? null,
-    kroger_location_id: store.krogerLocationId ?? null,
-    source: store.source ?? 'osm',
-    sort_order: index,
-  }));
+  const existingKeys = new Set((existingRows ?? []).map((r) => String((r as { store_key: string }).store_key)));
+  const toRemove = [...existingKeys].filter((k) => !desiredKeys.has(k));
 
-  await client.from('user_favorite_stores').insert(rows);
+  if (stores.length > 0) {
+    const rows = stores.map((store, index) => ({
+      user_id: userId,
+      store_key: storeKey(store),
+      name: store.name,
+      chain: store.chain,
+      address_line: store.addressLine,
+      city: store.city,
+      state: store.state,
+      zip: store.zip,
+      lat: store.lat ?? null,
+      lng: store.lng ?? null,
+      kroger_location_id: store.krogerLocationId ?? null,
+      source: store.source ?? 'osm',
+      sort_order: index,
+    }));
+
+    const { error: upsertError } = await client.from('user_favorite_stores').upsert(rows, {
+      onConflict: 'user_id,store_key',
+    });
+    if (upsertError) return;
+  }
+
+  if (toRemove.length > 0) {
+    const { error: deleteError } = await client
+      .from('user_favorite_stores')
+      .delete()
+      .eq('user_id', userId)
+      .in('store_key', toRemove);
+    if (deleteError) return;
+  }
 }
 
 export function readInitialZip(profile: UserProfile): string {
   return profile.homeZip ?? readSavedZip() ?? '';
 }
 
+export { coordsForStoreSearch } from './coordsResolve';
+
 export function readInitialCoords(profile: UserProfile): { lat: number; lng: number } | undefined {
-  if (profile.homeLat != null && profile.homeLng != null) {
-    return { lat: profile.homeLat, lng: profile.homeLng };
-  }
-  const saved = readSavedCoords();
-  return saved ? { lat: saved.lat, lng: saved.lng } : undefined;
+  return coordsForStoreSearch({
+    savedCoords: readSavedCoords(),
+    profileZip: profile.homeZip,
+    savedZip: readSavedZip(),
+    profileLat: profile.homeLat,
+    profileLng: profile.homeLng,
+  });
 }
