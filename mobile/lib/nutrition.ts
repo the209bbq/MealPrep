@@ -1,8 +1,10 @@
 import {
+  isDemoMode,
+  isSupabaseConfigured,
   USDA_DEMO_API_KEY,
   USDA_FDC_FOOD_URL,
   USDA_FDC_SEARCH_URL,
-  USDA_SEARCH_DATA_TYPE,
+  USDA_SEARCH_DATA_TYPES,
   USDA_SETTINGS_STORAGE_KEY,
 } from '../config/appConfig';
 import type { NutritionField, NutritionValues, Recipe, RecipeIngredient, UsdaFoodMatch } from '../types/mealprep';
@@ -64,13 +66,21 @@ export function setStoredUsdaApiKey(key: string): void {
   writeJson(USDA_SETTINGS_STORAGE_KEY, key.trim());
 }
 
-/** Device-only override for direct USDA fallback (never commit keys; server uses `usda-proxy`). */
+/** Device-only override for direct USDA (never commit keys; signed-in users should use `usda-proxy`). */
 export function resolveUsdaDirectApiKey(override?: string): string {
   const fromOverride = (override ?? '').trim();
   if (fromOverride) return fromOverride;
   const fromStorage = getStoredUsdaApiKey();
   if (fromStorage) return fromStorage;
-  return USDA_DEMO_API_KEY;
+  if (isDemoMode() || !isSupabaseConfigured()) return USDA_DEMO_API_KEY;
+  return '';
+}
+
+export class UsdaLookupUnavailableError extends Error {
+  constructor(message = 'Nutrition lookup is temporarily unavailable. Sign in and try again in a moment.') {
+    super(message);
+    this.name = 'UsdaLookupUnavailableError';
+  }
 }
 
 function readNutrientNumber(food: UsdaFoodPayload, ids: number[]): number {
@@ -150,17 +160,27 @@ function mapFoodsToMatches(foods: UsdaFoodPayload[]): UsdaFoodMatch[] {
   });
 }
 
+function appendUsdaSearchDataTypes(params: URLSearchParams): void {
+  for (const dataType of USDA_SEARCH_DATA_TYPES) {
+    params.append('dataType', dataType);
+  }
+}
+
 async function searchUsdaFoodsDirect(
   query: string,
   pageSize: number,
   apiKey?: string,
 ): Promise<UsdaFoodMatch[]> {
+  const resolvedKey = resolveUsdaDirectApiKey(apiKey);
+  if (!resolvedKey) {
+    throw new UsdaLookupUnavailableError();
+  }
   const params = new URLSearchParams({
     query: query.trim(),
     pageSize: String(pageSize),
-    dataType: USDA_SEARCH_DATA_TYPE,
-    api_key: resolveUsdaDirectApiKey(apiKey),
+    api_key: resolvedKey,
   });
+  appendUsdaSearchDataTypes(params);
 
   const data = (await usdaFetchDirect(`${USDA_FDC_SEARCH_URL}?${params.toString()}`)) as {
     foods?: UsdaFoodPayload[];
@@ -170,7 +190,11 @@ async function searchUsdaFoodsDirect(
 }
 
 async function getUsdaFoodDirect(fdcId: number, apiKey?: string): Promise<UsdaFoodPayload> {
-  const params = new URLSearchParams({ api_key: resolveUsdaDirectApiKey(apiKey) });
+  const resolvedKey = resolveUsdaDirectApiKey(apiKey);
+  if (!resolvedKey) {
+    throw new UsdaLookupUnavailableError();
+  }
+  const params = new URLSearchParams({ api_key: resolvedKey });
   return (await usdaFetchDirect(
     `${USDA_FDC_FOOD_URL}/${encodeURIComponent(String(fdcId))}?${params.toString()}`,
   )) as UsdaFoodPayload;
@@ -183,6 +207,10 @@ export async function searchUsdaFoods(query: string, pageSize = 8, apiKey?: stri
   const proxied = await searchUsdaFoodsViaProxy(q, pageSize);
   if (proxied !== null) {
     return mapFoodsToMatches(proxied);
+  }
+
+  if (isSupabaseConfigured() && !isDemoMode() && !resolveUsdaDirectApiKey(apiKey)) {
+    throw new UsdaLookupUnavailableError();
   }
 
   return searchUsdaFoodsDirect(q, pageSize, apiKey);
@@ -200,7 +228,17 @@ export async function getUsdaFoodScaled(
   url: string;
 }> {
   const proxied = await getUsdaFoodViaProxy(fdcId);
-  const food = proxied ?? (await getUsdaFoodDirect(fdcId, apiKey));
+  if (proxied) {
+    const food = proxied;
+    const cite = usdaCitation(food);
+    const per100g = nutritionFromUsdaFood(food);
+    const scaled = scaleNutrition(per100g, grams);
+    return { per100g, scaled, ...cite };
+  }
+  if (isSupabaseConfigured() && !isDemoMode() && !resolveUsdaDirectApiKey(apiKey)) {
+    throw new UsdaLookupUnavailableError();
+  }
+  const food = await getUsdaFoodDirect(fdcId, apiKey);
   const cite = usdaCitation(food);
   const per100g = nutritionFromUsdaFood(food);
   const scaled = scaleNutrition(per100g, grams);

@@ -5,7 +5,9 @@
  */
 const CACHE_VERSION = '__CACHE_VERSION__';
 const PRECACHE_URLS = __PRECACHE_URLS__;
-const SHELL_CACHE = `meal-prep-shell-${CACHE_VERSION}`;
+/** Bumped when navigation caching policy changes (forces fresh shell cache). */
+const NAV_POLICY_VERSION = '3';
+const SHELL_CACHE = `meal-prep-shell-${CACHE_VERSION}-${NAV_POLICY_VERSION}`;
 
 const SUPABASE_HOST_RE = /(^|\.)supabase\.co$/i;
 
@@ -19,6 +21,18 @@ function isAuthLikeRequest(url, request) {
   if (path.includes('/auth/') || path.includes('token')) return true;
   if (request.credentials === 'include' && request.method !== 'GET') return true;
   return false;
+}
+
+function appShellUrl() {
+  return new URL('index.html', self.registration.scope).pathname;
+}
+
+function serveAppShell() {
+  const indexPath = appShellUrl();
+  return caches.match(indexPath).then((cached) => {
+    if (cached) return cached;
+    return fetch(indexPath);
+  });
 }
 
 self.addEventListener('install', (event) => {
@@ -55,14 +69,14 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
-          return response;
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
+            return response;
+          }
+          return serveAppShell();
         })
-        .catch(() => {
-          const indexUrl = new URL('index.html', self.registration.scope).pathname;
-          return caches.match(request).then((cached) => cached ?? caches.match(indexUrl));
-        })
+        .catch(() => serveAppShell())
     );
     return;
   }

@@ -243,7 +243,7 @@ export default function RecipesScreen() {
 
       {!pantryEmpty && !showKitchenEmpty && filteredKitchenRecipes.length === 0 && filteredDiscoverySuggestions.length > 0 ? (
         <Text className="mt-3 text-sm text-muted">
-          No kitchen recipes meet a {minPercent}% match. See RecipeAPI suggestions below or lower the minimum match.
+          No kitchen recipes meet a {minPercent}% match. See more recipe ideas below or lower the minimum match.
         </Text>
       ) : null}
 
@@ -270,7 +270,7 @@ export default function RecipesScreen() {
       />
 
       {!pantryEmpty ? (
-        <Card className="mt-2" title="Also from RecipeAPI" subtitle="Searched using your pantry ingredient names">
+        <Card className="mt-2" title="More recipe ideas" subtitle="Matched to ingredients in your pantry">
           {discoveryLoading ? (
             <View className="mt-3 flex-row items-center gap-2">
               <ActivityIndicator color={THEME.emerald} />
