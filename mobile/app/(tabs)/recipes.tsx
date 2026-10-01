@@ -84,6 +84,7 @@ function RecipeListSection({
   pantryRecipeMatches,
   isOnMealPlan,
   toggleMealPlanKitchenRecipe,
+  onAddMissing,
 }: {
   title: string;
   subtitle: string;
@@ -93,6 +94,7 @@ function RecipeListSection({
   pantryRecipeMatches: PantryMatchIndex;
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
   toggleMealPlanKitchenRecipe: (recipeId: string) => Promise<void>;
+  onAddMissing?: (recipeId: string) => void;
 }) {
   if (list.length === 0) return null;
   return (
@@ -102,9 +104,10 @@ function RecipeListSection({
       {list.map((recipe) => {
         const onPlan = isOnMealPlan({ recipeSlug: recipe.id });
         const match = pantryRecipeMatches.byRecipeId.get(recipe.id);
+        const missingCount = match?.missingCount ?? 0;
         return (
-          <Pressable key={recipe.id} onPress={() => setActiveId(recipe.id)}>
-            <Card className={`mb-3 ${activeId === recipe.id ? 'border-primary' : ''}`}>
+          <Card key={recipe.id} className={`mb-3 ${activeId === recipe.id ? 'border-primary' : ''}`}>
+            <Pressable onPress={() => setActiveId(recipe.id)}>
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 pr-2">
                   <Text className="text-xs font-semibold uppercase text-primary">{recipe.tag}</Text>
@@ -124,8 +127,16 @@ function RecipeListSection({
                   </Text>
                 </Pressable>
               </View>
-            </Card>
-          </Pressable>
+            </Pressable>
+            {missingCount > 0 && onAddMissing ? (
+              <Pressable
+                onPress={() => onAddMissing(recipe.id)}
+                className="mt-3 items-center rounded-xl bg-primary py-3"
+              >
+                <Text className="text-sm font-bold text-on-primary">{RECIPES_COPY.recipeCard.addMissingCta}</Text>
+              </Pressable>
+            ) : null}
+          </Card>
         );
       })}
     </>
@@ -308,6 +319,7 @@ export default function RecipesScreen() {
           pantryRecipeMatches={pantryRecipeMatches}
           isOnMealPlan={isOnMealPlan}
           toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+          onAddMissing={addMissingRecipeIngredientsToGrocery}
         />
       ) : null}
 
@@ -329,6 +341,7 @@ export default function RecipesScreen() {
           pantryRecipeMatches={pantryRecipeMatches}
           isOnMealPlan={isOnMealPlan}
           toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+          onAddMissing={addMissingRecipeIngredientsToGrocery}
         />
       ) : null}
 

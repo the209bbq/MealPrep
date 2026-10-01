@@ -27,6 +27,12 @@ export const GROCERY_COPY = {
   aisleLabel: 'Aisle',
   addToList: 'Add to list',
   shopThisList: (count: number) => `Shop this list (${count})`,
+  /** Primary CTA from grocery tab → Smart Shop (prefilled open items + saved location). */
+  findStoresForList: (count: number) => `Find stores for this list (${count})`,
+  addedMissingSingle: (name: string) => `Added ${name} to your grocery list`,
+  addedMissingPlural: (count: number) => `Added ${count} missing items to your grocery list`,
+  alreadyOnGroceryList: 'Those missing items are already on your grocery list',
+  viewGroceryListAction: 'View list',
   plannedMealsLine: (count: number) => `${count} planned meal(s) · only buy what recipes still need`,
   toBuyInCartLine: (open: number, checked: number) => `${open} to buy · ${checked} in cart`,
 } as const;
