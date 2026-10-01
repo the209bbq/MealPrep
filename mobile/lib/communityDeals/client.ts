@@ -1,6 +1,7 @@
 import { COMMUNITY_DEALS } from '../../config/communityDeals';
 import { isDemoMode } from '../../config/appConfig';
 import { getSupabase } from '../supabase';
+import { deleteScanPhoto } from '../scanPhotos/client';
 import { demoCommunityDeals } from './demoSamples';
 import { isPastLocalDate, localDateString } from './localDate';
 import { resolvePriceValidity } from './priceValidity';
@@ -25,6 +26,7 @@ type DealRow = {
   price_kind: string | null;
   reported_by: string;
   created_at: string;
+  scan_photo_path: string | null;
 };
 
 type VoteRow = {
@@ -67,6 +69,7 @@ function mapDealRow(
     confirmCount,
     expiredCount,
     myVote,
+    scanPhotoPath: row.scan_photo_path ?? undefined,
   };
 }
 
@@ -108,7 +111,7 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
   const { data: dealRows, error: dealsError } = await client
     .from('store_deals')
     .select(
-      'id, store_key, osm_store_id, store_name, item_name, price, unit, note, valid_until, price_kind, reported_by, created_at',
+      'id, store_key, osm_store_id, store_name, item_name, price, unit, note, valid_until, price_kind, reported_by, created_at, scan_photo_path',
     )
     .in('store_key', uniqueKeys)
     .order('created_at', { ascending: false });
@@ -175,6 +178,7 @@ export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ 
     valid_until: validUntil,
     price_kind: priceKind,
     reported_by: userId,
+    scan_photo_path: input.scanPhotoPath?.trim() || null,
   });
 
   if (isMissingTableError(error)) {
@@ -197,12 +201,27 @@ export async function deleteCommunityDeal(dealId: string): Promise<{ ok: boolean
   const userId = userData.user?.id;
   if (!userId) return { ok: false, error: 'Sign in to delete a deal.' };
 
+  const { data: row, error: fetchError } = await client
+    .from('store_deals')
+    .select('scan_photo_path')
+    .eq('id', dealId)
+    .eq('reported_by', userId)
+    .maybeSingle();
+
+  if (isMissingTableError(fetchError)) {
+    return { ok: false, error: COMMUNITY_DEALS.migrationHint };
+  }
+
+  const photoPath = fetchError ? null : (row as { scan_photo_path?: string | null } | null)?.scan_photo_path;
+
   const { error } = await client.from('store_deals').delete().eq('id', dealId).eq('reported_by', userId);
 
   if (isMissingTableError(error)) {
     return { ok: false, error: COMMUNITY_DEALS.migrationHint };
   }
   if (error) return { ok: false, error: error.message };
+
+  void deleteScanPhoto((row as { scan_photo_path?: string | null } | null)?.scan_photo_path);
 
   return { ok: true };
 }

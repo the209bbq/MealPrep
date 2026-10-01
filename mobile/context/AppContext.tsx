@@ -209,7 +209,7 @@ interface AppContextValue {
   clearAllPantry: () => Promise<void>;
   previewPantryResort: () => PantryResortPreview;
   resortPantryItemsInDefaultLocation: () => Promise<PantryResortPreview>;
-  savePantryScanReview: (items: PantryScanReviewItem[]) => Promise<void>;
+  savePantryScanReview: (items: PantryScanReviewItem[], scanPhotoPath?: string | null) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
   pantryRecipeMatches: PantryMatchIndex;
@@ -1145,8 +1145,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, pantry.length, supabase, userId]);
 
   const savePantryScanReview = useCallback(
-    async (items: PantryScanReviewItem[]) => {
-      const toSave = reviewItemsToPantryItems(items);
+    async (items: PantryScanReviewItem[], scanPhotoPath?: string | null) => {
+      const toSave = reviewItemsToPantryItems(items, scanPhotoPath);
       if (toSave.length === 0) return;
 
       if (demoMode) {

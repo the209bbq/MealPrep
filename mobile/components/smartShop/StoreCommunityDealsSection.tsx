@@ -15,6 +15,7 @@ import {
 import { isPastLocalDate, localDateString } from '../../lib/communityDeals/localDate';
 import { getSupabase } from '../../lib/supabase';
 import type { CommunityStoreDeal } from '../../lib/communityDeals/types';
+import { ViewScanPhotoButton } from '../ViewScanPhotoButton';
 
 interface StoreCommunityDealsSectionProps {
   store: StoreLocation;
@@ -198,9 +199,10 @@ export function StoreCommunityDealsSection({
               ) : null}
               {!deal.isSample && isOwn ? (
                 <View className="mt-2">
+                  <ViewScanPhotoButton scanPhotoPath={deal.scanPhotoPath} />
                   <Pressable
                     onPress={() => void handleDelete(deal.id)}
-                    className="self-start rounded-lg border border-danger/40 px-2 py-1"
+                    className="mt-2 self-start rounded-lg border border-danger/40 px-2 py-1"
                   >
                     <Text className="text-xs font-semibold text-danger">Delete</Text>
                   </Pressable>

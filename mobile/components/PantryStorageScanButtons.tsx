@@ -24,16 +24,6 @@ export function PantryStorageScanButtons({
     ]);
   }
 
-  function openPickPhotoLocationMenu() {
-    Alert.alert('Pick photo', 'Which storage area is this photo from?', [
-      ...actions.map((action) => ({
-        text: action.scanTitle,
-        onPress: () => onRequestNativeScan(action.location, 'library'),
-      })),
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }
-
   return (
     <View className="mt-3">
       {actions.map((action) => (
@@ -67,13 +57,6 @@ export function PantryStorageScanButtons({
         </View>
       ))}
 
-      <Pressable
-        disabled={disabled}
-        onPress={() => openPickPhotoLocationMenu()}
-        className={`mt-1 rounded-xl border border-border bg-paper px-3 py-3 ${disabled ? 'opacity-40' : ''}`}
-      >
-        <Text className="text-center text-sm font-bold text-slate">Pick photo…</Text>
-      </Pressable>
     </View>
   );
 }

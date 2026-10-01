@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -25,14 +25,15 @@ import {
   PantryVisionScanError,
 } from '../../lib/pantryVision/client';
 import { analyzePriceTagPhoto } from '../../lib/priceTagVision/client';
+import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 import { getSupabase } from '../../lib/supabase';
 import { resolveStoreChainKey } from '../../config/weeklyAds';
 import {
   rememberItemSizeUnit,
   rememberLastAddPriceStore,
+  readAddPriceMemory,
   readRememberedSizeUnit,
   resolveStoreFromMemory,
-  readAddPriceMemory,
 } from '../../lib/smartShop/addPriceMemory';
 import {
   buildAddPriceItemSuggestions,
@@ -41,6 +42,7 @@ import {
   sizeUnitForGroceryItem,
 } from '../../lib/smartShop/addPriceSuggestions';
 import type { GroceryListItem } from '../../types/mealprep';
+import { ViewScanPhotoButton } from '../ViewScanPhotoButton';
 
 export type SmartShopAddPriceTarget = {
   store?: StoreLocation;
@@ -73,6 +75,14 @@ function applyGroceryItemToForm(
   setters.setGroceryItemId(item.id);
 }
 
+function clearPendingScan(
+  setPendingScanPhotoPath: (v: string | null) => void,
+  scanUploadRef: MutableRefObject<Promise<string | null> | null>,
+): void {
+  setPendingScanPhotoPath(null);
+  scanUploadRef.current = null;
+}
+
 export function SmartShopAddPriceSheet({
   target,
   ownerId,
@@ -95,6 +105,9 @@ export function SmartShopAddPriceSheet({
   const [submitting, setSubmitting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
+  const scanUploadRef = useRef<Promise<string | null> | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [pricedThisSession, setPricedThisSession] = useState<Set<string>>(() => new Set());
 
@@ -134,6 +147,7 @@ export function SmartShopAddPriceSheet({
     setPrice('');
     setSaleUntil('');
     setError(null);
+    clearPendingScan(setPendingScanPhotoPath, scanUploadRef);
 
     const memory = readAddPriceMemory(ownerId);
     const resolvedStore =
@@ -142,7 +156,11 @@ export function SmartShopAddPriceSheet({
 
     void getSupabase()
       ?.auth.getSession()
-      .then(({ data }) => setSignedIn(Boolean(data.session?.user?.id)));
+      .then(({ data }) => {
+        const id = data.session?.user?.id ?? null;
+        setUserId(id);
+        setSignedIn(Boolean(id));
+      });
 
     const matchedById = target.groceryItemId
       ? groceryItems.find((i) => i.id === target.groceryItemId)
@@ -179,6 +197,7 @@ export function SmartShopAddPriceSheet({
     });
     setPrice('');
     setError(null);
+    clearPendingScan(setPendingScanPhotoPath, scanUploadRef);
   }
 
   function resetFormForAnother(next: (typeof suggestions)[number]) {
@@ -191,6 +210,7 @@ export function SmartShopAddPriceSheet({
     setSaleUntil('');
     setError(null);
     setJustSaved(false);
+    clearPendingScan(setPendingScanPhotoPath, scanUploadRef);
   }
 
   async function handleSave() {
@@ -222,6 +242,11 @@ export function SmartShopAddPriceSheet({
 
     setSubmitting(true);
     setError(null);
+    let scanPhotoPath = pendingScanPhotoPath;
+    if (!scanPhotoPath && scanUploadRef.current) {
+      scanPhotoPath = await scanUploadRef.current;
+    }
+
     const res = await addCommunityDeal({
       storeKey: resolvedStoreKey,
       osmStoreId: store.id.startsWith('kroger-') ? undefined : store.id,
@@ -230,6 +255,7 @@ export function SmartShopAddPriceSheet({
       price: parsed,
       unit: sizeUnit.trim() || undefined,
       saleValidUntil: sale || undefined,
+      scanPhotoPath,
     });
     setSubmitting(false);
     if (!res.ok) {
@@ -257,21 +283,28 @@ export function SmartShopAddPriceSheet({
     resetFormForAnother(next);
   }
 
-  async function runScan(prepared: { base64: string; mimeType: string }) {
+  async function runScan(prepared: { base64: string; mimeType: string; uri?: string }) {
     setScanning(true);
     setError(null);
+    setPendingScanPhotoPath(null);
     try {
       const session = await getSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token ?? null;
-      const result = await analyzePriceTagPhoto(
-        {
-          uri: '',
-          base64: prepared.base64,
-          mimeType: prepared.mimeType as 'image/jpeg' | 'image/png' | 'image/webp',
-          byteLength: Math.floor((prepared.base64.length * 3) / 4),
-        },
-        token,
-      );
+      const uid = userId ?? session?.data.session?.user?.id ?? null;
+      const imagePayload = {
+        uri: prepared.uri ?? '',
+        base64: prepared.base64,
+        mimeType: prepared.mimeType as 'image/jpeg' | 'image/png' | 'image/webp',
+        byteLength: Math.floor((prepared.base64.length * 3) / 4),
+      };
+      if (uid) {
+        const uploadPromise = uploadScanPhoto(imagePayload, 'price-tag', uid);
+        scanUploadRef.current = uploadPromise;
+        void uploadPromise.then(setPendingScanPhotoPath);
+      } else {
+        scanUploadRef.current = null;
+      }
+      const result = await analyzePriceTagPhoto(imagePayload, token);
       if (result.itemName) setItemName(result.itemName);
       if (Number.isFinite(result.price)) setPrice(String(result.price));
       if (result.sizeUnit) setSizeUnit(result.sizeUnit);
@@ -480,6 +513,10 @@ export function SmartShopAddPriceSheet({
                   {scanning ? SMART_SHOP_COPY.addPriceScanning : SMART_SHOP_COPY.addPriceScanTag}
                 </Text>
               </Pressable>
+
+              {pendingScanPhotoPath ? (
+                <ViewScanPhotoButton scanPhotoPath={pendingScanPhotoPath} />
+              ) : null}
 
               <View className="mt-4 flex-row gap-2">
                 <Pressable

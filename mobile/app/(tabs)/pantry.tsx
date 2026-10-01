@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +17,7 @@ import {
 import { Card } from '../../components/Card';
 import { CategoryChips } from '../../components/CategoryChips';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { PantryLocationSections } from '../../components/PantryLocationSections';
+import { PantryFilteredItemList } from '../../components/PantryFilteredItemList';
 import { PantryStorageScanButtons } from '../../components/PantryStorageScanButtons';
 import { PantryScanReview, PantryScanReviewStickyFooter } from '../../components/PantryScanReview';
 import { PantryOverflowMenu } from '../../components/PantryOverflowMenu';
@@ -29,7 +29,9 @@ import {
 import { CATEGORY_LABELS, isPantryVisionConfigured, PHOTO_SCAN, THEME } from '../../config/appConfig';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
+  isPantryStorageLocation,
   labelForPantryStorageLocation,
+  PANTRY_LOCATION_FILTER_STORAGE_KEY,
   PANTRY_STORAGE_LOCATIONS,
   previewResortFromDefaultPantry,
   suggestStorageLocationForCategory,
@@ -39,7 +41,8 @@ import { useApp } from '../../context/AppContext';
 import { countDefaultKitchenMatches } from '../../config/recipeMatching';
 import { buildPantryMatchIndex } from '../../lib/recipeMatch';
 import { reviewItemsToPantryItems } from '../../lib/pantryVision/reviewItems';
-import { countPantryItemsInLocation } from '../../lib/pantryGrouping';
+import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
+import { readJson, writeJson } from '../../lib/storage';
 import {
   analyzePantryPhoto,
   PantryVisionAuthError,
@@ -50,6 +53,8 @@ import {
 import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import { detectionsToReviewItems } from '../../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem, PreparedPantryImage } from '../../lib/pantryVision/types';
+import { uploadScanPhoto } from '../../lib/scanPhotos/client';
+import { ViewScanPhotoButton } from '../../components/ViewScanPhotoButton';
 import { PANTRY_CATEGORIES, type PantryCategory, type PantryItem } from '../../types/mealprep';
 
 type ScanPhase = 'idle' | 'loading' | 'review';
@@ -59,6 +64,13 @@ type PantryConfirmAction =
   | { kind: 'clear-location'; location: PantryStorageLocation; count: number }
   | { kind: 'clear-all'; count: number }
   | { kind: 'resort'; toFridge: number; toSpiceRack: number };
+
+function readStoredPantryLocationFilter(): PantryStorageLocation | 'all' {
+  const saved = readJson<string | null>(PANTRY_LOCATION_FILTER_STORAGE_KEY, null);
+  if (saved === 'all') return 'all';
+  if (saved && isPantryStorageLocation(saved)) return saved;
+  return 'all';
+}
 
 export default function PantryScreen() {
   const {
@@ -76,7 +88,7 @@ export default function PantryScreen() {
     resortPantryItemsInDefaultLocation,
   } = useApp();
   const [filter, setFilter] = useState<PantryCategory | 'all'>('all');
-  const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>('all');
+  const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>(readStoredPantryLocationFilter);
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
@@ -107,9 +119,12 @@ export default function PantryScreen() {
   );
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
+  const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
+  const pantryScanUploadRef = useRef<Promise<string | null> | null>(null);
 
   const visionReady = isPantryVisionConfigured();
   const accessToken = session?.access_token ?? null;
+  const userId = session?.user?.id ?? null;
 
   const locationCounts = useMemo(
     () =>
@@ -118,6 +133,16 @@ export default function PantryScreen() {
       ) as Record<PantryStorageLocation, number>,
     [pantry],
   );
+
+  const locationFilterCounts = useMemo(
+    () => countPantryItemsForLocationFilters(pantry, filter),
+    [filter, pantry],
+  );
+
+  function selectLocationFilter(next: PantryStorageLocation | 'all') {
+    setLocationFilter(next);
+    writeJson(PANTRY_LOCATION_FILTER_STORAGE_KEY, next);
+  }
 
   const resortPreview = useMemo(() => previewResortFromDefaultPantry(pantry), [pantry]);
 
@@ -164,6 +189,15 @@ export default function PantryScreen() {
     setPreviewUri(prepared.uri);
 
     const attempt = { kind: 'prepared' as const, prepared, location: scanLocation };
+
+    setPendingScanPhotoPath(null);
+    if (userId) {
+      const uploadPromise = uploadScanPhoto(prepared, 'pantry', userId);
+      pantryScanUploadRef.current = uploadPromise;
+      void uploadPromise.then(setPendingScanPhotoPath);
+    } else {
+      pantryScanUploadRef.current = null;
+    }
 
     try {
       const result = await analyzePantryPhoto(prepared, accessToken, { scanLocation });
@@ -262,10 +296,15 @@ export default function PantryScreen() {
         buildPantryMatchIndex(recipes, mergedPantry).ranked,
         mergedPantry.length,
       );
-      await savePantryScanReview(reviewItems);
+      let scanPhotoPath = pendingScanPhotoPath;
+      if (!scanPhotoPath && pantryScanUploadRef.current) {
+        scanPhotoPath = await pantryScanUploadRef.current;
+      }
+      await savePantryScanReview(reviewItems, scanPhotoPath);
       setPhase('idle');
       setReviewItems([]);
       setPreviewUri(null);
+      setPendingScanPhotoPath(null);
       clearScanFailure();
       setSaveError(null);
       setScanRecipeCount(recipeCount);
@@ -284,6 +323,7 @@ export default function PantryScreen() {
     setPhase('idle');
     setReviewItems([]);
     setPreviewUri(null);
+    setPendingScanPhotoPath(null);
     setScanLocationHint(DEFAULT_PANTRY_STORAGE_LOCATION);
   }
 
@@ -536,14 +576,17 @@ export default function PantryScreen() {
           </Pressable>
         </Card>
 
-        <Text className="mb-1 mt-2 text-xs font-bold uppercase tracking-wide text-muted">Storage</Text>
-        <PantryStorageLocationFilterChips selected={locationFilter} onSelect={setLocationFilter} />
+        <PantryStorageLocationFilterChips
+          selected={locationFilter}
+          onSelect={selectLocationFilter}
+          counts={locationFilterCounts}
+        />
 
         <CategoryChips selected={filter} onSelect={setFilter} />
 
         {actionError ? <Text className="mb-2 text-xs font-semibold text-danger">{actionError}</Text> : null}
 
-        <PantryLocationSections
+        <PantryFilteredItemList
           items={pantry}
           categoryFilter={filter}
           locationFilter={locationFilter}
@@ -634,6 +677,9 @@ export default function PantryScreen() {
                 onSelect={setManualLocation}
               />
             </View>
+            {editItem?.scanPhotoPath ? (
+              <ViewScanPhotoButton scanPhotoPath={editItem.scanPhotoPath} />
+            ) : null}
             {formError ? <Text className="mt-2 text-xs font-semibold text-danger">{formError}</Text> : null}
             {editItem ? (
               <Pressable

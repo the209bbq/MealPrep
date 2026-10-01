@@ -43,13 +43,14 @@ export const PANTRY_SCAN_TIP = {
   fewItemsThreshold: 3,
 } as const;
 
-export const PANTRY_SECTION_EXPANDED_STORAGE_KEY = 'mealprep.pantrySectionExpanded';
+/** Last selected location tab on the Pantry screen (`all` or a storage location). */
+export const PANTRY_LOCATION_FILTER_STORAGE_KEY = 'mealprep.pantryLocationFilter';
 
-export const DEFAULT_PANTRY_SECTION_EXPANDED: Record<PantryStorageLocation, boolean> = {
-  pantry: true,
-  fridge: true,
-  spice_rack: true,
-};
+export const PANTRY_LIST_COPY = {
+  emptyFiltered: 'No items match your filters.',
+  storageFilterLabel: 'Storage',
+  allLocationsChipLabel: 'All',
+} as const;
 
 const LEGACY_FRIDGE_PATTERN = /\bfridge\b|\brefrigerator\b/i;
 const LEGACY_SPICE_PATTERN = /\bspice[\s_-]?rack\b|\bspice_rack\b/i;
