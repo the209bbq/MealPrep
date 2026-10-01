@@ -7,7 +7,7 @@ import { getCachedPantryScan, pantryScanCacheKey, setCachedPantryScan } from './
 import { logPantryScanFailure, type PantryScanFailureReason } from './scanLog';
 import type { PantryVisionErrorEnvelope, PantryVisionResponse, PreparedPantryImage } from './types';
 
-const PANTRY_VISION_REQUEST_MS = 95_000;
+const PANTRY_VISION_REQUEST_MS = PHOTO_SCAN.visionRequestTimeoutMs;
 
 export class PantryVisionNotConfiguredError extends Error {
   code = 'NOT_CONFIGURED';

@@ -1,5 +1,6 @@
 import { getPantryVisionUrl, isDemoMode, PHOTO_SCAN } from '../../config/appConfig';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
+import { withTimeout } from '../withTimeout';
 import type { PreparedPantryImage } from '../pantryVision/types';
 import {
   PantryVisionAuthError,
@@ -33,8 +34,8 @@ async function parseErrorResponse(response: Response, text: string): Promise<nev
   if (response.status === 429 || json.code === 'RATE_LIMIT') {
     throw new PantryVisionRateLimitError(json.error ?? PHOTO_SCAN.rateLimitMessage);
   }
-  if (response.status === 502 && json.code === 'UPSTREAM_ERROR') {
-    throw new PantryVisionScanError(SMART_SHOP_COPY.addPriceScanFailed);
+  if (response.status === 502 || json.code === 'UPSTREAM_ERROR') {
+    throw new PantryVisionScanError(PHOTO_SCAN.scanBusyMessage);
   }
   throw new PantryVisionScanError(json.error ?? SMART_SHOP_COPY.addPriceScanFailed);
 }
@@ -61,7 +62,7 @@ export async function analyzePriceTagPhoto(
     throw new PantryVisionAuthError('Sign in to scan a shelf tag.');
   }
 
-  const response = await fetch(url, {
+  const request = fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -73,6 +74,17 @@ export async function analyzePriceTagPhoto(
       mimeType: prepared.mimeType,
     }),
   });
+
+  let response: Response;
+  try {
+    response = await withTimeout(
+      request,
+      PHOTO_SCAN.visionRequestTimeoutMs,
+      PHOTO_SCAN.scanBusyMessage,
+    );
+  } catch {
+    throw new PantryVisionScanError(PHOTO_SCAN.scanBusyMessage);
+  }
 
   const text = await response.text();
   if (!response.ok) {
