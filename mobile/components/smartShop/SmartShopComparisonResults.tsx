@@ -2,6 +2,7 @@ import { Linking, Pressable, Text, View } from 'react-native';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { StoreCommunityDealsSection } from './StoreCommunityDealsSection';
 import { StoreDeliveryButtons } from './StoreDeliveryButtons';
+import { ItemRetailerSearchButtons, StoreRetailerButtons } from './StoreRetailerButtons';
 import { StoreWeeklyAdButton } from './StoreWeeklyAdButton';
 import type { DealsSearchResult, StoreLocation } from '../../lib/deals';
 import type { CommunityStoreDeal } from '../../lib/communityDeals/types';
@@ -171,6 +172,7 @@ export function SmartShopComparisonResults({
             <View className="mt-2">
               <StoreDeliveryButtons store={store} />
             </View>
+            <StoreRetailerButtons store={store} grocery={items} />
             <StoreCommunityDealsSection
               store={store}
               deals={communityDeals}
@@ -235,6 +237,11 @@ export function SmartShopComparisonResults({
                         {SMART_SHOP_COPY.addPriceButton} · {store.chain}
                       </Text>
                     </Pressable>
+                  ))}
+                </View>
+                <View className="mt-2 flex-row flex-wrap gap-3">
+                  {activeStores.map((store) => (
+                    <ItemRetailerSearchButtons key={`retail-${store.id}-${item.id}`} store={store} itemName={item.name} />
                   ))}
                 </View>
                 {best?.productUrl ? (

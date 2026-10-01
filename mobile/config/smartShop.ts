@@ -61,6 +61,7 @@ export const SMART_SHOP_COPY = {
   compareStoresPickerDone: 'Done',
   compareStoresEmpty: 'No grocery stores found nearby. Try a different ZIP or widen your search later.',
   deliveryBlurb: 'Copy your list, then paste into search on Instacart or DoorDash.',
+  retailerListCopiedToast: 'List copied — refine search on the store site if needed.',
   estimatedPricesTitle: 'Estimated prices',
   estimatedPricesNote: 'Prices are estimates. Check the store for exact prices.',
   demoPricesTitle: 'Demo prices (sample)',
