@@ -1,12 +1,14 @@
 import {
   USDA_DEMO_API_KEY,
-  USDA_FDC_API_KEY,
   USDA_FDC_FOOD_URL,
   USDA_FDC_SEARCH_URL,
+  USDA_SEARCH_DATA_TYPE,
   USDA_SETTINGS_STORAGE_KEY,
 } from '../config/appConfig';
 import type { NutritionField, NutritionValues, Recipe, RecipeIngredient, UsdaFoodMatch } from '../types/mealprep';
 import { NUTRITION_FIELDS } from '../types/mealprep';
+import { getUsdaFoodViaProxy, searchUsdaFoodsViaProxy } from './usda/proxyClient';
+import type { UsdaFoodPayload } from './usda/types';
 import { readJson, writeJson } from './storage';
 
 const USDA_NUTRIENT_IDS: Record<NutritionField, number[]> = {
@@ -62,31 +64,14 @@ export function setStoredUsdaApiKey(key: string): void {
   writeJson(USDA_SETTINGS_STORAGE_KEY, key.trim());
 }
 
-export function resolveUsdaApiKey(override?: string): string {
+/** Device-only override for direct USDA fallback (never commit keys; server uses `usda-proxy`). */
+export function resolveUsdaDirectApiKey(override?: string): string {
   const fromOverride = (override ?? '').trim();
   if (fromOverride) return fromOverride;
   const fromStorage = getStoredUsdaApiKey();
   if (fromStorage) return fromStorage;
-  if (USDA_FDC_API_KEY) return USDA_FDC_API_KEY;
   return USDA_DEMO_API_KEY;
 }
-
-type FoodNutrientRow = {
-  nutrientId?: number;
-  nutrientNumber?: number | string;
-  nutrient?: { id?: number };
-  value?: number;
-  amount?: number;
-};
-
-type UsdaFoodPayload = {
-  fdcId: number;
-  description?: string;
-  lowercaseDescription?: string;
-  dataType?: string;
-  brandOwner?: string;
-  foodNutrients?: FoodNutrientRow[];
-};
 
 function readNutrientNumber(food: UsdaFoodPayload, ids: number[]): number {
   const nutrients = food.foodNutrients ?? [];
@@ -144,7 +129,7 @@ function usdaCitation(food: UsdaFoodPayload) {
   };
 }
 
-async function usdaFetch(url: string): Promise<unknown> {
+async function usdaFetchDirect(url: string): Promise<unknown> {
   const response = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!response.ok) {
     throw new Error(`USDA lookup failed (${response.status}). Check your API key in Admin settings.`);
@@ -152,22 +137,8 @@ async function usdaFetch(url: string): Promise<unknown> {
   return response.json();
 }
 
-export async function searchUsdaFoods(query: string, pageSize = 8, apiKey?: string): Promise<UsdaFoodMatch[]> {
-  const q = query.trim();
-  if (!q) return [];
-
-  const params = new URLSearchParams({
-    query: q,
-    pageSize: String(pageSize),
-    dataType: 'Foundation,SR Legacy,Survey (FNDDS)',
-    api_key: resolveUsdaApiKey(apiKey),
-  });
-
-  const data = (await usdaFetch(`${USDA_FDC_SEARCH_URL}?${params.toString()}`)) as {
-    foods?: UsdaFoodPayload[];
-  };
-
-  return (data.foods ?? []).map((food) => {
+function mapFoodsToMatches(foods: UsdaFoodPayload[]): UsdaFoodMatch[] {
+  return foods.map((food) => {
     const cite = usdaCitation(food);
     return {
       name: food.description ?? 'USDA food',
@@ -177,6 +148,44 @@ export async function searchUsdaFoods(query: string, pageSize = 8, apiKey?: stri
       ...cite,
     };
   });
+}
+
+async function searchUsdaFoodsDirect(
+  query: string,
+  pageSize: number,
+  apiKey?: string,
+): Promise<UsdaFoodMatch[]> {
+  const params = new URLSearchParams({
+    query: query.trim(),
+    pageSize: String(pageSize),
+    dataType: USDA_SEARCH_DATA_TYPE,
+    api_key: resolveUsdaDirectApiKey(apiKey),
+  });
+
+  const data = (await usdaFetchDirect(`${USDA_FDC_SEARCH_URL}?${params.toString()}`)) as {
+    foods?: UsdaFoodPayload[];
+  };
+
+  return mapFoodsToMatches(data.foods ?? []);
+}
+
+async function getUsdaFoodDirect(fdcId: number, apiKey?: string): Promise<UsdaFoodPayload> {
+  const params = new URLSearchParams({ api_key: resolveUsdaDirectApiKey(apiKey) });
+  return (await usdaFetchDirect(
+    `${USDA_FDC_FOOD_URL}/${encodeURIComponent(String(fdcId))}?${params.toString()}`,
+  )) as UsdaFoodPayload;
+}
+
+export async function searchUsdaFoods(query: string, pageSize = 8, apiKey?: string): Promise<UsdaFoodMatch[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const proxied = await searchUsdaFoodsViaProxy(q, pageSize);
+  if (proxied !== null) {
+    return mapFoodsToMatches(proxied);
+  }
+
+  return searchUsdaFoodsDirect(q, pageSize, apiKey);
 }
 
 export async function getUsdaFoodScaled(
@@ -190,10 +199,8 @@ export async function getUsdaFoodScaled(
   citation: string;
   url: string;
 }> {
-  const params = new URLSearchParams({ api_key: resolveUsdaApiKey(apiKey) });
-  const food = (await usdaFetch(
-    `${USDA_FDC_FOOD_URL}/${encodeURIComponent(String(fdcId))}?${params.toString()}`,
-  )) as UsdaFoodPayload;
+  const proxied = await getUsdaFoodViaProxy(fdcId);
+  const food = proxied ?? (await getUsdaFoodDirect(fdcId, apiKey));
   const cite = usdaCitation(food);
   const per100g = nutritionFromUsdaFood(food);
   const scaled = scaleNutrition(per100g, grams);
