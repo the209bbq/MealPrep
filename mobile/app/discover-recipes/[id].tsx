@@ -35,6 +35,7 @@ export default function DiscoverRecipeDetailScreen() {
     pantry,
     toggleMealPlanDiscoveryRecipe,
     isOnMealPlan,
+    onboarding,
   } = useApp();
   const accessToken = session?.access_token ?? null;
 
@@ -59,6 +60,7 @@ export default function DiscoverRecipeDetailScreen() {
     try {
       const detail = await fetchDiscoveryRecipeDetail(recipeId, accessToken);
       setRecipe(detail);
+      onboarding.notifyTutorialStepComplete('recipes');
     } catch (err) {
       if (err instanceof RecipeDiscoveryNotConfiguredError) {
         setError('Recipe discovery is not set up on the server yet.');
@@ -70,7 +72,7 @@ export default function DiscoverRecipeDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [accessToken, recipeId]);
+  }, [accessToken, onboarding, recipeId]);
 
   useEffect(() => {
     void load();

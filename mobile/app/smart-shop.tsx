@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SmartShopComparisonResults, resolveCheapestStoreId } from '../components/smartShop/SmartShopComparisonResults';
@@ -24,7 +24,7 @@ import type { StoreLocation } from '../lib/deals';
 
 export default function SmartShopScreen() {
   const insets = useSafeAreaInsets();
-  const { grocery, featureFlags, profile } = useApp();
+  const { grocery, featureFlags, profile, onboarding } = useApp();
   const shop = useSmartShopScreen({ grocery, profile });
   const [addPriceTarget, setAddPriceTarget] = useState<SmartShopAddPriceTarget | null>(null);
 
@@ -36,6 +36,12 @@ export default function SmartShopScreen() {
     void shop.community.refresh();
     void shop.refreshComparison();
   }, [shop.community.refresh, shop.refreshComparison]);
+
+  useEffect(() => {
+    if (shop.dealsResult) {
+      onboarding.notifyTutorialStepComplete('shop');
+    }
+  }, [onboarding, shop.dealsResult]);
 
   if (!featureFlags.smartShop) {
     return (
