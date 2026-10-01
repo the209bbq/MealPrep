@@ -27,6 +27,7 @@ import {
 import { analyzePriceTagPhoto } from '../../lib/priceTagVision/client';
 import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 import { getSupabase } from '../../lib/supabase';
+import { pickWebImageFile } from '../../lib/web/pickWebImageFile';
 import { resolveStoreChainKey } from '../../config/weeklyAds';
 import {
   rememberItemSizeUnit,
@@ -328,19 +329,15 @@ export function SmartShopAddPriceSheet({
 
   async function handleSnapTag() {
     if (Platform.OS === 'web') {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.capture = 'environment';
-      input.onchange = () => {
-        const file = input.files?.[0];
+      try {
+        const file = await pickWebImageFile({ capture: 'environment' });
         if (!file) return;
-        void import('../../lib/pantryVision/prepareImage.web')
-          .then(({ preparePantryImageFromFile }) => preparePantryImageFromFile(file))
-          .then((prepared) => runScan(prepared))
-          .catch(() => setError(SMART_SHOP_COPY.addPriceScanFailed));
-      };
-      input.click();
+        const { preparePantryImageFromFile } = await import('../../lib/pantryVision/prepareImage.web');
+        const prepared = await preparePantryImageFromFile(file);
+        await runScan(prepared);
+      } catch {
+        setError(SMART_SHOP_COPY.addPriceScanFailed);
+      }
       return;
     }
 
