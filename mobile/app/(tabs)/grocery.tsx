@@ -94,14 +94,14 @@ export default function GroceryScreen() {
       <View className="flex-1 bg-paper">
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: showShopCta ? 100 + insets.bottom : 32 }}>
           <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-5">
-            <Text className="text-xs font-bold uppercase tracking-widest text-emerald-light">Grocery list</Text>
+            <Text className="text-xs font-bold uppercase tracking-widest text-on-primary-muted">Grocery list</Text>
             <Text className="mt-1 text-2xl font-bold text-on-emerald">
               {open.length} to buy · {checkedCount} in cart
             </Text>
-            <View className="mt-3 h-2 overflow-hidden rounded-full bg-slate-muted/40">
-              <View className="h-full rounded-full bg-emerald-accent" style={{ width: `${progressPct}%` }} />
+            <View className="mt-3 h-2 overflow-hidden rounded-full bg-on-primary-muted/30">
+              <View className="h-full rounded-full bg-primary-accent" style={{ width: `${progressPct}%` }} />
             </View>
-            <Text className="mt-2 text-sm text-emerald-light">
+            <Text className="mt-2 text-sm text-on-primary-muted">
               {plannedRecipeIds.length} planned meal(s) · only buy what recipes still need
             </Text>
             <View className="mt-4 flex-row flex-wrap gap-2">
@@ -109,14 +109,14 @@ export default function GroceryScreen() {
                 onPress={() => setAddOpen(true)}
                 className="min-h-[48px] flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3"
               >
-                <Ionicons name="add-circle-outline" size={20} color={THEME.emerald} />
+                <Ionicons name="add-circle-outline" size={20} color={THEME.primary} />
                 <Text className="text-sm font-bold text-ink">Add item</Text>
               </Pressable>
               <Pressable
                 onPress={refreshGrocery}
-                className="min-h-[48px] rounded-2xl border border-emerald-light bg-emerald-light px-4 py-3"
+                className="min-h-[48px] rounded-2xl border border-on-primary-muted/40 bg-primary/30 px-4 py-3"
               >
-                <Text className="text-center text-sm font-bold text-emerald-dark">Refresh</Text>
+                <Text className="text-center text-sm font-bold text-on-emerald">Refresh</Text>
               </Pressable>
             </View>
           </View>
@@ -160,7 +160,7 @@ export default function GroceryScreen() {
                     className="mb-2 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3"
                   >
                     <View className="flex-row items-center gap-2">
-                      <Ionicons name="bag-check-outline" size={22} color={THEME.emerald} />
+                      <Ionicons name="bag-check-outline" size={22} color={THEME.primary} />
                       <Text className="text-base font-bold text-ink">In cart ({done.length})</Text>
                     </View>
                     <Ionicons name={cartExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={THEME.muted} />
@@ -197,7 +197,7 @@ export default function GroceryScreen() {
               onPress={() => router.push('/smart-shop')}
               className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-emerald px-4 py-3"
             >
-              <Ionicons name="pricetags" size={22} color={THEME.onEmerald} />
+              <Ionicons name="pricetags" size={22} color={THEME.onPrimary} />
               <Text className="text-base font-bold text-on-emerald">Shop this list ({open.length})</Text>
             </Pressable>
           </View>

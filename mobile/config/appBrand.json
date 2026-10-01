@@ -4,7 +4,7 @@
   "pwaDescription": "Plan meals, use your pantry, and shop smarter.",
   "colors": {
     "brandCream": "#FCF8EC",
-    "themeEmerald": "#047857"
+    "themePrimaryDark": "#13253F"
   },
   "sourceLogo": "assets/mealplanatic-logo-source.png",
   "crops": {

@@ -34,7 +34,7 @@ export function PantryStorageScanButtons({
           <Ionicons
             name={action.icon as keyof typeof Ionicons.glyphMap}
             size={22}
-            color={THEME.emerald}
+            color={THEME.primary}
           />
           <Text className="flex-1 text-sm font-bold text-ink">{action.scanTitle}</Text>
           <Pressable
@@ -44,7 +44,7 @@ export function PantryStorageScanButtons({
             className={`rounded-lg p-2 ${disabled ? 'opacity-40' : 'bg-emerald-light'}`}
             accessibilityLabel={`${action.scanTitle} with camera`}
           >
-            <Ionicons name="camera-outline" size={20} color={THEME.emeraldDark} />
+            <Ionicons name="camera-outline" size={20} color={THEME.primaryDark} />
           </Pressable>
           <Pressable
             disabled={disabled}
@@ -52,7 +52,7 @@ export function PantryStorageScanButtons({
             className={`rounded-lg border border-border p-2 ${disabled ? 'opacity-40' : 'bg-paper'}`}
             accessibilityLabel={`${action.scanTitle} from photo library`}
           >
-            <Ionicons name="images-outline" size={20} color={THEME.slate} />
+            <Ionicons name="images-outline" size={20} color={THEME.primaryDark} />
           </Pressable>
         </View>
       ))}

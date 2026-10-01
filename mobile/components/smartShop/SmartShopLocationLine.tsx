@@ -13,7 +13,7 @@ export function SmartShopLocationLine({ locationSummary, onChangePress }: Props)
         <Text className="text-xs text-muted">
           {SMART_SHOP_COPY.locationNearPrefix} {locationSummary}
         </Text>
-        <Text className="text-xs font-semibold text-emerald-dark">· {SMART_SHOP_COPY.locationChange}</Text>
+        <Text className="text-xs font-semibold text-success-dark">· {SMART_SHOP_COPY.locationChange}</Text>
       </Pressable>
     </View>
   );

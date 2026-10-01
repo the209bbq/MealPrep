@@ -19,6 +19,10 @@ export const SCAN_PHOTOS = {
   viewPhotoLabel: 'View photo',
   openPhotoFailed: 'Could not open that photo. Try again later.',
   loadingPhoto: 'Opening photo…',
+  /** Local persistence: last client cleanup run per signed-in user (ISO timestamps). */
+  clientCleanupStorageKey: 'mealplanatic.scanPhotoCleanupLastRunByUser',
+  /** At most one cleanup pass per user per calendar day (local device clock). */
+  clientCleanupMinIntervalMs: 24 * 60 * 60 * 1000,
 } as const;
 
 export function scanPhotoFolderForKind(kind: ScanPhotoKind): string {

@@ -39,7 +39,7 @@ export function SmartShopDeliveryBox({ grocery, onError }: Props) {
       <Text className="mt-1 text-xs text-muted">{SMART_SHOP_COPY.deliveryBlurb}</Text>
       <OrderListDeliveryButtons onOrder={(service) => void handleOrderList(service)} />
       {clipboardToast ? (
-        <Text className="mt-2 text-xs font-semibold text-emerald-dark">{clipboardToast}</Text>
+        <Text className="mt-2 text-xs font-semibold text-success-dark">{clipboardToast}</Text>
       ) : null}
     </View>
   );

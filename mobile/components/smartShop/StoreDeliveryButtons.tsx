@@ -39,7 +39,7 @@ export function StoreDeliveryButtons({ store }: Props) {
 function DeliveryChip({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} className="rounded-lg border border-border bg-paper px-2 py-1">
-      <Text className="text-xs font-semibold text-emerald-dark">{label}</Text>
+      <Text className="text-xs font-semibold text-success-dark">{label}</Text>
     </Pressable>
   );
 }

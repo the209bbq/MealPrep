@@ -389,10 +389,10 @@ export function SmartShopAddPriceSheet({
                   <Pressable
                     key={store.id}
                     onPress={() => setActiveStore(store)}
-                    className={`mr-2 rounded-full border px-3 py-1.5 ${selected ? 'border-emerald bg-emerald-light' : 'border-border bg-card'}`}
+                    className={`mr-2 rounded-full border px-3 py-1.5 ${selected ? 'border-primary bg-primary-light' : 'border-border bg-card'}`}
                   >
                     <Text
-                      className={`text-xs font-semibold ${selected ? 'text-emerald-dark' : 'text-ink'}`}
+                      className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}
                       numberOfLines={1}
                     >
                       {store.chain || store.name}
@@ -414,9 +414,9 @@ export function SmartShopAddPriceSheet({
               <View className="mt-4 flex-row gap-2">
                 <Pressable
                   onPress={() => handleAddAnother()}
-                  className="flex-1 rounded-xl bg-emerald px-3 py-3"
+                  className="flex-1 rounded-xl bg-primary px-3 py-3"
                 >
-                  <Text className="text-center text-sm font-bold text-on-emerald">
+                  <Text className="text-center text-sm font-bold text-on-primary">
                     {SMART_SHOP_COPY.addPriceAddAnother}
                   </Text>
                 </Pressable>
@@ -437,10 +437,10 @@ export function SmartShopAddPriceSheet({
                         <Pressable
                           key={suggestion.item.id}
                           onPress={() => selectSuggestion(suggestion)}
-                          className={`mr-2 rounded-full border px-3 py-1.5 ${selected ? 'border-emerald bg-emerald-light' : 'border-border bg-card'}`}
+                          className={`mr-2 rounded-full border px-3 py-1.5 ${selected ? 'border-primary bg-primary-light' : 'border-border bg-card'}`}
                         >
                           <Text
-                            className={`text-xs font-semibold ${selected ? 'text-emerald-dark' : 'text-ink'}`}
+                            className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}
                             numberOfLines={1}
                           >
                             {suggestion.item.name}
@@ -502,14 +502,14 @@ export function SmartShopAddPriceSheet({
               <Pressable
                 onPress={() => void handleSnapTag()}
                 disabled={scanning || submitting}
-                className="mt-3 flex-row items-center justify-center gap-2 rounded-xl border border-emerald bg-emerald-light/40 px-3 py-3"
+                className="mt-3 flex-row items-center justify-center gap-2 rounded-xl border border-primary bg-primary-light/40 px-3 py-3"
               >
                 {scanning ? (
-                  <ActivityIndicator size="small" color={THEME.emerald} />
+                  <ActivityIndicator size="small" color={THEME.primary} />
                 ) : (
-                  <Ionicons name="camera-outline" size={20} color={THEME.emerald} />
+                  <Ionicons name="camera-outline" size={20} color={THEME.primary} />
                 )}
-                <Text className="text-sm font-bold text-emerald-dark">
+                <Text className="text-sm font-bold text-primary-dark">
                   {scanning ? SMART_SHOP_COPY.addPriceScanning : SMART_SHOP_COPY.addPriceScanTag}
                 </Text>
               </Pressable>
@@ -522,9 +522,9 @@ export function SmartShopAddPriceSheet({
                 <Pressable
                   onPress={() => void handleSave()}
                   disabled={submitting || scanning || signedIn === false}
-                  className="flex-1 rounded-xl bg-emerald px-3 py-3"
+                  className="flex-1 rounded-xl bg-primary px-3 py-3"
                 >
-                  <Text className="text-center text-sm font-bold text-on-emerald">
+                  <Text className="text-center text-sm font-bold text-on-primary">
                     {submitting ? 'Saving…' : SMART_SHOP_COPY.addPriceSave}
                   </Text>
                 </Pressable>

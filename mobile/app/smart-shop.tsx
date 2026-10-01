@@ -68,9 +68,9 @@ export default function SmartShopScreen() {
         {shop.items.length > 0 ? (
           <Pressable
             onPress={() => openAddPrice()}
-            className="rounded-xl bg-emerald px-3 py-2"
+            className="rounded-xl bg-primary px-3 py-2"
           >
-            <Text className="text-xs font-bold text-on-emerald">{SMART_SHOP_COPY.addPriceButton}</Text>
+            <Text className="text-xs font-bold text-on-primary">{SMART_SHOP_COPY.addPriceButton}</Text>
           </Pressable>
         ) : null}
       </View>

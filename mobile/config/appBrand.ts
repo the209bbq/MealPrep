@@ -3,7 +3,7 @@ import brandJson from './appBrand.json';
 
 export type AppBrandColors = {
   brandCream: string;
-  themeEmerald: string;
+  themePrimaryDark: string;
 };
 
 export type AppBrandCropRect = {

@@ -45,9 +45,9 @@ export function ViewScanPhotoButton({ scanPhotoPath, className }: Props) {
         accessibilityLabel={SCAN_PHOTOS.viewPhotoLabel}
       >
         {loading ? (
-          <ActivityIndicator size="small" color={THEME.emerald} />
+          <ActivityIndicator size="small" color={THEME.primary} />
         ) : (
-          <Ionicons name="image-outline" size={16} color={THEME.emerald} />
+          <Ionicons name="image-outline" size={16} color={THEME.primary} />
         )}
         <Text className="text-xs font-bold text-emerald-dark">
           {loading ? SCAN_PHOTOS.loadingPhoto : SCAN_PHOTOS.viewPhotoLabel}

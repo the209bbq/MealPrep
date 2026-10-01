@@ -517,7 +517,7 @@ export default function PantryScreen() {
 
           {phase === 'loading' ? (
             <View className="mt-4 items-center py-6">
-              <ActivityIndicator size="large" color="#047857" />
+              <ActivityIndicator size="large" color={THEME.primary} />
               <Text className="mt-2 text-sm text-muted">Analyzing photo…</Text>
             </View>
           ) : null}

@@ -38,6 +38,7 @@ import {
   type PantryMatchIndex,
 } from '../lib/recipeMatch';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
+import { runScanPhotoRetentionCleanupIfDue } from '../lib/scanPhotos/cleanup';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
 import { readJson, removeStorageKey, writeJson } from '../lib/storage';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
@@ -338,6 +339,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAuthError(error instanceof Error ? error.message : 'Failed to load kitchen data');
     });
   }, [demoMode, userId, loadLiveData]);
+
+  useEffect(() => {
+    if (demoMode || !userId) return;
+    runScanPhotoRetentionCleanupIfDue(userId);
+  }, [demoMode, userId]);
 
   const refreshGrocery = useCallback(() => {
     if (!featureFlags.grocerySync) return;
