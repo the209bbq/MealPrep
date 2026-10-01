@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useHydrated } from '../../hooks/useHydrated';
 import {
   ActivityIndicator,
   Alert,
@@ -97,7 +98,13 @@ export default function PantryScreen() {
     resortPantryItemsInDefaultLocation,
   } = useApp();
   const [filter, setFilter] = useState<PantryCategory | 'all'>('all');
-  const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>(readStoredPantryLocationFilter);
+  const hydrated = useHydrated();
+  const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>('all');
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setLocationFilter(readStoredPantryLocationFilter());
+  }, [hydrated]);
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
