@@ -1,9 +1,15 @@
 import { haversineMiles, milesToMeters, SMART_SHOP_STORES } from '../../config/smartShop';
 import { readCache, writeCache } from './cache';
+import {
+  buildOverpassGroceryQuery,
+  dedupeGroceryStoresByName,
+  haystackFromTags,
+  isAllowedOsmGroceryElement,
+  rankGroceryStores,
+  resolveGroceryChainFromHaystack,
+} from './groceryFilter';
 import { isRateLimitedStatus, osmRequestHeaders } from './osmHttp';
 import type { NearbyStoreSearchParams, StoreRecord } from './types';
-
-const SHOP_TAGS = ['supermarket', 'grocery', 'convenience'] as const;
 
 function parseAddress(tags: Record<string, string>): {
   addressLine: string;
@@ -18,21 +24,6 @@ function parseAddress(tags: Record<string, string>): {
   const state = tags['addr:state'] ?? '';
   const zip = tags['addr:postcode'] ?? '';
   return { addressLine, city, state, zip };
-}
-
-function storeName(tags: Record<string, string>): string {
-  return tags.name ?? tags.brand ?? tags.operator ?? 'Grocery store';
-}
-
-function buildOverpassQuery(lat: number, lng: number, radiusMeters: number): string {
-  const filters = SHOP_TAGS.map((shop) => `node["shop"="${shop}"](around:${radiusMeters},${lat},${lng});`).join('\n');
-  return `[out:json][timeout:25];
-(
-${filters}
-way["shop"="supermarket"](around:${radiusMeters},${lat},${lng});
-way["shop"="grocery"](around:${radiusMeters},${lat},${lng});
-);
-out center ${SMART_SHOP_STORES.maxOverpassResults};`;
 }
 
 type OverpassElement = {
@@ -54,11 +45,16 @@ export async function fetchOverpassStores(
 ): Promise<OverpassFetchResult> {
   const radiusMiles = params.radiusMiles ?? SMART_SHOP_STORES.defaultRadiusMiles;
   const radiusMeters = Math.round(milesToMeters(radiusMiles));
-  const cacheKey = `overpass:${origin.lat.toFixed(3)}:${origin.lng.toFixed(3)}:${radiusMiles}`;
+  const cacheKey = `overpass:v2:${origin.lat.toFixed(3)}:${origin.lng.toFixed(3)}:${radiusMiles}`;
   const cached = readCache<StoreRecord[]>(cacheKey);
   if (cached) return { ok: true, stores: cached };
 
-  const query = buildOverpassQuery(origin.lat, origin.lng, radiusMeters);
+  const query = buildOverpassGroceryQuery(
+    origin.lat,
+    origin.lng,
+    radiusMeters,
+    SMART_SHOP_STORES.maxOverpassResults,
+  );
 
   try {
     const response = await fetch(SMART_SHOP_STORES.overpassApiUrl, {
@@ -83,12 +79,16 @@ export async function fetchOverpassStores(
 
     for (const el of elements) {
       const tags = el.tags ?? {};
+      if (!isAllowedOsmGroceryElement(tags)) continue;
+
       const lat = el.lat ?? el.center?.lat;
       const lng = el.lon ?? el.center?.lon;
       if (lat == null || lng == null) continue;
 
-      const name = storeName(tags);
-      const chain = tags.brand ?? tags.operator ?? name;
+      const name = tags.name!.trim();
+      const haystack = haystackFromTags(tags);
+      const known = resolveGroceryChainFromHaystack(haystack);
+      const chain = known?.displayName ?? tags.brand ?? tags.operator ?? name;
       const addr = parseAddress(tags);
       const id = `osm-${el.type}-${el.id}`;
       const distanceMiles = haversineMiles(origin, { lat, lng });
@@ -110,27 +110,14 @@ export async function fetchOverpassStores(
       });
     }
 
-    const deduped = dedupeByProximity(stores);
-    deduped.sort((a, b) => (a.distanceMiles ?? 99) - (b.distanceMiles ?? 99));
+    const deduped = dedupeGroceryStoresByName(stores);
+    const ranked = rankGroceryStores(deduped);
 
-    if (deduped.length === 0) return { ok: false, reason: 'empty' };
+    if (ranked.length === 0) return { ok: false, reason: 'empty' };
 
-    writeCache(cacheKey, deduped, SMART_SHOP_STORES.cacheTtlMs);
-    return { ok: true, stores: deduped };
+    writeCache(cacheKey, ranked, SMART_SHOP_STORES.cacheTtlMs);
+    return { ok: true, stores: ranked };
   } catch {
     return { ok: false, reason: 'network' };
   }
-}
-
-function dedupeByProximity(stores: StoreRecord[]): StoreRecord[] {
-  const kept: StoreRecord[] = [];
-  for (const store of stores) {
-    const duplicate = kept.find(
-      (k) =>
-        k.name.toLowerCase() === store.name.toLowerCase() &&
-        (k.distanceMiles ?? 0) - (store.distanceMiles ?? 0) < 0.05,
-    );
-    if (!duplicate) kept.push(store);
-  }
-  return kept;
 }

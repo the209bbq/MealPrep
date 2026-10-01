@@ -1,9 +1,19 @@
 /** Smart Shop — public config only (no secrets). */
 
+import { GROCERY_NAME_EXCLUDE_PATTERNS, SPECIALTY_SHOP_TAGS } from './smartShopChains';
+
 export const SMART_SHOP_STORES = {
-  defaultRadiusMiles: 15,
+  defaultRadiusMiles: 10,
   maxSavedStores: 8,
-  maxOverpassResults: 40,
+  /** Initial store cards shown before "Show more". */
+  defaultVisibleStores: 8,
+  /** Dedupe same name within this radius (meters). */
+  duplicateRadiusMeters: 150,
+  /** Include OSM shop=bakery / butcher / etc. when true. */
+  includeSpecialtyShops: false,
+  nameExcludePatterns: GROCERY_NAME_EXCLUDE_PATTERNS,
+  specialtyShopTags: SPECIALTY_SHOP_TAGS,
+  maxOverpassResults: 80,
   /** Native clients: Nominatim / Overpass usage policy User-Agent. */
   httpUserAgent: '209MealPrep/1.0 Smart Shop (https://github.com/the209bbq/MealPrep)',
   /** Web / fallback: Nominatim requires a contact email in the request (cannot set User-Agent in browsers). */

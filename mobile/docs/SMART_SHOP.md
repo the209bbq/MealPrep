@@ -20,4 +20,6 @@ No GitHub Pages env changes beyond existing `EXPO_PUBLIC_SUPABASE_URL` / anon ke
 
 - `lib/stores/` — Nominatim (ZIP + `email` param on web), Overpass (graceful fallback on rate limits).
 - `lib/deals/` — always calls `kroger-deals` for Kroger **locations** and **deals** when Supabase is configured; 503 → SAMPLE mode.
-- `config/smartShop.ts` — radius, endpoints, contact email for Nominatim.
+- `config/smartShop.ts` — radius (~10 mi), endpoints, contact email for Nominatim.
+- `config/smartShopChains.ts` — grocery chain allowlist, exclusions, delivery slugs.
+- `config/smartShopDelivery.ts` — Instacart / DoorDash URL templates.
