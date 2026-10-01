@@ -19,6 +19,11 @@ assert(!isAllowedOsmGroceryElement({ shop: 'supermarket', brand: 'Save Mart' }),
 assert(isAllowedOsmGroceryElement({ shop: 'wholesale', name: 'Costco Wholesale' }), 'costco wholesale');
 assert(!isAllowedOsmGroceryElement({ shop: 'wholesale', name: 'Restaurant Depot' }), 'restaurant depot');
 assert(!isAllowedOsmGroceryElement({ shop: 'supermarket', name: 'Dollar General' }), 'dollar');
+assert(
+  isAllowedOsmGroceryElement({ shop: 'department_store', name: 'Walmart Neighborhood Market', brand: 'Walmart' }),
+  'walmart neighborhood dept store',
+);
+assert(!isAllowedOsmGroceryElement({ shop: 'department_store', name: 'Kohl\'s' }), 'kohls dept');
 
 const chain = resolveGroceryChainFromHaystack('save mart oakdale');
 assert(chain?.key === 'save_mart', 'chain key');

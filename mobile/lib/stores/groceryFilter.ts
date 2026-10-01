@@ -3,7 +3,9 @@ import {
   type GroceryChainConfig,
   SPECIALTY_SHOP_TAGS,
 } from '../../config/smartShopChains';
+import { RETAILER_OSM_WIKIDATA_IDS } from '../../config/smartShopRetailers';
 import { haversineMiles, SMART_SHOP_STORES } from '../../config/smartShop';
+import { osmTagsMatchAnyRetailerGrocery } from '../smartShop/retailerLinks';
 import type { StoreRecord } from './types';
 
 export type OsmElementLike = {
@@ -54,6 +56,10 @@ export function isAllowedOsmGroceryElement(tags: Record<string, string>): boolea
 
   if (!SMART_SHOP_STORES.includeSpecialtyShops && SPECIALTY_SHOP_TAGS.some((t) => shop === t)) {
     return false;
+  }
+
+  if (shop === 'department_store' || shop === 'general') {
+    return osmTagsMatchAnyRetailerGrocery(tags);
   }
 
   return false;
@@ -124,12 +130,25 @@ export function sortStoreLocationsForDisplay<T extends SortableStoreLocation>(
 
 export function buildOverpassGroceryQuery(lat: number, lng: number, radiusMeters: number, maxResults: number): string {
   const around = `around:${radiusMeters},${lat},${lng}`;
+  const bigBoxShop = 'department_store|general';
+  const wikidataUnion = RETAILER_OSM_WIKIDATA_IDS.map(
+    (qid) => `
+node["shop"~"${bigBoxShop}"]["brand:wikidata"="${qid}"](${around});
+way["shop"~"${bigBoxShop}"]["brand:wikidata"="${qid}"](${around});`,
+  ).join('');
+  const brandNameUnion = `
+node["shop"~"${bigBoxShop}"]["brand"~"Walmart|Target",i](${around});
+way["shop"~"${bigBoxShop}"]["brand"~"Walmart|Target",i](${around});
+node["shop"~"${bigBoxShop}"]["name"~"Walmart Supercenter|Walmart Neighborhood|Walmart|Target",i](${around});
+way["shop"~"${bigBoxShop}"]["name"~"Walmart Supercenter|Walmart Neighborhood|Walmart|Target",i](${around});`;
   return `[out:json][timeout:${SMART_SHOP_STORES.overpassQueryTimeoutSec}];
 (
 node["shop"="supermarket"](${around});
 node["shop"="grocery"](${around});
 way["shop"="supermarket"](${around});
 way["shop"="grocery"](${around});
+${wikidataUnion}
+${brandNameUnion}
 );
 out center ${maxResults};`;
 }
