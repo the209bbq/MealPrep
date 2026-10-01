@@ -1,9 +1,12 @@
-import { Platform } from 'react-native';
 import { SMART_SHOP_STORES } from '../../config/smartShop';
+
+function isWebRuntime(): boolean {
+  return typeof document !== 'undefined';
+}
 
 /** Headers OSM APIs accept from native clients (browsers block custom User-Agent). */
 export function osmRequestHeaders(): Record<string, string> {
-  if (Platform.OS === 'web') {
+  if (isWebRuntime()) {
     return { Accept: 'application/json' };
   }
   return {
@@ -14,7 +17,7 @@ export function osmRequestHeaders(): Record<string, string> {
 
 export function nominatimSearchParams(base: Record<string, string>): URLSearchParams {
   const params = new URLSearchParams(base);
-  if (Platform.OS === 'web' || !params.has('email')) {
+  if (isWebRuntime() || !params.has('email')) {
     params.set('email', SMART_SHOP_STORES.nominatimContactEmail);
   }
   return params;

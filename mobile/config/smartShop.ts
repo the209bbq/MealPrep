@@ -29,7 +29,12 @@ export const SMART_SHOP_STORES = {
   ] as const,
   /** @deprecated Use overpassApiUrls — kept for scripts. */
   overpassApiUrl: 'https://overpass-api.de/api/interpreter',
-  overpassRequestTimeoutMs: 25_000,
+  /** Per-mirror POST timeout while racing Overpass endpoints. */
+  overpassRequestTimeoutMs: 8_000,
+  /** Overall cap for the parallel mirror race (ms). */
+  overpassOverallTimeoutMs: 12_000,
+  /** Overpass QL `[timeout:…]` server-side limit (seconds). */
+  overpassQueryTimeoutSec: 10,
   /** In-memory cache TTL for geocode / Overpass (ms). */
   cacheTtlMs: 15 * 60 * 1000,
   /** localStorage cache for ZIP geocode + nearby stores (ms). */
@@ -76,6 +81,9 @@ export const SMART_SHOP_COPY = {
   estimatedSuffix: 'est.',
   pricesUnavailable: 'No prices yet',
   loadingStores: 'Finding nearby grocery stores…',
+  updatingStores: 'Updating nearby stores…',
+  storeSearchFailed: 'Could not load nearby stores. Check your connection and try again.',
+  retryStoreSearch: 'Retry',
   loadingComparison: 'Comparing prices for your list…',
   osmRateLimited: 'Store search is busy — try again in a minute.',
   osmNetwork:

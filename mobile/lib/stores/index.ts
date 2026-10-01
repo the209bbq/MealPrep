@@ -1,13 +1,14 @@
 import { mapsDirectionsUrl, SMART_SHOP_COPY, SMART_SHOP_STORES } from '../../config/smartShop';
 import { geocodeUsZip } from './nominatim';
-import { placeLabelFromGeocodePoint } from './zipPlaceParse';
-import { fetchOverpassStores } from './overpass';
+import { fetchOverpassStores, readCachedOverpassStores } from './overpass';
 import { loadSavedStoresFallback } from './savedStoresFallback';
+import { resolveSearchOriginFast, resolveSearchOriginWithGeocode } from './resolveOrigin';
 import type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
 
 export type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
 export { geocodeUsZip, geocodeUsZipOrNull } from './nominatim';
 export { mapsDirectionsUrl };
+export { resolveSearchOriginFast, readCachedOverpassStores };
 
 function zipGeocodeMessage(reason: string): string {
   switch (reason) {
@@ -36,29 +37,46 @@ function overpassWarning(reason: string): string | undefined {
 }
 
 export async function resolveSearchOrigin(params: NearbyStoreSearchParams): Promise<ResolvedGeo> {
-  if (params.lat != null && params.lng != null && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
-    return { lat: params.lat, lng: params.lng, label: 'your location' };
-  }
-  if (params.zip) {
-    const result = await geocodeUsZip(params.zip);
-    if (!result.ok) throw new Error(zipGeocodeMessage(result.reason));
-    const zip = params.zip.slice(0, 5);
-    return {
-      lat: result.point.lat,
-      lng: result.point.lng,
-      label: placeLabelFromGeocodePoint(result.point, zip),
-    };
-  }
-  throw new Error('Set your location or enter a ZIP code to find stores.');
+  return resolveSearchOriginWithGeocode(params, geocodeUsZip, zipGeocodeMessage);
 }
 
-export async function searchNearbyGroceryStores(params: NearbyStoreSearchParams): Promise<{
+export type InstantGroceryStorePreview = {
   origin: ResolvedGeo;
   stores: StoreRecord[];
-  osmWarning?: string;
-}> {
-  const origin = await resolveSearchOrigin(params);
-  const overpass = await fetchOverpassStores(origin, params);
+  source: 'cache' | 'saved';
+};
+
+/** Cached or saved stores for stale-while-revalidate (no network). */
+export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): InstantGroceryStorePreview | null {
+  const origin = resolveSearchOriginFast(params);
+  if (!origin) return null;
+
+  const radiusMiles = params.radiusMiles ?? SMART_SHOP_STORES.defaultRadiusMiles;
+  const cached = readCachedOverpassStores(origin, radiusMiles);
+  if (cached?.length) {
+    return {
+      origin,
+      source: 'cache',
+      stores: cached.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+    };
+  }
+
+  const fallback = loadSavedStoresFallback(params.zip);
+  if (fallback.length > 0) {
+    return {
+      origin,
+      source: 'saved',
+      stores: fallback.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+    };
+  }
+
+  return null;
+}
+
+function applyOsmResult(
+  overpass: Awaited<ReturnType<typeof fetchOverpassStores>>,
+  params: NearbyStoreSearchParams,
+): { osmStores: StoreRecord[]; osmWarning?: string } {
   let osmStores: StoreRecord[] = overpass.ok ? overpass.stores : [];
   let osmWarning: string | undefined;
 
@@ -76,9 +94,25 @@ export async function searchNearbyGroceryStores(params: NearbyStoreSearchParams)
     }
   }
 
+  return { osmStores, osmWarning };
+}
+
+export async function searchNearbyGroceryStores(params: NearbyStoreSearchParams): Promise<{
+  origin: ResolvedGeo;
+  stores: StoreRecord[];
+  osmWarning?: string;
+  storeSearchFailed?: boolean;
+}> {
+  const origin = await resolveSearchOrigin(params);
+  const overpass = await fetchOverpassStores(origin, params);
+  const { osmStores, osmWarning } = applyOsmResult(overpass, params);
+
+  const storeSearchFailed = !overpass.ok && osmStores.length === 0;
+
   return {
     origin,
     osmWarning,
+    storeSearchFailed,
     stores: osmStores.map((s) => ({
       ...s,
       url: mapsDirectionsUrl(s),

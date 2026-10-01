@@ -1,7 +1,7 @@
 import { SMART_SHOP } from '../../config/appConfig';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { mergeKrogerLocations } from '../stores/krogerMerge';
-import { searchNearbyGroceryStores, type StoreRecord } from '../stores';
+import { previewNearbyGroceryStores, searchNearbyGroceryStores, type StoreRecord } from '../stores';
 import { assembleDealsResult, remapKrogerDealsToStores, storeRecordToLocation } from './buildShopResult';
 import { KROGER_NOT_CONFIGURED_NOTE, isKrogerProxyAvailable } from './krogerAvailability';
 import { fetchKrogerLocations } from './krogerClient';
@@ -26,12 +26,30 @@ function liveDealsWithoutPricing(
   });
 }
 
+export function nearbyStoresInstantPreview(params: NearbyStoresParams): {
+  stores: StoreLocation[];
+  originLabel: string;
+} | null {
+  const preview = previewNearbyGroceryStores({
+    lat: params.lat,
+    lng: params.lng,
+    zip: params.zip,
+    radiusMiles: params.radiusMiles ?? SMART_SHOP.defaultRadiusMiles,
+  });
+  if (!preview) return null;
+  return {
+    originLabel: preview.origin.label,
+    stores: preview.stores.map(storeRecordToLocation),
+  };
+}
+
 export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
   stores: StoreLocation[];
   originLabel: string;
   storeSearchWarning?: string;
+  storeSearchFailed?: boolean;
 }> {
-  const { origin, stores, osmWarning } = await searchNearbyGroceryStores({
+  const { origin, stores, osmWarning, storeSearchFailed } = await searchNearbyGroceryStores({
     lat: params.lat,
     lng: params.lng,
     zip: params.zip,
@@ -62,6 +80,7 @@ export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
   return {
     originLabel: origin.label,
     storeSearchWarning: warning,
+    storeSearchFailed,
     stores: merged.map(storeRecordToLocation),
   };
 }

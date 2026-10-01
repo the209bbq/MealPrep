@@ -105,6 +105,9 @@ export default function SmartShopScreen() {
             savedStoreIds={shop.savedStoreIds}
             sortedNearbyStores={shop.sortedNearbyStores}
             loadingStores={shop.loadingStores}
+            updatingStores={shop.updatingStores}
+            storeSearchFailed={shop.storeSearchFailed}
+            onRetryStoreSearch={() => shop.retryStoreSearch()}
             storeHasCommunityDeals={shop.storeHasCommunityDeals}
             onEditPress={() => shop.setStorePickerOpen(true)}
             resultMode={shop.dealsResult?.mode}

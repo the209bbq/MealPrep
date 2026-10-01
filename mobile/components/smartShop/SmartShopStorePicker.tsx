@@ -12,6 +12,9 @@ type SectionProps = {
   savedStoreIds: string[];
   sortedNearbyStores: StoreLocation[];
   loadingStores: boolean;
+  updatingStores?: boolean;
+  storeSearchFailed?: boolean;
+  onRetryStoreSearch?: () => void;
   storeHasCommunityDeals: (store: StoreLocation) => boolean;
   onEditPress: () => void;
   resultMode?: 'live' | 'sample';
@@ -23,6 +26,9 @@ export function SmartShopCompareStoresSection({
   savedStoreIds,
   sortedNearbyStores,
   loadingStores,
+  updatingStores,
+  storeSearchFailed,
+  onRetryStoreSearch,
   storeHasCommunityDeals,
   onEditPress,
   resultMode,
@@ -36,10 +42,23 @@ export function SmartShopCompareStoresSection({
           <Text className="text-xs font-semibold text-success-dark">{SMART_SHOP_COPY.compareStoresEdit}</Text>
         </Pressable>
       </View>
+      {updatingStores && sortedNearbyStores.length > 0 ? (
+        <Text className="mb-2 text-xs text-muted">{SMART_SHOP_COPY.updatingStores}</Text>
+      ) : null}
       {loadingStores && sortedNearbyStores.length === 0 ? (
         <Text className="text-sm text-muted">{SMART_SHOP_COPY.loadingStores}</Text>
       ) : null}
-      {!loadingStores && sortedNearbyStores.length === 0 ? (
+      {storeSearchFailed && sortedNearbyStores.length === 0 ? (
+        <View className="rounded-xl border border-border bg-card px-3 py-3">
+          <Text className="text-sm text-muted">{SMART_SHOP_COPY.storeSearchFailed}</Text>
+          {onRetryStoreSearch ? (
+            <Pressable onPress={onRetryStoreSearch} className="mt-3 self-start rounded-lg bg-primary px-3 py-2">
+              <Text className="text-xs font-bold text-on-primary">{SMART_SHOP_COPY.retryStoreSearch}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+      {!loadingStores && !storeSearchFailed && sortedNearbyStores.length === 0 ? (
         <Text className="text-sm text-muted">{SMART_SHOP_COPY.compareStoresEmpty}</Text>
       ) : null}
       {activeStores.map((store) => {

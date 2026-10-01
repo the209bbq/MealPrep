@@ -7,7 +7,7 @@ import { SMART_SHOP } from '../../config/appConfig';
 import type { GroceryListItem, UserProfile } from '../../types/mealprep';
 import { mergeCommunityDealsIntoSearchResult } from '../communityDeals/mergeIntoDeals';
 import { chainKeysFromStores, useCommunityDealsForStores } from '../communityDeals/useCommunityDeals';
-import { searchDeals, searchNearbyStores, type DealsSearchResult, type StoreLocation } from '../deals';
+import { nearbyStoresInstantPreview, searchDeals, searchNearbyStores, type DealsSearchResult, type StoreLocation } from '../deals';
 import { geocodeUsZip } from '../stores';
 import { mapsDirectionsUrl, manualStoreFromInput } from '../stores';
 import { sortStoreLocationsForDisplay } from '../stores/groceryFilter';
@@ -38,6 +38,8 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
   const [originLabel, setOriginLabel] = useState<string | null>(null);
   const [dealsResult, setDealsResult] = useState<DealsSearchResult | null>(null);
   const [loadingStores, setLoadingStores] = useState(false);
+  const [updatingStores, setUpdatingStores] = useState(false);
+  const [storeSearchFailed, setStoreSearchFailed] = useState(false);
   const [loadingDeals, setLoadingDeals] = useState(false);
   const [locationHint, setLocationHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +48,7 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
   const [storePickerOpen, setStorePickerOpen] = useState(false);
   const [zipPlaceLabel, setZipPlaceLabel] = useState<string | null>(null);
   const initialLocationChecked = useRef(false);
+  const loadStoresGeneration = useRef(0);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -129,37 +132,68 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
     [nearbyStores],
   );
 
-  const loadStores = useCallback(
-    async (coords?: { lat: number; lng: number }) => {
-      setLoadingStores(true);
-      setError(null);
-      try {
-        const zipCode = isValidUsZip(zip) ? zip.trim() : undefined;
-        const { stores, originLabel: label, storeSearchWarning: warning } = await searchNearbyStores({
-          lat: coords?.lat,
-          lng: coords?.lng,
-          zip: coords ? undefined : zipCode,
-          radiusMiles: SMART_SHOP.defaultRadiusMiles,
-        });
-        setNearbyStores(stores);
-        setOriginLabel(label);
-        setStoreSearchWarning(warning ?? null);
-        const favorites = await loadFavoriteStoreIds();
-        if (favorites.length > 0) {
-          setSavedStoreIds(favorites);
-        } else if (stores.length > 0) {
-          const n = Math.min(SMART_SHOP_STORES.defaultComparisonStoreCount, SMART_SHOP.maxSavedStores);
-          const defaults = stores.slice(0, n).map((s) => s.krogerLocationId ?? s.id);
-          setSavedStoreIds(defaults);
-          await persistFavoriteStores(stores.slice(0, n));
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not load stores');
-      } finally {
-        setLoadingStores(false);
+  const applyStoreSearchResult = useCallback(
+    async (stores: StoreLocation[]) => {
+      setNearbyStores(stores);
+      const favorites = await loadFavoriteStoreIds();
+      if (favorites.length > 0) {
+        setSavedStoreIds(favorites);
+      } else if (stores.length > 0) {
+        const n = Math.min(SMART_SHOP_STORES.defaultComparisonStoreCount, SMART_SHOP.maxSavedStores);
+        const defaults = stores.slice(0, n).map((s) => s.krogerLocationId ?? s.id);
+        setSavedStoreIds(defaults);
+        await persistFavoriteStores(stores.slice(0, n));
       }
     },
-    [zip],
+    [],
+  );
+
+  const loadStores = useCallback(
+    async (coords?: { lat: number; lng: number }) => {
+      const generation = ++loadStoresGeneration.current;
+      setError(null);
+      setStoreSearchFailed(false);
+
+      const zipCode = isValidUsZip(zip) ? zip.trim() : undefined;
+      const searchParams = {
+        lat: coords?.lat,
+        lng: coords?.lng,
+        zip: coords ? undefined : zipCode,
+        radiusMiles: SMART_SHOP.defaultRadiusMiles,
+      };
+
+      const instant = nearbyStoresInstantPreview(searchParams);
+      const hadInstantStores = Boolean(instant?.stores.length);
+      if (instant) {
+        setNearbyStores(instant.stores);
+        setOriginLabel(instant.originLabel);
+        setLoadingStores(false);
+        if (hadInstantStores) setUpdatingStores(true);
+      } else {
+        setLoadingStores(true);
+      }
+
+      try {
+        const { stores, originLabel: label, storeSearchWarning: warning, storeSearchFailed: failed } =
+          await searchNearbyStores(searchParams);
+        if (generation !== loadStoresGeneration.current) return;
+
+        await applyStoreSearchResult(stores);
+        setOriginLabel(label);
+        setStoreSearchWarning(warning ?? null);
+        setStoreSearchFailed(Boolean(failed));
+      } catch (err) {
+        if (generation !== loadStoresGeneration.current) return;
+        setError(err instanceof Error ? err.message : 'Could not load stores');
+        if (!hadInstantStores) setStoreSearchFailed(true);
+      } finally {
+        if (generation === loadStoresGeneration.current) {
+          setLoadingStores(false);
+          setUpdatingStores(false);
+        }
+      }
+    },
+    [applyStoreSearchResult, zip],
   );
 
   const fetchDeals = useCallback(async () => {
@@ -313,6 +347,10 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
     void Linking.openURL(url);
   }, []);
 
+  const retryStoreSearch = useCallback(() => {
+    void loadStores(readInitialCoords(profile));
+  }, [loadStores, profile]);
+
   return {
     items,
     zip,
@@ -330,6 +368,8 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
     originLabel,
     dealsResult,
     loadingStores,
+    updatingStores,
+    storeSearchFailed,
     loadingDeals,
     locationHint,
     setLocationHint,
@@ -344,5 +384,6 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
     storeHasCommunityDeals,
     community,
     refreshComparison: fetchDeals,
+    retryStoreSearch,
   };
 }
