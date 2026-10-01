@@ -202,10 +202,7 @@ export default function PantryScreen() {
       return;
     }
     if (!demoMode && !session) {
-      Alert.alert(GUEST_MODE_COPY.pantryScanSignInTitle, GUEST_MODE_COPY.pantryScanSignIn, [
-        { text: GUEST_MODE_COPY.pantryScanSignInCta, onPress: () => router.push(APP_ROUTES.profile) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+      promptGuestPhotoScanSignIn();
       return;
     }
 
@@ -330,12 +327,16 @@ export default function PantryScreen() {
     }
   }
 
+  function promptGuestPhotoScanSignIn() {
+    Alert.alert(GUEST_MODE_COPY.pantryScanSignInTitle, GUEST_MODE_COPY.pantryScanSignIn, [
+      { text: GUEST_MODE_COPY.pantryScanSignInCta, onPress: () => router.push(APP_ROUTES.profile) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   async function handleNativeScan(scanLocation: PantryStorageLocation, source: 'camera' | 'library') {
-    if (source === 'camera' && !demoMode && isGuest) {
-      Alert.alert(GUEST_MODE_COPY.pantryScanSignInTitle, GUEST_MODE_COPY.pantryScanSignIn, [
-        { text: GUEST_MODE_COPY.pantryScanSignInCta, onPress: () => router.push(APP_ROUTES.profile) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+    if (!demoMode && isGuest) {
+      promptGuestPhotoScanSignIn();
       return;
     }
     if (source === 'camera') {
@@ -597,7 +598,7 @@ export default function PantryScreen() {
             <>
               <PantryStorageScanButtons
                 disabled={phase === 'loading' || !featureFlags.photoScan}
-                guestCameraBlocked={!demoMode && isGuest}
+                guestPhotoScanBlocked={!demoMode && isGuest}
                 onImagePrepared={(location, prepared) => void runVisionFromPrepared(prepared, location)}
                 onRequestNativeScan={(location, source) => void handleNativeScan(location, source)}
               />

@@ -11,7 +11,7 @@ import type { PantryStorageScanButtonsProps } from './PantryStorageScanButtons';
 
 export function PantryStorageScanButtons({
   disabled,
-  guestCameraBlocked,
+  guestPhotoScanBlocked,
   onImagePrepared,
 }: PantryStorageScanButtonsProps) {
   const actions = pantryStorageScanActions();
@@ -59,7 +59,7 @@ export function PantryStorageScanButtons({
           <Pressable
             disabled={disabled}
             onPress={() => {
-              if (guestCameraBlocked) {
+              if (guestPhotoScanBlocked) {
                 setGuestGateLocation(action.location);
                 return;
               }
@@ -74,6 +74,10 @@ export function PantryStorageScanButtons({
           <Pressable
             disabled={disabled}
             onPress={() => {
+              if (guestPhotoScanBlocked) {
+                setGuestGateLocation(action.location);
+                return;
+              }
               setPickLocation(action.location);
               libraryRef.current?.click();
             }}

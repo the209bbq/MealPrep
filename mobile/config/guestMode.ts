@@ -9,7 +9,7 @@ export const GUEST_KITCHEN_STORAGE_KEYS = {
 } as const;
 
 export const GUEST_MODE_COPY = {
-  pantryScanSignIn: 'Sign in to scan with your camera.',
-  pantryScanSignInTitle: 'Camera scan',
+  pantryScanSignIn: 'Sign in to scan or upload pantry photos.',
+  pantryScanSignInTitle: 'Photo scan',
   pantryScanSignInCta: 'Sign in',
 } as const;
