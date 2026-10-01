@@ -78,7 +78,17 @@ export function fuzzyNameScore(a: string, b: string): number {
   for (const ak of aKeys) {
     for (const bk of bKeys) {
       if (ak === bk) return 1;
-      if (ak.includes(bk) || bk.includes(ak)) return 0.92;
+      const shorter = ak.length <= bk.length ? ak : bk;
+      const longer = ak.length <= bk.length ? bk : ak;
+      if (shorter.length >= 4 && (longer.includes(shorter) || shorter.includes(longer))) return 0.92;
+      const shortTokens = tokenizeIngredientName(shorter);
+      const longTokens = tokenizeIngredientName(longer);
+      if (
+        shortTokens.length >= 2 &&
+        shortTokens.every((t) => longTokens.includes(t))
+      ) {
+        return 0.92;
+      }
     }
   }
 

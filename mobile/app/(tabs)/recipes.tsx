@@ -1,19 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { DiscoverRecipesPanel } from '../../components/DiscoverRecipesPanel';
 import { FilterChips } from '../../components/FilterChips';
 import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
+import { DEFAULT_MIN_MATCHED_INGREDIENTS, DEFAULT_MIN_PANTRY_MATCH_PERCENT } from '../../config/recipeMatching';
 import { useApp } from '../../context/AppContext';
+import {
+  fetchPantryDiscoverySuggestions,
+  type PantryDiscoverySuggestion,
+} from '../../lib/recipeDiscovery/pantrySuggestions';
 import {
   filterRankedMatches,
   type PantryMatchIndex,
   type RecipePantryFilterMode,
 } from '../../lib/recipeMatch';
+import { nutritionLabel } from '../../lib/nutrition';
 import type { Recipe } from '../../types/mealprep';
 
 const FILTER_OPTIONS: { id: RecipePantryFilterMode; label: string }[] = [
@@ -61,6 +67,9 @@ function RecipeListSection({
                   <Text className="text-base font-bold text-ink">{recipe.name}</Text>
                   <Text className="mt-1 text-sm text-muted">{recipe.description}</Text>
                   <RecipePantryMatchBadge match={match} />
+                  <Text className="mt-2 text-xs text-muted">
+                    {recipe.servings} servings · {recipe.minutes} min · {nutritionLabel(recipe)}
+                  </Text>
                 </View>
                 <Pressable
                   onPress={() => void toggleMealPlanKitchenRecipe(recipe.id)}
@@ -84,6 +93,7 @@ export default function RecipesScreen() {
   const {
     recipes,
     pantry,
+    session,
     servingOverrides,
     setServingOverride,
     featureFlags,
@@ -96,26 +106,33 @@ export default function RecipesScreen() {
   } = useApp();
   const [activeId, setActiveId] = useState('');
   const [pantryFilter, setPantryFilter] = useState<RecipePantryFilterMode>('best_match');
-  const [minPercent, setMinPercent] = useState<number>(RECIPES_TAB.defaultMinPercent);
+  const [minPercent, setMinPercent] = useState(DEFAULT_MIN_PANTRY_MATCH_PERCENT);
+  const [discoverySuggestions, setDiscoverySuggestions] = useState<PantryDiscoverySuggestion[]>([]);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
 
   const pantryEmpty = pantry.length === 0;
+  const accessToken = session?.access_token ?? null;
   const activeMealCount = mealPlan.filter((m) => !m.made).length;
 
   const filteredKitchenRecipes = useMemo(() => {
     if (pantryEmpty) return [];
     const mode = pantryFilter === 'best_match' ? 'all' : pantryFilter;
-    const hideZero = RECIPES_TAB.hideZeroPantryMatches && pantryFilter !== 'all';
-    const minMatched =
-      pantryFilter === 'all' ? 0 : RECIPES_TAB.defaultMinMatchedCount;
+    const minMatchedCount =
+      pantryFilter === 'all'
+        ? 0
+        : RECIPES_TAB.hideZeroPantryMatches
+          ? DEFAULT_MIN_MATCHED_INGREDIENTS
+          : 0;
     const ranked = filterRankedMatches(pantryRecipeMatches.ranked, mode, minPercent, {
-      minMatchedCount: hideZero ? Math.max(minMatched, 1) : minMatched,
+      minMatchedCount,
+      pantryItemCount: pantry.length,
     });
     const rankedIds = ranked.map((m) => m.recipeId);
     const idSet = new Set(rankedIds);
     const list = recipes.filter((r) => idSet.has(r.id));
     list.sort((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
     return list;
-  }, [minPercent, pantryEmpty, pantryFilter, pantryRecipeMatches.ranked, recipes]);
+  }, [minPercent, pantry.length, pantryEmpty, pantryFilter, pantryRecipeMatches.ranked, recipes]);
 
   const cookNowRecipes = useMemo(
     () =>
@@ -128,6 +145,14 @@ export default function RecipesScreen() {
       filteredKitchenRecipes.filter((r) => (pantryRecipeMatches.byRecipeId.get(r.id)?.missingCount ?? 0) > 0),
     [filteredKitchenRecipes, pantryRecipeMatches.byRecipeId],
   );
+
+  const filteredDiscoverySuggestions = useMemo(() => {
+    if (pantryEmpty) return [];
+    return discoverySuggestions.filter(
+      (row) =>
+        row.match.percentMatch >= minPercent && row.match.matchedCount >= DEFAULT_MIN_MATCHED_INGREDIENTS,
+    );
+  }, [discoverySuggestions, minPercent, pantryEmpty]);
 
   useEffect(() => {
     if (typeof params.recipeId === 'string' && params.recipeId) {
@@ -145,15 +170,43 @@ export default function RecipesScreen() {
     }
   }, [activeId, filteredKitchenRecipes]);
 
+  useEffect(() => {
+    if (pantryEmpty) {
+      setDiscoverySuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    setDiscoveryLoading(true);
+    void fetchPantryDiscoverySuggestions(pantry, accessToken)
+      .then((rows) => {
+        if (!cancelled) setDiscoverySuggestions(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setDiscoverySuggestions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDiscoveryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, pantry, pantryEmpty]);
+
   const active = recipes.find((r) => r.id === activeId);
   const activeMatch = active ? pantryRecipeMatches.byRecipeId.get(active.id) : undefined;
   const servings = active ? servingOverrides[active.id] ?? active.servings : 4;
   const scale = active && active.servings > 0 ? servings / active.servings : 1;
 
+  const showKitchenEmpty =
+    pantryEmpty || (filteredKitchenRecipes.length === 0 && !discoveryLoading && filteredDiscoverySuggestions.length === 0);
+
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8">
       {activeMealCount > 0 ? (
-        <Pressable onPress={() => router.push('/')} className="mt-4 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3">
+        <Pressable
+          onPress={() => router.push('/')}
+          className="mt-4 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3"
+        >
           <Text className="text-sm font-semibold text-ink">Meals to make on Home ({activeMealCount})</Text>
           <Ionicons name="chevron-forward" size={18} color={THEME.muted} />
         </Pressable>
@@ -186,7 +239,13 @@ export default function RecipesScreen() {
         </View>
       </Card>
 
-      {filteredKitchenRecipes.length === 0 ? <RecipesEmptyState pantryEmpty={pantryEmpty} /> : null}
+      {showKitchenEmpty ? <RecipesEmptyState pantryEmpty={pantryEmpty} /> : null}
+
+      {!pantryEmpty && !showKitchenEmpty && filteredKitchenRecipes.length === 0 && filteredDiscoverySuggestions.length > 0 ? (
+        <Text className="mt-3 text-sm text-muted">
+          No kitchen recipes meet a {minPercent}% match. See RecipeAPI suggestions below or lower the minimum match.
+        </Text>
+      ) : null}
 
       <RecipeListSection
         title="Ready to cook"
@@ -210,6 +269,50 @@ export default function RecipesScreen() {
         toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
       />
 
+      {!pantryEmpty ? (
+        <Card className="mt-2" title="Also from RecipeAPI" subtitle="Searched using your pantry ingredient names">
+          {discoveryLoading ? (
+            <View className="mt-3 flex-row items-center gap-2">
+              <ActivityIndicator color={THEME.emerald} />
+              <Text className="text-sm text-muted">Finding recipes for your ingredients…</Text>
+            </View>
+          ) : null}
+          {!discoveryLoading && filteredDiscoverySuggestions.length === 0 ? (
+            <Text className="mt-3 text-sm text-muted">
+              No external recipes meet a {minPercent}% match with at least {DEFAULT_MIN_MATCHED_INGREDIENTS} pantry
+              ingredients.
+            </Text>
+          ) : null}
+          {filteredDiscoverySuggestions.map(({ recipe, match }) => {
+            const onPlan = isOnMealPlan({ recipeApiId: recipe.id });
+            return (
+              <Pressable
+                key={`api-${recipe.id}`}
+                onPress={() => router.push(`/discover-recipes/${recipe.id}`)}
+                className="mt-3"
+              >
+                <Card>
+                  <View className="flex-row items-start justify-between">
+                    <View className="flex-1 pr-2">
+                      <Text className="text-base font-bold text-ink">{recipe.name}</Text>
+                      <RecipePantryMatchBadge match={match} />
+                    </View>
+                    <Pressable
+                      onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
+                      className={`rounded-full px-3 py-1 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                    >
+                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
+                        {onPlan ? 'In meals' : 'Add to meals'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </Card>
+              </Pressable>
+            );
+          })}
+        </Card>
+      ) : null}
+
       {active && activeMatch ? (
         <Card title="Pantry check" subtitle={active.name} className="mt-3">
           <Text className="mt-2 text-sm font-semibold text-emerald-dark">You have</Text>
@@ -219,7 +322,7 @@ export default function RecipesScreen() {
             activeMatch.matched.map((row) => (
               <Text key={row.ingredient.ingredientId} className="mt-1 text-sm text-muted">
                 ✓ {row.ingredient.name}
-                {row.matchReason === 'staple' ? ' (staple)' : row.matchedPantryItem ? ` · ${row.matchedPantryItem.name}` : ''}
+                {row.matchedPantryItem ? ` · ${row.matchedPantryItem.name}` : ''}
               </Text>
             ))
           )}

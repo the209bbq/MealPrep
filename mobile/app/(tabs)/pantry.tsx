@@ -204,7 +204,10 @@ export default function PantryScreen() {
     setSaveError(null);
     try {
       const mergedPantry = [...reviewItemsToPantryItems(reviewItems), ...pantry];
-      const recipeCount = countDefaultKitchenMatches(buildPantryMatchIndex(recipes, mergedPantry).ranked);
+      const recipeCount = countDefaultKitchenMatches(
+        buildPantryMatchIndex(recipes, mergedPantry).ranked,
+        mergedPantry.length,
+      );
       await savePantryScanReview(reviewItems);
       setPhase('idle');
       setReviewItems([]);

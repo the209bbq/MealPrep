@@ -39,7 +39,7 @@ export function resolveHomeNextStep(input: {
     };
   }
 
-  const top = topDefaultKitchenMatch(rankedMatches);
+  const top = topDefaultKitchenMatch(rankedMatches, pantryItemCount);
   if (top && top.missingCount > 0) {
     return {
       kind: 'add_missing',
