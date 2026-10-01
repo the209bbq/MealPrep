@@ -1,5 +1,4 @@
 import { haversineMiles, milesToMeters, SMART_SHOP_STORES } from '../../config/smartShop';
-import { withTimeout } from '../withTimeout';
 import { readCache, writeCache } from './cache';
 import {
   buildOverpassGroceryQuery,
@@ -9,8 +8,8 @@ import {
   rankGroceryStores,
   resolveGroceryChainFromHaystack,
 } from './groceryFilter';
-import { isRateLimitedStatus, osmRequestHeaders } from './osmHttp';
 import { readPersistentCache, readPersistentCacheStale, writePersistentCache } from './osmPersistentCache';
+import { raceOverpassMirrors } from './overpassFetch';
 import type { NearbyStoreSearchParams, StoreRecord } from './types';
 
 function parseAddress(tags: Record<string, string>): {
@@ -38,11 +37,28 @@ type OverpassElement = {
 };
 
 export type OverpassFetchResult =
-  | { ok: true; stores: StoreRecord[]; fromStaleCache?: boolean }
+  | { ok: true; stores: StoreRecord[]; fromStaleCache?: boolean; fromCache?: boolean }
   | { ok: false; reason: 'rate_limited' | 'network' | 'empty' };
 
-function overpassCacheKey(origin: { lat: number; lng: number }, radiusMiles: number): string {
+export function overpassCacheKey(origin: { lat: number; lng: number }, radiusMiles: number): string {
   return `overpass:v2:${origin.lat.toFixed(3)}:${origin.lng.toFixed(3)}:${radiusMiles}`;
+}
+
+export function readCachedOverpassStores(
+  origin: { lat: number; lng: number },
+  radiusMiles: number,
+): StoreRecord[] | undefined {
+  const cacheKey = overpassCacheKey(origin, radiusMiles);
+  const memoryCached = readCache<StoreRecord[]>(cacheKey);
+  if (memoryCached?.length) return memoryCached;
+
+  const persistentCached = readPersistentCache<StoreRecord[]>(cacheKey);
+  if (persistentCached?.length) {
+    writeCache(cacheKey, persistentCached, SMART_SHOP_STORES.cacheTtlMs);
+    return persistentCached;
+  }
+
+  return undefined;
 }
 
 function elementsToStores(
@@ -89,60 +105,34 @@ function elementsToStores(
   return rankGroceryStores(deduped);
 }
 
-async function postOverpassQuery(query: string, endpoint: string): Promise<Response> {
-  const fetchPromise = fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      ...osmRequestHeaders(),
-    },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  return withTimeout(
-    fetchPromise,
-    SMART_SHOP_STORES.overpassRequestTimeoutMs,
-    `Overpass request timed out (${endpoint})`,
-  );
-}
-
-async function fetchOverpassElements(
-  query: string,
-): Promise<{ elements: OverpassElement[] } | { reason: 'rate_limited' | 'network' }> {
-  let lastNetwork = true;
-  for (const endpoint of SMART_SHOP_STORES.overpassApiUrls) {
-    try {
-      const response = await postOverpassQuery(query, endpoint);
-      if (isRateLimitedStatus(response.status)) {
-        lastNetwork = false;
-        continue;
-      }
-      if (!response.ok) {
-        continue;
-      }
-      const json = (await response.json()) as { elements?: OverpassElement[] };
-      return { elements: json.elements ?? [] };
-    } catch {
-      continue;
-    }
-  }
-  return { reason: lastNetwork ? 'network' : 'rate_limited' };
-}
+export type FetchOverpassStoresOptions = {
+  /** When true, skip live Overpass and only return persistent / memory cache. */
+  cacheOnly?: boolean;
+};
 
 export async function fetchOverpassStores(
   origin: { lat: number; lng: number },
   params: NearbyStoreSearchParams,
+  options?: FetchOverpassStoresOptions,
 ): Promise<OverpassFetchResult> {
   const radiusMiles = params.radiusMiles ?? SMART_SHOP_STORES.defaultRadiusMiles;
   const radiusMeters = Math.round(milesToMeters(radiusMiles));
   const cacheKey = overpassCacheKey(origin, radiusMiles);
 
-  const memoryCached = readCache<StoreRecord[]>(cacheKey);
-  if (memoryCached?.length) return { ok: true, stores: memoryCached };
+  const cached = readCachedOverpassStores(origin, radiusMiles);
+  if (cached?.length) {
+    if (options?.cacheOnly) {
+      return { ok: true, stores: cached, fromCache: true };
+    }
+  }
 
-  const persistentCached = readPersistentCache<StoreRecord[]>(cacheKey);
-  if (persistentCached?.length) {
-    writeCache(cacheKey, persistentCached, SMART_SHOP_STORES.cacheTtlMs);
-    return { ok: true, stores: persistentCached };
+  if (options?.cacheOnly) {
+    const stale = readPersistentCacheStale<StoreRecord[]>(cacheKey);
+    if (stale?.length) {
+      writeCache(cacheKey, stale, SMART_SHOP_STORES.cacheTtlMs);
+      return { ok: true, stores: stale, fromStaleCache: true, fromCache: true };
+    }
+    return { ok: false, reason: 'network' };
   }
 
   const query = buildOverpassGroceryQuery(
@@ -152,18 +142,26 @@ export async function fetchOverpassStores(
     SMART_SHOP_STORES.maxOverpassResults,
   );
 
-  const fetched = await fetchOverpassElements(query);
+  const fetched = await raceOverpassMirrors(query);
   if ('reason' in fetched) {
     const stale = readPersistentCacheStale<StoreRecord[]>(cacheKey);
     if (stale?.length) {
       writeCache(cacheKey, stale, SMART_SHOP_STORES.cacheTtlMs);
       return { ok: true, stores: stale, fromStaleCache: true };
     }
+    if (cached?.length) {
+      return { ok: true, stores: cached, fromStaleCache: true, fromCache: true };
+    }
     return { ok: false, reason: fetched.reason };
   }
 
-  const ranked = elementsToStores(fetched.elements, origin, params);
-  if (ranked.length === 0) return { ok: false, reason: 'empty' };
+  const ranked = elementsToStores(fetched.elements as OverpassElement[], origin, params);
+  if (ranked.length === 0) {
+    if (cached?.length) {
+      return { ok: true, stores: cached, fromStaleCache: true, fromCache: true };
+    }
+    return { ok: false, reason: 'empty' };
+  }
 
   writeCache(cacheKey, ranked, SMART_SHOP_STORES.cacheTtlMs);
   writePersistentCache(cacheKey, ranked, SMART_SHOP_STORES.overpassPersistentTtlMs);

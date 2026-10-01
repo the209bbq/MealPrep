@@ -124,14 +124,12 @@ export function sortStoreLocationsForDisplay<T extends SortableStoreLocation>(
 
 export function buildOverpassGroceryQuery(lat: number, lng: number, radiusMeters: number, maxResults: number): string {
   const around = `around:${radiusMeters},${lat},${lng}`;
-  return `[out:json][timeout:25];
+  return `[out:json][timeout:${SMART_SHOP_STORES.overpassQueryTimeoutSec}];
 (
 node["shop"="supermarket"](${around});
 node["shop"="grocery"](${around});
-node["shop"="wholesale"](${around});
 way["shop"="supermarket"](${around});
 way["shop"="grocery"](${around});
-way["shop"="wholesale"](${around});
 );
 out center ${maxResults};`;
 }
