@@ -1,3 +1,4 @@
+import { SMART_SHOP_COPY } from '../../config/smartShop';
 import type { GroceryListItem } from '../../types/mealprep';
 import {
   computeLineTotal,
@@ -19,7 +20,7 @@ function unitPriceFor(item: GroceryListItem, store: StoreLocation): number {
 
 export const samplePricingProvider: PricingProvider = {
   id: 'sample',
-  label: 'Sample deals',
+  label: SMART_SHOP_COPY.estimatedPricesTitle,
   isConfigured: () => true,
   async fetchDeals(params: FetchDealsParams) {
     const { stores, items } = params;
@@ -40,7 +41,7 @@ export const samplePricingProvider: PricingProvider = {
           lineTotal,
           quantity: item.quantity,
           unit: item.unit,
-          promoLabel: promoRoll === 0 ? 'Weekly special (sample)' : undefined,
+          promoLabel: promoRoll === 0 ? 'Weekly special' : undefined,
           productUrl: store.url,
           priceSource: 'sample',
         });
@@ -70,10 +71,10 @@ export const samplePricingProvider: PricingProvider = {
       storeTotals,
       suggestion: {
         kind: 'single_store',
-        label: bestStore ? `Sample trip: ${bestStore.chain}` : 'Sample pricing',
+        label: bestStore ? `Best value: ${bestStore.chain}` : SMART_SHOP_COPY.estimatedPricesTitle,
         storeIds: best ? [best.storeId] : [],
         estimatedTotal: best?.subtotal ?? 0,
-        note: 'Sample pricing (estimates) — not live store prices.',
+        note: undefined,
       },
     };
   },

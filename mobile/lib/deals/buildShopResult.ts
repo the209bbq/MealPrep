@@ -1,3 +1,4 @@
+import { SMART_SHOP_COPY } from '../../config/smartShop';
 import type {
   DealsSearchResult,
   ItemStoreDeal,
@@ -55,10 +56,7 @@ function buildSuggestion(
       label: store ? `Nearby: ${store.chain}` : 'Nearby stores',
       storeIds: [bestCoverage.storeId],
       estimatedTotal: 0,
-      note:
-        mode === 'live'
-          ? 'Prices not available at these chains. Add Kroger-family stores for live pricing.'
-          : undefined,
+      note: mode === 'live' ? SMART_SHOP_COPY.pricesUnavailable : undefined,
     };
   }
 
@@ -86,7 +84,7 @@ function buildSuggestion(
       label: `Split trip: ${chains}`,
       storeIds: [...splitStoreIds],
       estimatedTotal: splitTotal,
-      note: mode === 'sample' ? 'Sample pricing for demo.' : 'Live Kroger prices at selected locations.',
+      note: mode === 'sample' ? undefined : SMART_SHOP_COPY.livePricingMatched,
     };
   }
 

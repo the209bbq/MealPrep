@@ -132,7 +132,7 @@ export function StoreCommunityDealsSection({
         className="flex-row items-center justify-between"
       >
         <Text className="text-sm font-bold text-ink">
-          Deals ({storeDeals.length}){storeDeals.some((d) => d.isSample) ? ' · SAMPLE' : ''}
+          Deals ({storeDeals.length})
         </Text>
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={THEME.muted} />
       </Pressable>
@@ -172,7 +172,6 @@ export function StoreCommunityDealsSection({
                   <Text className="mt-1 text-xs text-muted">
                     Reported {formatReportedAgo(deal.createdAt)}
                     {deal.confirmCount ? ` · ${deal.confirmCount} confirmed` : ''}
-                    {deal.isSample ? ' · SAMPLE' : ''}
                     {expired ? ' · Expired' : ''}
                   </Text>
                 </View>

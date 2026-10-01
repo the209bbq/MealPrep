@@ -24,7 +24,7 @@ function communityDealToItemStoreDeal(
     lineTotal: communityLineTotal(deal, item),
     quantity: item.quantity,
     unit: deal.unit ?? item.unit,
-    promoLabel: deal.isSample ? 'SAMPLE user-reported deal' : 'User-reported deal',
+    promoLabel: 'Community deal',
     priceSource: 'community',
     communityDealId: deal.id,
   };
