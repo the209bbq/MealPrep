@@ -1,12 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { DiscoverRecipesPanel } from '../../components/DiscoverRecipesPanel';
 import { FilterChips } from '../../components/FilterChips';
-import { MealsToMakePanel } from '../../components/MealsToMakePanel';
-import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
+import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
 import { DEFAULT_MIN_MATCHED_INGREDIENTS, DEFAULT_MIN_PANTRY_MATCH_PERCENT } from '../../config/recipeMatching';
 import { useApp } from '../../context/AppContext';
@@ -14,8 +14,13 @@ import {
   fetchPantryDiscoverySuggestions,
   type PantryDiscoverySuggestion,
 } from '../../lib/recipeDiscovery/pantrySuggestions';
-import { filterRankedMatches, type RecipePantryFilterMode } from '../../lib/recipeMatch';
+import {
+  filterRankedMatches,
+  type PantryMatchIndex,
+  type RecipePantryFilterMode,
+} from '../../lib/recipeMatch';
 import { nutritionLabel } from '../../lib/nutrition';
+import type { Recipe } from '../../types/mealprep';
 
 const FILTER_OPTIONS: { id: RecipePantryFilterMode; label: string }[] = [
   { id: 'best_match', label: 'Best match first' },
@@ -25,6 +30,63 @@ const FILTER_OPTIONS: { id: RecipePantryFilterMode; label: string }[] = [
 ];
 
 const MIN_PERCENT_CHIPS = [0, 50, 70, 90] as const;
+
+function RecipeListSection({
+  title,
+  subtitle,
+  list,
+  activeId,
+  setActiveId,
+  pantryRecipeMatches,
+  isOnMealPlan,
+  toggleMealPlanKitchenRecipe,
+}: {
+  title: string;
+  subtitle: string;
+  list: Recipe[];
+  activeId: string;
+  setActiveId: (id: string) => void;
+  pantryRecipeMatches: PantryMatchIndex;
+  isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
+  toggleMealPlanKitchenRecipe: (recipeId: string) => Promise<void>;
+}) {
+  if (list.length === 0) return null;
+  return (
+    <>
+      <Text className="mb-1 mt-4 text-sm font-bold uppercase tracking-wide text-muted">{title}</Text>
+      <Text className="mb-2 text-xs text-muted">{subtitle}</Text>
+      {list.map((recipe) => {
+        const onPlan = isOnMealPlan({ recipeSlug: recipe.id });
+        const match = pantryRecipeMatches.byRecipeId.get(recipe.id);
+        return (
+          <Pressable key={recipe.id} onPress={() => setActiveId(recipe.id)}>
+            <Card className={`mb-3 ${activeId === recipe.id ? 'border-emerald' : ''}`}>
+              <View className="flex-row items-start justify-between">
+                <View className="flex-1 pr-2">
+                  <Text className="text-xs font-semibold uppercase text-emerald">{recipe.tag}</Text>
+                  <Text className="text-base font-bold text-ink">{recipe.name}</Text>
+                  <Text className="mt-1 text-sm text-muted">{recipe.description}</Text>
+                  <RecipePantryMatchBadge match={match} />
+                  <Text className="mt-2 text-xs text-muted">
+                    {recipe.servings} servings · {recipe.minutes} min · {nutritionLabel(recipe)}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => void toggleMealPlanKitchenRecipe(recipe.id)}
+                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                >
+                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
+                    {onPlan ? 'In meals' : 'Add to meals'}
+                  </Text>
+                </Pressable>
+              </View>
+            </Card>
+          </Pressable>
+        );
+      })}
+    </>
+  );
+}
 
 export default function RecipesScreen() {
   const params = useLocalSearchParams<{ recipeId?: string }>();
@@ -38,12 +100,9 @@ export default function RecipesScreen() {
     pantryRecipeMatches,
     addMissingRecipeIngredientsToGrocery,
     mealPlan,
-    toggleMealPlanKitchenRecipe,
     toggleMealPlanDiscoveryRecipe,
-    removeMealPlanItem,
-    setMealPlanItemMade,
     isOnMealPlan,
-    addMissingForPlannedMealsToGrocery,
+    toggleMealPlanKitchenRecipe,
   } = useApp();
   const [activeId, setActiveId] = useState('');
   const [pantryFilter, setPantryFilter] = useState<RecipePantryFilterMode>('best_match');
@@ -53,6 +112,7 @@ export default function RecipesScreen() {
 
   const pantryEmpty = pantry.length === 0;
   const accessToken = session?.access_token ?? null;
+  const activeMealCount = mealPlan.filter((m) => !m.made).length;
 
   const filteredKitchenRecipes = useMemo(() => {
     if (pantryEmpty) return [];
@@ -73,6 +133,18 @@ export default function RecipesScreen() {
     list.sort((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
     return list;
   }, [minPercent, pantry.length, pantryEmpty, pantryFilter, pantryRecipeMatches.ranked, recipes]);
+
+  const cookNowRecipes = useMemo(
+    () =>
+      filteredKitchenRecipes.filter((r) => (pantryRecipeMatches.byRecipeId.get(r.id)?.missingCount ?? 1) === 0),
+    [filteredKitchenRecipes, pantryRecipeMatches.byRecipeId],
+  );
+
+  const needItemsRecipes = useMemo(
+    () =>
+      filteredKitchenRecipes.filter((r) => (pantryRecipeMatches.byRecipeId.get(r.id)?.missingCount ?? 0) > 0),
+    [filteredKitchenRecipes, pantryRecipeMatches.byRecipeId],
+  );
 
   const filteredDiscoverySuggestions = useMemo(() => {
     if (pantryEmpty) return [];
@@ -130,20 +202,17 @@ export default function RecipesScreen() {
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8">
-      <DiscoverRecipesPanel
-        onToggleMealPlan={(item) => void toggleMealPlanDiscoveryRecipe(item)}
-        isOnMealPlan={(apiId) => isOnMealPlan({ recipeApiId: apiId })}
-      />
+      {activeMealCount > 0 ? (
+        <Pressable
+          onPress={() => router.push('/')}
+          className="mt-4 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3"
+        >
+          <Text className="text-sm font-semibold text-ink">Meals to make on Home ({activeMealCount})</Text>
+          <Ionicons name="chevron-forward" size={18} color={THEME.muted} />
+        </Pressable>
+      ) : null}
 
-      <MealsToMakePanel
-        compact
-        items={mealPlan}
-        onRemove={(id) => void removeMealPlanItem(id)}
-        onToggleMade={(id, made) => void setMealPlanItemMade(id, made)}
-        onAddMissingToGrocery={addMissingForPlannedMealsToGrocery}
-      />
-
-      <Card className="mt-4" title="What can I make?" subtitle="Kitchen recipes ranked by pantry ingredient matches">
+      <Card className="mt-4" title="Cook now" subtitle="Kitchen recipes ranked by what is already in your pantry">
         <Text className="mt-1 text-xs font-semibold text-muted">Sort & filter</Text>
         <FilterChips
           allowClear={false}
@@ -178,35 +247,27 @@ export default function RecipesScreen() {
         </Text>
       ) : null}
 
-      {filteredKitchenRecipes.map((recipe) => {
-        const onPlan = isOnMealPlan({ recipeSlug: recipe.id });
-        const match = pantryRecipeMatches.byRecipeId.get(recipe.id);
-        return (
-          <Pressable key={recipe.id} onPress={() => setActiveId(recipe.id)}>
-            <Card className={`mb-3 mt-3 ${active?.id === recipe.id ? 'border-emerald' : ''}`}>
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1 pr-2">
-                  <Text className="text-xs font-semibold uppercase text-emerald">{recipe.tag}</Text>
-                  <Text className="text-base font-bold text-ink">{recipe.name}</Text>
-                  <Text className="mt-1 text-sm text-muted">{recipe.description}</Text>
-                  <RecipePantryMatchBadge match={match} />
-                  <Text className="mt-2 text-xs text-muted">
-                    {recipe.servings} servings · {recipe.minutes} min · {nutritionLabel(recipe)}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => void toggleMealPlanKitchenRecipe(recipe.id)}
-                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
-                >
-                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
-                    {onPlan ? 'In meals' : 'Add to meals'}
-                  </Text>
-                </Pressable>
-              </View>
-            </Card>
-          </Pressable>
-        );
-      })}
+      <RecipeListSection
+        title="Ready to cook"
+        subtitle="Everything on hand — save a grocery run"
+        list={cookNowRecipes}
+        activeId={activeId}
+        setActiveId={setActiveId}
+        pantryRecipeMatches={pantryRecipeMatches}
+        isOnMealPlan={isOnMealPlan}
+        toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+      />
+
+      <RecipeListSection
+        title="Need a few items"
+        subtitle="Add missing ingredients to your list, then Smart Shop"
+        list={needItemsRecipes}
+        activeId={activeId}
+        setActiveId={setActiveId}
+        pantryRecipeMatches={pantryRecipeMatches}
+        isOnMealPlan={isOnMealPlan}
+        toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
+      />
 
       {!pantryEmpty ? (
         <Card className="mt-2" title="Also from RecipeAPI" subtitle="Searched using your pantry ingredient names">
@@ -253,7 +314,7 @@ export default function RecipesScreen() {
       ) : null}
 
       {active && activeMatch ? (
-        <Card title="Pantry check" subtitle={active.name}>
+        <Card title="Pantry check" subtitle={active.name} className="mt-3">
           <Text className="mt-2 text-sm font-semibold text-emerald-dark">You have</Text>
           {activeMatch.matched.length === 0 ? (
             <Text className="mt-1 text-sm text-muted">No matching pantry items yet.</Text>
@@ -320,6 +381,11 @@ export default function RecipesScreen() {
           ))}
         </Card>
       ) : null}
+
+      <DiscoverRecipesPanel
+        onToggleMealPlan={(item) => void toggleMealPlanDiscoveryRecipe(item)}
+        isOnMealPlan={(apiId) => isOnMealPlan({ recipeApiId: apiId })}
+      />
     </ScrollView>
   );
 }

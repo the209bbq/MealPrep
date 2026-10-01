@@ -25,7 +25,9 @@ export function MealsToMakePanel({
   if (items.length === 0) {
     return (
       <Card className={compact ? 'mt-3' : 'mt-4'} title="Meals to make" subtitle="Add recipes from search or your kitchen">
-        <Text className="mt-2 text-sm text-muted">Nothing planned yet. Tap Add to meals on a recipe card.</Text>
+        <Text className="mt-2 text-sm text-muted">
+          Plan what you will cook this week — one tap adds missing items to your grocery list so shopping is faster.
+        </Text>
       </Card>
     );
   }

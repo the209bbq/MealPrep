@@ -2,6 +2,7 @@ import type { PantryItem, Recipe, RecipeIngredient } from '../../types/mealprep'
 import {
   DEFAULT_MIN_MATCHED_INGREDIENTS,
   DEFAULT_MIN_PANTRY_MATCH_PERCENT,
+  RECIPE_MATCHING,
 } from '../../config/recipeMatching';
 import { FUZZY_MATCH_THRESHOLD, PANTRY_STAPLES } from './config';
 import { expandSynonymKeys, fuzzyNameScore, normalizeIngredientName, tokenizeIngredientName } from './normalize';
@@ -233,7 +234,7 @@ export function filterRankedMatches(
 export function topPantryRecipeRecommendations(
   recipes: Recipe[],
   pantry: PantryItem[],
-  limit = 3,
+  limit = RECIPE_MATCHING.homeRecommendationsLimit,
 ): RecipePantryMatch[] {
   if (pantry.length === 0) return [];
   const { ranked } = buildPantryMatchIndex(recipes, pantry);

@@ -8,9 +8,9 @@ export function GroceryEmptyState() {
       <View className="mb-4 rounded-full bg-emerald-light p-4">
         <Ionicons name="cart-outline" size={40} color={THEME.emerald} />
       </View>
-      <Text className="text-center text-lg font-bold text-ink">Your list is clear</Text>
+      <Text className="text-center text-lg font-bold text-ink">Nothing to buy yet</Text>
       <Text className="mt-2 text-center text-sm leading-5 text-muted">
-        Select recipes on the Home or Recipes tab, or add items manually. We subtract what you already have in the pantry.
+        Add missing recipe ingredients or plan meals — we build a list minus what is already in your pantry so you spend less time and money shopping.
       </Text>
     </View>
   );

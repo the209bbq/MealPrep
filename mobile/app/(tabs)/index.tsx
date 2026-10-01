@@ -1,43 +1,70 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Card } from '../../components/Card';
-import { MealsToMakePanel } from '../../components/MealsToMakePanel';
 import { CookFromPantryCard } from '../../components/RecipePantryMatch';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
-import { APP_NAME, APP_TAGLINE, THEME } from '../../config/appConfig';
+import { MealsToMakePanel } from '../../components/MealsToMakePanel';
+import { NextStepCard } from '../../components/NextStepCard';
+import { THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
-
-const HIGHLIGHTS = [
-  { icon: 'camera-outline' as const, title: 'Photo pantry', body: 'Snap shelves and track what you have on hand.' },
-  { icon: 'calculator-outline' as const, title: 'Batch prep', body: 'Scale recipes for the week in one pass.' },
-  { icon: 'cart-outline' as const, title: 'Smart grocery', body: 'Shop only what recipes still need.' },
-];
+import { resolveHomeNextStep } from '../../lib/home/nextStep';
 
 export default function HomeScreen() {
   const {
     summary,
     demoMode,
     profile,
+    pantry,
+    grocery,
     pantryRecipeRecommendations,
+    pantryRecipeMatches,
     mealPlan,
     removeMealPlanItem,
     setMealPlanItemMade,
     addMissingForPlannedMealsToGrocery,
+    addMissingRecipeIngredientsToGrocery,
   } = useApp();
+
+  const openGroceryCount = useMemo(() => grocery.filter((g) => !g.checked).length, [grocery]);
+
+  const nextStep = useMemo(
+    () =>
+      resolveHomeNextStep({
+        pantryItemCount: pantry.length,
+        openGroceryCount,
+        rankedMatches: pantryRecipeMatches.ranked,
+      }),
+    [openGroceryCount, pantry.length, pantryRecipeMatches.ranked],
+  );
+
+  function handleNextStep() {
+    switch (nextStep.kind) {
+      case 'scan_pantry':
+      case 'build_pantry':
+        router.push('/pantry');
+        break;
+      case 'shop_list':
+        router.push('/smart-shop');
+        break;
+      case 'add_missing':
+        if (nextStep.recipeId) addMissingRecipeIngredientsToGrocery(nextStep.recipeId);
+        break;
+      case 'cook_recipe':
+        if (nextStep.recipeId) {
+          router.push({ pathname: '/recipes', params: { recipeId: nextStep.recipeId } });
+        } else {
+          router.push('/recipes');
+        }
+        break;
+      default:
+        router.push('/pantry');
+    }
+  }
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8" contentContainerStyle={{ paddingBottom: 24 }}>
       <InstallAppBanner />
-
-      <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-8">
-        <Text className="text-xs font-bold uppercase tracking-widest text-emerald-light">{APP_NAME}</Text>
-        <Text className="mt-2 text-3xl font-bold leading-tight text-on-emerald">Your smart kitchen command center</Text>
-        <Text className="mt-3 text-base text-emerald-light">{APP_TAGLINE}</Text>
-        {demoMode && (
-          <Text className="mt-3 text-xs text-sand">Demo mode — Supabase env vars are empty. Data is local mock storage.</Text>
-        )}
-      </View>
 
       <View className="mt-4 flex-row gap-3">
         {[
@@ -56,21 +83,24 @@ export default function HomeScreen() {
         ))}
       </View>
 
-      <Card className="mt-4" title="Today's meal prep" subtitle={`${profile.name} · ${summary.date}`}>
-        <View className="mt-3 flex-row flex-wrap gap-2">
-          {[
-            { label: 'Meals planned', value: String(summary.mealsPlanned) },
-            { label: 'Pantry items', value: String(summary.pantryItems) },
-            { label: 'Grocery left', value: String(summary.groceryRemaining) },
-            { label: 'Protein (g)', value: String(summary.proteinGrams) },
-          ].map((stat) => (
-            <View key={stat.label} className="min-w-[45%] flex-1 rounded-xl bg-emerald-light px-3 py-2">
-              <Text className="text-xs font-semibold text-emerald-dark">{stat.label}</Text>
-              <Text className="text-xl font-bold text-ink">{stat.value}</Text>
-            </View>
-          ))}
-        </View>
-      </Card>
+      <NextStepCard step={nextStep} onPress={handleNextStep} />
+
+      <View className="mt-4 flex-row flex-wrap gap-2">
+        {[
+          { label: 'Meals planned', value: String(summary.mealsPlanned) },
+          { label: 'Pantry items', value: String(summary.pantryItems) },
+          { label: 'To buy', value: String(summary.groceryRemaining) },
+        ].map((stat) => (
+          <View key={stat.label} className="min-w-[30%] flex-1 rounded-xl bg-emerald-light px-3 py-2">
+            <Text className="text-xs font-semibold text-emerald-dark">{stat.label}</Text>
+            <Text className="text-xl font-bold text-ink">{stat.value}</Text>
+          </View>
+        ))}
+      </View>
+
+      {demoMode ? (
+        <Text className="mt-3 text-xs text-muted">Demo mode — local data only until Supabase is connected.</Text>
+      ) : null}
 
       <MealsToMakePanel
         items={mealPlan}
@@ -82,20 +112,8 @@ export default function HomeScreen() {
       <CookFromPantryCard
         recommendations={pantryRecipeRecommendations}
         onOpenRecipe={(recipeId) => router.push({ pathname: '/recipes', params: { recipeId } })}
+        onAddMissing={(recipeId) => addMissingRecipeIngredientsToGrocery(recipeId)}
       />
-
-      <Text className="mb-2 mt-6 text-lg font-bold text-ink">Why Meal Prep</Text>
-      {HIGHLIGHTS.map((item) => (
-        <Card key={item.title} className="mb-3">
-          <View className="flex-row items-start gap-3">
-            <Ionicons name={item.icon} size={22} color={THEME.slate} />
-            <View className="flex-1">
-              <Text className="font-bold text-ink">{item.title}</Text>
-              <Text className="mt-1 text-sm text-muted">{item.body}</Text>
-            </View>
-          </View>
-        </Card>
-      ))}
     </ScrollView>
   );
 }
