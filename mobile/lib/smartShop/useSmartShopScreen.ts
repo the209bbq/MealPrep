@@ -6,6 +6,7 @@ import type { GroceryListItem, UserProfile } from '../../types/mealprep';
 import { mergeCommunityDealsIntoSearchResult } from '../communityDeals/mergeIntoDeals';
 import { chainKeysFromStores, useCommunityDealsForStores } from '../communityDeals/useCommunityDeals';
 import { searchDeals, searchNearbyStores, type DealsSearchResult, type StoreLocation } from '../deals';
+import { geocodeUsZip } from '../stores';
 import { mapsDirectionsUrl, manualStoreFromInput } from '../stores';
 import { sortStoreLocationsForDisplay } from '../stores/groceryFilter';
 import { resolveStoreChainKey } from '../../config/weeklyAds';
@@ -86,9 +87,10 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
   );
 
   const persistSavedStores = useCallback(
-    async (ids: string[]) => {
+    async (ids: string[], storeList?: StoreLocation[]) => {
       setSavedStoreIds(ids);
-      const stores = nearbyStores.filter((s) => ids.includes(s.krogerLocationId ?? s.id));
+      const list = storeList ?? nearbyStores;
+      const stores = list.filter((s) => ids.includes(s.krogerLocationId ?? s.id));
       await persistFavoriteStores(stores);
     },
     [nearbyStores],
@@ -207,11 +209,18 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
       setError('Enter a valid 5-digit US ZIP code.');
       return false;
     }
-    await persistHomeLocation({ zip });
+    const trimmed = zip.trim();
+    const geocodeResult = await geocodeUsZip(trimmed);
+    if (!geocodeResult.ok) {
+      setError('Could not look up that ZIP. Try again.');
+      return false;
+    }
+    const geocoded = { lat: geocodeResult.point.lat, lng: geocodeResult.point.lng };
+    await persistHomeLocation({ zip: trimmed, lat: geocoded.lat, lng: geocoded.lng });
     setError(null);
-    await finishLocationSetup(readInitialCoords(profile));
+    await finishLocationSetup(geocoded);
     return true;
-  }, [finishLocationSetup, profile, zip]);
+  }, [finishLocationSetup, zip]);
 
   const toggleSavedStore = useCallback(
     async (store: StoreLocation) => {
@@ -251,10 +260,18 @@ export function useSmartShopScreen({ grocery, profile }: UseSmartShopScreenInput
         ...store,
         url: mapsDirectionsUrl(store),
       };
-      setNearbyStores((prev) => [mapped, ...prev]);
-      await toggleSavedStore(mapped);
+      const key = mapped.krogerLocationId ?? mapped.id;
+      if (savedStoreIds.length >= SMART_SHOP.maxSavedStores) {
+        setError(`You can compare up to ${SMART_SHOP.maxSavedStores} stores. Deselect one first.`);
+        return;
+      }
+      const nextStores = [mapped, ...nearbyStores];
+      setNearbyStores(nextStores);
+      const nextIds = [...savedStoreIds, key];
+      setError(null);
+      await persistSavedStores(nextIds, nextStores);
     },
-    [toggleSavedStore, zip],
+    [nearbyStores, persistSavedStores, savedStoreIds, zip],
   );
 
   const openDirections = useCallback((store: StoreLocation) => {

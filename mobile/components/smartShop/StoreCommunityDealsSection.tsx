@@ -74,8 +74,8 @@ export function StoreCommunityDealsSection({
     onRefresh();
   }
 
-  async function handleVote(dealId: string, vote: 'confirm' | 'expired') {
-    const res = await voteCommunityDeal(dealId, vote);
+  async function handleVote(dealId: string, vote: 'confirm' | 'expired', reportedBy: string) {
+    const res = await voteCommunityDeal(dealId, vote, { reportedBy });
     if (!res.ok) {
       setFormError(res.error ?? 'Could not save vote');
       return;
@@ -176,10 +176,10 @@ export function StoreCommunityDealsSection({
                   </Text>
                 </View>
               </View>
-              {!deal.isSample ? (
+              {!deal.isSample && !isOwn ? (
                 <View className="mt-2 flex-row flex-wrap gap-2">
                   <Pressable
-                    onPress={() => void handleVote(deal.id, 'confirm')}
+                    onPress={() => void handleVote(deal.id, 'confirm', deal.reportedBy)}
                     className={`rounded-lg px-2 py-1 ${deal.myVote === 'confirm' ? 'bg-emerald' : 'bg-emerald-light'}`}
                   >
                     <Text
@@ -189,7 +189,7 @@ export function StoreCommunityDealsSection({
                     </Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => void handleVote(deal.id, 'expired')}
+                    onPress={() => void handleVote(deal.id, 'expired', deal.reportedBy)}
                     className={`rounded-lg px-2 py-1 ${deal.myVote === 'expired' ? 'bg-danger/20' : 'bg-paper'}`}
                   >
                     <Text className="text-xs font-semibold text-danger">Expired</Text>

@@ -57,10 +57,19 @@ async function parseErrorResponse(
   if (response.status === 429 || json.code === 'RATE_LIMIT') {
     throw new PantryVisionRateLimitError(json.error ?? PHOTO_SCAN.rateLimitMessage);
   }
-  if (response.status === 502 && json.code === 'UPSTREAM_ERROR') {
+  if (response.status === 400 || json.code === 'BAD_REQUEST' || json.code === 'PAYLOAD_TOO_LARGE') {
     throw new PantryVisionScanError(PHOTO_SCAN.scanFailedMessage);
   }
-  throw new PantryVisionScanError(json.error ?? PHOTO_SCAN.scanFailedMessage);
+  if (response.status === 502 || json.code === 'UPSTREAM_ERROR') {
+    if (json.error) {
+      console.warn('[pantry-vision]', json.error);
+    }
+    throw new PantryVisionScanError(PHOTO_SCAN.scanBusyMessage);
+  }
+  if (json.error) {
+    console.warn('[pantry-vision]', json.error);
+  }
+  throw new PantryVisionScanError(PHOTO_SCAN.scanBusyMessage);
 }
 
 export interface AnalyzePantryPhotoOptions {

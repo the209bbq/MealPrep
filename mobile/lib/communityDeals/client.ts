@@ -142,11 +142,11 @@ export async function fetchCommunityDealsForStoreKeys(storeKeys: string[]): Prom
 
 export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ ok: boolean; error?: string }> {
   if (isDemoMode()) {
-    return { ok: false, error: 'Sign in with Supabase to report deals (demo shows sample deals only).' };
+    return { ok: false, error: 'Sign in to share deals (demo shows sample deals only).' };
   }
 
   const client = getSupabase();
-  if (!client) return { ok: false, error: 'Supabase is not configured.' };
+  if (!client) return { ok: false, error: 'Account sync isn’t set up on this device.' };
 
   const { data: userData } = await client.auth.getUser();
   const userId = userData.user?.id;
@@ -186,11 +186,11 @@ export async function addCommunityDeal(input: AddCommunityDealInput): Promise<{ 
 
 export async function deleteCommunityDeal(dealId: string): Promise<{ ok: boolean; error?: string }> {
   if (isDemoMode()) {
-    return { ok: false, error: 'Sign in with Supabase to manage deals (demo shows sample deals only).' };
+    return { ok: false, error: 'Sign in to manage deals (demo shows sample deals only).' };
   }
 
   const client = getSupabase();
-  if (!client) return { ok: false, error: 'Supabase is not configured.' };
+  if (!client) return { ok: false, error: 'Account sync isn’t set up on this device.' };
 
   const { data: userData } = await client.auth.getUser();
   const userId = userData.user?.id;
@@ -209,17 +209,22 @@ export async function deleteCommunityDeal(dealId: string): Promise<{ ok: boolean
 export async function voteCommunityDeal(
   dealId: string,
   vote: StoreDealVoteKind,
+  options?: { reportedBy?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   if (isDemoMode()) {
     return { ok: false, error: 'Votes are disabled in demo mode.' };
   }
 
   const client = getSupabase();
-  if (!client) return { ok: false, error: 'Supabase is not configured.' };
+  if (!client) return { ok: false, error: 'Account sync isn’t set up on this device.' };
 
   const { data: userData } = await client.auth.getUser();
   const userId = userData.user?.id;
   if (!userId) return { ok: false, error: 'Sign in to vote on deals.' };
+
+  if (options?.reportedBy && options.reportedBy === userId) {
+    return { ok: false, error: 'You cannot vote on a deal you reported.' };
+  }
 
   const { error } = await client.from('store_deal_votes').upsert(
     { deal_id: dealId, user_id: userId, vote },

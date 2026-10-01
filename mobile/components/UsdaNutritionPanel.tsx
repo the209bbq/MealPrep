@@ -10,7 +10,7 @@ import {
   searchUsdaFoods,
   setStoredUsdaApiKey,
 } from '../lib/nutrition';
-import { isUsdaProxyConfigured, USDA_DEMO_API_KEY } from '../config/appConfig';
+import { isUsdaProxyConfigured } from '../config/appConfig';
 
 interface UsdaNutritionPanelProps {
   recipes: Recipe[];
@@ -122,8 +122,8 @@ export function UsdaNutritionPanel({ recipes, onSave }: UsdaNutritionPanelProps)
       <Text className="text-sm font-semibold text-ink">USDA nutrition lookup</Text>
       <Text className="mt-1 text-xs text-muted">
         {isUsdaProxyConfigured()
-          ? 'Signed-in lookups use the Supabase usda-proxy Edge Function (no key in the app). If that is unavailable, falls back to a device key or the public DEMO_KEY.'
-          : `Uses a key saved here or the public ${USDA_DEMO_API_KEY} fallback (same as the kitchen board).`}
+          ? 'Signed-in lookups use the server proxy (no USDA key stored in the app). You can still add your own key below as a backup.'
+          : 'Uses a key saved here or the public demo key (same as the kitchen board).'}
       </Text>
       {recipes.length > 1 ? (
         <>
