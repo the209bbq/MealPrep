@@ -3,8 +3,8 @@ import {
   PANTRY_DISCOVERY_PER_QUERY,
   RECIPE_MATCHING,
 } from '../../config/recipeMatching';
+import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
-import { GUEST_MODE_COPY } from '../../config/guestMode';
 import type { PantryItem } from '../../types/mealprep';
 import { searchDiscoveryRecipes } from './client';
 import { pantryIngredientSearchQueries } from './pantryQueries';
@@ -152,8 +152,8 @@ export async function fetchPantryDiscoverySuggestions(
   const errorMessage =
     failures === plans.length && ranked.length === 0
       ? accessToken
-        ? GUEST_MODE_COPY.recipeSearchUnavailable
-        : GUEST_MODE_COPY.recipeSearchUnavailable
+        ? RECIPES_COPY.discoveryErrors.pantrySuggestionsUnavailable
+        : RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild
       : null;
 
   const result: PantryDiscoveryResult = {

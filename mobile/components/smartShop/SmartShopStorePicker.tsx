@@ -60,8 +60,8 @@ export function SmartShopCompareStoresSection({
                 </Text>
               </View>
               {onAddPrice ? (
-                <Pressable onPress={() => onAddPrice(store)} className="rounded-lg bg-emerald px-2 py-1">
-                  <Text className="text-xs font-bold text-on-emerald">{SMART_SHOP_COPY.addPriceButton}</Text>
+                <Pressable onPress={() => onAddPrice(store)} className="rounded-lg bg-primary px-2 py-1">
+                  <Text className="text-xs font-bold text-on-primary">{SMART_SHOP_COPY.addPriceButton}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -165,7 +165,7 @@ export function SmartShopStorePickerModal({
               }}
               className="mt-3 rounded-xl bg-slate px-4 py-2"
             >
-              <Text className="text-center font-bold text-on-emerald">Add store</Text>
+              <Text className="text-center font-bold text-on-primary">Add store</Text>
             </Pressable>
           </View>
         </View>

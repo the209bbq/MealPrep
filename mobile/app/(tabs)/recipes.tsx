@@ -10,6 +10,7 @@ import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
 import { DEFAULT_MIN_MATCHED_INGREDIENTS, DEFAULT_MIN_PANTRY_MATCH_PERCENT } from '../../config/recipeMatching';
+import { RECIPES_COPY, type RecipesPantryFilterCopyId } from '../../config/recipesCopy';
 import { useApp } from '../../context/AppContext';
 import {
   fetchPantryDiscoverySuggestions,
@@ -24,12 +25,9 @@ import {
 import { nutritionLabel } from '../../lib/nutrition';
 import type { Recipe } from '../../types/mealprep';
 
-const FILTER_OPTIONS: { id: RecipePantryFilterMode; label: string }[] = [
-  { id: 'best_match', label: 'Best match first' },
-  { id: 'have_all', label: 'Have everything' },
-  { id: 'missing_1_2', label: '1–2 missing' },
-  { id: 'all', label: 'Show all' },
-];
+const FILTER_OPTIONS: { id: RecipePantryFilterMode; label: string }[] = (
+  ['best_match', 'have_all', 'missing_1_2', 'all'] as RecipesPantryFilterCopyId[]
+).map((id) => ({ id, label: RECIPES_COPY.pantryFilterLabels[id] }));
 
 const MIN_PERCENT_CHIPS = [0, 50, 70, 90] as const;
 
@@ -62,10 +60,10 @@ function RecipeListSection({
         const match = pantryRecipeMatches.byRecipeId.get(recipe.id);
         return (
           <Pressable key={recipe.id} onPress={() => setActiveId(recipe.id)}>
-            <Card className={`mb-3 ${activeId === recipe.id ? 'border-emerald' : ''}`}>
+            <Card className={`mb-3 ${activeId === recipe.id ? 'border-primary' : ''}`}>
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 pr-2">
-                  <Text className="text-xs font-semibold uppercase text-emerald">{recipe.tag}</Text>
+                  <Text className="text-xs font-semibold uppercase text-primary">{recipe.tag}</Text>
                   <Text className="text-base font-bold text-ink">{recipe.name}</Text>
                   <Text className="mt-1 text-sm text-muted">{recipe.description}</Text>
                   <RecipePantryMatchBadge match={match} />
@@ -75,10 +73,10 @@ function RecipeListSection({
                 </View>
                 <Pressable
                   onPress={() => void toggleMealPlanKitchenRecipe(recipe.id)}
-                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
                 >
-                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
-                    {onPlan ? 'In meals' : 'Add to meals'}
+                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
+                    {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
                   </Text>
                 </Pressable>
               </View>
@@ -105,6 +103,7 @@ export default function RecipesScreen() {
     toggleMealPlanDiscoveryRecipe,
     isOnMealPlan,
     toggleMealPlanKitchenRecipe,
+    onboarding,
   } = useApp();
   const [activeId, setActiveId] = useState('');
   const [pantryFilter, setPantryFilter] = useState<RecipePantryFilterMode>('best_match');
@@ -116,6 +115,11 @@ export default function RecipesScreen() {
   const pantryEmpty = pantry.length === 0;
   const accessToken = getRecipeDiscoveryAccessToken(session);
   const activeMealCount = mealPlan.filter((m) => !m.made).length;
+
+  function selectRecipe(recipeId: string) {
+    setActiveId(recipeId);
+    onboarding.notifyTutorialStepComplete('recipes');
+  }
 
   const filteredKitchenRecipes = useMemo(() => {
     if (pantryEmpty) return [];
@@ -191,7 +195,7 @@ export default function RecipesScreen() {
       .catch(() => {
         if (!cancelled) {
           setDiscoverySuggestions([]);
-          setDiscoveryError('Could not load online recipes right now.');
+          setDiscoveryError(RECIPES_COPY.discoveryErrors.loadFailed);
         }
       })
       .finally(() => {
@@ -217,22 +221,26 @@ export default function RecipesScreen() {
           onPress={() => router.push('/')}
           className="mt-4 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3"
         >
-          <Text className="text-sm font-semibold text-ink">Meals to make on Home ({activeMealCount})</Text>
+          <Text className="text-sm font-semibold text-ink">{RECIPES_COPY.mealsOnHomeLink(activeMealCount)}</Text>
           <Ionicons name="chevron-forward" size={18} color={THEME.muted} />
         </Pressable>
       ) : null}
 
       <GuestSaveNudge />
 
-      <Card className="mt-4" title="Cook now" subtitle="Kitchen recipes ranked by what is already in your pantry">
-        <Text className="mt-1 text-xs font-semibold text-muted">Sort & filter</Text>
+      <Card
+        className="mt-4"
+        title={RECIPES_COPY.cookNowCard.title}
+        subtitle={RECIPES_COPY.cookNowCard.subtitle}
+      >
+        <Text className="mt-1 text-xs font-semibold text-muted">{RECIPES_COPY.cookNowCard.sortFilterLabel}</Text>
         <FilterChips
           allowClear={false}
           options={FILTER_OPTIONS}
           selectedId={pantryFilter}
           onSelect={(id) => setPantryFilter((id as RecipePantryFilterMode) ?? 'best_match')}
         />
-        <Text className="mt-3 text-xs font-semibold text-muted">Minimum match</Text>
+        <Text className="mt-3 text-xs font-semibold text-muted">{RECIPES_COPY.cookNowCard.pantryOverlapLabel}</Text>
         <View className="mt-1 flex-row flex-wrap gap-2">
           {MIN_PERCENT_CHIPS.map((pct) => {
             const activeChip = minPercent === pct;
@@ -240,10 +248,10 @@ export default function RecipesScreen() {
               <Pressable
                 key={pct}
                 onPress={() => setMinPercent(pct)}
-                className={`rounded-full px-3 py-1.5 ${activeChip ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                className={`rounded-full px-3 py-1.5 ${activeChip ? 'bg-primary' : 'border border-border bg-paper'}`}
               >
-                <Text className={`text-xs font-semibold ${activeChip ? 'text-on-emerald' : 'text-muted'}`}>
-                  {pct === 0 ? 'Any %' : `${pct}%+`}
+                <Text className={`text-xs font-semibold ${activeChip ? 'text-on-primary' : 'text-muted'}`}>
+                  {RECIPES_COPY.minPantryOverlapChips[pct]}
                 </Text>
               </Pressable>
             );
@@ -254,49 +262,48 @@ export default function RecipesScreen() {
       {showKitchenEmpty ? <RecipesEmptyState pantryEmpty={pantryEmpty} /> : null}
 
       {!pantryEmpty && !showKitchenEmpty && filteredKitchenRecipes.length === 0 && filteredDiscoverySuggestions.length > 0 ? (
-        <Text className="mt-3 text-sm text-muted">
-          No kitchen recipes meet a {minPercent}% match. See more recipe ideas below or lower the minimum match.
-        </Text>
+        <Text className="mt-3 text-sm text-muted">{RECIPES_COPY.kitchenFilteredEmptyWithDiscovery}</Text>
       ) : null}
 
       <RecipeListSection
-        title="Ready to cook"
-        subtitle="Everything on hand — save a grocery run"
+        title={RECIPES_COPY.readyToCook.title}
+        subtitle={RECIPES_COPY.readyToCook.subtitle}
         list={cookNowRecipes}
         activeId={activeId}
-        setActiveId={setActiveId}
+        setActiveId={selectRecipe}
         pantryRecipeMatches={pantryRecipeMatches}
         isOnMealPlan={isOnMealPlan}
         toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
       />
 
       <RecipeListSection
-        title="Need a few items"
-        subtitle="Add missing ingredients to your list, then Smart Shop"
+        title={RECIPES_COPY.needAFewItems.title}
+        subtitle={RECIPES_COPY.needAFewItems.subtitle}
         list={needItemsRecipes}
         activeId={activeId}
-        setActiveId={setActiveId}
+        setActiveId={selectRecipe}
         pantryRecipeMatches={pantryRecipeMatches}
         isOnMealPlan={isOnMealPlan}
         toggleMealPlanKitchenRecipe={toggleMealPlanKitchenRecipe}
       />
 
       {!pantryEmpty ? (
-        <Card className="mt-2" title="More recipe ideas" subtitle="Matched to ingredients in your pantry">
+        <Card
+          className="mt-2"
+          title={RECIPES_COPY.moreIdeasCard.title}
+          subtitle={RECIPES_COPY.moreIdeasCard.subtitle}
+        >
           {discoveryLoading ? (
             <View className="mt-3 flex-row items-center gap-2">
               <ActivityIndicator color={THEME.primary} />
-              <Text className="text-sm text-muted">Finding recipes for your ingredients…</Text>
+              <Text className="text-sm text-muted">{RECIPES_COPY.moreIdeasCard.loading}</Text>
             </View>
           ) : null}
           {!discoveryLoading && discoveryError ? (
             <Text className="mt-3 text-sm text-muted">{discoveryError}</Text>
           ) : null}
           {!discoveryLoading && !discoveryError && filteredDiscoverySuggestions.length === 0 ? (
-            <Text className="mt-3 text-sm text-muted">
-              No external recipes meet a {minPercent}% match with at least {DEFAULT_MIN_MATCHED_INGREDIENTS} pantry
-              ingredients.
-            </Text>
+            <Text className="mt-3 text-sm text-muted">{RECIPES_COPY.moreIdeasCard.empty}</Text>
           ) : null}
           {filteredDiscoverySuggestions.map(({ recipe, match }) => {
             const onPlan = isOnMealPlan({ recipeApiId: recipe.id });
@@ -314,10 +321,10 @@ export default function RecipesScreen() {
                     </View>
                     <Pressable
                       onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
-                      className={`rounded-full px-3 py-1 ${onPlan ? 'bg-emerald' : 'border border-border bg-paper'}`}
+                      className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
                     >
-                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-emerald' : 'text-muted'}`}>
-                        {onPlan ? 'In meals' : 'Add to meals'}
+                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
+                        {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
                       </Text>
                     </Pressable>
                   </View>
@@ -329,10 +336,10 @@ export default function RecipesScreen() {
       ) : null}
 
       {active && activeMatch ? (
-        <Card title="Pantry check" subtitle={active.name} className="mt-3">
-          <Text className="mt-2 text-sm font-semibold text-emerald-dark">You have</Text>
+        <Card title={RECIPES_COPY.pantryCheck.title} subtitle={active.name} className="mt-3">
+          <Text className="mt-2 text-sm font-semibold text-primary-dark">{RECIPES_COPY.pantryCheck.youHave}</Text>
           {activeMatch.matched.length === 0 ? (
-            <Text className="mt-1 text-sm text-muted">No matching pantry items yet.</Text>
+            <Text className="mt-1 text-sm text-muted">{RECIPES_COPY.pantryCheck.noPantryItemsYet}</Text>
           ) : (
             activeMatch.matched.map((row) => (
               <Text key={row.ingredient.ingredientId} className="mt-1 text-sm text-muted">
@@ -341,9 +348,9 @@ export default function RecipesScreen() {
               </Text>
             ))
           )}
-          <Text className="mt-4 text-sm font-semibold text-danger">Still need</Text>
+          <Text className="mt-4 text-sm font-semibold text-danger">{RECIPES_COPY.pantryCheck.stillNeed}</Text>
           {activeMatch.missing.length === 0 ? (
-            <Text className="mt-1 text-sm text-muted">Nothing — you are ready to cook.</Text>
+            <Text className="mt-1 text-sm text-muted">{RECIPES_COPY.pantryCheck.readyToCook}</Text>
           ) : (
             activeMatch.missing.map((ing) => (
               <Text key={ing.ingredientId} className="mt-1 text-sm text-muted">
@@ -354,17 +361,22 @@ export default function RecipesScreen() {
           {activeMatch.missing.length > 0 ? (
             <Pressable
               onPress={() => addMissingRecipeIngredientsToGrocery(active.id)}
-              className="mt-4 items-center rounded-xl bg-emerald py-3"
+              className="mt-4 items-center rounded-xl bg-primary py-3"
             >
-              <Text className="text-sm font-bold text-on-emerald">Add missing to grocery list</Text>
+              <Text className="text-sm font-bold text-on-primary">{RECIPES_COPY.pantryCheck.addMissingCta}</Text>
             </Pressable>
           ) : null}
         </Card>
       ) : null}
 
       {active && featureFlags.batchCalculator ? (
-        <Card title="Batch meal prep calculator" subtitle={`Scaling ${active.name}`}>
-          <Text className="mt-2 text-sm text-muted">Target servings (base: {active.servings})</Text>
+        <Card
+          title={RECIPES_COPY.batchCalculator.title}
+          subtitle={RECIPES_COPY.batchCalculator.scalingSubtitle(active.name)}
+        >
+          <Text className="mt-2 text-sm text-muted">
+            {RECIPES_COPY.batchCalculator.targetServings(active.servings)}
+          </Text>
           <View className="mt-2 flex-row items-center gap-3">
             <Pressable
               onPress={() => setServingOverride(active.id, Math.max(1, servings - 1))}
@@ -388,7 +400,7 @@ export default function RecipesScreen() {
               <Text className="font-bold text-ink">+</Text>
             </Pressable>
           </View>
-          <Text className="mt-4 text-sm font-semibold text-ink">Scaled ingredients</Text>
+          <Text className="mt-4 text-sm font-semibold text-ink">{RECIPES_COPY.batchCalculator.scaledIngredients}</Text>
           {active.ingredients.map((ing) => (
             <Text key={ing.ingredientId} className="mt-1 text-sm text-muted">
               {ing.name}: {(ing.quantity * scale).toFixed(1)} {ing.unit}

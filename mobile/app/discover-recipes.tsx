@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card } from '../components/Card';
 import { FilterChips } from '../components/FilterChips';
 import { isRecipeDiscoveryConfigured, RECIPE_DISCOVERY, THEME } from '../config/appConfig';
+import { RECIPES_COPY } from '../config/recipesCopy';
 import { useApp } from '../context/AppContext';
 import {
   debouncedSearch,
@@ -90,7 +91,7 @@ export default function DiscoverRecipesScreen() {
       return;
     }
     if (!accessToken) {
-      setError('Recipe search is not available in this build.');
+      setError(RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild);
       return;
     }
     setLoading(true);
@@ -208,7 +209,7 @@ export default function DiscoverRecipesScreen() {
               {recipe.isDemoSample ? (
                 <Text className="mb-1 text-[10px] font-bold uppercase text-amber-700">Demo sample</Text>
               ) : null}
-              <Text className="text-xs font-semibold uppercase text-emerald">{recipe.cuisine}</Text>
+              <Text className="text-xs font-semibold uppercase text-primary">{recipe.cuisine}</Text>
               <Text className="text-base font-bold text-ink">{recipe.name}</Text>
               <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{recipe.description}</Text>
               <Text className="mt-2 text-xs text-muted">
