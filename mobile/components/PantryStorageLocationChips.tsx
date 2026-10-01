@@ -1,9 +1,11 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import {
   labelForPantryStorageLocation,
+  PANTRY_LIST_COPY,
   pantryStorageLocationOptions,
   type PantryStorageLocation,
 } from '../config/pantryStorage';
+import type { PantryLocationFilterCounts } from '../lib/pantryGrouping';
 
 interface PantryStorageLocationChipsProps {
   selected: PantryStorageLocation;
@@ -52,31 +54,45 @@ export function PantryStorageLocationChips({
 interface PantryStorageLocationFilterChipsProps {
   selected: PantryStorageLocation | 'all';
   onSelect: (location: PantryStorageLocation | 'all') => void;
+  counts: PantryLocationFilterCounts;
 }
 
-export function PantryStorageLocationFilterChips({ selected, onSelect }: PantryStorageLocationFilterChipsProps) {
-  const items: Array<{ key: PantryStorageLocation | 'all'; label: string }> = [
-    { key: 'all', label: 'All' },
-    ...pantryStorageLocationOptions().map((o) => ({ key: o.id, label: o.label })),
+export function PantryStorageLocationFilterChips({
+  selected,
+  onSelect,
+  counts,
+}: PantryStorageLocationFilterChipsProps) {
+  const items: Array<{ key: PantryStorageLocation | 'all'; label: string; count: number }> = [
+    { key: 'all', label: PANTRY_LIST_COPY.allLocationsChipLabel, count: counts.all },
+    ...pantryStorageLocationOptions().map((o) => ({
+      key: o.id,
+      label: o.label,
+      count: counts[o.id],
+    })),
   ];
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
-      {items.map((item) => {
-        const active = selected === item.key;
-        return (
-          <Pressable
-            key={item.key}
-            onPress={() => onSelect(item.key)}
-            className={`mr-2 rounded-full px-3 py-1.5 ${active ? 'bg-slate' : 'border border-border bg-paper'}`}
-          >
-            <Text className={`text-xs font-semibold ${active ? 'text-on-emerald' : 'text-muted'}`}>
-              {item.key === 'all' ? 'All locations' : item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+    <View>
+      <Text className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">
+        {PANTRY_LIST_COPY.storageFilterLabel}
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
+        {items.map((item) => {
+          const active = selected === item.key;
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => onSelect(item.key)}
+              className={`mr-2 rounded-full px-3 py-1.5 ${active ? 'bg-slate' : 'border border-border bg-paper'}`}
+            >
+              <Text className={`text-xs font-semibold ${active ? 'text-on-emerald' : 'text-muted'}`}>
+                {item.label} ({item.count})
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
