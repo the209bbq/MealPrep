@@ -7,7 +7,6 @@ import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../confi
 import { APP_ROUTES } from '../../config/appRoutes';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
-import { UsdaNutritionPanel } from '../../components/UsdaNutritionPanel';
 import type { FeatureFlagKey, UserRole } from '../../types/mealprep';
 
 export default function AdminScreen() {
@@ -25,8 +24,6 @@ export default function AdminScreen() {
     setUserPreference,
     seedPantry,
     analytics,
-    recipes,
-    updateRecipe,
     onboarding,
     session,
   } = useApp();
@@ -67,12 +64,6 @@ export default function AdminScreen() {
       {demoMode || isDemoMode() ? (
         <Card className="mt-4" title="Demo role switch" subtitle="Preview admin vs member UI">
           <RoleToggle current={profile.role} onChange={setDemoRole} />
-        </Card>
-      ) : null}
-
-      {recipes.length > 0 ? (
-        <Card className="mt-4">
-          <UsdaNutritionPanel recipes={recipes} onSave={updateRecipe} />
         </Card>
       ) : null}
 
@@ -138,9 +129,9 @@ function RoleToggle({ current, onChange }: { current: UserRole; onChange: (role:
         <Pressable
           key={role}
           onPress={() => onChange(role)}
-          className={`flex-1 rounded-xl px-3 py-3 ${current === role ? 'bg-emerald' : 'border border-border bg-card'}`}
+          className={`flex-1 rounded-xl px-3 py-3 ${current === role ? 'bg-primary' : 'border border-border bg-card'}`}
         >
-          <Text className={`text-center text-sm font-bold ${current === role ? 'text-on-emerald' : 'text-muted'}`}>
+          <Text className={`text-center text-sm font-bold ${current === role ? 'text-on-primary' : 'text-muted'}`}>
             {ROLE_LABELS[role]}
           </Text>
         </Pressable>

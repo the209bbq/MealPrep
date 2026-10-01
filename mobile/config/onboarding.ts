@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import type { HandsOnTutorialStepId } from '../lib/onboarding/tutorialProgress';
 import { APP_ROUTES } from './appRoutes';
 
 export type OnboardingBenefitId = 'scan' | 'recipes' | 'grocery' | 'smartShop';
@@ -10,7 +11,8 @@ export type OnboardingIoniconName =
   | 'storefront-outline'
   | 'home-outline'
   | 'leaf-outline'
-  | 'pricetags-outline';
+  | 'pricetags-outline'
+  | 'checkmark-circle';
 
 export type OnboardingBenefit = {
   id: OnboardingBenefitId;
@@ -19,14 +21,17 @@ export type OnboardingBenefit = {
   body: string;
 };
 
-export type OnboardingTourStepId = 'pantry' | 'recipes' | 'grocery';
-
-export type OnboardingTourStep = {
-  id: OnboardingTourStepId;
+export type HandsOnTutorialStepCopy = {
+  id: HandsOnTutorialStepId;
   icon: OnboardingIoniconName;
   title: string;
   body: string;
-  tabHint: string;
+  primaryCta: string;
+  secondaryCta?: string;
+  /** Route opened by the primary CTA. */
+  primaryHref: Href;
+  /** Optional query string for pantry actions (`scan` | `manual`). */
+  primaryPantryAction?: 'scan' | 'manual';
 };
 
 export type OnboardingTabEmptyId = 'home' | 'pantry' | 'recipes' | 'grocery';
@@ -46,13 +51,17 @@ export type OnboardingCopy = {
     primaryCta: string;
     secondaryCta: string;
   };
-  tour: {
-    steps: readonly OnboardingTourStep[];
-    skip: string;
-    next: string;
-    finishTitle: string;
-    finishBody: string;
-    finishCta: string;
+  tutorial: {
+    progressLabel: (current: number, total: number) => string;
+    skipTutorial: string;
+    skipStep: string;
+    continuePill: string;
+    steps: readonly HandsOnTutorialStepCopy[];
+    recap: {
+      title: string;
+      body: string;
+      cta: string;
+    };
   };
   profile: {
     showTourAgainTitle: string;
@@ -62,7 +71,9 @@ export type OnboardingCopy = {
   emptyStates: Record<OnboardingTabEmptyId, OnboardingTabEmptyCopy>;
 };
 
-/** Plain-language onboarding copy (welcome, tour, tab empty states). */
+const TUTORIAL_STEP_COUNT = 4;
+
+/** Plain-language onboarding copy (welcome, hands-on tutorial, tab empty states). */
 export const ONBOARDING_COPY: OnboardingCopy = {
   welcome: {
     valueProp: 'Save time, money, and extra store runs — cook from what you already have.',
@@ -71,7 +82,7 @@ export const ONBOARDING_COPY: OnboardingCopy = {
         id: 'scan',
         icon: 'camera-outline',
         title: 'Scan what you have',
-        body: 'Snap your shelves once. We remember what is in your kitchen.',
+        body: 'Snap pantry, fridge, or spice rack once. We remember what is in your kitchen.',
       },
       {
         id: 'recipes',
@@ -89,46 +100,64 @@ export const ONBOARDING_COPY: OnboardingCopy = {
         id: 'smartShop',
         icon: 'storefront-outline',
         title: 'Find the cheapest nearby store',
-        body: 'Compare prices around Modesto so you spend less on the same list.',
+        body: 'Compare prices around you so you spend less on the same list.',
       },
     ],
     primaryCta: 'Get started',
     secondaryCta: 'Look around first',
   },
-  tour: {
+  tutorial: {
+    progressLabel: (current, total) => `Step ${current} of ${total}`,
+    skipTutorial: 'Skip tutorial',
+    skipStep: 'Skip step',
+    continuePill: 'Continue tutorial',
     steps: [
       {
-        id: 'pantry',
-        icon: 'leaf-outline',
-        title: 'Start with your Pantry',
-        body: 'Open the Pantry tab and scan or add what you have at home. Everything else builds from here.',
-        tabHint: 'Pantry tab',
+        id: 'scan',
+        icon: 'camera-outline',
+        title: 'Scan what you have',
+        body:
+          'Start with a quick photo of your pantry, fridge, or spice rack. We turn it into ingredients you can cook from.',
+        primaryCta: 'Scan an item now',
+        secondaryCta: 'Add one by hand',
+        primaryHref: APP_ROUTES.pantry,
+        primaryPantryAction: 'scan',
       },
       {
         id: 'recipes',
         icon: 'restaurant-outline',
-        title: 'Pick recipes that fit',
-        body: 'The Recipes tab shows meals matched to your pantry so you cook instead of guessing.',
-        tabHint: 'Recipes tab',
+        title: 'See recipes that fit',
+        body: 'Recipes are ranked by what is already in your kitchen. Open one you like or add it to Meals to make.',
+        primaryCta: 'See my recipes',
+        primaryHref: APP_ROUTES.recipes,
       },
       {
         id: 'grocery',
-        icon: 'pricetags-outline',
-        title: 'Shop smart from your list',
-        body: 'Grocery List keeps what you still need to buy. Smart Shop finds the best nearby prices.',
-        tabHint: 'Grocery List tab',
+        icon: 'cart-outline',
+        title: 'Your grocery list fills itself',
+        body: 'When a recipe needs something you do not have, it lands on your grocery list automatically.',
+        primaryCta: 'Open my list',
+        primaryHref: APP_ROUTES.grocery,
+      },
+      {
+        id: 'shop',
+        icon: 'storefront-outline',
+        title: 'Compare nearby stores',
+        body: 'Smart Shop totals your open list at stores near you so you can pick the cheapest run.',
+        primaryCta: 'Compare stores',
+        primaryHref: APP_ROUTES.smartShop,
       },
     ],
-    skip: 'Skip',
-    next: 'Next',
-    finishTitle: 'You are ready',
-    finishBody: 'Your best first move is a quick pantry scan. It unlocks recipes and your shopping list.',
-    finishCta: 'Scan your pantry',
+    recap: {
+      title: 'You are set',
+      body: 'Scan → recipes → list → Smart Shop. Come back any time from Profile to replay this tour.',
+      cta: 'Start cooking',
+    },
   },
   profile: {
-    showTourAgainTitle: 'App tour',
-    showTourAgainBlurb: 'Replay the short walkthrough of Pantry, Recipes, and Grocery List.',
-    showTourAgainButton: 'Show tour again',
+    showTourAgainTitle: 'App tutorial',
+    showTourAgainBlurb: 'Replay the hands-on walkthrough: scan, recipes, grocery list, and Smart Shop.',
+    showTourAgainButton: 'Show tutorial again',
   },
   emptyStates: {
     home: {
@@ -161,3 +190,5 @@ export const ONBOARDING_COPY: OnboardingCopy = {
     },
   },
 };
+
+export const HANDS_ON_TUTORIAL_STEP_COUNT = TUTORIAL_STEP_COUNT;

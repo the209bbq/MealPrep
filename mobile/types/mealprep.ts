@@ -132,17 +132,6 @@ export interface Recipe {
   nutritionSourcedAt?: string;
 }
 
-export interface UsdaFoodMatch {
-  fdcId: number;
-  name: string;
-  dataType: string;
-  brand: string;
-  nutritionPer100g: NutritionValues;
-  source: string;
-  citation: string;
-  url: string;
-}
-
 export interface GroceryListItem {
   id: string;
   ingredientId: string;

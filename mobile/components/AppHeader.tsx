@@ -26,7 +26,7 @@ export function AppHeader() {
           {showAccountChrome ? (
             <>
               <View className="h-8 w-8 items-center justify-center rounded-full bg-primary">
-                <Text className="text-xs font-bold text-on-emerald">{initials(profile.name)}</Text>
+                <Text className="text-xs font-bold text-on-primary">{initials(profile.name)}</Text>
               </View>
               <Text className="mt-1 text-[10px] font-bold uppercase tracking-wide text-on-primary-muted">
                 {ROLE_LABELS[profile.role]}

@@ -73,7 +73,7 @@ async function callProxy<T>(
     );
   }
   if (!accessToken) {
-    throw new RecipeDiscoveryAuthError('Sign in to search recipes.');
+    throw new RecipeDiscoveryAuthError('Recipe search is not available in this build.');
   }
 
   const response = await fetch(url, {

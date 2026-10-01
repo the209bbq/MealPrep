@@ -25,14 +25,14 @@ export function GroceryItemRow({ item, recipeLabels, onToggle, dimmed, community
     >
       <View
         className={`mr-3 h-11 w-11 items-center justify-center rounded-xl border-2 ${
-          item.checked ? 'border-emerald bg-emerald' : 'border-emerald bg-emerald-light'
+          item.checked ? 'border-primary bg-primary' : 'border-primary bg-primary-light'
         }`}
       >
         {item.checked ? <Ionicons name="checkmark" size={24} color={THEME.onPrimary} /> : null}
       </View>
       <View className="min-w-0 flex-1">
         <Text className={`text-base font-bold ${item.checked ? 'text-muted line-through' : 'text-ink'}`}>{item.name}</Text>
-        <Text className="mt-0.5 text-sm font-semibold text-emerald-dark">{qtyLabel}</Text>
+        <Text className="mt-0.5 text-sm font-semibold text-primary-dark">{qtyLabel}</Text>
         {communityDeal ? (
           <View className="mt-1 self-start rounded-lg bg-amber-100 px-2 py-0.5">
             <Text className="text-xs font-bold text-amber-950">

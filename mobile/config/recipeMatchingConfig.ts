@@ -172,13 +172,3 @@ export const INGREDIENT_SUBSTITUTE_MATCH_SCORE = 0.68;
 /** Minimum fuzzy score (0–1) to count as a full pantry ingredient match. */
 export const FUZZY_MATCH_THRESHOLD = 0.72;
 
-/** User-facing copy for match thresholds (Recipes tab chips reference these). */
-export const RECIPE_MATCHING_COPY = {
-  staplesExcluded:
-    'Salt, oil, water, and other basics do not count toward match percentages.',
-  minIngredientsHint: 'Recipes need at least 2 pantry ingredients matched to appear.',
-  rankedByPantry: 'Sorted by how much you already have — best matches first.',
-  discoveryLoading: 'Finding online recipes for your top pantry ingredients…',
-  discoveryError: 'Could not load online recipes right now. Kitchen matches are still shown below.',
-  discoveryEmpty: 'No online recipes matched yet — try adding more variety to your pantry.',
-} as const;

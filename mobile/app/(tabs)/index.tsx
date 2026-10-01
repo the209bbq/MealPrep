@@ -105,8 +105,8 @@ export default function HomeScreen() {
             { label: 'Pantry items', value: String(summary.pantryItems) },
             { label: 'To buy', value: String(summary.groceryRemaining) },
           ].map((stat) => (
-            <View key={stat.label} className="min-w-[30%] flex-1 rounded-xl bg-emerald-light px-3 py-2">
-              <Text className="text-xs font-semibold text-emerald-dark">{stat.label}</Text>
+            <View key={stat.label} className="min-w-[30%] flex-1 rounded-xl bg-primary-light px-3 py-2">
+              <Text className="text-xs font-semibold text-primary-dark">{stat.label}</Text>
               <Text className="text-xl font-bold text-ink">{stat.value}</Text>
             </View>
           ))}

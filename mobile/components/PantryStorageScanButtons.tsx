@@ -41,7 +41,7 @@ export function PantryStorageScanButtons({
             disabled={disabled}
             onPress={() => onRequestNativeScan(action.location, 'camera')}
             onLongPress={() => openNativeSourceMenu(action.location, action.scanTitle)}
-            className={`rounded-lg p-2 ${disabled ? 'opacity-40' : 'bg-emerald-light'}`}
+            className={`rounded-lg p-2 ${disabled ? 'opacity-40' : 'bg-primary-light'}`}
             accessibilityLabel={`${action.scanTitle} with camera`}
           >
             <Ionicons name="camera-outline" size={20} color={THEME.primaryDark} />

@@ -1,8 +1,8 @@
 // RecipeAPI.io proxy — paste this ENTIRE file into Supabase Dashboard:
 // Edge Functions → Deploy a new function → Via Editor → name: recipeapi-proxy
 //
-// Settings: leave "Verify JWT" ENABLED (default). The gateway rejects anonymous calls;
-// this function reads the user id from the JWT for rate limiting.
+// Settings: leave "Verify JWT" ENABLED (default). Guests may call with the publishable
+// anon key; signed-in users send their session JWT. Rate limits use user id or client IP.
 //
 // Secrets (Edge Functions → Secrets): RECIPEAPI_KEY = your sk_live_... key
 
@@ -118,7 +118,6 @@ function checkUserRateLimit(userId: string): boolean {
   return true;
 }
 
-/** With Verify JWT enabled, only authenticated requests reach this handler. */
 function userIdFromJwt(req: Request): string | null {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
@@ -135,6 +134,14 @@ function userIdFromJwt(req: Request): string | null {
   }
 }
 
+function rateLimitKey(req: Request): string {
+  const userId = userIdFromJwt(req);
+  if (userId) return userId;
+  const forwarded = req.headers.get('x-forwarded-for');
+  const ip = forwarded?.split(',')[0]?.trim() || req.headers.get('cf-connecting-ip') || 'anon';
+  return `anon:${ip}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -147,15 +154,15 @@ Deno.serve(async (req) => {
     });
   }
 
-  const userId = userIdFromJwt(req);
-  if (!userId) {
+  const limitKey = rateLimitKey(req);
+  if (!limitKey) {
     return new Response(JSON.stringify({ error: 'Sign in required', code: 'UNAUTHENTICATED' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  if (!checkUserRateLimit(userId)) {
+  if (!checkUserRateLimit(limitKey)) {
     return new Response(
       JSON.stringify({ error: 'Too many recipe searches. Try again in a minute.', code: 'RATE_LIMIT' }),
       {

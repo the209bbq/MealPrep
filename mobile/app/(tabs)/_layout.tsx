@@ -1,15 +1,14 @@
+import type { ComponentProps } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs, type Href } from 'expo-router';
 import { View } from 'react-native';
 import { AppHeader } from '../../components/AppHeader';
 import { HydrationSafeIonicon } from '../../components/HydrationSafeIonicon';
-import type { ComponentProps } from 'react';
-import { Ionicons } from '@expo/vector-icons';
-
-type IoniconName = ComponentProps<typeof Ionicons>['name'];
-import { AppOverlays } from '../../components/AppOverlays';
 import { MaintenanceScreen } from '../../components/MaintenanceScreen';
 import { TABS, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
+
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 export default function TabsLayout() {
   const { maintenanceActive, isAdmin } = useApp();
@@ -26,7 +25,6 @@ export default function TabsLayout() {
   return (
     <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
       <AppHeader />
-      <AppOverlays />
       <Tabs
         screenOptions={{
           headerShown: false,
