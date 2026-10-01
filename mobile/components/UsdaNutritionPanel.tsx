@@ -10,7 +10,7 @@ import {
   searchUsdaFoods,
   setStoredUsdaApiKey,
 } from '../lib/nutrition';
-import { USDA_DEMO_API_KEY } from '../config/appConfig';
+import { isUsdaProxyConfigured, USDA_DEMO_API_KEY } from '../config/appConfig';
 
 interface UsdaNutritionPanelProps {
   recipe: Recipe;
@@ -113,8 +113,9 @@ export function UsdaNutritionPanel({ recipe, onSave }: UsdaNutritionPanelProps) 
     <View className="mt-4 border-t border-border pt-4">
       <Text className="text-sm font-semibold text-ink">USDA nutrition lookup</Text>
       <Text className="mt-1 text-xs text-muted">
-        Uses EXPO_PUBLIC_USDA_FDC_API_KEY, a key saved here, or the public {USDA_DEMO_API_KEY} fallback (same as the
-        kitchen board).
+        {isUsdaProxyConfigured()
+          ? 'Signed-in lookups use the Supabase usda-proxy Edge Function (no key in the app). If that is unavailable, falls back to a device key or the public DEMO_KEY.'
+          : `Uses a key saved here or the public ${USDA_DEMO_API_KEY} fallback (same as the kitchen board).`}
       </Text>
       <TextInput
         value={apiKey}
