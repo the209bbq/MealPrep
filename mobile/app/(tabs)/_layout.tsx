@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { AppHeader } from '../../components/AppHeader';
+import { AppOverlays } from '../../components/AppOverlays';
 import { MaintenanceScreen } from '../../components/MaintenanceScreen';
 import { TABS, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
@@ -21,6 +22,7 @@ export default function TabsLayout() {
   return (
     <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
       <AppHeader />
+      <AppOverlays />
       <Tabs
         screenOptions={{
           headerShown: false,
