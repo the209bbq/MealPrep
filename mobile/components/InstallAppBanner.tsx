@@ -9,16 +9,16 @@ export function InstallAppBanner() {
   if (!showHint) return null;
 
   return (
-    <View className="mb-3 rounded-2xl border border-emerald/30 bg-emerald-light px-4 py-3">
+    <View className="mb-3 rounded-2xl border border-primary/30 bg-primary-light px-4 py-3">
       <View className="flex-row items-start justify-between gap-2">
         <View className="flex-1">
-          <Text className="text-sm font-bold text-emerald-dark">Install {APP_SHORT_NAME}</Text>
+          <Text className="text-sm font-bold text-primary-dark">Install {APP_SHORT_NAME}</Text>
           {canInstall ? (
-            <Text className="mt-1 text-xs text-emerald-dark">
+            <Text className="mt-1 text-xs text-primary-dark">
               Add a home-screen shortcut for faster access and offline app shell loading.
             </Text>
           ) : isIos ? (
-            <Text className="mt-1 text-xs text-emerald-dark">
+            <Text className="mt-1 text-xs text-primary-dark">
               Tap Share in Safari, then &quot;Add to Home Screen&quot; to install.
             </Text>
           ) : null}
@@ -30,9 +30,9 @@ export function InstallAppBanner() {
       {canInstall ? (
         <Pressable
           onPress={() => promptInstall()}
-          className="mt-3 items-center rounded-xl bg-emerald py-2.5"
+          className="mt-3 items-center rounded-xl bg-primary py-2.5"
         >
-          <Text className="text-sm font-bold text-on-emerald">Install app</Text>
+          <Text className="text-sm font-bold text-on-primary">Install app</Text>
         </Pressable>
       ) : null}
     </View>

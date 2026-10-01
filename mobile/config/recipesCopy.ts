@@ -116,4 +116,41 @@ export const RECIPES_COPY = {
       'Recipe ideas are unavailable right now. Check your connection or try again shortly.',
     pantrySuggestionsSignIn: 'Sign in to see recipe ideas based on your pantry.',
   },
+
+  pantryOverlap: {
+    youHave: (matched: number, total: number) => `You have ${matched} of ${total}`,
+    needMore: (missing: number) => (missing === 1 ? 'Need 1 more' : `Need ${missing} more`),
+    readyToCook: 'Ready to cook',
+  },
+
+  cookFromPantryCard: {
+    title: 'Cook from your pantry',
+    subtitle: 'Use what you have — fewer store runs',
+    addMissingShort: 'Add missing to list',
+    seeAllOnRecipes: 'See all recipes',
+  },
 } as const;
+
+/** Compact label for recipe list badges (no percentages). */
+export function recipePantryBadgeLabel(
+  matchedCount: number,
+  totalIngredients: number,
+  missingCount: number,
+): string {
+  if (missingCount === 0) {
+    return RECIPES_COPY.pantryOverlap.readyToCook;
+  }
+  return `${RECIPES_COPY.pantryOverlap.youHave(matchedCount, totalIngredients)} · ${RECIPES_COPY.pantryOverlap.needMore(missingCount)}`;
+}
+
+/** Secondary line under a recipe name on home / recommendation rows. */
+export function recipePantryListSubtitle(
+  matchedCount: number,
+  totalIngredients: number,
+  missingCount: number,
+): string {
+  if (missingCount === 0) {
+    return `${RECIPES_COPY.pantryOverlap.youHave(matchedCount, totalIngredients)} — ${RECIPES_COPY.pantryOverlap.readyToCook.toLowerCase()}`;
+  }
+  return `${RECIPES_COPY.pantryOverlap.youHave(matchedCount, totalIngredients)} · ${RECIPES_COPY.pantryOverlap.needMore(missingCount)}`;
+}

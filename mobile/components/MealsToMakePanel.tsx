@@ -49,9 +49,9 @@ export function MealsToMakePanel({
           <View className="flex-row items-center gap-2">
             <Pressable
               onPress={() => onMarkMade(item.id)}
-              className="rounded-full bg-emerald-light px-3 py-1.5"
+              className="rounded-full bg-primary-light px-3 py-1.5"
             >
-              <Text className="text-xs font-bold text-emerald-dark">Made it</Text>
+              <Text className="text-xs font-bold text-primary-dark">Made it</Text>
             </Pressable>
             <Pressable onPress={() => onRemove(item.id)} className="p-1">
               <Ionicons name="close-circle" size={22} color={THEME.muted} />
@@ -67,7 +67,7 @@ export function MealsToMakePanel({
             <View key={item.id} className="mt-2 flex-row items-center justify-between">
               <Text className="flex-1 text-sm text-muted line-through" numberOfLines={1}>{item.title}</Text>
               <Pressable onPress={() => onUndoMade(item.id)}>
-                <Text className="text-xs font-bold text-emerald-dark">Undo</Text>
+                <Text className="text-xs font-bold text-primary-dark">Undo</Text>
               </Pressable>
             </View>
           ))}
@@ -75,8 +75,8 @@ export function MealsToMakePanel({
       ) : null}
 
       {onAddMissingToGrocery && active.length > 0 ? (
-        <Pressable onPress={onAddMissingToGrocery} className="mt-4 items-center rounded-xl border border-emerald py-3">
-          <Text className="text-sm font-bold text-emerald-dark">Add missing ingredients to grocery list</Text>
+        <Pressable onPress={onAddMissingToGrocery} className="mt-4 items-center rounded-xl border border-primary py-3">
+          <Text className="text-sm font-bold text-primary-dark">Add missing ingredients to grocery list</Text>
         </Pressable>
       ) : null}
     </Card>
