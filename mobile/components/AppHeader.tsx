@@ -16,15 +16,15 @@ export function AppHeader() {
       <View className="flex-row items-center justify-between">
         <View className="min-w-0 flex-1 flex-row items-center gap-2 pr-2">
           <BrandLogo variant="header" />
-          <Text className="shrink text-xs font-semibold text-emerald-light" numberOfLines={1}>
+          <Text className="shrink text-xs font-semibold text-on-primary-muted" numberOfLines={1}>
             {title}
           </Text>
         </View>
         <View className="shrink-0 items-end">
-          <View className="h-8 w-8 items-center justify-center rounded-full bg-emerald-dark">
+          <View className="h-8 w-8 items-center justify-center rounded-full bg-primary">
             <Text className="text-xs font-bold text-on-emerald">{initials(profile.name)}</Text>
           </View>
-          <Text className="mt-1 text-[10px] font-bold uppercase tracking-wide text-emerald-light">
+          <Text className="mt-1 text-[10px] font-bold uppercase tracking-wide text-on-primary-muted">
             {ROLE_LABELS[profile.role]}
           </Text>
         </View>

@@ -271,9 +271,9 @@ export function SmartShopAddPriceSheet({ target, onClose, onSaved }: Props) {
             className="mt-3 flex-row items-center justify-center gap-2 rounded-xl border border-emerald bg-emerald-light/40 px-3 py-3"
           >
             {scanning ? (
-              <ActivityIndicator size="small" color={THEME.emerald} />
+              <ActivityIndicator size="small" color={THEME.primary} />
             ) : (
-              <Ionicons name="camera-outline" size={20} color={THEME.emerald} />
+              <Ionicons name="camera-outline" size={20} color={THEME.primary} />
             )}
             <Text className="text-sm font-bold text-emerald-dark">
               {scanning ? SMART_SHOP_COPY.addPriceScanning : SMART_SHOP_COPY.addPriceScanTag}

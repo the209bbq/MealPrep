@@ -28,7 +28,7 @@ export function GroceryItemRow({ item, recipeLabels, onToggle, dimmed, community
           item.checked ? 'border-emerald bg-emerald' : 'border-emerald bg-emerald-light'
         }`}
       >
-        {item.checked ? <Ionicons name="checkmark" size={24} color={THEME.onEmerald} /> : null}
+        {item.checked ? <Ionicons name="checkmark" size={24} color={THEME.onPrimary} /> : null}
       </View>
       <View className="min-w-0 flex-1">
         <Text className={`text-base font-bold ${item.checked ? 'text-muted line-through' : 'text-ink'}`}>{item.name}</Text>

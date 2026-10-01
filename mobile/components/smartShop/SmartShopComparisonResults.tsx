@@ -82,12 +82,12 @@ export function SmartShopComparisonResults({
           <Text className="text-xs font-bold uppercase tracking-wide text-muted">{dealsSummaryLabel(dealsResult)}</Text>
           {summarySubtext ? <Text className="mt-1 text-xs text-muted">{summarySubtext}</Text> : null}
           {savingsEstimate ? (
-            <View className="mt-3 rounded-xl bg-emerald-light px-3 py-2">
-              <Text className="text-sm font-bold text-emerald-dark">
+            <View className="mt-3 rounded-xl bg-success-light px-3 py-2">
+              <Text className="text-sm font-bold text-success-dark">
                 Save up to {formatMoney(savingsEstimate.savingsAmount)} vs highest store
                 {savingsEstimate.isDemoPricing ? ' (demo)' : ''}
               </Text>
-              <Text className="mt-1 text-xs text-emerald-dark">
+              <Text className="mt-1 text-xs text-success-dark">
                 Priced {savingsEstimate.pricedItemCount} of {savingsEstimate.listItemCount} list items
               </Text>
             </View>
@@ -96,7 +96,7 @@ export function SmartShopComparisonResults({
             <Text className="mt-2 text-lg font-bold text-ink">{dealsResult.suggestion.label}</Text>
           ) : null}
           {suggestionHasTotal ? (
-            <Text className="mt-1 text-2xl font-bold text-emerald-dark">
+            <Text className="mt-1 text-2xl font-bold text-success-dark">
               {formatStoreTotal(dealsResult.suggestion.estimatedTotal, isEstimate)}
             </Text>
           ) : null}
@@ -118,14 +118,14 @@ export function SmartShopComparisonResults({
         return (
           <View
             key={total.storeId}
-            className={`mb-3 rounded-xl border px-4 py-3 ${isCheapest ? 'border-emerald bg-emerald-light/50' : 'border-border bg-card'}`}
+            className={`mb-3 rounded-xl border px-4 py-3 ${isCheapest ? 'border-success bg-success-light/50' : 'border-border bg-card'}`}
           >
             <View className="flex-row items-start justify-between gap-2">
               <View className="flex-1">
                 <View className="flex-row flex-wrap items-center gap-2">
                   <Text className="font-bold text-ink">{store.chain || store.name}</Text>
                   {isCheapest ? (
-                    <Text className="rounded-md bg-emerald px-2 py-0.5 text-xs font-bold text-on-emerald">Cheapest</Text>
+                    <Text className="rounded-md bg-success px-2 py-0.5 text-xs font-bold text-on-success">Cheapest</Text>
                   ) : null}
                 </View>
                 <Text className="text-xs text-muted">
@@ -145,7 +145,7 @@ export function SmartShopComparisonResults({
                 ) : null}
               </View>
               {priced ? (
-                <Text className="text-lg font-bold text-emerald-dark">
+                <Text className="text-lg font-bold text-success-dark">
                   {formatStoreTotal(total.subtotal, isEstimate)}
                 </Text>
               ) : null}
@@ -198,7 +198,7 @@ export function SmartShopComparisonResults({
                 </Text>
                 {best ? (
                   <View className="mt-2">
-                    <Text className="text-base font-bold text-emerald-dark">
+                    <Text className="text-base font-bold text-success-dark">
                       {formatMoney(best.lineTotal)} at {activeStores.find((s) => s.id === best.storeId)?.chain ?? 'store'}
                     </Text>
                     {best.promoLabel ? <Text className="text-xs text-danger">{best.promoLabel}</Text> : null}

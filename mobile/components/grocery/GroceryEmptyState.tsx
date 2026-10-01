@@ -6,7 +6,7 @@ export function GroceryEmptyState() {
   return (
     <View className="items-center rounded-3xl border border-dashed border-border bg-card px-6 py-10">
       <View className="mb-4 rounded-full bg-emerald-light p-4">
-        <Ionicons name="cart-outline" size={40} color={THEME.emerald} />
+        <Ionicons name="cart-outline" size={40} color={THEME.primary} />
       </View>
       <Text className="text-center text-lg font-bold text-ink">Nothing to buy yet</Text>
       <Text className="mt-2 text-center text-sm leading-5 text-muted">

@@ -79,7 +79,7 @@ export default function AdminScreen() {
               <Switch
                 value={userPreferences[key]}
                 onValueChange={(value) => setUserPreference(key, value)}
-                trackColor={{ true: THEME.emerald, false: THEME.border }}
+                trackColor={{ true: THEME.primary, false: THEME.border }}
               />
             </View>
           ))}
@@ -142,7 +142,7 @@ export default function AdminScreen() {
             <Switch
               value={userPreferences[key]}
               onValueChange={(value) => setUserPreference(key, value)}
-              trackColor={{ true: THEME.emerald, false: THEME.border }}
+              trackColor={{ true: THEME.primary, false: THEME.border }}
             />
           </View>
         ))}
@@ -158,7 +158,7 @@ export default function AdminScreen() {
             <Switch
               value={featureFlags[key]}
               onValueChange={(value) => setFeatureFlag(key, value)}
-              trackColor={{ true: THEME.emerald, false: THEME.border }}
+              trackColor={{ true: THEME.primary, false: THEME.border }}
             />
           </View>
         ))}

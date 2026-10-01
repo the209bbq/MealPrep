@@ -38,7 +38,7 @@ export function PantryOverflowMenu({
               }}
               className={`flex-row items-center gap-3 rounded-xl px-3 py-3 ${resortPreviewTotal === 0 ? 'opacity-40' : ''}`}
             >
-              <Ionicons name="swap-vertical" size={20} color={THEME.slate} />
+              <Ionicons name="swap-vertical" size={20} color={THEME.primaryDark} />
               <Text className="flex-1 text-sm font-semibold text-ink">Re-sort items</Text>
             </Pressable>
             {PANTRY_STORAGE_LOCATIONS.map((location) => {

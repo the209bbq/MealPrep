@@ -17,9 +17,14 @@ const brand = JSON.parse(fs.readFileSync(path.join(mobileRoot, 'config', 'appBra
 const baseUrl = appJson.expo?.experiments?.baseUrl ?? '';
 const basePath = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 
+const themeColors = JSON.parse(
+  fs.readFileSync(path.join(mobileRoot, 'config', 'theme.colors.json'), 'utf8'),
+);
+
 const THEME = {
-  emerald: brand.colors.themeEmerald,
-  cream: brand.colors.brandCream,
+  primaryDark: themeColors.primaryDark,
+  paper: themeColors.paper,
+  brandCream: themeColors.brandCream,
 };
 const APP_NAME = brand.name;
 const APP_SHORT_NAME = brand.shortName;
@@ -52,7 +57,7 @@ async function generateIcons(sourceIcon) {
           width: size,
           height: size,
           channels: 4,
-          background: THEME.cream,
+          background: THEME.brandCream,
         },
       })
         .composite([{ input: resized, gravity: 'centre' }])
@@ -74,8 +79,8 @@ function writeManifest() {
     scope: webPath('/'),
     display: 'standalone',
     orientation: 'portrait',
-    theme_color: THEME.emerald,
-    background_color: THEME.cream,
+    theme_color: THEME.primaryDark,
+    background_color: THEME.paper,
     icons: [
       { src: webPath('/icons/icon-192.png'), sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: webPath('/icons/icon-512.png'), sizes: '512x512', type: 'image/png', purpose: 'any' },

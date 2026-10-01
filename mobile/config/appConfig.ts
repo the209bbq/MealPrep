@@ -2,34 +2,17 @@ import type {
   FeatureFlags,
   PantryCategory,
   TabConfig,
-  ThemeTokens,
   UserRole,
 } from '../types/mealprep';
 import { SMART_SHOP_STORES } from './smartShop';
 import appBrand from './appBrand.json';
 
+export { THEME } from './theme';
+
 export const APP_NAME = appBrand.name;
 export const APP_SHORT_NAME = appBrand.shortName;
 export const APP_TAGLINE = 'Save time, effort, and money — cook what you have, shop only what you need.';
 export const APP_SCHEME = 'mealprep';
-
-export const THEME: ThemeTokens = {
-  cream: '#FAF7F2',
-  paper: '#F4EFE6',
-  sand: '#E8DCC8',
-  ink: '#1C1917',
-  muted: '#78716C',
-  border: '#E7E0D6',
-  slate: '#334155',
-  slateMuted: '#64748B',
-  emerald: '#047857',
-  emeraldDark: '#065F46',
-  emeraldLight: '#D1FAE5',
-  emeraldAccent: '#059669',
-  onEmerald: '#ECFDF5',
-  card: '#FFFcf7',
-  danger: '#B45309',
-};
 
 export const TABS: TabConfig[] = [
   { name: 'index', title: 'Home', href: '/', icon: 'home-outline', iconActive: 'home' },
