@@ -531,6 +531,9 @@ export default function SmartShopScreen() {
                     </Pressable>
                     <StoreWeeklyAdButton store={store} />
                   </View>
+                  <View className="mt-2">
+                    <StoreDeliveryButtons store={store} />
+                  </View>
                   <StoreCommunityDealsSection
                     store={store}
                     deals={communityDeals}
