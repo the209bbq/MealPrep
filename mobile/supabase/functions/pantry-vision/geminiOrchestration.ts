@@ -4,13 +4,14 @@
  * (see npm run test:pantry-vision-gemini-inline).
  */
 
-/** @sync mobile/config/geminiVision.ts */
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
+/** @sync mobile/config/geminiConfig.ts */
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_GEMINI_FALLBACK_MODELS = [
-  'gemini-3.8-flash',
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
 ] as const;
 
 /** Per upstream HTTP call (each Gemini generateContent). */

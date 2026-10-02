@@ -4,6 +4,12 @@ import {
   ingredientMatchScore,
 } from '../recipeMatch/ingredientNormalize';
 import type { PantryCategory } from '../../types/mealprep';
+import {
+  dedupePantryRows,
+  mergePantryPasses,
+  mergePantryRowPair,
+  type PantryMergeIdentity,
+} from './pantryItemMerge';
 
 /** Raw row shape from pantry-vision (before client post-process). */
 export interface PantryVisionDetectionRow {
@@ -90,25 +96,27 @@ export function stableSortDetections<T extends { name: string }>(items: T[]): T[
   return [...items].sort((a, b) => detectionIdentityKey(a.name).localeCompare(detectionIdentityKey(b.name)));
 }
 
-function pickBetterName(a: string, b: string): string {
-  const scoreLength = (n: string) => n.trim().length;
-  if (scoreLength(a) !== scoreLength(b)) return scoreLength(a) > scoreLength(b) ? a : b;
-  return a.localeCompare(b) <= 0 ? a : b;
+const CLIENT_PANTRY_MERGE_IDENTITY: PantryMergeIdentity = {
+  identityKey: detectionIdentityKey,
+  rowsMatch: (a, b) =>
+    ingredientMatchScore(a, b) >= 1 || fuzzyNameScore(a, b) >= 0.92,
+};
+
+function finalizeDetectionRow(row: PantryVisionDetectionRow): PantryVisionDetectionRow {
+  return {
+    ...row,
+    name: formatDetectedIngredientName(row.name),
+  };
 }
 
-function mergeRowPair(
+function mergeDetectionRows(
   existing: PantryVisionDetectionRow,
   incoming: PantryVisionDetectionRow,
 ): PantryVisionDetectionRow {
-  const sameUnit = existing.unit.toLowerCase() === incoming.unit.toLowerCase();
-  const quantity = sameUnit ? existing.quantity + incoming.quantity : Math.max(existing.quantity, incoming.quantity);
-  const rawName = pickBetterName(existing.name, incoming.name);
+  const merged = mergePantryRowPair(existing, incoming);
   return {
-    name: rawName,
-    quantity,
-    unit: existing.unit || incoming.unit,
+    ...merged,
     category: existing.confidence >= incoming.confidence ? existing.category : incoming.category,
-    confidence: Math.max(existing.confidence, incoming.confidence),
     storage: existing.storage ?? incoming.storage,
   };
 }
@@ -116,35 +124,26 @@ function mergeRowPair(
 /** Collapse duplicate products (synonym / fuzzy) into one row. */
 export function dedupeDetections(items: PantryVisionDetectionRow[]): PantryVisionDetectionRow[] {
   const sorted = stableSortDetections(items);
-
   const merged: PantryVisionDetectionRow[] = [];
   for (const row of sorted) {
-    const key = detectionIdentityKey(row.name);
     let matchIndex = -1;
     for (let i = 0; i < merged.length; i += 1) {
       const other = merged[i];
-      const otherKey = detectionIdentityKey(other.name);
-      if (key === otherKey) {
-        matchIndex = i;
-        break;
-      }
-      if (ingredientMatchScore(row.name, other.name) >= 1 || fuzzyNameScore(row.name, other.name) >= 0.92) {
+      if (
+        detectionIdentityKey(row.name) === detectionIdentityKey(other.name) ||
+        CLIENT_PANTRY_MERGE_IDENTITY.rowsMatch(row.name, other.name)
+      ) {
         matchIndex = i;
         break;
       }
     }
     if (matchIndex >= 0) {
-      merged[matchIndex] = mergeRowPair(merged[matchIndex], row);
+      merged[matchIndex] = mergeDetectionRows(merged[matchIndex], row);
     } else {
       merged.push(row);
     }
   }
-  return stableSortDetections(
-    merged.map((row) => ({
-      ...row,
-      name: formatDetectedIngredientName(row.name),
-    })),
-  );
+  return stableSortDetections(merged.map(finalizeDetectionRow));
 }
 
 /** Union two model passes (enumerate + verify) without dropping items. */
@@ -152,7 +151,22 @@ export function mergeDetectionPasses(
   passA: PantryVisionDetectionRow[],
   passB: PantryVisionDetectionRow[],
 ): PantryVisionDetectionRow[] {
-  return dedupeDetections([...passA, ...passB]);
+  const combined = mergePantryPasses(passA, passB, CLIENT_PANTRY_MERGE_IDENTITY);
+  return stableSortDetections(
+    combined.map((row) => {
+      const fromA = passA.find((p) => CLIENT_PANTRY_MERGE_IDENTITY.rowsMatch(p.name, row.name));
+      const fromB = passB.find((p) => CLIENT_PANTRY_MERGE_IDENTITY.rowsMatch(p.name, row.name));
+      return finalizeDetectionRow({
+        ...row,
+        category: fromA && fromB
+          ? fromA.confidence >= fromB.confidence
+            ? fromA.category
+            : fromB.category
+          : (fromA ?? fromB ?? row).category,
+        storage: fromA?.storage ?? fromB?.storage,
+      });
+    }),
+  );
 }
 
 export function isLowConfidenceDetection(confidence: number): boolean {

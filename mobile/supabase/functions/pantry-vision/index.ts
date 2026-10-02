@@ -7,17 +7,18 @@
 // Secrets (Edge Functions → Secrets):
 //   GEMINI_API_KEY = key from https://aistudio.google.com/apikey
 // Optional secrets:
-//   GEMINI_MODEL = e.g. gemini-3.6-flash (defaults below; keep in sync with mobile/config/geminiVision.ts)
+//   GEMINI_MODEL = e.g. gemini-3.8-flash (defaults below; keep in sync with mobile/config/geminiConfig.ts)
 //   GEMINI_FALLBACK_MODELS = comma-separated backup model ids (optional)
 
 // BEGIN GEMINI_ORCHESTRATION (keep in sync with geminiOrchestration.ts — npm run test:pantry-vision-gemini)
-/** @sync mobile/config/geminiVision.ts */
-const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
+/** @sync mobile/config/geminiConfig.ts */
+const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 const DEFAULT_GEMINI_FALLBACK_MODELS = [
-  'gemini-3.8-flash',
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
 ] as const;
 
 /** Per upstream HTTP call (each Gemini generateContent). */
@@ -145,11 +146,119 @@ function orderModelsForAttempt(
 }
 // END GEMINI_ORCHESTRATION
 
+// BEGIN PANTRY_MERGE (keep in sync with pantryItemMerge.ts — npm run test:pantry-vision-merge)
+type PantryMergeRow = {
+  name: string;
+  quantity: number;
+  unit: string;
+  confidence: number;
+};
+
+type PantryMergeIdentity = {
+  identityKey: (name: string) => string;
+  rowsMatch: (a: string, b: string) => boolean;
+};
+
+function stableSortByName<T extends { name: string }>(
+  items: T[],
+  identityKey: (name: string) => string,
+): T[] {
+  return [...items].sort((a, b) => identityKey(a.name).localeCompare(identityKey(b.name)));
+}
+
+function pickBetterPantryName(a: string, b: string): string {
+  const lenA = a.trim().length;
+  const lenB = b.trim().length;
+  if (lenA !== lenB) return lenA > lenB ? a : b;
+  return a.localeCompare(b) <= 0 ? a : b;
+}
+
+function mergePantryRowPair<T extends PantryMergeRow>(existing: T, incoming: T): T {
+  const sameUnit = existing.unit.toLowerCase() === incoming.unit.toLowerCase();
+  const quantity = sameUnit
+    ? Math.max(existing.quantity, incoming.quantity)
+    : Math.max(existing.quantity, incoming.quantity);
+  return {
+    ...existing,
+    name: pickBetterPantryName(existing.name, incoming.name),
+    quantity,
+    unit: existing.unit || incoming.unit,
+    confidence: Math.max(existing.confidence, incoming.confidence),
+  };
+}
+
+function dedupePantryRows<T extends PantryMergeRow>(items: T[], identity: PantryMergeIdentity): T[] {
+  const sorted = stableSortByName(items, identity.identityKey);
+  const merged: T[] = [];
+
+  for (const row of sorted) {
+    const key = identity.identityKey(row.name);
+    let matchIndex = -1;
+    for (let i = 0; i < merged.length; i += 1) {
+      const other = merged[i];
+      const otherKey = identity.identityKey(other.name);
+      if (key === otherKey || identity.rowsMatch(row.name, other.name)) {
+        matchIndex = i;
+        break;
+      }
+    }
+    if (matchIndex >= 0) {
+      merged[matchIndex] = mergePantryRowPair(merged[matchIndex], row);
+    } else {
+      merged.push(row);
+    }
+  }
+  return stableSortByName(merged, identity.identityKey);
+}
+
+function mergePantryPasses<T extends PantryMergeRow>(
+  passA: T[],
+  passB: T[],
+  identity: PantryMergeIdentity,
+): T[] {
+  return dedupePantryRows([...passA, ...passB], identity);
+}
+
+function pantryRowsSeemCompleteForSinglePass(
+  items: PantryMergeRow[],
+  minItems: number,
+  minAvgConfidence: number,
+): boolean {
+  if (items.length < minItems) return false;
+  const avg = items.reduce((sum, row) => sum + row.confidence, 0) / items.length;
+  return avg >= minAvgConfidence;
+}
+
+function tokenOverlapMatch(a: string, b: string): boolean {
+  const aKey = normalizeNameKey(a);
+  const bKey = normalizeNameKey(b);
+  if (!aKey || !bKey) return false;
+  if (aKey === bKey) return true;
+  const aTokens = aKey.split(' ').filter(Boolean);
+  const bTokens = bKey.split(' ').filter(Boolean);
+  if (aTokens.length === 0 || bTokens.length === 0) return false;
+  const shorter = aTokens.length <= bTokens.length ? aTokens : bTokens;
+  const longer = aTokens.length <= bTokens.length ? bTokens : aTokens;
+  if (shorter.length >= 2 && shorter.every((t) => longer.includes(t))) return true;
+  const shorterSet = new Set(shorter);
+  const overlap = longer.filter((t) => shorterSet.has(t)).length;
+  const union = new Set([...aTokens, ...bTokens]).size;
+  return overlap >= 2 && overlap / union >= 0.85;
+}
+
+const EDGE_PANTRY_MERGE_IDENTITY: PantryMergeIdentity = {
+  identityKey: normalizeNameKey,
+  rowsMatch: tokenOverlapMatch,
+};
+// END PANTRY_MERGE
+
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_RETRY_BACKOFF_MS = 450;
 const GEMINI_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 503]);
 const geminiModelTimeoutMemory = new ModelTimeoutMemory();
-const PANTRY_VISION_CACHE_VERSION = 'v3';
+const PANTRY_VISION_CACHE_VERSION = 'v4';
+const PANTRY_VISION_SINGLE_PASS_MIN_ITEMS = 8;
+const PANTRY_VISION_SINGLE_PASS_MIN_AVG_CONFIDENCE = 0.72;
 const PANTRY_MAX_ITEMS = 120;
 const GEMINI_DETERMINISTIC_SEED = 42;
 const GEMINI_MAX_OUTPUT_TOKENS = 16_384;
@@ -216,6 +325,7 @@ const RESPONSE_JSON_SCHEMA = {
         type: 'object',
         properties: {
           name: { type: 'string' },
+          brand: { type: 'string' },
           quantity: { type: 'number' },
           unit: { type: 'string' },
           category: { type: 'string', enum: [...PANTRY_CATEGORIES] },
@@ -235,11 +345,19 @@ const USER_MAX_PER_WINDOW = 12;
 
 type DetectedPantryItem = {
   name: string;
+  brand?: string;
   quantity: number;
   unit: string;
   category: (typeof PANTRY_CATEGORIES)[number];
   storage: (typeof PANTRY_STORAGE)[number];
   confidence: number;
+};
+
+type GeminiModelAttemptDebug = {
+  model: string;
+  ok: boolean;
+  status?: number;
+  message?: string;
 };
 
 async function userHasPlusPhotoScanAccess(userId: string): Promise<boolean> {
@@ -459,6 +577,8 @@ function sanitizeItems(raw: unknown): DetectedPantryItem[] {
     const row = entry as Record<string, unknown>;
     const name = typeof row.name === 'string' ? row.name.trim() : '';
     if (!name) continue;
+    const brandRaw = typeof row.brand === 'string' ? row.brand.trim() : '';
+    const brand = brandRaw ? brandRaw.slice(0, 64) : undefined;
     const quantity = Number(row.quantity);
     const unit = typeof row.unit === 'string' ? row.unit.trim() || 'each' : 'each';
     const categoryRaw = typeof row.category === 'string' ? row.category : 'dry_goods';
@@ -472,6 +592,7 @@ function sanitizeItems(raw: unknown): DetectedPantryItem[] {
       : 'pantry';
     out.push({
       name: name.slice(0, 120),
+      brand,
       quantity: Number.isFinite(quantity) && quantity > 0 ? Math.min(quantity, 9999) : 1,
       unit: unit.slice(0, 32),
       category,
@@ -483,27 +604,11 @@ function sanitizeItems(raw: unknown): DetectedPantryItem[] {
 }
 
 function dedupeItems(items: DetectedPantryItem[]): DetectedPantryItem[] {
-  const merged: DetectedPantryItem[] = [];
-  for (const row of stableSortItems(items)) {
-    const key = normalizeNameKey(row.name);
-    const existingIndex = merged.findIndex((m) => normalizeNameKey(m.name) === key);
-    if (existingIndex < 0) {
-      merged.push(row);
-      continue;
-    }
-    const existing = merged[existingIndex];
-    const sameUnit = existing.unit.toLowerCase() === row.unit.toLowerCase();
-    merged[existingIndex] = {
-      ...existing,
-      quantity: sameUnit ? existing.quantity + row.quantity : Math.max(existing.quantity, row.quantity),
-      confidence: Math.max(existing.confidence, row.confidence),
-    };
-  }
-  return stableSortItems(merged);
+  return dedupePantryRows(items, EDGE_PANTRY_MERGE_IDENTITY);
 }
 
 function mergeItemPasses(passA: DetectedPantryItem[], passB: DetectedPantryItem[]): DetectedPantryItem[] {
-  return dedupeItems([...passA, ...passB]);
+  return mergePantryPasses(passA, passB, EDGE_PANTRY_MERGE_IDENTITY);
 }
 
 function getCachedScan(cacheKey: string): { items: DetectedPantryItem[]; model: string } | null {
@@ -597,13 +702,21 @@ function sanitizePriceTag(raw: unknown): SanitizedPriceTag | null {
 
 function geminiEnumeratePrompt(scanLocation: (typeof PANTRY_STORAGE)[number]): string {
   return (
-    'You inventory kitchen storage from a photo. Do NOT summarize, group, or skip items to be brief.\n' +
+    'You inventory edible kitchen products from a photo for a home recipe app. Do NOT summarize or skip items.\n' +
     scanLocationPromptHint(scanLocation) +
-    '\nProcess systematically: scan shelf by shelf top-to-bottom; on each shelf go left-to-right.\n' +
-    'List EVERY distinct product visible, including partially visible items when the label is readable.\n' +
-    'One JSON object per distinct product. If three identical cans are visible, use quantity 3 and unit "can".\n' +
-    'Use realistic units (oz, lb, each, bottle, jar, can). Set confidence 0-1. Do not invent unreadable items.\n' +
-    'Example item: {"name":"Campbell\'s tomato soup","quantity":2,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.91}\n' +
+    '\nRules:\n' +
+    '- Read the FRONT product label only. Ignore ingredient lists, nutrition panels, and side/back text.\n' +
+    '- Skip non-food (pet food, cleaning supplies, napkins, appliances, empty jars, bags, tools).\n' +
+    '- Do not guess: omit anything you cannot read clearly from the front label.\n' +
+    '- Do NOT use barcodes.\n' +
+    '- name: generic recipe ingredient (lowercase-friendly), specific when it matters (e.g. black olives, chicken breast, cake flour, all-purpose flour, cream of mushroom soup). Never put store brands in name.\n' +
+    '- brand: optional store brand when visible (separate field).\n' +
+    '- Scan shelf by shelf top-to-bottom; on each shelf go left-to-right.\n' +
+    '- One JSON object per distinct product. If three identical cans are visible, quantity 3 and unit "can".\n' +
+    '- Use realistic units (oz, lb, each, bottle, jar, can). Set confidence 0-1.\n' +
+    'Examples (name only): {"name":"black olives","brand":"WinCo","quantity":1,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.9}\n' +
+    '{"name":"tomato soup","quantity":2,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.88}\n' +
+    '{"name":"cake flour","quantity":1,"unit":"box","category":"dry_goods","storage":"pantry","confidence":0.86}\n' +
     'Return JSON only matching the schema.'
   );
 }
@@ -613,10 +726,12 @@ function geminiVerifyPrompt(scanLocation: (typeof PANTRY_STORAGE)[number], passO
   return (
     'You verify a pantry inventory from the same photo.\n' +
     scanLocationPromptHint(scanLocation) +
-    '\nFirst pass found:\n' +
+    '\nFirst pass already found:\n' +
     list +
-    '\nLook at the image again. ADD any visible products missing from that list. Merge duplicates.\n' +
-    'Keep correct first-pass items. Do not summarize. Return the FULL merged list in JSON only.'
+    '\nLook at the image again. Return ONLY additional visible food products missing from that list.\n' +
+    'Same rules as before: generic recipe names in name (not brands), optional brand field, front label only, no non-food, no guesses.\n' +
+    'If nothing new is visible, return {"items":[]}.\n' +
+    'Do NOT repeat first-pass items. Do NOT re-list the full inventory. JSON only.'
   );
 }
 
@@ -821,7 +936,7 @@ async function callPantryGeminiTwoPass(
   imageBase64: string,
   scanLocation: (typeof PANTRY_STORAGE)[number],
   budget: RequestTimeBudget,
-): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
+): Promise<{ items: DetectedPantryItem[]; passes: 1 | 2 } | { error: GeminiAttemptError }> {
   const passOne = await callPantryGeminiPass(
     apiKey,
     model,
@@ -833,20 +948,37 @@ async function callPantryGeminiTwoPass(
   );
   if ('error' in passOne) return passOne;
 
+  const passOneDeduped = dedupeItems(passOne.items);
+
+  if (
+    pantryRowsSeemCompleteForSinglePass(
+      passOneDeduped,
+      PANTRY_VISION_SINGLE_PASS_MIN_ITEMS,
+      PANTRY_VISION_SINGLE_PASS_MIN_AVG_CONFIDENCE,
+    ) ||
+    budget.isExhausted()
+  ) {
+    return { items: passOneDeduped, passes: 1 };
+  }
+
   const passTwo = await callPantryGeminiPass(
     apiKey,
     model,
     mimeType,
     imageBase64,
-    geminiVerifyPrompt(scanLocation, passOne.items.map((i) => i.name)),
+    geminiVerifyPrompt(scanLocation, passOneDeduped.map((i) => i.name)),
     GEMINI_MAX_OUTPUT_TOKENS,
     budget,
   );
   if ('error' in passTwo) {
-    return passOne;
+    return { items: passOneDeduped, passes: 1 };
   }
 
-  return { items: mergeItemPasses(passOne.items, passTwo.items) };
+  if (passTwo.items.length === 0) {
+    return { items: passOneDeduped, passes: 1 };
+  }
+
+  return { items: mergeItemPasses(passOneDeduped, passTwo.items), passes: 2 };
 }
 
 async function callPriceTagGeminiOnce(
@@ -904,7 +1036,7 @@ async function callPantryGeminiOnModel(
   imageBase64: string,
   scanLocation: (typeof PANTRY_STORAGE)[number],
   budget: RequestTimeBudget,
-): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
+): Promise<{ items: DetectedPantryItem[]; passes: 1 | 2 } | { error: GeminiAttemptError }> {
   let httpRetries = 0;
 
   while (true) {
@@ -975,7 +1107,11 @@ async function callPantryGeminiWithFallbacks(
   mimeType: string,
   imageBase64: string,
   scanLocation: (typeof PANTRY_STORAGE)[number],
-): Promise<{ items: DetectedPantryItem[]; model: string }> {
+): Promise<{
+  items: DetectedPantryItem[];
+  model: string;
+  debug: { modelAttempts: GeminiModelAttemptDebug[]; geminiPasses: number };
+}> {
   const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
   const candidates = orderModelsForAttempt(
     Deno.env.get('GEMINI_MODEL') ?? undefined,
@@ -984,10 +1120,16 @@ async function callPantryGeminiWithFallbacks(
   );
 
   const failures: string[] = [];
+  const modelAttempts: GeminiModelAttemptDebug[] = [];
 
   for (const model of candidates) {
     if (budget.isExhausted()) {
       failures.push('request time budget exhausted before next model');
+      modelAttempts.push({
+        model,
+        ok: false,
+        message: 'request time budget exhausted before next model',
+      });
       break;
     }
 
@@ -1000,10 +1142,24 @@ async function callPantryGeminiWithFallbacks(
       budget,
     );
     if ('items' in result) {
-      console.log(`pantry-vision: gemini ok model=${model} items=${result.items.length}`);
-      return { items: result.items, model };
+      modelAttempts.push({ model, ok: true });
+      console.log(
+        `pantry-vision: gemini ok model=${model} items=${result.items.length} passes=${result.passes}`,
+      );
+      return {
+        items: result.items,
+        model,
+        debug: { modelAttempts, geminiPasses: result.passes },
+      };
     }
-    failures.push(formatAttemptError(model, result.error, GEMINI_REQUEST_TIMEOUT_MS));
+    const failureMessage = formatAttemptError(model, result.error, GEMINI_REQUEST_TIMEOUT_MS);
+    failures.push(failureMessage);
+    modelAttempts.push({
+      model,
+      ok: false,
+      status: result.error.kind === 'http' ? result.error.status : undefined,
+      message: failureMessage,
+    });
     console.warn(`pantry-vision: gemini failed ${failures[failures.length - 1]}`);
   }
 
@@ -1139,7 +1295,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { items, model } = await callPantryGeminiWithFallbacks(
+    const { items, model, debug } = await callPantryGeminiWithFallbacks(
       apiKey,
       imageResult.mimeType,
       imageBase64,
@@ -1149,7 +1305,14 @@ Deno.serve(async (req) => {
     setCachedScan(cacheKey, items, model);
 
     return jsonResponse(
-      { items, model, scanLocation: imageResult.scanLocation, cached: false, itemCount: items.length },
+      {
+        items,
+        model,
+        debug,
+        scanLocation: imageResult.scanLocation,
+        cached: false,
+        itemCount: items.length,
+      },
       200,
     );
   } catch (error) {
