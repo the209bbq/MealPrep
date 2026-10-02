@@ -1,4 +1,8 @@
 import {
+  PANTRY_SCAN_PHRASE_SYNONYMS,
+  PANTRY_SCAN_STRIP_BRANDS,
+} from '../../config/pantryScanNormalize';
+import {
   FUZZY_MATCH_THRESHOLD,
   INGREDIENT_CATEGORY_GROUPS,
   INGREDIENT_CUT_OR_FORM_MODIFIERS,
@@ -16,20 +20,63 @@ const STRIP_TOKENS = new Set<string>(INGREDIENT_STRIP_TOKENS);
 
 const QUANTITY_PATTERNS: RegExp[] = [
   /\b\d+(\.\d+)?\s*(%|percent)\b/gi,
+  /\b\d+(\.\d+)?%/gi,
   /\b\d+(\.\d+)?\s*(oz|lb|lbs|g|kg|ml|l|ct|count|pk|pack|gal|gallon)\b/gi,
   /\b\d+(\.\d+)?\s*[-/]\s*\d+(\.\d+)?\b/g,
   /\b\d+(\.\d+)?\b/g,
 ];
 
+const PANTRY_BRANDS_SORTED = [...PANTRY_SCAN_STRIP_BRANDS].sort((a, b) => b.length - a.length);
+const PANTRY_PHRASE_KEYS_SORTED = Object.keys(PANTRY_SCAN_PHRASE_SYNONYMS).sort(
+  (a, b) => b.length - a.length,
+);
+
+function stripPantryScanBrands(text: string): string {
+  let out = text;
+  for (const brand of PANTRY_BRANDS_SORTED) {
+    const pattern = new RegExp(`\\b${brand.replace(/\s+/g, '\\s+')}\\b`, 'gi');
+    out = out.replace(pattern, ' ');
+  }
+  return out;
+}
+
+function applyPantryScanPhraseSynonyms(text: string): string {
+  let out = text;
+  for (const key of PANTRY_PHRASE_KEYS_SORTED) {
+    const replacement = PANTRY_SCAN_PHRASE_SYNONYMS[key] ?? key;
+    const pattern = new RegExp(`\\b${key.replace(/\s+/g, '\\s+')}\\b`, 'gi');
+    if (!pattern.test(out)) continue;
+    if (
+      replacement.toLowerCase().startsWith(key.toLowerCase()) &&
+      new RegExp(`\\b${replacement.replace(/\s+/g, '\\s+')}\\b`, 'i').test(out)
+    ) {
+      continue;
+    }
+    out = out.replace(pattern, replacement);
+  }
+  return out;
+}
+
 export function normalizeIngredientName(value: string): string {
   let text = value
+    .normalize('NFC')
     .toLowerCase()
     .replace(/\[demo sample\]/gi, '')
-    .replace(/[^a-z0-9\s%./-]/g, ' ');
+    .replace(/&/g, ' and ')
+    .replace(/(\p{L})['’]s\b/giu, '$1 ')
+    .replace(/['’]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  text = stripPantryScanBrands(text);
+  text = text.replace(/[^ \p{L}\p{N}%./-]/gu, ' ');
 
   for (const pattern of QUANTITY_PATTERNS) {
     text = text.replace(pattern, ' ');
   }
+
+  text = applyPantryScanPhraseSynonyms(text);
+  text = text.replace(/(?:^|\s)s(?=\s|$)/g, ' ');
 
   return text.replace(/\s+/g, ' ').trim();
 }
@@ -38,6 +85,9 @@ function singularizeToken(token: string): string {
   if (token.length <= 3) return token;
   if (token.endsWith('ies') && token.length > 4) {
     return `${token.slice(0, -3)}y`;
+  }
+  if (token.endsWith('oes') && token.length > 4) {
+    return token.slice(0, -2);
   }
   if (token.endsWith('es') && token.length > 4) {
     const stem = token.slice(0, -2);

@@ -36,6 +36,12 @@ const deduped = dedupeDetections(first);
 assert(deduped.some((r) => r.name.toLowerCase().includes('tomato')), 'merged tomato soup rows');
 assert(deduped.length < first.length, 'dedupe should collapse duplicates');
 
+const mergedDup = mergeDetectionPasses(
+  [{ name: 'Tomato Soup', quantity: 2, unit: 'can', category: 'dry_goods', confidence: 0.9 }],
+  [{ name: 'Tomato Soup', quantity: 2, unit: 'can', category: 'dry_goods', confidence: 0.88 }],
+);
+assert(mergedDup.length === 1 && mergedDup[0].quantity === 2, 'merge pass must not sum duplicate quantities');
+
 const passB = parsePantryVisionPayload({
   items: [
     {

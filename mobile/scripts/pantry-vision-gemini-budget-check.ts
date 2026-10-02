@@ -16,27 +16,27 @@ import {
 
 function testBuildCandidates() {
   const list = buildGeminiModelCandidates('gemini-3.6-flash', 'gemini-3.5-flash,gemini-3.6-flash');
-  assert.deepEqual(list.slice(0, 3), ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.8-flash']);
+  assert.deepEqual(list.slice(0, 3), ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash']);
 }
 
 function testDeprioritizeTimedOutModels() {
   const now = 1_000_000;
   const map = new Map<string, number>([['gemini-3.6-flash', now - 60_000]]);
   const ordered = deprioritizeRecentlyTimedOutModels(
-    ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.8-flash'],
+    ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash'],
     map,
     now,
   );
-  assert.deepEqual(ordered, ['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.6-flash']);
+  assert.deepEqual(ordered, ['gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.6-flash']);
 }
 
 function testOrderModelsForAttempt() {
   const memory = new ModelTimeoutMemory();
   memory.record('gemini-3.6-flash', Date.now() - 30_000);
-  const ordered = orderModelsForAttempt('gemini-3.6-flash', undefined, memory);
+  const ordered = orderModelsForAttempt('gemini-3.8-flash', undefined, memory);
   assert.equal(ordered[0], 'gemini-3.8-flash');
   assert.ok(ordered.includes('gemini-3.6-flash'));
-  assert.ok(ordered.indexOf('gemini-3.6-flash') > ordered.indexOf('gemini-3.5-flash'));
+  assert.ok(ordered.indexOf('gemini-3.6-flash') > ordered.indexOf('gemini-3.7-flash'));
 }
 
 function testShouldNotRetryOnTimeout() {
