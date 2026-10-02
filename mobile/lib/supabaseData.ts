@@ -157,6 +157,7 @@ export function mapProfile(row: ProfileRow): UserProfile {
     preferences: {
       autoAddMissingToGrocery:
         row.auto_add_missing_to_grocery ?? USER_PREFERENCE_DEFAULTS.autoAddMissingToGrocery,
+      addCheckedItemsToPantry: USER_PREFERENCE_DEFAULTS.addCheckedItemsToPantry,
     },
   };
 }

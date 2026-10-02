@@ -62,7 +62,13 @@ import {
 } from '../lib/recipeMatch';
 import { scoreDiscoveryRecipeAgainstPantry } from '../lib/recipeDiscovery/scorePantry';
 import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
-import { fuzzyNameScore, ingredientMatchScore } from '../lib/recipeMatch/ingredientNormalize';
+import {
+  groceryItemsToPantryItems,
+  mergePantryStock,
+} from '../lib/pantry/mergePantryStock';
+import { syncPantryToSnapshot } from '../lib/pantry/syncPantrySnapshot';
+import { PANTRY_RESTOCK_COPY } from '../config/pantryRestock';
+import { PANTRY_SCAN_UI_COPY, writeLastPantryScanLocation } from '../config/pantryScan';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import { runScanPhotoRetentionCleanupIfDue } from '../lib/scanPhotos/cleanup';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
@@ -309,7 +315,11 @@ interface AppContextValue {
   clearAllPantry: () => Promise<void>;
   previewPantryResort: () => PantryResortPreview;
   resortPantryItemsInDefaultLocation: () => Promise<PantryResortPreview>;
-  savePantryScanReview: (items: PantryScanReviewItem[], scanPhotoPath?: string | null) => Promise<void>;
+  savePantryScanReview: (
+    items: PantryScanReviewItem[],
+    scanPhotoPath?: string | null,
+    scanLocation?: PantryStorageLocation,
+  ) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
   pantryRecipeMatches: PantryMatchIndex;
@@ -364,7 +374,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    setUserPreferences(readJson(STORAGE_KEYS.userPreferences, USER_PREFERENCE_DEFAULTS));
+    setUserPreferences({
+      ...USER_PREFERENCE_DEFAULTS,
+      ...readJson(STORAGE_KEYS.userPreferences, USER_PREFERENCE_DEFAULTS),
+    });
     setServingOverrides(readJson(STORAGE_KEYS.servingOverrides, {}));
     if (!demoMode) return;
     setRole(readJson(STORAGE_KEYS.role, 'admin'));
@@ -415,7 +428,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const bundle = await fetchLiveBundle(supabase, userId);
     if (bundle.profile) {
       setLiveProfile(bundle.profile);
-      setUserPreferences(bundle.profile.preferences);
+      setUserPreferences((prev) => ({
+        ...prev,
+        autoAddMissingToGrocery: bundle.profile!.preferences.autoAddMissingToGrocery,
+      }));
       hydrateLocationFromProfile(bundle.profile);
     }
 
@@ -697,8 +713,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, featureFlags]);
 
   useEffect(() => {
-    if (demoMode) writeJson(STORAGE_KEYS.userPreferences, userPreferences);
-  }, [demoMode, userPreferences]);
+    if (demoMode || isGuest || userId) {
+      writeJson(STORAGE_KEYS.userPreferences, userPreferences);
+    }
+  }, [demoMode, isGuest, userId, userPreferences]);
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.mealPlan, mealPlan);
@@ -1306,8 +1324,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setServingOverrides((prev) => ({ ...prev, [recipeId]: servings }));
   }, []);
 
+  const restockGroceriesToPantry = useCallback(
+    async (items: GroceryListItem[]) => {
+      if (!userPreferences.addCheckedItemsToPantry || items.length === 0) return;
+
+      const incoming = groceryItemsToPantryItems(items);
+      const pantrySnapshot = pantry.map((row) => ({ ...row }));
+      const { pantry: nextPantry, inserted, updated } = mergePantryStock(pantry, incoming);
+
+      setPantry(nextPantry);
+
+      if (!demoMode && !isGuest && supabase && userId) {
+        try {
+          for (const row of updated) {
+            await updatePantryItem(supabase, userId, row);
+          }
+          if (inserted.length > 0) {
+            const saved = await insertPantryItems(supabase, userId, inserted);
+            setPantry((prev) => {
+              const insertIds = new Set(inserted.map((row) => row.id));
+              const without = prev.filter((row) => !insertIds.has(row.id));
+              return [...saved, ...without];
+            });
+          }
+        } catch (error: unknown) {
+          setAuthError(error instanceof Error ? error.message : 'Failed to update pantry');
+          setPantry(pantrySnapshot);
+          return;
+        }
+      }
+
+      const toastMessage = PANTRY_RESTOCK_COPY.addedToPantry(items.length);
+      setUndoToast({
+        message: toastMessage,
+        onUndo: () => {
+          setPantry(pantrySnapshot);
+          setUndoToast(null);
+          if (!demoMode && !isGuest && supabase && userId) {
+            void syncPantryToSnapshot(supabase, userId, nextPantry, pantrySnapshot).catch((error: unknown) => {
+              setAuthError(error instanceof Error ? error.message : 'Failed to undo pantry update');
+            });
+          }
+        },
+      });
+    },
+    [demoMode, isGuest, pantry, supabase, userId, userPreferences.addCheckedItemsToPantry],
+  );
+
   const toggleGroceryItem = useCallback(
     (id: string) => {
+      const current = grocery.find((item) => item.id === id);
+      const willCheck = Boolean(current && !current.checked);
+
       setGrocery((prev) => {
         const next = prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item));
         if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
@@ -1322,8 +1390,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         return next;
       });
+
+      if (willCheck && current) {
+        void restockGroceriesToPantry([current]);
+      }
     },
-    [demoMode, isGuest, supabase, userId],
+    [demoMode, grocery, isGuest, restockGroceriesToPantry, supabase, userId],
   );
 
   const addManualGroceryItem = useCallback(
@@ -1350,29 +1422,80 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const clearCheckedGroceryItems = useCallback(() => {
-    setGrocery((prev) => {
-      const removed = prev.filter((item) => item.checked);
-      if (removed.length === 0) return prev;
+    const removed = grocery.filter((item) => item.checked);
+    if (removed.length === 0) return;
 
-      const dismissalKeys = removed.flatMap((item) => groceryDismissalKeysForItem(item));
-      addGroceryDismissals(ownerId, dismissalKeys);
+    const dismissalKeys = removed.flatMap((item) => groceryDismissalKeysForItem(item));
+    addGroceryDismissals(ownerId, dismissalKeys);
 
-      const previous = prev;
-      const next = prev.filter((item) => !item.checked);
-      persistGroceryList(next);
+    const previousGrocery = grocery;
+    const nextGrocery = grocery.filter((item) => !item.checked);
+    persistGroceryList(nextGrocery);
+    setGrocery(nextGrocery);
 
-      setUndoToast({
-        message: GROCERY_COPY.undoCleared(removed.length),
-        onUndo: () => {
-          setGrocery(previous);
-          persistGroceryList(previous);
-          setUndoToast(null);
-        },
-      });
+    const restockEnabled = userPreferences.addCheckedItemsToPantry;
+    const pantrySnapshot = pantry.map((row) => ({ ...row }));
+    let nextPantry = pantry;
 
-      return next;
+    if (restockEnabled) {
+      const incoming = groceryItemsToPantryItems(removed);
+      const merged = mergePantryStock(pantry, incoming);
+      nextPantry = merged.pantry;
+      setPantry(nextPantry);
+
+      if (!demoMode && !isGuest && supabase && userId) {
+        void (async () => {
+          try {
+            for (const row of merged.updated) {
+              await updatePantryItem(supabase, userId, row);
+            }
+            if (merged.inserted.length > 0) {
+              const saved = await insertPantryItems(supabase, userId, merged.inserted);
+              setPantry((prev) => {
+                const insertIds = new Set(merged.inserted.map((row) => row.id));
+                const without = prev.filter((row) => !insertIds.has(row.id));
+                return [...saved, ...without];
+              });
+            }
+          } catch (error: unknown) {
+            setAuthError(error instanceof Error ? error.message : 'Failed to update pantry');
+            setPantry(pantrySnapshot);
+            setGrocery(previousGrocery);
+            persistGroceryList(previousGrocery);
+          }
+        })();
+      }
+    }
+
+    setUndoToast({
+      message: restockEnabled
+        ? PANTRY_RESTOCK_COPY.addedToPantry(removed.length)
+        : GROCERY_COPY.undoCleared(removed.length),
+      onUndo: () => {
+        setGrocery(previousGrocery);
+        persistGroceryList(previousGrocery);
+        if (restockEnabled) {
+          setPantry(pantrySnapshot);
+          if (!demoMode && !isGuest && supabase && userId) {
+            void syncPantryToSnapshot(supabase, userId, nextPantry, pantrySnapshot).catch((error: unknown) => {
+              setAuthError(error instanceof Error ? error.message : 'Failed to undo pantry update');
+            });
+          }
+        }
+        setUndoToast(null);
+      },
     });
-  }, [ownerId, persistGroceryList]);
+  }, [
+    demoMode,
+    grocery,
+    isGuest,
+    ownerId,
+    pantry,
+    persistGroceryList,
+    supabase,
+    userId,
+    userPreferences.addCheckedItemsToPantry,
+  ]);
 
   const removeGroceryItem = useCallback(
     (id: string) => {
@@ -1720,76 +1843,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, isGuest, pantry.length, supabase, userId]);
 
   const savePantryScanReview = useCallback(
-    async (items: PantryScanReviewItem[], scanPhotoPath?: string | null) => {
+    async (
+      items: PantryScanReviewItem[],
+      scanPhotoPath?: string | null,
+      scanLocation?: PantryStorageLocation,
+    ) => {
       const toSave = reviewItemsToPantryItems(items, scanPhotoPath);
       if (toSave.length === 0) return;
 
-      const findExisting = (candidate: PantryItem): PantryItem | undefined =>
-        pantry.find(
-          (row) =>
-            row.ingredientId === candidate.ingredientId ||
-            ingredientMatchScore(candidate.name, row.name) >= 1 ||
-            fuzzyNameScore(candidate.name, row.name) >= 0.92,
-        );
-
-      if (demoMode || isGuest) {
-        setPantry((prev) => {
-          const next = [...prev];
-          for (const item of toSave) {
-            const existing = next.find(
-              (row) =>
-                row.ingredientId === item.ingredientId ||
-                ingredientMatchScore(item.name, row.name) >= 1 ||
-                fuzzyNameScore(item.name, row.name) >= 0.92,
-            );
-            if (!existing) {
-              next.unshift(item);
-              continue;
-            }
-            const sameUnit = existing.unit.toLowerCase() === item.unit.toLowerCase();
-            existing.quantity = sameUnit
-              ? existing.quantity + item.quantity
-              : Math.max(existing.quantity, item.quantity);
-            existing.updatedAt = item.updatedAt;
-          }
-          return next;
-        });
-        notifyTutorialStepCompleteRef.current('scan');
-        return;
-      }
-      if (!supabase || !userId) {
-        throw new Error('Sign in to save pantry items.');
+      if (scanLocation) {
+        writeLastPantryScanLocation(scanLocation);
       }
 
-      const inserts: PantryItem[] = [];
-      const updatedRows: PantryItem[] = [];
-      for (const item of toSave) {
-        const existing = findExisting(item);
-        if (!existing) {
-          inserts.push(item);
-          continue;
+      const pantrySnapshot = pantry.map((row) => ({ ...row }));
+      const { pantry: nextPantry, inserted, updated } = mergePantryStock(pantry, toSave);
+
+      setPantry(nextPantry);
+
+      if (!demoMode && !isGuest) {
+        if (!supabase || !userId) {
+          throw new Error('Sign in to save pantry items.');
         }
-        const sameUnit = existing.unit.toLowerCase() === item.unit.toLowerCase();
-        updatedRows.push({
-          ...existing,
-          quantity: sameUnit ? existing.quantity + item.quantity : Math.max(existing.quantity, item.quantity),
-          scanPhotoPath: item.scanPhotoPath ?? existing.scanPhotoPath,
-          updatedAt: item.updatedAt,
-        });
+        for (const row of updated) {
+          await updatePantryItem(supabase, userId, row);
+        }
+        if (inserted.length > 0) {
+          const savedInserts = await insertPantryItems(supabase, userId, inserted);
+          setPantry((prev) => {
+            const insertIds = new Set(inserted.map((row) => row.id));
+            const without = prev.filter((row) => !insertIds.has(row.id));
+            return [...savedInserts, ...without];
+          });
+        }
       }
 
-      const savedUpdates: PantryItem[] = [];
-      for (const row of updatedRows) {
-        savedUpdates.push(await updatePantryItem(supabase, userId, row));
-      }
-      const savedInserts = inserts.length > 0 ? await insertPantryItems(supabase, userId, inserts) : [];
-      const saved = [...savedInserts, ...savedUpdates];
-      setPantry((prev) => {
-        const ids = new Set(saved.map((s) => s.id));
-        const without = prev.filter((p) => !ids.has(p.id));
-        return [...saved, ...without];
-      });
       notifyTutorialStepCompleteRef.current('scan');
+
+      setUndoToast({
+        message: PANTRY_SCAN_UI_COPY.addedToPantry(toSave.length),
+        onUndo: () => {
+          setPantry(pantrySnapshot);
+          setUndoToast(null);
+          if (!demoMode && !isGuest && supabase && userId) {
+            void syncPantryToSnapshot(supabase, userId, nextPantry, pantrySnapshot).catch((error: unknown) => {
+              setAuthError(error instanceof Error ? error.message : 'Failed to undo pantry update');
+            });
+          }
+        },
+      });
     },
     [demoMode, isGuest, pantry, supabase, userId],
   );

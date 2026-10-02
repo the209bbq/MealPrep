@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { CATEGORY_LABELS, PHOTO_SCAN } from '../config/appConfig';
+import { PANTRY_SCAN_UI_COPY } from '../config/pantryScan';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   PANTRY_SCAN_TIP,
@@ -25,6 +26,7 @@ interface PantryScanReviewProps {
   modelLabel?: string;
   saveError?: string | null;
   defaultBatchLocation?: PantryStorageLocation;
+  onBatchLocationChange?: (location: PantryStorageLocation) => void;
   /** When true, omits bottom action row (parent renders sticky footer). */
   stickyFooter?: boolean;
 }
@@ -40,6 +42,7 @@ export function PantryScanReview({
   modelLabel,
   saveError,
   defaultBatchLocation = DEFAULT_PANTRY_STORAGE_LOCATION,
+  onBatchLocationChange,
   stickyFooter = false,
 }: PantryScanReviewProps) {
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
@@ -56,6 +59,7 @@ export function PantryScanReview({
 
   function setBatchLocationForAll(location: PantryStorageLocation) {
     setBatchLocation(location);
+    onBatchLocationChange?.(location);
     onChange(applyBatchStorageLocation(items, location));
   }
 
@@ -89,7 +93,7 @@ export function PantryScanReview({
         className={`flex-1 rounded-xl px-3 py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-primary'}`}
       >
         <Text className="text-center text-sm font-bold text-on-primary">
-          {saving ? 'Saving…' : `Save ${enabledCount} item${enabledCount === 1 ? '' : 's'}`}
+          {saving ? 'Saving…' : PANTRY_SCAN_UI_COPY.addItems(enabledCount)}
         </Text>
       </Pressable>
     </View>
@@ -260,7 +264,7 @@ export function PantryScanReviewStickyFooter(props: {
           className={`flex-[2] rounded-xl py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-primary'}`}
         >
           <Text className="text-center text-sm font-bold text-on-primary">
-            {saving ? 'Saving…' : `Save ${enabledCount} item${enabledCount === 1 ? '' : 's'}`}
+            {saving ? 'Saving…' : PANTRY_SCAN_UI_COPY.addItems(enabledCount)}
           </Text>
         </Pressable>
       </View>

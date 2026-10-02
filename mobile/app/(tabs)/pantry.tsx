@@ -30,6 +30,9 @@ import {
 import { CATEGORY_LABELS, isPantryVisionConfigured, PHOTO_SCAN, THEME } from '../../config/appConfig';
 import { GUEST_MODE_COPY } from '../../config/guestMode';
 import {
+  readLastPantryScanLocation,
+} from '../../config/pantryScan';
+import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   isPantryStorageLocation,
   labelForPantryStorageLocation,
@@ -146,7 +149,7 @@ export default function PantryScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [scanLocationHint, setScanLocationHint] = useState<PantryStorageLocation>(
-    DEFAULT_PANTRY_STORAGE_LOCATION,
+    readLastPantryScanLocation(),
   );
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
@@ -404,7 +407,8 @@ export default function PantryScreen() {
     setScanFailure(message, PHOTO_SCAN.scanFailedTitle, null);
   }
 
-  async function handleNativeScan(scanLocation: PantryStorageLocation, source: 'camera' | 'library') {
+  async function handleNativeScan(source: 'camera' | 'library') {
+    const scanLocation = readLastPantryScanLocation();
     const { access } = await resolvePhotoScanAccess(photoScanAccess, session);
     if (access !== 'allowed') {
       const copy = photoScanAccessUserMessage(access);
@@ -424,7 +428,7 @@ export default function PantryScreen() {
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
+        allowsEditing: false,
         quality: PHOTO_SCAN.jpegQuality,
       });
       if (result.canceled || !result.assets[0]) return;
@@ -432,7 +436,7 @@ export default function PantryScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
+      allowsEditing: false,
       quality: PHOTO_SCAN.jpegQuality,
     });
     if (result.canceled || !result.assets[0]) return;
@@ -452,7 +456,7 @@ export default function PantryScreen() {
       if (!scanPhotoPath && pantryScanUploadRef.current) {
         scanPhotoPath = await pantryScanUploadRef.current;
       }
-      await savePantryScanReview(reviewItems, scanPhotoPath);
+      await savePantryScanReview(reviewItems, scanPhotoPath, scanLocationHint);
       setPhase('idle');
       setReviewItems([]);
       setPreviewUri(null);
@@ -506,7 +510,7 @@ export default function PantryScreen() {
         return;
       }
       const source = Platform.OS === 'web' ? 'library' : 'camera';
-      void handleNativeScan(DEFAULT_PANTRY_STORAGE_LOCATION, source);
+      void handleNativeScan(source);
     });
   }, [params.tutorialManual, params.tutorialScan]); // eslint-disable-line react-hooks/exhaustive-deps -- tutorial one-shot
 
@@ -686,9 +690,13 @@ export default function PantryScreen() {
                 photoScanGate={photoScanGate}
                 photoScanAccess={photoScanAccess}
                 contextSession={session}
+                scanLocation={scanLocationHint}
                 onPrepareError={handleWebPrepareError}
-                onImagePrepared={(location, prepared) => void runVisionFromPrepared(prepared, location)}
-                onRequestNativeScan={(location, source) => void handleNativeScan(location, source)}
+                onImagePrepared={(location, prepared) => {
+                  setScanLocationHint(location);
+                  void runVisionFromPrepared(prepared, location);
+                }}
+                onRequestNativeScan={(_location, source) => void handleNativeScan(source)}
                 onRequestSignIn={openAuthSheet}
               />
 
@@ -780,6 +788,7 @@ export default function PantryScreen() {
               modelLabel={modelLabel}
               saveError={saveError}
               defaultBatchLocation={scanLocationHint}
+              onBatchLocationChange={setScanLocationHint}
               stickyFooter
             />
           ) : null}
