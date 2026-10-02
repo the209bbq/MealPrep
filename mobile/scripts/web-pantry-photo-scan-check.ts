@@ -84,18 +84,6 @@ async function main() {
     const page = await context.newPage();
     await page.route(`**${basePath}/pwa-register.js`, (route) => route.abort());
 
-    await page.addInitScript(() => {
-      const session = {
-        access_token: 'test-access-token',
-        refresh_token: 'test-refresh',
-        user: { id: 'test-user-id', email: 'test@example.com' },
-      };
-      window.localStorage.setItem(
-        'sb-test-auth-token',
-        JSON.stringify({ currentSession: session, expiresAt: Date.now() + 3600_000 }),
-      );
-    });
-
     await page.route('**/functions/v1/pantry-vision**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -109,9 +97,16 @@ async function main() {
 
     await page.goto(`${origin}${basePath}/pantry`, { waitUntil: 'networkidle', timeout: 90_000 });
 
-    const libraryButton = page.getByLabel(/from photo library/i).first();
-    await libraryButton.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(800);
+    const lookAround = page.getByRole('button', { name: 'Look around first' });
+    if (await lookAround.isVisible().catch(() => false)) {
+      await lookAround.click({ force: true });
+    }
+
+    const scanShelf = page.getByLabel(/Scan shelf with camera or photo library/i);
+    await scanShelf.scrollIntoViewIfNeeded();
+    await scanShelf.click({ force: true });
+    const libraryButton = page.getByText('Choose from library', { exact: true });
+    await libraryButton.waitFor({ timeout: 10_000 });
 
     const fileChooserPromise = page.waitForEvent('filechooser', { timeout: 20_000 });
     await libraryButton.click({ force: true });
@@ -124,7 +119,11 @@ async function main() {
     }
     await fileChooser.setFiles(userPhoto);
 
-    await page.getByText('Analyzing photo', { exact: false }).waitFor({ timeout: 30_000 });
+    await page
+      .getByText('Review scan', { exact: false })
+      .or(page.getByText('Analyzing photo', { exact: false }))
+      .first()
+      .waitFor({ timeout: 60_000 });
 
     const readPhotoTitle = page.getByText("Couldn't read that photo", { exact: false });
     const sawPrepareFailure = await readPhotoTitle.isVisible().catch(() => false);
