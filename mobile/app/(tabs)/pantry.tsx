@@ -30,7 +30,6 @@ import {
 import { CATEGORY_LABELS, isPantryVisionConfigured, PHOTO_SCAN, THEME } from '../../config/appConfig';
 import { APP_ROUTES } from '../../config/appRoutes';
 import { GUEST_MODE_COPY } from '../../config/guestMode';
-import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   isPantryStorageLocation,
@@ -655,8 +654,6 @@ export default function PantryScreen() {
             </Pressable>
           ) : null}
         </View>
-
-        <GuestSaveNudge />
 
         {scanRecipeCount != null && scanRecipeCount > 0 ? (
           <View className="mt-4 rounded-2xl border border-primary bg-primary-light px-4 py-4">

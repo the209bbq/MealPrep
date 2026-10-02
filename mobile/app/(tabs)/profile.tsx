@@ -4,6 +4,11 @@ import { BrandLogo } from '../../components/BrandLogo';
 import { Card } from '../../components/Card';
 import { TourReplayCard } from '../../components/onboarding/TourReplayCard';
 import { APP_BRAND } from '../../config/appBrand';
+import {
+  AUTH_MAGIC_LINK_COPY,
+  getAuthCardBlurb,
+  isMagicLinkSignInEnabled,
+} from '../../config/authConfig';
 import { ROLE_LABELS, THEME } from '../../config/appConfig';
 import { PLAN_LABELS } from '../../config/plans';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
@@ -45,7 +50,7 @@ export default function ProfileScreen() {
           authError={authError}
           onSignIn={signInWithPassword}
           onSignUp={signUpWithPassword}
-          onMagicLink={signInWithMagicLink}
+          onMagicLink={isMagicLinkSignInEnabled() ? signInWithMagicLink : undefined}
         />
         <TourReplayCard onReplay={onboarding.requestTourReplay} />
       </ScrollView>
@@ -122,7 +127,7 @@ function AuthPanel({
   authError: string | null;
   onSignIn: (email: string, password: string) => Promise<void>;
   onSignUp: (email: string, password: string, name: string) => Promise<void>;
-  onMagicLink: (email: string) => Promise<void>;
+  onMagicLink?: (email: string) => Promise<void>;
 }) {
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [email, setEmail] = useState('');
@@ -145,7 +150,7 @@ function AuthPanel({
   return (
     <Card className="mt-4" title="Sign in" subtitle={APP_BRAND.copy.authCardSubtitle}>
       <BrandLogo variant="auth" />
-      <Text className="mt-2 text-sm text-muted">{APP_BRAND.copy.authCardBlurb}</Text>
+      <Text className="mt-2 text-sm text-muted">{getAuthCardBlurb()}</Text>
       <View className="mt-4 flex-row gap-2">
         {(['sign-in', 'sign-up'] as const).map((tab) => (
           <Pressable
@@ -198,13 +203,20 @@ function AuthPanel({
       >
         <Text className="text-center font-bold text-on-emerald">{mode === 'sign-in' ? 'Sign in' : 'Create account'}</Text>
       </Pressable>
-      <Pressable
-        disabled={busy || !email.trim()}
-        onPress={() => void run(() => onMagicLink(email.trim()), 'Magic link sent — check your email.')}
-        className="mt-3 rounded-xl border border-border bg-card px-4 py-3"
-      >
-        <Text className="text-center font-bold text-slate">Email magic link</Text>
-      </Pressable>
+      {onMagicLink ? (
+        <Pressable
+          disabled={busy || !email.trim()}
+          onPress={() =>
+            void run(
+              () => onMagicLink(email.trim()),
+              AUTH_MAGIC_LINK_COPY.successMessage,
+            )
+          }
+          className="mt-3 rounded-xl border border-border bg-card px-4 py-3"
+        >
+          <Text className="text-center font-bold text-slate">{AUTH_MAGIC_LINK_COPY.buttonLabel}</Text>
+        </Pressable>
+      ) : null}
       {authError ? <Text className="mt-3 text-sm text-danger">{authError}</Text> : null}
       {status ? <Text className="mt-2 text-sm text-emerald-dark">{status}</Text> : null}
     </Card>

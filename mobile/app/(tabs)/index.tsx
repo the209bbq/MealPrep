@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { CookFromPantryCard } from '../../components/RecipePantryMatch';
+import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { MealMadeReviewSheet } from '../../components/MealMadeReviewSheet';
 import { MealWeekCalendarCard } from '../../components/mealCalendar/MealWeekCalendarCard';
@@ -88,6 +89,7 @@ export default function HomeScreen() {
     <View className="flex-1">
       <ScrollView className="flex-1 bg-paper px-4 pb-8" contentContainerStyle={{ paddingBottom: 24 }}>
         <InstallAppBanner />
+        <GuestSaveNudge />
 
         <View className="mt-4 flex-row gap-3">
           {[
