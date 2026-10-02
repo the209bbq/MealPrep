@@ -1,29 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   clearRecipesTabFilters,
-  parseStoredRecipesTabFilters,
+  DEFAULT_RECIPES_TAB_FILTER_STATE,
+  parseStoredRecipesTabFilterState,
   RECIPES_TAB_FILTERS_STORAGE_KEY,
-  type RecipesTabFilterId,
-  toggleRecipesTabFilter,
+  type RecipesTabFilterDimension,
+  type RecipesTabFilterState,
 } from '../config/recipesTabFilters';
 import { readJson, writeJson } from '../lib/storage';
 
 export function useRecipesTabFilters() {
-  const [activeFilterIds, setActiveFilterIds] = useState<RecipesTabFilterId[]>(() =>
-    parseStoredRecipesTabFilters(readJson<unknown>(RECIPES_TAB_FILTERS_STORAGE_KEY, [])),
+  const [filters, setFilters] = useState<RecipesTabFilterState>(() =>
+    parseStoredRecipesTabFilterState(readJson<unknown>(RECIPES_TAB_FILTERS_STORAGE_KEY, null)),
   );
 
   useEffect(() => {
-    writeJson(RECIPES_TAB_FILTERS_STORAGE_KEY, activeFilterIds);
-  }, [activeFilterIds]);
+    writeJson(RECIPES_TAB_FILTERS_STORAGE_KEY, filters);
+  }, [filters]);
 
-  const toggleFilter = useCallback((filterId: RecipesTabFilterId) => {
-    setActiveFilterIds((prev) => toggleRecipesTabFilter(prev, filterId));
-  }, []);
+  const setFilter = useCallback(
+    <K extends RecipesTabFilterDimension>(dimension: K, value: RecipesTabFilterState[K]) => {
+      setFilters((prev) => ({ ...prev, [dimension]: value }));
+    },
+    [],
+  );
 
   const clearAllFilters = useCallback(() => {
-    setActiveFilterIds(clearRecipesTabFilters());
+    setFilters(clearRecipesTabFilters());
   }, []);
 
-  return { activeFilterIds, toggleFilter, clearAllFilters };
+  const resetFilters = useCallback(() => {
+    setFilters({ ...DEFAULT_RECIPES_TAB_FILTER_STATE });
+  }, []);
+
+  return { filters, setFilter, clearAllFilters, resetFilters };
 }

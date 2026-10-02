@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { FEATURE_FLAG_DEFAULTS } from '../config/appConfig';
 import { GROCERY_COPY } from '../config/grocery';
 import { RECIPES_COPY } from '../config/recipesCopy';
+import { RECIPES_TAB_FILTER_COPY } from '../config/recipesTabFilters';
 import { SMART_SHOP_COPY } from '../config/smartShop';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -117,6 +118,18 @@ async function addPantryItems(page: Page): Promise<void> {
   }
 }
 
+async function exerciseRecipesQuestionFilter(page: Page): Promise<void> {
+  await page.getByRole('tab', { name: 'Recipes' }).click();
+  await page.waitForURL(/\/recipes/, { timeout: 15_000 });
+
+  await page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton).click();
+  await page.getByLabel(`${RECIPES_TAB_FILTER_COPY.questions.time} select`).click();
+  await page.getByText(/30 min or less/).first().click();
+  await page.getByLabel('Close filters').click();
+  await page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton).getByText('30 min').waitFor({ timeout: 5_000 });
+  await page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }).click();
+}
+
 async function addMissingFromRecipes(page: Page): Promise<string> {
   await page.getByRole('tab', { name: 'Recipes' }).click();
   await page.waitForURL(/\/recipes/, { timeout: 15_000 });
@@ -180,6 +193,7 @@ async function smartShopWithMockStores(page: Page): Promise<void> {
 async function runGuestFlow(page: Page): Promise<void> {
   await primeGuestSession(page);
   await addPantryItems(page);
+  await exerciseRecipesQuestionFilter(page);
   await addMissingFromRecipes(page);
   await verifyGroceryList(page);
   await smartShopWithMockStores(page);

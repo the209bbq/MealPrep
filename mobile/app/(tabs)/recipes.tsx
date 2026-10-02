@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { DiscoverRecipesPanel } from '../../components/DiscoverRecipesPanel';
@@ -11,7 +11,13 @@ import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
 import { DEFAULT_MIN_MATCHED_INGREDIENTS } from '../../config/recipeMatching';
 import { RECIPES_COPY } from '../../config/recipesCopy';
-import { applyRecipesTabFilters, type RecipesTabRow, recipesTabFiltersActive } from '../../config/recipesTabFilters';
+import {
+  applyRecipesTabFilters,
+  discoveryRecipeServingOverrideId,
+  recipesTabNarrowingFiltersActive,
+  recipesTabPeopleTargetServings,
+  type RecipesTabRow,
+} from '../../config/recipesTabFilters';
 import { useRecipesTabFilters } from '../../hooks/useRecipesTabFilters';
 import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
 import { useApp } from '../../context/AppContext';
@@ -181,7 +187,7 @@ export default function RecipesScreen() {
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
   const [pickedRecipeId, setPickedRecipeId] = useState<string | null>(null);
-  const { activeFilterIds, toggleFilter, clearAllFilters } = useRecipesTabFilters();
+  const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const minPantryMatchPercent = RECIPES_TAB.defaultMinPercent;
   const pantryEmpty = pantry.length === 0;
   const discoveryEnabled = !pantryEmpty;
@@ -256,18 +262,34 @@ export default function RecipesScreen() {
       RecipesTabRow,
       { kind: 'kitchen' }
     >[];
-    const filtered = applyRecipesTabFilters(rows, activeFilterIds);
+    const filtered = applyRecipesTabFilters(rows, filters);
     return filtered.map((row) => row.recipe);
-  }, [activeFilterIds, filterBaseRows]);
+  }, [filterBaseRows, filters]);
 
   const filteredDiscoverySuggestions = useMemo(() => {
     const rows = filterBaseRows.filter((row) => row.kind === 'discovery') as Extract<
       RecipesTabRow,
       { kind: 'discovery' }
     >[];
-    const filtered = applyRecipesTabFilters(rows, activeFilterIds);
+    const filtered = applyRecipesTabFilters(rows, filters);
     return filtered.map((row) => ({ recipe: row.recipe, match: row.match }));
-  }, [activeFilterIds, filterBaseRows]);
+  }, [filterBaseRows, filters]);
+
+  const peopleTargetServings = recipesTabPeopleTargetServings(filters.people);
+  useEffect(() => {
+    if (peopleTargetServings == null) return;
+    for (const recipe of kitchenRecipes) {
+      setServingOverride(recipe.id, peopleTargetServings);
+    }
+    for (const { recipe } of baseDiscoverySuggestions) {
+      setServingOverride(discoveryRecipeServingOverrideId(recipe.id), peopleTargetServings);
+    }
+  }, [
+    baseDiscoverySuggestions,
+    kitchenRecipes,
+    peopleTargetServings,
+    setServingOverride,
+  ]);
 
   const cookNowRecipes = useMemo(
     () =>
@@ -305,11 +327,10 @@ export default function RecipesScreen() {
   const servings = active ? servingOverrides[active.id] ?? active.servings : 4;
   const scale = active && active.servings > 0 ? servings / active.servings : 1;
 
-  const filtersActive = recipesTabFiltersActive(activeFilterIds);
   const hasUnfilteredResults = baseKitchenRecipes.length > 0 || baseDiscoverySuggestions.length > 0;
   const showFilterEmpty =
     !pantryEmpty &&
-    filtersActive &&
+    recipesTabNarrowingFiltersActive(filters) &&
     hasUnfilteredResults &&
     filteredKitchenRecipes.length === 0 &&
     filteredDiscoverySuggestions.length === 0;
@@ -341,10 +362,9 @@ export default function RecipesScreen() {
         subtitle={RECIPES_COPY.cookNowCard.subtitle}
       >
         <RecipesTabFilterBar
-          pantry={pantry}
           baseRows={filterBaseRows}
-          activeFilterIds={activeFilterIds}
-          onToggleFilter={toggleFilter}
+          filters={filters}
+          onSetFilter={setFilter}
           onClearAll={clearAllFilters}
         />
       </Card>

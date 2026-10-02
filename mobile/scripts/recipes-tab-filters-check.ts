@@ -1,15 +1,21 @@
 import assert from 'node:assert/strict';
-import type { PantryItem, Recipe } from '../types/mealprep';
+import type { Recipe } from '../types/mealprep';
 import {
   applyRecipesTabFilters,
-  countRecipesTabFilterMatches,
-  inferKitchenMealCategory,
+  countRecipesTabFilterOption,
+  DEFAULT_RECIPES_TAB_FILTER_STATE,
+  inferKitchenMealChoice,
+  recipesTabFilterSummary,
+  recipesTabNarrowingFiltersActive,
+  recipesTabPeopleTargetServings,
   type RecipesTabDiscoveryRow,
+  type RecipesTabFilterState,
   type RecipesTabKitchenRow,
   type RecipesTabRow,
 } from '../config/recipesTabFilters';
 import type { RecipePantryMatch } from '../lib/recipeMatch';
 import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
+import { recipesTabKitchenDifficulty } from '../config/recipesTabFilterDifficulty';
 
 function matchStub(
   recipeId: string,
@@ -50,8 +56,8 @@ const baseRecipe: Recipe = {
   protein: 40,
   carbs: 10,
   fat: 8,
-  ingredients: [],
-  steps: [],
+  ingredients: [{ ingredientId: 'a', name: 'chicken', quantity: 1, unit: 'lb' }],
+  steps: ['a', 'b', 'c'],
   isMaster: false,
   createdAt: '',
 };
@@ -59,7 +65,20 @@ const baseRecipe: Recipe = {
 const rows: RecipesTabRow[] = [
   kitchenRow(baseRecipe, matchStub('lemon-chicken', { missingCount: 0, matchedCount: 3 })),
   kitchenRow(
-    { ...baseRecipe, id: 'fast-bowl', name: 'Pulled Pork Bowl', minutes: 25, description: 'Lunch bowl' },
+    {
+      ...baseRecipe,
+      id: 'fast-bowl',
+      name: 'Pulled Pork Bowl',
+      minutes: 25,
+      description: 'Lunch bowl',
+      ingredients: Array.from({ length: 12 }, (_, i) => ({
+        ingredientId: `i-${i}`,
+        name: `ing ${i}`,
+        quantity: 1,
+        unit: 'cup',
+      })),
+      steps: Array.from({ length: 9 }, () => 'step'),
+    },
     matchStub('fast-bowl', { missingCount: 2, matchedCount: 1 }),
   ),
   discoveryRow(
@@ -76,28 +95,46 @@ const rows: RecipesTabRow[] = [
       cook_time: 15,
       calories_per_serving: 300,
       protein: 8,
-      instructions: [],
-      ingredients: [],
+      instructions: ['mix', 'cook'],
+      ingredients: [{ id: 1, name: 'flour', category: 'dry', quantity: 1, unit: 'cup', optional: false }],
     },
     matchStub('recipeapi-101', { missingCount: 1, matchedCount: 2 }),
   ),
 ];
 
-assert.equal(applyRecipesTabFilters(rows, ['can_make_now']).length, 1);
-assert.equal(applyRecipesTabFilters(rows, ['missing_1_2']).length, 2);
-assert.equal(applyRecipesTabFilters(rows, ['under_30']).length, 2);
-assert.equal(applyRecipesTabFilters(rows, ['meal:breakfast']).length, 1);
-assert.equal(applyRecipesTabFilters(rows, ['meal:lunch']).length, 1);
-assert.equal(applyRecipesTabFilters(rows, ['can_make_now', 'under_30']).length, 0);
-assert.equal(applyRecipesTabFilters(rows, ['can_make_now', 'missing_1_2']).length, 0);
+const state30Lunch: RecipesTabFilterState = {
+  ...DEFAULT_RECIPES_TAB_FILTER_STATE,
+  time: '30',
+  meal: 'lunch',
+};
 
-const combined = applyRecipesTabFilters(rows, ['missing_1_2', 'meal:breakfast']);
-assert.equal(combined.length, 1);
-assert.equal(combined[0]?.kind, 'discovery');
+assert.equal(applyRecipesTabFilters(rows, state30Lunch).length, 1);
+assert.equal(applyRecipesTabFilters(rows, { ...DEFAULT_RECIPES_TAB_FILTER_STATE, shop: 'pantry_only' }).length, 1);
+assert.equal(
+  applyRecipesTabFilters(rows, { ...DEFAULT_RECIPES_TAB_FILTER_STATE, shop: 'grab_1_2' }).length,
+  2,
+);
+assert.equal(
+  applyRecipesTabFilters(rows, { ...DEFAULT_RECIPES_TAB_FILTER_STATE, time: '30', shop: 'pantry_only' }).length,
+  0,
+);
 
-assert.equal(countRecipesTabFilterMatches(rows, 'can_make_now', []), 1);
-assert.equal(countRecipesTabFilterMatches(rows, 'can_make_now', ['missing_1_2']), 0);
+assert.equal(recipesTabKitchenDifficulty(baseRecipe), 'easy');
+assert.equal(recipesTabKitchenDifficulty(rows[1]!.kind === 'kitchen' ? rows[1]!.recipe : baseRecipe), 'hard');
 
-assert.equal(inferKitchenMealCategory({ ...baseRecipe, name: 'Sunday Pancakes', description: '' }), 'breakfast');
+assert.equal(
+  applyRecipesTabFilters(rows, { ...DEFAULT_RECIPES_TAB_FILTER_STATE, difficulty: 'hard' }).length,
+  1,
+);
+
+assert.equal(countRecipesTabFilterOption(rows, DEFAULT_RECIPES_TAB_FILTER_STATE, 'time', '30'), 2);
+assert.equal(recipesTabPeopleTargetServings('three_four'), 4);
+assert.equal(
+  recipesTabFilterSummary({ ...DEFAULT_RECIPES_TAB_FILTER_STATE, time: '30', difficulty: 'easy' }),
+  '30 min · Easy',
+);
+assert.equal(recipesTabNarrowingFiltersActive({ ...DEFAULT_RECIPES_TAB_FILTER_STATE, people: 'two' }), false);
+
+assert.equal(inferKitchenMealChoice({ ...baseRecipe, name: 'Sunday Pancakes', description: '' }), 'breakfast');
 
 console.log('recipes-tab-filters-check: ok');
