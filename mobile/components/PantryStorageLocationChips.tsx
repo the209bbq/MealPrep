@@ -62,7 +62,7 @@ export function PantryStorageLocationFilterChips({
   onSelect,
   counts,
 }: PantryStorageLocationFilterChipsProps) {
-  const items: Array<{ key: PantryStorageLocation | 'all'; label: string; count: number }> = [
+  const items: { key: PantryStorageLocation | 'all'; label: string; count: number }[] = [
     { key: 'all', label: PANTRY_LIST_COPY.allLocationsChipLabel, count: counts.all },
     ...pantryStorageLocationOptions().map((o) => ({
       key: o.id,

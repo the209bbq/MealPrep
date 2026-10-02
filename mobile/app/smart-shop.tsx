@@ -36,7 +36,7 @@ export default function SmartShopScreen() {
   const handlePriceSaved = useCallback(() => {
     void shop.community.refresh();
     void shop.refreshComparison();
-  }, [shop.community.refresh, shop.refreshComparison]);
+  }, [shop]);
 
   useEffect(() => {
     if (shop.dealsResult) {

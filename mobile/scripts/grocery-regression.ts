@@ -175,6 +175,28 @@ const afterClearSim = buildGroceryList(
 );
 assert(!afterClearSim.some((g) => g.name === 'Limes'), 'cleared checked recipe item stays off after dismissals');
 
+const tomatoPantry: PantryItem[] = [
+  {
+    id: 'tomato-1',
+    ingredientId: 'tomato',
+    name: 'Tomato',
+    category: 'produce',
+    quantity: 1,
+    unit: 'each',
+    location: 'fridge',
+    photoUri: null,
+    expiresOn: null,
+    updatedAt: new Date().toISOString(),
+  },
+];
+const tomatoRecipe: Recipe = {
+  ...recipe,
+  id: 'tomato-bake',
+  ingredients: [{ name: 'Tomato', ingredientId: 'tomato', quantity: 250, unit: 'g' }],
+};
+const tomatoList = buildGroceryList([tomatoRecipe], [tomatoRecipe.id], tomatoPantry, {}, []);
+assert(!tomatoList.some((g) => g.name === 'Tomato'), 'skip grocery line when pantry name matches but units differ');
+
 console.log('All grocery regression checks passed.');
 }
 

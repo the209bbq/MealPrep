@@ -56,12 +56,12 @@ export function usePwaInstall() {
   }, []);
 
   const dismissInstallHint = useCallback(() => {
-    setDismissed(true);
     try {
       localStorage.setItem(DISMISS_KEY, '1');
     } catch {
       /* ignore */
     }
+    setDismissed(true);
   }, []);
 
   const promptInstall = useCallback(async () => {

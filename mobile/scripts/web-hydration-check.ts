@@ -127,6 +127,13 @@ async function main() {
     }, basePath);
     const staleLines = await visitRoutes(stalePage, basePath);
     const staleErrors = hydrationErrorsFromText(staleLines.join('\n'));
+    await stalePage
+      .evaluate(async () => {
+        if (!('serviceWorker' in navigator)) return;
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((reg) => reg.unregister()));
+      })
+      .catch(() => undefined);
     await staleContext.close();
 
     if (cleanErrors.length > 0) {
@@ -146,4 +153,11 @@ async function main() {
   }
 }
 
-void main();
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    process.exit(process.exitCode ?? 0);
+  });

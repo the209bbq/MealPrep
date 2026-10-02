@@ -9,7 +9,7 @@ interface CategoryChipsProps {
 }
 
 export function CategoryChips({ selected, onSelect }: CategoryChipsProps) {
-  const items: Array<{ key: PantryCategory | 'all'; label: string }> = [
+  const items: { key: PantryCategory | 'all'; label: string }[] = [
     { key: 'all', label: 'All' },
     ...PANTRY_CATEGORIES.map((c) => ({ key: c, label: CATEGORY_LABELS[c] })),
   ];

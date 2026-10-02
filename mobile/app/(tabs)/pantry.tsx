@@ -44,7 +44,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { countDefaultKitchenMatches } from '../../config/recipeMatching';
 import { buildPantryMatchIndex } from '../../lib/recipeMatch';
-import { reviewItemsToPantryItems } from '../../lib/pantryVision/reviewItems';
+import { reviewItemsToPantryItems, detectionsToReviewItems, mergeSecondScanIntoReview } from '../../lib/pantryVision/reviewItems';
 import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
 import { readJson, writeJson } from '../../lib/storage';
 import {
@@ -58,10 +58,6 @@ import {
 import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
 import { PantryImageQualityError } from '../../lib/pantryVision/prepareImageShared';
-import {
-  detectionsToReviewItems,
-  mergeSecondScanIntoReview,
-} from '../../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem, PreparedPantryImage } from '../../lib/pantryVision/types';
 import {
   shouldBlockGuestPantryPhotoScan,
@@ -114,17 +110,19 @@ export default function PantryScreen() {
   } = useApp();
   const [filter, setFilter] = useState<PantryCategory | 'all'>('all');
   const hydrated = useHydrated();
-  const [locationFilter, setLocationFilter] = useState<PantryStorageLocation | 'all'>('all');
+  const [locationFilterOverride, setLocationFilterOverride] = useState<PantryStorageLocation | 'all' | null>(
+    null,
+  );
+  const locationFilter: PantryStorageLocation | 'all' = hydrated
+    ? (locationFilterOverride ?? readStoredPantryLocationFilter())
+    : 'all';
 
-  useEffect(() => {
-    if (!hydrated) return;
-    setLocationFilter(readStoredPantryLocationFilter());
-  }, [hydrated]);
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanErrorTitle, setScanErrorTitle] = useState<string | null>(null);
+  const [scanGuestSignInCta, setScanGuestSignInCta] = useState(false);
   const [scanNotice, setScanNotice] = useState<{ title: string; message: string } | null>(null);
   const [scanQualityWarning, setScanQualityWarning] = useState<string | null>(null);
   const [lastScanAttempt, setLastScanAttempt] = useState<
@@ -193,7 +191,7 @@ export default function PantryScreen() {
   );
 
   function selectLocationFilter(next: PantryStorageLocation | 'all') {
-    setLocationFilter(next);
+    setLocationFilterOverride(next);
     writeJson(PANTRY_LOCATION_FILTER_STORAGE_KEY, next);
   }
 
@@ -202,6 +200,7 @@ export default function PantryScreen() {
   function clearScanFailure() {
     setScanError(null);
     setScanErrorTitle(null);
+    setScanGuestSignInCta(false);
     setScanNotice(null);
     setScanQualityWarning(null);
     setLastScanAttempt(null);
@@ -228,11 +227,13 @@ export default function PantryScreen() {
       | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
       | { kind: 'uri'; uri: string; location: PantryStorageLocation }
       | null,
+    options?: { signInCta?: boolean },
   ) {
     setScanNotice(null);
     setScanError(message);
     setScanErrorTitle(title);
     setLastScanAttempt(attempt);
+    setScanGuestSignInCta(Boolean(options?.signInCta));
   }
 
   function retryLastScan() {
@@ -395,10 +396,9 @@ export default function PantryScreen() {
   }
 
   function promptGuestPhotoScanSignIn() {
-    Alert.alert(GUEST_MODE_COPY.pantryScanSignInTitle, GUEST_MODE_COPY.pantryScanSignIn, [
-      { text: GUEST_MODE_COPY.pantryScanSignInCta, onPress: () => router.push(APP_ROUTES.profile) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    setScanFailure(GUEST_MODE_COPY.pantryScanSignIn, GUEST_MODE_COPY.pantryScanSignInTitle, null, {
+      signInCta: true,
+    });
   }
 
   function handleWebPrepareError(message: string) {
@@ -411,6 +411,7 @@ export default function PantryScreen() {
       const copy = photoScanAccessUserMessage(access);
       if (access === 'guest_blocked') {
         promptGuestPhotoScanSignIn();
+        return;
       }
       if (copy) {
         setScanFailure(copy.message, copy.title, null);
@@ -500,13 +501,15 @@ export default function PantryScreen() {
     const key = wantsScan ? 'scan' : wantsManual ? 'manual' : null;
     if (!key || tutorialLaunchRef.current === key) return;
     tutorialLaunchRef.current = key;
-    if (key === 'manual') {
-      openAddModal();
-      return;
-    }
-    const source = Platform.OS === 'web' ? 'library' : 'camera';
-    void handleNativeScan(DEFAULT_PANTRY_STORAGE_LOCATION, source);
-  }, [params.tutorialManual, params.tutorialScan]);
+    queueMicrotask(() => {
+      if (key === 'manual') {
+        openAddModal();
+        return;
+      }
+      const source = Platform.OS === 'web' ? 'library' : 'camera';
+      void handleNativeScan(DEFAULT_PANTRY_STORAGE_LOCATION, source);
+    });
+  }, [params.tutorialManual, params.tutorialScan]); // eslint-disable-line react-hooks/exhaustive-deps -- tutorial one-shot
 
   function openEditModal(item: PantryItem) {
     setEditItem(item);
@@ -553,6 +556,8 @@ export default function PantryScreen() {
           category: manualCategory,
           location: manualLocation,
         });
+        selectLocationFilter(manualLocation);
+        setFilter('all');
       }
       closeManualModal();
     } catch (error) {
@@ -745,6 +750,14 @@ export default function PantryScreen() {
             <View className="mt-3 rounded-xl border border-danger/25 bg-paper p-3">
               <Text className="text-sm font-bold text-ink">{scanErrorTitle ?? PHOTO_SCAN.scanFailedTitle}</Text>
               <Text className="mt-1 text-xs text-muted">{scanError}</Text>
+              {scanGuestSignInCta ? (
+                <Pressable
+                  onPress={() => router.push(APP_ROUTES.profile)}
+                  className="mt-3 items-center rounded-xl bg-primary py-2.5"
+                >
+                  <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>
+                </Pressable>
+              ) : null}
               {lastScanAttempt ? (
                 <Pressable
                   onPress={retryLastScan}
@@ -758,6 +771,7 @@ export default function PantryScreen() {
 
           {phase === 'review' ? (
             <PantryScanReview
+              key={`${scanLocationHint}-${reviewItems.map((i) => i.key).join(',')}`}
               items={reviewItems}
               onChange={setReviewItems}
               onSave={() => void handleSaveReview()}
@@ -798,6 +812,10 @@ export default function PantryScreen() {
             categoryFilter={filter}
             locationFilter={locationFilter}
             onPressItem={openEditModal}
+            onResetFilters={() => {
+              selectLocationFilter('all');
+              setFilter('all');
+            }}
           />
         )}
         </ScrollView>
