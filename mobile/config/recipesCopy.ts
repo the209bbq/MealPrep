@@ -113,13 +113,6 @@ export const RECIPES_COPY = {
       'Recipe ideas are unavailable right now. Check your connection or try again shortly.',
   },
 
-  guestSaveNudge: {
-    title: 'Save across devices',
-    body:
-      'Sign in any time to sync your pantry and grocery list to your account. Your list stays on this device until then.',
-    cta: 'Sign in',
-  },
-
   pantryOverlap: {
     youHave: (matched: number, total: number) => `You have ${matched} of ${total}`,
     needMore: (missing: number) => (missing === 1 ? 'Need 1 more' : `Need ${missing} more`),
