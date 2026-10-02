@@ -43,7 +43,7 @@ export const GROCERY_CHAINS: readonly GroceryChainConfig[] = [
   },
   {
     key: 'cost_less',
-    displayName: 'Cost Less Food Co',
+    displayName: 'Cost Less Food Co.',
     matchPatterns: ['cost less', 'costless'],
     distanceBoostMiles: 0.3,
     delivery: { instacartAvailable: true, doordashAvailable: true, deliverySearchName: 'Cost Less Foods' },

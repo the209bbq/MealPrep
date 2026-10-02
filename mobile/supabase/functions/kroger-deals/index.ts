@@ -292,7 +292,8 @@ serve(async (req) => {
     if (!clientId || !clientSecret) {
       return new Response(
         JSON.stringify({
-          error: 'Kroger credentials not configured on server. Add KROGER_CLIENT_ID and KROGER_CLIENT_SECRET in Supabase secrets.',
+          error:
+            'Live Kroger prices are not set up yet. Ask an admin to finish setup.',
           configured: false,
         }),
         {

@@ -250,11 +250,11 @@ export default function PantryScreen() {
     scanLocation: PantryStorageLocation,
   ) {
     if (!featureFlags.photoScan) {
-      const message = 'Photo scan is disabled in feature toggles.';
+      const message = 'Photo pantry scan is turned off. An admin can re-enable it in feature toggles.';
       if (Platform.OS === 'web') {
-        setScanFailure(message, 'Feature off', null);
+        setScanFailure(message, 'Feature turned off', null);
       } else {
-        Alert.alert('Feature off', message);
+        Alert.alert('Feature turned off', message);
       }
       return;
     }

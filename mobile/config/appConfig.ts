@@ -27,7 +27,7 @@ export const TABS: TabConfig[] = [
   { name: 'pantry', title: 'Pantry', href: '/pantry', icon: 'leaf-outline', iconActive: 'leaf' },
   {
     name: 'grocery',
-    title: 'Grocery List',
+    title: 'Grocery list',
     href: '/grocery',
     icon: 'cart-outline',
     iconActive: 'cart',
@@ -169,7 +169,7 @@ export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; bl
     blurb: 'Camera or gallery flow on Pantry with Gemini vision via the pantry-vision Edge Function.',
   },
   batchCalculator: {
-    title: 'Batch meal-prep calculator',
+    title: 'Batch meal prep calculator',
     blurb: 'Scale recipe servings and portions from the Recipes tab.',
   },
   grocerySync: {
@@ -178,7 +178,7 @@ export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; bl
   },
   smartShop: {
     title: 'Smart Shop deals',
-    blurb: 'Compare prices at nearby stores from the Grocery List tab.',
+    blurb: 'Compare prices at nearby stores from the grocery list tab.',
   },
   maintenanceMode: {
     title: 'Maintenance mode',

@@ -116,7 +116,7 @@ export const RECIPES_COPY = {
   guestSaveNudge: {
     title: 'Save across devices',
     body:
-      'Sign in anytime to sync your pantry and grocery list to your account. Your list stays on this device until then.',
+      'Sign in any time to sync your pantry and grocery list to your account. Your list stays on this device until then.',
     cta: 'Sign in',
   },
 

@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         error:
-          'USDA nutrition lookup is not set up yet. Add USDA_API_KEY in Supabase Edge Function secrets.',
+          'USDA nutrition lookup is not set up yet. Ask an admin to finish setup.',
         code: 'NOT_CONFIGURED',
       }),
       {
@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
     } else if (body.action === 'food') {
       const id = Number(body.fdcId);
       if (!Number.isFinite(id) || id <= 0) {
-        return new Response(JSON.stringify({ error: 'Invalid FDC id' }), {
+        return new Response(JSON.stringify({ error: 'Invalid food ID' }), {
           status: 400,
           headers: { ...cors, 'Content-Type': 'application/json' },
         });

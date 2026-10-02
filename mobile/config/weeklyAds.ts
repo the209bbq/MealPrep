@@ -17,7 +17,7 @@ export interface WeeklyAdChainConfig {
 export const WEEKLY_AD_CHAINS: readonly WeeklyAdChainConfig[] = [
   {
     key: 'cost_less',
-    displayName: 'Cost Less Food Co',
+    displayName: 'Cost Less Food Co.',
     matchPatterns: ['cost less', 'costless'],
     url: 'https://costlessfoods.com/weekly-ad/',
   },
