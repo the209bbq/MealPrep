@@ -45,7 +45,17 @@ import {
 import { useApp } from '../../context/AppContext';
 import { countDefaultKitchenMatches } from '../../config/recipeMatching';
 import { buildPantryMatchIndex } from '../../lib/recipeMatch';
-import { reviewItemsToPantryItems, mergeSecondScanIntoReview } from '../../lib/pantryVision/reviewItems';
+import {
+  registerAiBaselineEntries,
+  reviewItemsToPantryItems,
+  mergeSecondScanIntoReview,
+} from '../../lib/pantryVision/reviewItems';
+import { buildScanCorrectionRows } from '../../lib/scanCorrections/diff';
+import {
+  logScanCorrectionsInBackground,
+  uploadScanTrainingPhoto,
+} from '../../lib/scanCorrections/client';
+import { createScanSessionId } from '../../lib/scanCorrections/session';
 import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
 import { readJson, writeJson } from '../../lib/storage';
 import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
@@ -93,6 +103,8 @@ export default function PantryScreen() {
     profileReady,
     session,
     savePantryScanReview,
+    userPreferences,
+    setUserPreference,
     addManualPantryItem,
     updatePantryItemEntry,
     deletePantryItemEntry,
@@ -146,6 +158,8 @@ export default function PantryScreen() {
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
   const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
   const pantryScanUploadRef = useRef<Promise<string | null> | null>(null);
+  const scanSessionIdRef = useRef<string | null>(null);
+  const aiBaselineRef = useRef<Map<string, { aiName: string }>>(new Map());
 
   const visionReady = isPantryVisionConfigured();
   const accessToken = session?.access_token ?? null;
@@ -305,6 +319,9 @@ export default function PantryScreen() {
       clearScanFailure();
       setLastScanAttempt(attempt);
       setModelLabel(result.model);
+      scanSessionIdRef.current = createScanSessionId();
+      aiBaselineRef.current = new Map();
+      registerAiBaselineEntries(rows, aiBaselineRef.current);
       setReviewItems(rows);
       setPhase('review');
     } catch (error) {
@@ -384,9 +401,11 @@ export default function PantryScreen() {
         scanLocation,
         bypassCache: true,
       });
-      setReviewItems((prev) =>
-        mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation),
-      );
+      setReviewItems((prev) => {
+        const merged = mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation);
+        registerAiBaselineEntries(merged, aiBaselineRef.current);
+        return merged;
+      });
       setModelLabel(result.model);
     } catch (error) {
       const { PantryVisionScanError } = await import('../../lib/pantryVision/client');
@@ -448,6 +467,36 @@ export default function PantryScreen() {
     await runVisionFromUri(result.assets[0].uri, scanLocation);
   }
 
+  function submitScanCorrectionsFeedback() {
+    if (demoMode || !session?.user?.id || !scanSessionIdRef.current) return;
+
+    const scanId = scanSessionIdRef.current;
+    const model = modelLabel;
+    const baseline = aiBaselineRef.current;
+    const finalItems = reviewItems;
+    const shareTraining = userPreferences.shareScanPhotoForTraining;
+    const prepared =
+      lastScanAttempt?.kind === 'prepared' ? lastScanAttempt.prepared : null;
+    const userId = session.user.id;
+
+    const persist = (trainingPhotoPath: string | null) => {
+      const rows = buildScanCorrectionRows({
+        scanId,
+        model,
+        baseline,
+        finalItems,
+        trainingPhotoPath,
+      });
+      logScanCorrectionsInBackground(rows);
+    };
+
+    if (shareTraining && prepared) {
+      void uploadScanTrainingPhoto(prepared, userId, scanId).then(persist);
+    } else {
+      persist(null);
+    }
+  }
+
   async function handleSaveReview() {
     setSaving(true);
     setSaveError(null);
@@ -462,10 +511,13 @@ export default function PantryScreen() {
         scanPhotoPath = await pantryScanUploadRef.current;
       }
       await savePantryScanReview(reviewItems, scanPhotoPath, scanLocationHint);
+      submitScanCorrectionsFeedback();
       setPhase('idle');
       setReviewItems([]);
       setPreviewUri(null);
       setPendingScanPhotoPath(null);
+      scanSessionIdRef.current = null;
+      aiBaselineRef.current = new Map();
       clearScanFailure();
       setSaveError(null);
       setScanRecipeCount(recipeCount);
@@ -485,6 +537,8 @@ export default function PantryScreen() {
     setReviewItems([]);
     setPreviewUri(null);
     setPendingScanPhotoPath(null);
+    scanSessionIdRef.current = null;
+    aiBaselineRef.current = new Map();
     setScanLocationHint(DEFAULT_PANTRY_STORAGE_LOCATION);
   }
 
@@ -795,6 +849,11 @@ export default function PantryScreen() {
               defaultBatchLocation={scanLocationHint}
               onBatchLocationChange={setScanLocationHint}
               stickyFooter
+              pantry={pantry}
+              recipes={recipes}
+              scanLocationHint={scanLocationHint}
+              shareTrainingPhoto={userPreferences.shareScanPhotoForTraining}
+              onShareTrainingPhotoChange={(value) => setUserPreference('shareScanPhotoForTraining', value)}
             />
           ) : null}
 

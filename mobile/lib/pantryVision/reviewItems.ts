@@ -14,6 +14,7 @@ import {
 } from './detectionParse';
 import { buildIngredientCatalog, matchDetectionToCatalog } from './matchIngredients';
 import type { PantryScanReviewItem, PantryVisionDetection } from './types';
+import { formatDetectedIngredientName } from './detectionParse';
 
 /** Per-item storage: vision field, then keyword auto-sort (can differ from scan hint), else scan hint. */
 export function resolveReviewItemStorage(
@@ -89,8 +90,59 @@ export function detectionsToReviewItems(
       photoUri,
       isDemoSample,
       needsReview: isLowConfidenceDetection(detection.confidence),
+      sourceAiName: match.name,
+      addedManually: false,
     };
   });
+}
+
+export function createManualPantryReviewItem(
+  name: string,
+  pantry: PantryItem[],
+  recipes: Recipe[],
+  photoUri: string | null,
+  scanHint: PantryStorageLocation = DEFAULT_PANTRY_STORAGE_LOCATION,
+): PantryScanReviewItem {
+  const trimmed = formatDetectedIngredientName(name);
+  const catalog = buildIngredientCatalog(pantry, recipes);
+  const detection: PantryVisionDetection = {
+    name: trimmed,
+    quantity: 1,
+    unit: 'each',
+    category: 'dry_goods',
+    confidence: 1,
+  };
+  const match = matchDetectionToCatalog(detection, catalog);
+  const category = match.category;
+  return {
+    key: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    enabled: true,
+    name: match.name,
+    quantity: 1,
+    unit: match.unit,
+    category,
+    confidence: 1,
+    ingredientId: match.ingredientId,
+    location: suggestStorageLocationForPantryItem(match.name, category) || scanHint,
+    photoUri,
+    isDemoSample: false,
+    needsReview: false,
+    sourceAiName: null,
+    addedManually: true,
+  };
+}
+
+export function registerAiBaselineEntries(
+  items: PantryScanReviewItem[],
+  baseline: Map<string, { aiName: string }>,
+): void {
+  for (const item of items) {
+    const aiName = item.sourceAiName?.trim();
+    if (!aiName) continue;
+    if (!baseline.has(item.key)) {
+      baseline.set(item.key, { aiName });
+    }
+  }
 }
 
 /** Merge a second scan into existing review rows (scan again). */

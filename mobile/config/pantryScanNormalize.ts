@@ -69,7 +69,6 @@ export const PANTRY_SCAN_PHRASE_SYNONYMS: Readonly<Record<string, string>> = {
   '100 pumpkin': 'pumpkin puree',
   oatmeal: 'oats',
   'old fashioned oats': 'oats',
-  'old fashioned oats': 'oats',
   'pancake syrup': 'pancake syrup',
   'maple syrup': 'maple syrup',
   syrup: 'pancake syrup',

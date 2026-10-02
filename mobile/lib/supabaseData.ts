@@ -26,6 +26,7 @@ import type {
   UserRole,
 } from '../types/mealprep';
 import { MEAL_SLOTS } from '../types/mealprep';
+import type { AdminScanCorrectionsSummary } from './scanCorrections/types';
 
 type ProfileRow = {
   id: string;
@@ -160,6 +161,7 @@ export function mapProfile(row: ProfileRow): UserProfile {
       autoAddMissingToGrocery:
         row.auto_add_missing_to_grocery ?? USER_PREFERENCE_DEFAULTS.autoAddMissingToGrocery,
       addCheckedItemsToPantry: USER_PREFERENCE_DEFAULTS.addCheckedItemsToPantry,
+      shareScanPhotoForTraining: USER_PREFERENCE_DEFAULTS.shareScanPhotoForTraining,
     },
   };
 }
@@ -918,4 +920,29 @@ export async function adminSetUserPlan(
     throw new Error(`Plan update returned ${applied} instead of ${plan}.`);
   }
   return applied;
+}
+
+const SCAN_CORRECTIONS_MIGRATION_SQL = 'supabase/migrations/20261002210000_scan_corrections.sql';
+
+export async function fetchAdminScanCorrectionsSummary(
+  client: SupabaseClient,
+  days = 30,
+): Promise<AdminScanCorrectionsSummary | null> {
+  const { data, error } = await client.rpc('admin_scan_corrections_summary', { p_days: days });
+  if (error) {
+    if (isMissingSchemaError(error)) {
+      throw new Error(formatSupabaseError(error, SCAN_CORRECTIONS_MIGRATION_SQL));
+    }
+    throw new Error(formatSupabaseError(error, SCAN_CORRECTIONS_MIGRATION_SQL));
+  }
+  if (!data || typeof data !== 'object') return null;
+  const payload = data as Record<string, unknown>;
+  return {
+    days: typeof payload.days === 'number' ? payload.days : days,
+    counts: (payload.counts as AdminScanCorrectionsSummary['counts']) ?? {},
+    top_renames: Array.isArray(payload.top_renames)
+      ? (payload.top_renames as { ai_name: string; user_name: string; count: number }[])
+      : [],
+    training_photo_scans: typeof payload.training_photo_scans === 'number' ? payload.training_photo_scans : 0,
+  };
 }
