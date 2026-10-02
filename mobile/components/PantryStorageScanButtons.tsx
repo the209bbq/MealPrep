@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../lib/icons/Ionicons';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { THEME } from '../config/appConfig';
 import { PANTRY_SCAN_UI_COPY } from '../config/pantryScan';

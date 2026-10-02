@@ -30,6 +30,7 @@ export default function RecipesScreen() {
     session,
     servingOverrides,
     setServingOverride,
+    applyServingOverridesBatch,
     featureFlags,
     pantryRecipeMatches,
     addMissingRecipeIngredientsToGrocery,
@@ -60,15 +61,19 @@ export default function RecipesScreen() {
 
   const kitchenRecipes = useMemo(() => kitchenRecipesForPantryMatch(recipes), [recipes]);
 
-  const filterBaseRows = useMemo(
-    (): RecipesTabRow[] =>
-      buildRecipesTabCatalogRows({
-        kitchenRecipes,
-        pantryMatches: pantryRecipeMatches,
-        discoverySuggestions,
-      }),
-    [discoverySuggestions, kitchenRecipes, pantryRecipeMatches],
-  );
+  const filterBaseRows = useMemo((): RecipesTabRow[] => {
+    const kitchenOnly = buildRecipesTabCatalogRows({
+      kitchenRecipes,
+      pantryMatches: pantryRecipeMatches,
+      discoverySuggestions: [],
+    });
+    if (discoverySuggestions.length === 0) return kitchenOnly;
+    return buildRecipesTabCatalogRows({
+      kitchenRecipes,
+      pantryMatches: pantryRecipeMatches,
+      discoverySuggestions,
+    });
+  }, [discoverySuggestions, kitchenRecipes, pantryRecipeMatches]);
 
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
@@ -93,13 +98,15 @@ export default function RecipesScreen() {
   const peopleTargetServings = recipesTabPeopleTargetServings(filters.people);
   useEffect(() => {
     if (peopleTargetServings == null) return;
+    const updates: Record<string, number> = {};
     for (const recipe of kitchenRecipes) {
-      setServingOverride(recipe.id, peopleTargetServings);
+      updates[recipe.id] = peopleTargetServings;
     }
     for (const { recipe } of discoverySuggestions) {
-      setServingOverride(discoveryRecipeServingOverrideId(recipe.id), peopleTargetServings);
+      updates[discoveryRecipeServingOverrideId(recipe.id)] = peopleTargetServings;
     }
-  }, [discoverySuggestions, kitchenRecipes, peopleTargetServings, setServingOverride]);
+    applyServingOverridesBatch(updates);
+  }, [applyServingOverridesBatch, discoverySuggestions, kitchenRecipes, peopleTargetServings]);
 
   const detailServings = useMemo(() => {
     if (!detailRow) return 4;

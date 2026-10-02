@@ -8,6 +8,12 @@ import {
 } from '../../config/recipeMatching';
 import { FUZZY_MATCH_THRESHOLD, PANTRY_STAPLES } from '../../config/recipeMatchingConfig';
 import { fuzzyNameScore, ingredientMatchScore, normalizeIngredientName } from './normalize';
+import {
+  fuzzyNameScoreWithPantryTokens,
+  getPantryMatchContext,
+  ingredientMatchScoreWithPantryTokens,
+  type PantryMatchContext,
+} from './pantryMatchContext';
 import { findPantryItemsForIngredient, totalPantryQuantityInUnit } from './pantryStock';
 
 export interface MatchedIngredient {
@@ -57,12 +63,14 @@ function findPantryMatch(
   ingredient: RecipeIngredient,
   pantry: PantryItem[],
   usedPantryIds: Set<string>,
+  context: PantryMatchContext,
 ): { item: PantryItem | null; reason: MatchedIngredient['matchReason']; score: number } {
   if (pantry.length === 0) {
     return { item: null, reason: 'fuzzy_name', score: 0 };
   }
 
-  for (const item of pantry) {
+  for (const row of context.items) {
+    const item = row.item;
     if (usedPantryIds.has(item.id)) continue;
     if (item.ingredientId === ingredient.ingredientId) {
       return { item, reason: 'ingredient_id', score: 1 };
@@ -79,13 +87,10 @@ function findPantryMatch(
 
   let best: PantryItem | null = null;
   let bestScore = 0;
-  for (const item of pantry) {
+  for (const row of context.items) {
+    const item = row.item;
     if (usedPantryIds.has(item.id)) continue;
-    const score = Math.max(
-      fuzzyNameScore(ingredient.name, item.name),
-      fuzzyNameScore(ingredient.name, item.ingredientId.replace(/-/g, ' ')),
-      fuzzyNameScore(ingredient.ingredientId.replace(/-/g, ' '), item.name),
-    );
+    const score = fuzzyNameScoreWithPantryTokens(ingredient.name, row);
     if (score > bestScore) {
       bestScore = score;
       best = item;
@@ -99,7 +104,12 @@ function findPantryMatch(
   return { item: null, reason: 'fuzzy_name', score: bestScore };
 }
 
-export function scoreRecipeAgainstPantry(recipe: Recipe, pantry: PantryItem[]): RecipePantryMatch {
+export function scoreRecipeAgainstPantry(
+  recipe: Recipe,
+  pantry: PantryItem[],
+  context?: PantryMatchContext,
+): RecipePantryMatch {
+  const matchContext = context ?? getPantryMatchContext(pantry);
   const usedPantryIds = new Set<string>();
   const matched: MatchedIngredient[] = [];
   const missing: RecipeIngredient[] = [];
@@ -111,7 +121,7 @@ export function scoreRecipeAgainstPantry(recipe: Recipe, pantry: PantryItem[]): 
     }
     scorableCount += 1;
 
-    const result = findPantryMatch(ingredient, pantry, usedPantryIds);
+    const result = findPantryMatch(ingredient, pantry, usedPantryIds, matchContext);
     if (result.item) {
       const pantryMatches = findPantryItemsForIngredient(ingredient, pantry);
       const have = totalPantryQuantityInUnit(pantryMatches, ingredient.unit);
@@ -159,13 +169,14 @@ export function compareRecipePantryMatches(a: RecipePantryMatch, b: RecipePantry
 }
 
 export function buildPantryMatchIndex(recipes: Recipe[], pantry: PantryItem[]): PantryMatchIndex {
+  const context = getPantryMatchContext(pantry);
   if (pantry.length === 0) {
-    const empty = recipes.map((recipe) => scoreRecipeAgainstPantry(recipe, pantry));
+    const empty = recipes.map((recipe) => scoreRecipeAgainstPantry(recipe, pantry, context));
     const byRecipeId = new Map(empty.map((m) => [m.recipeId, m]));
     return { byRecipeId, ranked: [] };
   }
 
-  const ranked = recipes.map((recipe) => scoreRecipeAgainstPantry(recipe, pantry));
+  const ranked = recipes.map((recipe) => scoreRecipeAgainstPantry(recipe, pantry, context));
   ranked.sort(compareRecipePantryMatches);
   const byRecipeId = new Map(ranked.map((m) => [m.recipeId, m]));
   return { byRecipeId, ranked };
@@ -245,9 +256,10 @@ export function topPantryRecipeRecommendations(
   recipes: Recipe[],
   pantry: PantryItem[],
   limit = RECIPE_MATCHING.homeRecommendationsLimit,
+  existingIndex?: PantryMatchIndex,
 ): RecipePantryMatch[] {
   if (pantry.length === 0) return [];
-  const { ranked } = buildPantryMatchIndex(recipes, pantry);
+  const { ranked } = existingIndex ?? buildPantryMatchIndex(recipes, pantry);
   return filterRankedMatches(ranked, 'all', KITCHEN_LIST_DEFAULT_MIN_PERCENT, {
     minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
     pantryItemCount: pantry.length,

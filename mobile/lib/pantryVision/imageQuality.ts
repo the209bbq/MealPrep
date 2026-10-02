@@ -1,11 +1,7 @@
-import jpeg from 'jpeg-js';
-import {
-  evaluateImageQuality,
-  type ImageQualityAssessment,
-  type ImageQualityEvaluation,
-} from './prepareImageShared';
+import { evaluateImageQuality, type ImageQualityEvaluation } from './prepareImageShared';
 
-function decodeJpegBase64ToLuma(base64: string): { luma: Float32Array; width: number; height: number } {
+async function decodeJpegBase64ToLuma(base64: string): Promise<{ luma: Float32Array; width: number; height: number }> {
+  const { default: jpeg } = await import('jpeg-js');
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
@@ -22,14 +18,14 @@ function decodeJpegBase64ToLuma(base64: string): { luma: Float32Array; width: nu
   return { luma, width, height };
 }
 
-export function evaluateJpegBase64Quality(base64: string): ImageQualityEvaluation {
-  const { luma, width, height } = decodeJpegBase64ToLuma(base64);
+export async function evaluateJpegBase64Quality(base64: string): Promise<ImageQualityEvaluation> {
+  const { luma, width, height } = await decodeJpegBase64ToLuma(base64);
   return evaluateImageQuality(luma, width, height);
 }
 
 /** Decode a small JPEG base64 thumb and score brightness / blur. */
-export function assessJpegBase64Quality(base64: string): ImageQualityAssessment {
-  const evaluation = evaluateJpegBase64Quality(base64);
+export async function assessJpegBase64Quality(base64: string): Promise<import('./prepareImageShared').ImageQualityAssessment> {
+  const evaluation = await evaluateJpegBase64Quality(base64);
   if (evaluation.hardReject) {
     return {
       ok: false,

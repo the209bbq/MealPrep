@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { ONBOARDING_COPY, type OnboardingTabEmptyId } from '../../config/onboarding';

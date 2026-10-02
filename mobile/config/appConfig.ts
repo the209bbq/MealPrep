@@ -63,7 +63,7 @@ export const SMART_SHOP = {
 export const RECIPE_DISCOVERY = {
   enabled: true,
   searchDebounceMs: 450,
-  cacheTtlMs: 10 * 60 * 1000,
+  cacheTtlMs: 30 * 60 * 1000,
   defaultPerPage: 10,
   proxyUrl: process.env.EXPO_PUBLIC_RECIPEAPI_PROXY_URL ?? '',
 } as const;

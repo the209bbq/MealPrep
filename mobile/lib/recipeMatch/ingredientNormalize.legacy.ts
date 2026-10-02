@@ -6,7 +6,6 @@ import {
   INGREDIENT_SYNONYMS,
   INGREDIENT_STRIP_TOKENS,
 } from '../../config/recipeMatchingConfig';
-import { LruCache } from './lruCache';
 
 const CUT_MODIFIERS = new Set<string>(INGREDIENT_CUT_OR_FORM_MODIFIERS);
 
@@ -22,13 +21,7 @@ const QUANTITY_PATTERNS: RegExp[] = [
   /\b\d+(\.\d+)?\b/g,
 ];
 
-const NORMALIZE_CACHE = new LruCache<string, string>(4096);
-const TOKENIZE_CACHE = new LruCache<string, string[]>(4096);
-const PHRASE_CACHE = new LruCache<string, string>(4096);
-const INGREDIENT_MATCH_CACHE = new LruCache<string, number>(8192);
-const FUZZY_SCORE_CACHE = new LruCache<string, number>(8192);
-
-function normalizeIngredientNameCore(value: string): string {
+export function normalizeIngredientName(value: string): string {
   let text = value
     .toLowerCase()
     .replace(/\[demo sample\]/gi, '')
@@ -58,8 +51,8 @@ function singularizeToken(token: string): string {
   return token;
 }
 
-function tokenizeIngredientNameCore(value: string): string[] {
-  const normalized = normalizeIngredientNameCore(value);
+export function tokenizeIngredientName(value: string): string[] {
+  const normalized = normalizeIngredientName(value);
   if (!normalized) return [];
   return normalized
     .split(' ')
@@ -67,73 +60,9 @@ function tokenizeIngredientNameCore(value: string): string[] {
     .map(singularizeToken);
 }
 
-function canonicalIngredientPhraseCore(value: string): string {
-  return tokenizeIngredientNameCore(value).join(' ');
-}
-
-/** Maps canonical ingredient phrase → synonym group key (built once at module load). */
-const PHRASE_TO_SYNONYM_GROUP = new Map<string, string>();
-
-function buildSynonymLookup(): void {
-  for (const [canonical, synonyms] of Object.entries(INGREDIENT_SYNONYMS)) {
-    for (const member of [canonical, ...synonyms]) {
-      const phrase = canonicalIngredientPhraseCore(member);
-      if (phrase) PHRASE_TO_SYNONYM_GROUP.set(phrase, canonical);
-      const normalized = normalizeIngredientNameCore(member);
-      if (normalized) PHRASE_TO_SYNONYM_GROUP.set(normalized, canonical);
-    }
-  }
-}
-
-interface CategoryMemberIndex {
-  raw: string;
-  tokens: string[];
-  phrase: string;
-  singleToken: string | null;
-}
-
-const CATEGORY_MEMBER_INDEX: Record<string, CategoryMemberIndex[]> = {};
-
-function buildCategoryMemberIndex(): void {
-  for (const [family, members] of Object.entries(INGREDIENT_CATEGORY_GROUPS)) {
-    CATEGORY_MEMBER_INDEX[family] = members.map((member) => {
-      const tokens = tokenizeIngredientNameCore(member);
-      return {
-        raw: member,
-        tokens,
-        phrase: tokens.join(' '),
-        singleToken: tokens.length === 1 ? tokens[0] : null,
-      };
-    });
-  }
-}
-
-buildSynonymLookup();
-buildCategoryMemberIndex();
-
-export function normalizeIngredientName(value: string): string {
-  const cached = NORMALIZE_CACHE.get(value);
-  if (cached !== undefined) return cached;
-  const result = normalizeIngredientNameCore(value);
-  NORMALIZE_CACHE.set(value, result);
-  return result;
-}
-
-export function tokenizeIngredientName(value: string): string[] {
-  const cached = TOKENIZE_CACHE.get(value);
-  if (cached !== undefined) return cached;
-  const result = tokenizeIngredientNameCore(value);
-  TOKENIZE_CACHE.set(value, result);
-  return result;
-}
-
 /** Canonical identity phrase kept for matching (e.g. "chicken breast", not "chicken"). */
 export function canonicalIngredientPhrase(value: string): string {
-  const cached = PHRASE_CACHE.get(value);
-  if (cached !== undefined) return cached;
-  const result = canonicalIngredientPhraseCore(value);
-  PHRASE_CACHE.set(value, result);
-  return result;
+  return tokenizeIngredientName(value).join(' ');
 }
 
 function ingredientForms(name: string): string[] {
@@ -151,21 +80,27 @@ function orderedPrefix(shorter: string[], longer: string[]): boolean {
   return shorter.every((t, i) => t === longer[i]);
 }
 
-function nameBelongsToSynonymGroup(name: string, canonical: string, _synonyms: readonly string[]): boolean {
+function nameBelongsToSynonymGroup(name: string, canonical: string, synonyms: readonly string[]): boolean {
   const namePhrase = canonicalIngredientPhrase(name);
-  if (!namePhrase) return false;
-  return PHRASE_TO_SYNONYM_GROUP.get(namePhrase) === canonical;
+  const members = [canonical, ...synonyms];
+
+  for (const member of members) {
+    const memberPhrase = canonicalIngredientPhrase(member);
+    if (namePhrase && memberPhrase && namePhrase === memberPhrase) return true;
+  }
+  return false;
 }
 
 function pantryMatchesCategoryHead(pantryTokens: string[], family: string): boolean {
-  const members = CATEGORY_MEMBER_INDEX[family];
+  const members = INGREDIENT_CATEGORY_GROUPS[family];
   if (!members) return false;
   const pantryPhrase = pantryTokens.join(' ');
   for (const member of members) {
-    if (member.tokens.length === 0) continue;
-    if (tokensEqual(pantryTokens, member.tokens)) return true;
-    if (member.singleToken && pantryTokens.includes(member.singleToken)) return true;
-    if (member.phrase && pantryPhrase.includes(member.phrase)) return true;
+    const memberTokens = tokenizeIngredientName(member);
+    if (memberTokens.length === 0) continue;
+    if (tokensEqual(pantryTokens, memberTokens)) return true;
+    if (memberTokens.length === 1 && pantryTokens.includes(memberTokens[0])) return true;
+    if (pantryPhrase.includes(memberTokens.join(' '))) return true;
   }
   return false;
 }
@@ -178,32 +113,36 @@ function categoryHeadForRecipeTokens(recipeTokens: string[]): string | null {
 }
 
 function specificTypeInFamily(pantryTokens: string[], family: string): boolean {
-  const members = CATEGORY_MEMBER_INDEX[family];
+  const members = INGREDIENT_CATEGORY_GROUPS[family];
   if (!members) return false;
   const phrase = pantryTokens.join(' ');
   for (const member of members) {
-    if (member.raw === family) continue;
-    const memberPhrase = member.phrase;
+    if (member === family) continue;
+    const memberPhrase = canonicalIngredientPhrase(member);
     if (memberPhrase && (phrase === memberPhrase || pantryTokens.includes(memberPhrase))) {
       return true;
     }
-    if (member.singleToken && pantryTokens.includes(member.singleToken)) return true;
+    const mt = tokenizeIngredientName(member);
+    if (mt.length === 1 && pantryTokens.includes(mt[0])) return true;
   }
   return false;
 }
 
-function ingredientMatchScoreCore(recipeLabel: string, pantryLabel: string): number {
+/**
+ * Hierarchical match: specific pantry satisfies generic recipe; wrong cut/form is substitute only.
+ */
+export function ingredientMatchScore(recipeLabel: string, pantryLabel: string): number {
   const recipeTokens = tokenizeIngredientName(recipeLabel);
   const pantryTokens = tokenizeIngredientName(pantryLabel);
   if (recipeTokens.length === 0 || pantryTokens.length === 0) return 0;
 
   if (tokensEqual(recipeTokens, pantryTokens)) return 1;
 
-  const recipePhrase = recipeTokens.join(' ');
-  const pantryPhrase = pantryTokens.join(' ');
-  const recipeGroup = PHRASE_TO_SYNONYM_GROUP.get(recipePhrase);
-  const pantryGroup = PHRASE_TO_SYNONYM_GROUP.get(pantryPhrase);
-  if (recipeGroup && recipeGroup === pantryGroup) return 1;
+  for (const [canonical, synonyms] of Object.entries(INGREDIENT_SYNONYMS)) {
+    const inRecipe = nameBelongsToSynonymGroup(recipeLabel, canonical, synonyms);
+    const inPantry = nameBelongsToSynonymGroup(pantryLabel, canonical, synonyms);
+    if (inRecipe && inPantry) return 1;
+  }
 
   const family = categoryHeadForRecipeTokens(recipeTokens);
   if (family && pantryMatchesCategoryHead(pantryTokens, family)) {
@@ -248,18 +187,6 @@ function ingredientMatchScoreCore(recipeLabel: string, pantryLabel: string): num
   }
 
   return 0;
-}
-
-/**
- * Hierarchical match: specific pantry satisfies generic recipe; wrong cut/form is substitute only.
- */
-export function ingredientMatchScore(recipeLabel: string, pantryLabel: string): number {
-  const cacheKey = `${recipeLabel}\u0000${pantryLabel}`;
-  const cached = INGREDIENT_MATCH_CACHE.get(cacheKey);
-  if (cached !== undefined) return cached;
-  const result = ingredientMatchScoreCore(recipeLabel, pantryLabel);
-  INGREDIENT_MATCH_CACHE.set(cacheKey, result);
-  return result;
 }
 
 /** Expand keys for exact/synonym identity only (no generic parent collapse). */
@@ -311,7 +238,7 @@ function phraseSubsetScore(shortTokens: string[], longTokens: string[]): number 
   return 0.92;
 }
 
-function fuzzyNameScoreCore(a: string, b: string): number {
+export function fuzzyNameScore(a: string, b: string): number {
   const hierarchical = ingredientMatchScore(a, b);
   if (hierarchical > 0) return hierarchical;
 
@@ -329,6 +256,7 @@ function fuzzyNameScoreCore(a: string, b: string): number {
   const subsetScore = phraseSubsetScore(shorter, longer);
   if (subsetScore > 0) return subsetScore;
 
+  const aSet = new Set(aTokens);
   const bSet = new Set(bTokens);
   const overlap = aTokens.filter((t) => bSet.has(t));
   if (overlap.length === 0) return 0;
@@ -346,15 +274,6 @@ function fuzzyNameScoreCore(a: string, b: string): number {
     0.88,
     overlap.length / unionSize + (overlap.length / Math.max(aTokens.length, bTokens.length)) * 0.12,
   );
-}
-
-export function fuzzyNameScore(a: string, b: string): number {
-  const cacheKey = `${a}\u0000${b}`;
-  const cached = FUZZY_SCORE_CACHE.get(cacheKey);
-  if (cached !== undefined) return cached;
-  const result = fuzzyNameScoreCore(a, b);
-  FUZZY_SCORE_CACHE.set(cacheKey, result);
-  return result;
 }
 
 /** Short label for RecipeAPI search queries (specific phrase, not generic collapse). */

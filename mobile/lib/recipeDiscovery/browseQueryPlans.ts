@@ -1,5 +1,6 @@
 import { PANTRY_DISCOVERY_MAX_PAGE } from './pantryQueryPlans';
 import type { PantryDiscoverySearchPlan } from './pantryQueryPlans';
+import { RECIPE_DISCOVERY_BROWSE_MAX_QUERIES } from '../../config/recipeDiscoveryClient';
 
 const BROWSE_DISCOVERY_TERMS = [
   'chicken',
@@ -21,7 +22,10 @@ function hashString(input: string): number {
 }
 
 /** RecipeAPI queries when the pantry is empty — browse the online catalog. */
-export function buildBrowseDiscoverySearchPlans(seed = 0, maxQueries = 5): PantryDiscoverySearchPlan[] {
+export function buildBrowseDiscoverySearchPlans(
+  seed = 0,
+  maxQueries = RECIPE_DISCOVERY_BROWSE_MAX_QUERIES,
+): PantryDiscoverySearchPlan[] {
   const start = ((seed % BROWSE_DISCOVERY_TERMS.length) + BROWSE_DISCOVERY_TERMS.length) % BROWSE_DISCOVERY_TERMS.length;
   const rotated = [...BROWSE_DISCOVERY_TERMS.slice(start), ...BROWSE_DISCOVERY_TERMS.slice(0, start)];
   const plans: PantryDiscoverySearchPlan[] = [];
@@ -32,11 +36,11 @@ export function buildBrowseDiscoverySearchPlans(seed = 0, maxQueries = 5): Pantr
     const key = search.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    const mixed = Math.abs(hashString(`${seed}:${index}:${key}`));
+    const mixed = seed === 0 ? 0 : Math.abs(hashString(`${seed}:${index}:${key}`));
     plans.push({
       search,
       ingredients: search,
-      page: 1 + (mixed % PANTRY_DISCOVERY_MAX_PAGE),
+      page: seed === 0 ? 1 : 1 + (mixed % PANTRY_DISCOVERY_MAX_PAGE),
       planKey: key,
     });
   }

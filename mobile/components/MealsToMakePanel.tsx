@@ -4,7 +4,7 @@ import { AddToCalendarButton } from './mealCalendar/AddToCalendarButton';
 import type { MealPlanItem } from '../types/mealprep';
 import { scheduleTargetFromMealPlanItem } from '../lib/mealCalendar/scheduleTarget';
 import { THEME } from '../config/appConfig';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../lib/icons/Ionicons';
 
 interface MealsToMakePanelProps {
   items: MealPlanItem[];

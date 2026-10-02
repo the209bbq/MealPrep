@@ -28,7 +28,9 @@ import {
   readGroceryDismissals,
 } from '../lib/grocery/dismissals';
 import { enqueueGroceryPersist } from '../lib/grocery/persistQueue';
+import { groceryListsEqual } from '../lib/grocery/fingerprint';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
+import { GROCERY_LIST_REFRESH_DEBOUNCE_MS } from '../config/grocerySync';
 import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
 import { router } from 'expo-router';
@@ -54,12 +56,18 @@ import {
 import { scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
 import {
   buildPantryMatchIndex,
+  filterRankedMatches,
   recipeServingScale,
   scaleRecipeIngredients,
-  topPantryRecipeRecommendations,
   withServingScale,
   type PantryMatchIndex,
+  type RecipePantryMatch,
 } from '../lib/recipeMatch';
+import {
+  DEFAULT_MIN_MATCHED_INGREDIENTS,
+  KITCHEN_LIST_DEFAULT_MIN_PERCENT,
+  RECIPE_MATCHING,
+} from '../config/recipeMatching';
 import { scoreDiscoveryRecipeAgainstPantry } from '../lib/recipeDiscovery/scorePantry';
 import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
 import {
@@ -291,6 +299,7 @@ interface AppContextValue {
   undoToast: UndoToastState | null;
   dismissUndoToast: () => void;
   setServingOverride: (recipeId: string, servings: number) => void;
+  applyServingOverridesBatch: (updates: Record<string, number>) => void;
   toggleGroceryItem: (id: string) => void;
   addManualGroceryItem: (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => void;
   clearCheckedGroceryItems: () => void;
@@ -323,7 +332,7 @@ interface AppContextValue {
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
   pantryRecipeMatches: PantryMatchIndex;
-  pantryRecipeRecommendations: ReturnType<typeof topPantryRecipeRecommendations>;
+  pantryRecipeRecommendations: RecipePantryMatch[];
   addMissingRecipeIngredientsToGrocery: (recipeId: string) => void;
   addMissingDiscoveryRecipeIngredientsToGrocery: (item: RecipeDiscoveryListItem) => void;
   onboarding: ReturnType<typeof useOnboarding>;
@@ -371,6 +380,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [servingOverrides, setServingOverrides] = useState<Record<string, number>>({});
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(USER_PREFERENCE_DEFAULTS);
+  const [guestKitchenHydrated, setGuestKitchenHydrated] = useState(() => demoMode);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -620,6 +630,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setMealPlan(readGuestMealPlan());
     setRecipes(readGuestRecipes());
     setLiveDataLoaded(true);
+    setGuestKitchenHydrated(true);
   }, [demoMode, hydrated, userId]);
 
   useEffect(() => {
@@ -638,7 +649,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     runScanPhotoRetentionCleanupIfDue(userId);
   }, [demoMode, userId]);
 
-  const refreshGrocery = useCallback(() => {
+  const refreshGroceryNow = useCallback(() => {
     if (!featureFlags.grocerySync) return;
     if (!demoMode && userId && !liveDataLoaded) return;
     const dismissals = readGroceryDismissals(ownerId);
@@ -647,6 +658,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         groceryDismissals: dismissals,
         householdSize: profile.householdSize,
       });
+      if (groceryListsEqual(prev, next)) return prev;
       if (demoMode) {
         writeJson(STORAGE_KEYS.grocery, next);
         return next;
@@ -682,8 +694,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     userId,
   ]);
 
+  const refreshGrocery = useCallback(() => {
+    refreshGroceryNow();
+  }, [refreshGroceryNow]);
+
   useEffect(() => {
-    refreshGrocery();
+    const timer = setTimeout(() => refreshGroceryNow(), GROCERY_LIST_REFRESH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [
     pantry,
     recipes,
@@ -691,7 +708,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     servingOverrides,
     profile.householdSize,
     featureFlags.grocerySync,
-    refreshGrocery,
+    refreshGroceryNow,
   ]);
 
   useEffect(() => {
@@ -700,8 +717,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.pantry, pantry);
-    else if (isGuest) writeGuestPantry(pantry);
-  }, [demoMode, isGuest, pantry]);
+    else if (isGuest && guestKitchenHydrated) writeGuestPantry(pantry);
+  }, [demoMode, guestKitchenHydrated, isGuest, pantry]);
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.recipes, recipes);
@@ -757,9 +774,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [pantry, profile.householdSize, recipes, servingOverrides]);
 
   const pantryRecipeRecommendations = useMemo(() => {
-    const kitchenRecipes = kitchenRecipesForPantryMatch(recipes);
-    return topPantryRecipeRecommendations(kitchenRecipes, pantry, 3);
-  }, [pantry, recipes]);
+    if (pantry.length === 0) return [];
+    return filterRankedMatches(pantryRecipeMatches.ranked, 'all', KITCHEN_LIST_DEFAULT_MIN_PERCENT, {
+      minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
+      pantryItemCount: pantry.length,
+    }).slice(0, RECIPE_MATCHING.homeRecommendationsLimit);
+  }, [pantry.length, pantryRecipeMatches.ranked]);
 
   const setDemoRole = useCallback((next: UserRole) => {
     setRole(next);
@@ -1321,7 +1341,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setServingOverride = useCallback((recipeId: string, servings: number) => {
-    setServingOverrides((prev) => ({ ...prev, [recipeId]: servings }));
+    setServingOverrides((prev) => {
+      if (prev[recipeId] === servings) return prev;
+      return { ...prev, [recipeId]: servings };
+    });
+  }, []);
+
+  const applyServingOverridesBatch = useCallback((updates: Record<string, number>) => {
+    setServingOverrides((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [recipeId, servings] of Object.entries(updates)) {
+        if (next[recipeId] === servings) continue;
+        next[recipeId] = servings;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
   }, []);
 
   const restockGroceriesToPantry = useCallback(
@@ -2016,6 +2052,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       undoToast,
       dismissUndoToast,
       setServingOverride,
+      applyServingOverridesBatch,
       toggleGroceryItem,
       addManualGroceryItem,
       clearCheckedGroceryItems,
@@ -2087,6 +2124,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setDemoRole,
       setFeatureFlag,
       setServingOverride,
+      applyServingOverridesBatch,
       signInWithMagicLink,
       signInWithPassword,
       signOut,

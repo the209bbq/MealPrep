@@ -113,6 +113,7 @@ export const RECIPES_COPY = {
     loadFailed: 'Could not load recipe ideas right now. Your saved recipes are still above.',
     pantrySuggestionsUnavailable:
       'Recipe ideas are unavailable right now. Check your connection or try again shortly.',
+    onlineUnavailable: 'Online recipes unavailable right now',
   },
 
   pantryOverlap: {

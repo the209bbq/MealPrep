@@ -8,7 +8,7 @@ import {
   recipePantryBadgeLabel,
   recipePantryListSubtitle,
 } from '../config/recipesCopy';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../lib/icons/Ionicons';
 
 import type { Recipe } from '../types/mealprep';
 import { scheduleTargetFromRecipeId } from '../lib/mealCalendar/scheduleTarget';

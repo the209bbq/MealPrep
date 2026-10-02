@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HANDS_ON_TUTORIAL_STEP_COUNT, ONBOARDING_COPY } from '../../config/onboarding';

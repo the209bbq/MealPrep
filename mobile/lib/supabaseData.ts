@@ -7,6 +7,8 @@ import { pantryPhotoUrlForStorage } from './pantryPhotoStorage';
 import { deleteScanPhoto } from './scanPhotos/client';
 import { withTimeout } from './withTimeout';
 import { groceryDedupeKey } from './recipeMatch/groceryFromMissing';
+import { groceryListsEqual } from './grocery/fingerprint';
+import { isPersistedGroceryUuid } from './grocery/persistIds';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
 import { DEFAULT_USER_PLAN, isUserPlan, type UserPlan } from '../config/plans';
 import type {
@@ -524,7 +526,31 @@ function groceryNameUnitKey(name: string, unit: string): string {
 }
 
 function isPersistedGroceryId(id: string, existingIds: Set<string>): boolean {
-  return existingIds.has(id);
+  return isPersistedGroceryUuid(id) && existingIds.has(id);
+}
+
+type GroceryWritePayload = {
+  user_id: string;
+  ingredient_id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  checked: boolean;
+  source_recipe_ids: string[];
+};
+
+function groceryWritePayload(userId: string, item: GroceryListItem): GroceryWritePayload {
+  return {
+    user_id: userId,
+    ingredient_id: item.ingredientId,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    unit: item.unit,
+    checked: item.checked,
+    source_recipe_ids: item.sourceRecipeIds,
+  };
 }
 
 export async function replaceGroceryList(
@@ -539,15 +565,22 @@ export async function replaceGroceryList(
   if (fetchError) throw fetchError;
 
   const existing = (existingRows ?? []) as GroceryRow[];
+  const existingMapped = existing.map((row) => mapGrocery(row)).sort((a, b) => a.name.localeCompare(b.name));
+  const sortedItems = [...items].sort((a, b) => a.name.localeCompare(b.name));
+  if (groceryListsEqual(existingMapped, sortedItems)) {
+    return existingMapped;
+  }
+
   const existingById = new Map(existing.map((row) => [row.id, row]));
   const existingIds = new Set(existing.map((row) => row.id));
   const existingByKey = new Map(existing.map((row) => [groceryRowKey(row.ingredient_id, row.unit), row]));
   const existingByNameUnit = new Map(existing.map((row) => [groceryNameUnitKey(row.name, row.unit), row]));
 
-  const persisted: GroceryListItem[] = [];
   const keptIds = new Set<string>();
+  const rowsToUpdate: (GroceryWritePayload & { id: string })[] = [];
+  const rowsToInsert: GroceryWritePayload[] = [];
 
-  for (const item of items) {
+  for (const item of sortedItems) {
     const key = groceryRowKey(item.ingredientId, item.unit);
     const nameKey = groceryNameUnitKey(item.name, item.unit);
     const matched =
@@ -555,41 +588,38 @@ export async function replaceGroceryList(
       existingByKey.get(key) ??
       existingByNameUnit.get(nameKey);
 
-    const payload = {
-      user_id: userId,
-      ingredient_id: item.ingredientId,
-      name: item.name,
-      category: item.category,
-      quantity: item.quantity,
-      unit: item.unit,
-      checked: item.checked,
-      source_recipe_ids: item.sourceRecipeIds,
-    };
+    const payload = groceryWritePayload(userId, item);
 
     if (matched) {
-      const { data, error } = await client
-        .from('grocery_list_items')
-        .update(payload)
-        .eq('id', matched.id)
-        .eq('user_id', userId)
-        .select('*')
-        .single();
-      if (error) throw error;
       keptIds.add(matched.id);
-      persisted.push(mapGrocery(data as GroceryRow));
-      continue;
+      rowsToUpdate.push({ id: matched.id, ...payload });
+    } else {
+      rowsToInsert.push(payload);
     }
-
-    const { data, error } = await client.from('grocery_list_items').insert(payload).select('*').single();
-    if (error) throw error;
-    keptIds.add((data as GroceryRow).id);
-    persisted.push(mapGrocery(data as GroceryRow));
   }
 
   const toRemove = existing.filter((row) => !keptIds.has(row.id)).map((row) => row.id);
   if (toRemove.length > 0) {
-    const { error: deleteError } = await client.from('grocery_list_items').delete().eq('user_id', userId).in('id', toRemove);
+    const { error: deleteError } = await client
+      .from('grocery_list_items')
+      .delete()
+      .eq('user_id', userId)
+      .in('id', toRemove);
     if (deleteError) throw deleteError;
+  }
+
+  const persisted: GroceryListItem[] = [];
+
+  if (rowsToUpdate.length > 0) {
+    const { data, error } = await client.from('grocery_list_items').upsert(rowsToUpdate).select('*');
+    if (error) throw error;
+    persisted.push(...((data ?? []) as GroceryRow[]).map(mapGrocery));
+  }
+
+  if (rowsToInsert.length > 0) {
+    const { data, error } = await client.from('grocery_list_items').insert(rowsToInsert).select('*');
+    if (error) throw error;
+    persisted.push(...((data ?? []) as GroceryRow[]).map(mapGrocery));
   }
 
   return persisted.sort((a, b) => a.name.localeCompare(b.name));

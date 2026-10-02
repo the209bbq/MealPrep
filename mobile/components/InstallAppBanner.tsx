@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../lib/icons/Ionicons';
 import { Pressable, Text, View } from 'react-native';
 import { APP_SHORT_NAME, THEME } from '../config/appConfig';
 import { usePwaInstall } from '../hooks/usePwaInstall';

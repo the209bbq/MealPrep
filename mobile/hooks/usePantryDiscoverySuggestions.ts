@@ -46,6 +46,9 @@ export function usePantryDiscoverySuggestions(
     void fetchPantryDiscoverySuggestions(pantry, accessToken, {
       minPercent,
       refreshSeed,
+      onPartial: (partial) => {
+        if (!cancelled) setSuggestions(partial);
+      },
     })
       .then((result) => {
         if (!cancelled) {

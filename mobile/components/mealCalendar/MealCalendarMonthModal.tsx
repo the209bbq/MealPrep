@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { localDateString, monthMatrix } from '../../lib/mealCalendar/dates';
 import type { MealPlanItem } from '../../types/mealprep';
 import { THEME } from '../../config/appConfig';

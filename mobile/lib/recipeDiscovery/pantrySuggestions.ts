@@ -1,9 +1,13 @@
 import { PANTRY_DISCOVERY_PER_QUERY } from '../../config/recipeMatching';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
+import { RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE } from '../../config/recipeDiscoveryClient';
 import type { PantryItem } from '../../types/mealprep';
 import { buildBrowseDiscoverySearchPlans } from './browseQueryPlans';
-import { searchDiscoveryRecipes } from './client';
+import {
+  RecipeDiscoveryQuotaError,
+  searchDiscoveryRecipes,
+} from './client';
 import { buildRotatingPantrySearchPlans, type PantryDiscoverySearchPlan } from './pantryQueryPlans';
 import { scoreDiscoveryRecipeAgainstPantry } from './scorePantry';
 import { collapseNearDuplicateRecipeRows } from '../recipes/nearDuplicate';
@@ -28,6 +32,8 @@ interface CacheEntry {
 }
 
 const suggestionCache = new Map<string, CacheEntry>();
+
+const DISCOVERY_SCORE_CHUNK_SIZE = 8;
 
 function pantryCacheKey(pantry: PantryItem[], refreshSeed: number): string {
   return `${refreshSeed}:${pantry
@@ -66,10 +72,82 @@ function rankSuggestions(rows: PantryDiscoverySuggestion[]): PantryDiscoverySugg
   });
 }
 
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+async function scoreDiscoverySuggestionsChunked(
+  recipes: RecipeDiscoveryListItem[],
+  pantry: PantryItem[],
+  onPartial?: (partial: PantryDiscoverySuggestion[]) => void,
+): Promise<PantryDiscoverySuggestion[]> {
+  const scored: PantryDiscoverySuggestion[] = [];
+  for (let index = 0; index < recipes.length; index += DISCOVERY_SCORE_CHUNK_SIZE) {
+    const slice = recipes.slice(index, index + DISCOVERY_SCORE_CHUNK_SIZE);
+    for (const recipe of slice) {
+      scored.push({
+        recipe,
+        match: scoreDiscoveryRecipeAgainstPantry(recipe, pantry),
+      });
+    }
+    onPartial?.(rankSuggestions([...scored]));
+    if (index + DISCOVERY_SCORE_CHUNK_SIZE < recipes.length) {
+      await yieldToMain();
+    }
+  }
+  return scored;
+}
+
+async function fetchDiscoveryListItems(
+  plans: PantryDiscoverySearchPlan[],
+  accessToken: string | null,
+): Promise<{ items: RecipeDiscoveryListItem[]; quotaExceeded: boolean; failures: number }> {
+  const byId = new Map<number, RecipeDiscoveryListItem>();
+  let failures = 0;
+  let quotaExceeded = false;
+
+  const results = await Promise.allSettled(
+    plans.map((plan) =>
+      searchDiscoveryRecipes(
+        {
+          search: plan.search,
+          ingredients: plan.ingredients,
+          page: plan.page,
+          perPage: PANTRY_DISCOVERY_PER_QUERY,
+        },
+        accessToken,
+      ),
+    ),
+  );
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      for (const item of result.value.items) {
+        if (!byId.has(item.id)) byId.set(item.id, item);
+      }
+      continue;
+    }
+    failures += 1;
+    if (result.reason instanceof RecipeDiscoveryQuotaError) {
+      quotaExceeded = true;
+      break;
+    }
+  }
+
+  return { items: [...byId.values()], quotaExceeded, failures };
+}
+
 export async function fetchPantryDiscoverySuggestions(
   pantry: PantryItem[],
   accessToken: string | null,
-  options?: { minPercent?: number; forceRefresh?: boolean; refreshSeed?: number },
+  options?: {
+    minPercent?: number;
+    forceRefresh?: boolean;
+    refreshSeed?: number;
+    onPartial?: (partial: PantryDiscoverySuggestion[]) => void;
+  },
 ): Promise<PantryDiscoveryResult> {
   const refreshSeed = options?.refreshSeed ?? 0;
   const cacheKey = pantry.length === 0 ? `browse:${refreshSeed}` : pantryCacheKey(pantry, refreshSeed);
@@ -90,43 +168,20 @@ export async function fetchPantryDiscoverySuggestions(
     return empty;
   }
 
-  const byId = new Map<number, RecipeDiscoveryListItem>();
-  let failures = 0;
+  const { items, quotaExceeded, failures } = await fetchDiscoveryListItems(plans, accessToken);
 
-  for (let queryIndex = 0; queryIndex < plans.length; queryIndex += 1) {
-    const plan = plans[queryIndex];
-    try {
-      const result = await searchDiscoveryRecipes(
-        {
-          search: plan.search,
-          ingredients: plan.ingredients,
-          page: plan.page,
-          perPage: PANTRY_DISCOVERY_PER_QUERY,
-        },
-        accessToken,
-      );
-      for (const item of result.items) {
-        if (!byId.has(item.id)) byId.set(item.id, item);
-      }
-    } catch {
-      failures += 1;
-    }
-  }
-
-  const scored = [...byId.values()].map((recipe) => ({
-    recipe,
-    match: scoreDiscoveryRecipeAgainstPantry(recipe, pantry),
-  }));
-
+  const scored = await scoreDiscoverySuggestionsChunked(items, pantry, options?.onPartial);
   const ranked = rankSuggestions(scored);
   const deduped = collapseDiscoveryNearDuplicates(ranked);
 
-  const errorMessage =
-    failures === plans.length && deduped.length === 0
-      ? accessToken
-        ? RECIPES_COPY.discoveryErrors.pantrySuggestionsUnavailable
-        : RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild
-      : null;
+  let errorMessage: string | null = null;
+  if (quotaExceeded) {
+    errorMessage = RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE;
+  } else if (failures === plans.length && deduped.length === 0) {
+    errorMessage = accessToken
+      ? RECIPES_COPY.discoveryErrors.pantrySuggestionsUnavailable
+      : RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild;
+  }
 
   const result: PantryDiscoveryResult = {
     suggestions: deduped,

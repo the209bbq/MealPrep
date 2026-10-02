@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { THEME } from '../../config/appConfig';
 import { GROCERY_COPY } from '../../config/grocery';

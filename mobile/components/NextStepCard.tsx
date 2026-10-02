@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../lib/icons/Ionicons';
 import { Pressable, Text, View } from 'react-native';
 import { HydrationSafeIonicon } from './HydrationSafeIonicon';
 import { THEME } from '../config/appConfig';
