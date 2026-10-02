@@ -217,20 +217,20 @@ export function RecipesTabFilterBar({
                 onSelect={(next) => onSetFilter('meal', next as RecipesTabMealChoice)}
               />
               <FilterQuestion
-                question={RECIPES_TAB_FILTER_COPY.questions.shop}
-                dimension="shop"
-                value={filters.shop}
-                baseRows={baseRows}
-                filters={filters}
-                onSelect={(next) => onSetFilter('shop', next as RecipesTabShopChoice)}
-              />
-              <FilterQuestion
                 question={RECIPES_TAB_FILTER_COPY.questions.people}
                 dimension="people"
                 value={filters.people}
                 baseRows={baseRows}
                 filters={filters}
                 onSelect={(next) => onSetFilter('people', next as RecipesTabPeopleChoice)}
+              />
+              <FilterQuestion
+                question={RECIPES_TAB_FILTER_COPY.questions.shop}
+                dimension="shop"
+                value={filters.shop}
+                baseRows={baseRows}
+                filters={filters}
+                onSelect={(next) => onSetFilter('shop', next as RecipesTabShopChoice)}
               />
             </ScrollView>
             {active ? (

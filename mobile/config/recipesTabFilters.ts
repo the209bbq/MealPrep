@@ -332,8 +332,8 @@ export function recipesTabFilterSummary(state: RecipesTabFilterState): string {
     parts.push(RECIPES_TAB_FILTER_COPY.options.difficulty[state.difficulty]);
   }
   if (state.meal !== 'any') parts.push(RECIPES_TAB_FILTER_COPY.options.meal[state.meal]);
-  if (state.shop !== 'any') parts.push(SUMMARY_SHOP[state.shop]);
   if (state.people !== 'any') parts.push(SUMMARY_PEOPLE[state.people]);
+  if (state.shop !== 'any') parts.push(SUMMARY_SHOP[state.shop]);
   return parts.join(' · ');
 }
 

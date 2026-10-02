@@ -133,6 +133,16 @@ assert.equal(
   recipesTabFilterSummary({ ...DEFAULT_RECIPES_TAB_FILTER_STATE, time: '30', difficulty: 'easy' }),
   '30 min · Easy',
 );
+assert.equal(
+  recipesTabFilterSummary({
+    ...DEFAULT_RECIPES_TAB_FILTER_STATE,
+    time: '30',
+    meal: 'dinner',
+    people: 'two',
+    shop: 'grab_1_2',
+  }),
+  '30 min · Dinner · 2 people · 1–2 to buy',
+);
 assert.equal(recipesTabNarrowingFiltersActive({ ...DEFAULT_RECIPES_TAB_FILTER_STATE, people: 'two' }), false);
 
 assert.equal(inferKitchenMealChoice({ ...baseRecipe, name: 'Sunday Pancakes', description: '' }), 'breakfast');
