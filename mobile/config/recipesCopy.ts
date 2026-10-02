@@ -12,6 +12,7 @@ export const RECIPES_COPY = {
     subtitle: 'Meals you can make with what is already in your pantry',
     sortFilterLabel: 'Sort & filter',
     showDifferentIdeas: 'Show different ideas',
+    emptyPantryBrowseHint: 'Add pantry items to see what you can make now',
   },
 
   pantryFilterLabels: {

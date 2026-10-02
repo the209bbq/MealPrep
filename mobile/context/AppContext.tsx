@@ -362,7 +362,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [role, setRole] = useState<UserRole>('admin');
   const [pantry, setPantry] = useState<PantryItem[]>(() =>
-    demoMode ? normalizePantryItemList(MOCK_PANTRY) : [],
+    demoMode ? normalizePantryItemList(readJson(STORAGE_KEYS.pantry, [])) : [],
   );
   const [recipes, setRecipes] = useState<Recipe[]>(() => (demoMode ? MOCK_RECIPES : []));
   const [grocery, setGrocery] = useState<GroceryListItem[]>([]);
@@ -381,7 +381,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setServingOverrides(readJson(STORAGE_KEYS.servingOverrides, {}));
     if (!demoMode) return;
     setRole(readJson(STORAGE_KEYS.role, 'admin'));
-    setPantry(normalizePantryItemList(readJson(STORAGE_KEYS.pantry, MOCK_PANTRY)));
+    setPantry(normalizePantryItemList(readJson(STORAGE_KEYS.pantry, [])));
     setRecipes(readJson(STORAGE_KEYS.recipes, MOCK_RECIPES));
     setGrocery(readJson(STORAGE_KEYS.grocery, []));
     setMealPlan(initialMealPlan(true));

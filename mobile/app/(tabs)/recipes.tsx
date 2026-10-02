@@ -6,9 +6,8 @@ import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
 import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedFeedCard';
 import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
-import { RECIPES_TAB, THEME } from '../../config/appConfig';
-import { DEFAULT_MIN_MATCHED_INGREDIENTS } from '../../config/recipeMatching';
 import { RECIPES_COPY } from '../../config/recipesCopy';
+import { THEME } from '../../config/appConfig';
 import {
   applyRecipesTabFilters,
   discoveryRecipeServingOverrideId,
@@ -19,21 +18,9 @@ import {
 import { useRecipesTabFilters } from '../../hooks/useRecipesTabFilters';
 import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
 import { useApp } from '../../context/AppContext';
-import { buildUnifiedRecipesFeed, dedupeRecipesTabRows } from '../../lib/recipes/unifiedFeed';
-import {
-  filterRankedMatchesWithPartialFallback,
-  type RecipePantryMatch,
-} from '../../lib/recipeMatch';
+import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
+import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
-import type { Recipe } from '../../types/mealprep';
-
-function rankKitchenRecipesByPantry(kitchenRecipes: Recipe[], ranked: RecipePantryMatch[]): Recipe[] {
-  const rankedIds = ranked.map((m) => m.recipeId);
-  const idSet = new Set(rankedIds);
-  const list = kitchenRecipes.filter((r) => idSet.has(r.id));
-  list.sort((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
-  return list;
-}
 
 export default function RecipesScreen() {
   const params = useLocalSearchParams<{ recipeId?: string }>();
@@ -58,15 +45,13 @@ export default function RecipesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
-  const minPantryMatchPercent = RECIPES_TAB.defaultMinPercent;
   const pantryEmpty = pantry.length === 0;
-  const discoveryEnabled = !pantryEmpty;
   const {
     suggestions: discoverySuggestions,
     loading: discoveryLoading,
     error: discoveryError,
     refreshDiscovery,
-  } = usePantryDiscoverySuggestions(pantry, session, { enabled: discoveryEnabled });
+  } = usePantryDiscoverySuggestions(pantry, session, { enabled: true });
 
   function openDetail(row: RecipesTabRow) {
     setPickedDetailRow(row);
@@ -75,57 +60,15 @@ export default function RecipesScreen() {
 
   const kitchenRecipes = useMemo(() => kitchenRecipesForPantryMatch(recipes), [recipes]);
 
-  const baseKitchenRecipes = useMemo(() => {
-    if (pantryEmpty) return [];
-    const minMatchedCount = RECIPES_TAB.hideZeroPantryMatches ? DEFAULT_MIN_MATCHED_INGREDIENTS : 0;
-    const { matches: ranked } = filterRankedMatchesWithPartialFallback(
-      pantryRecipeMatches.ranked,
-      'all',
-      minPantryMatchPercent,
-      {
-        minMatchedCount,
-        pantryItemCount: pantry.length,
-      },
-    );
-    return rankKitchenRecipesByPantry(kitchenRecipes, ranked);
-  }, [minPantryMatchPercent, pantry.length, pantryEmpty, pantryRecipeMatches.ranked, kitchenRecipes]);
-
-  const baseDiscoverySuggestions = useMemo(() => {
-    if (pantryEmpty) return [];
-    const { matches } = filterRankedMatchesWithPartialFallback(
-      discoverySuggestions.map((row) => row.match),
-      'all',
-      minPantryMatchPercent,
-      { pantryItemCount: pantry.length },
-    );
-    const allowed = new Set(matches.map((m) => m.recipeId));
-    return discoverySuggestions.filter((row) => allowed.has(row.match.recipeId));
-  }, [discoverySuggestions, minPantryMatchPercent, pantry.length, pantryEmpty]);
-
-  const filterBaseRows = useMemo((): RecipesTabRow[] => {
-    const kitchenRows: RecipesTabRow[] = baseKitchenRecipes.map((recipe) => ({
-      kind: 'kitchen',
-      recipe,
-      match:
-        pantryRecipeMatches.byRecipeId.get(recipe.id) ??
-        ({
-          recipeId: recipe.id,
-          recipeName: recipe.name,
-          totalIngredients: 0,
-          matchedCount: 0,
-          missingCount: 0,
-          percentMatch: 0,
-          matched: [],
-          missing: [],
-        } satisfies RecipePantryMatch),
-    }));
-    const discoveryRows: RecipesTabRow[] = baseDiscoverySuggestions.map((row) => ({
-      kind: 'discovery',
-      recipe: row.recipe,
-      match: row.match,
-    }));
-    return dedupeRecipesTabRows([...kitchenRows, ...discoveryRows]);
-  }, [baseDiscoverySuggestions, baseKitchenRecipes, pantryRecipeMatches.byRecipeId]);
+  const filterBaseRows = useMemo(
+    (): RecipesTabRow[] =>
+      buildRecipesTabCatalogRows({
+        kitchenRecipes,
+        pantryMatches: pantryRecipeMatches,
+        discoverySuggestions,
+      }),
+    [discoverySuggestions, kitchenRecipes, pantryRecipeMatches],
+  );
 
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
@@ -139,13 +82,13 @@ export default function RecipesScreen() {
 
   const detailRow = useMemo(() => {
     if (pickedDetailRow) return pickedDetailRow;
-    if (!routeRecipeId || pantryEmpty) return null;
+    if (!routeRecipeId) return null;
     return (
       filterBaseRows.find(
         (candidate) => candidate.kind === 'kitchen' && candidate.recipe.id === routeRecipeId,
       ) ?? null
     );
-  }, [filterBaseRows, pantryEmpty, pickedDetailRow, routeRecipeId]);
+  }, [filterBaseRows, pickedDetailRow, routeRecipeId]);
 
   const peopleTargetServings = recipesTabPeopleTargetServings(filters.people);
   useEffect(() => {
@@ -153,10 +96,10 @@ export default function RecipesScreen() {
     for (const recipe of kitchenRecipes) {
       setServingOverride(recipe.id, peopleTargetServings);
     }
-    for (const { recipe } of baseDiscoverySuggestions) {
+    for (const { recipe } of discoverySuggestions) {
       setServingOverride(discoveryRecipeServingOverrideId(recipe.id), peopleTargetServings);
     }
-  }, [baseDiscoverySuggestions, kitchenRecipes, peopleTargetServings, setServingOverride]);
+  }, [discoverySuggestions, kitchenRecipes, peopleTargetServings, setServingOverride]);
 
   const detailServings = useMemo(() => {
     if (!detailRow) return 4;
@@ -178,21 +121,15 @@ export default function RecipesScreen() {
 
   const hasUnfilteredResults = filterBaseRows.length > 0;
   const showFilterEmpty =
-    !pantryEmpty &&
     recipesTabNarrowingFiltersActive(filters) &&
     hasUnfilteredResults &&
     filteredRows.length === 0 &&
     !searchQuery.trim();
 
-  const showKitchenEmpty =
-    pantryEmpty ||
-    (!showFilterEmpty &&
-      !discoveryLoading &&
-      filterBaseRows.length === 0 &&
-      !searchQuery.trim());
+  const showCatalogEmpty =
+    !showFilterEmpty && !discoveryLoading && filterBaseRows.length === 0 && !searchQuery.trim();
 
   const showSearchEmpty =
-    !pantryEmpty &&
     !discoveryLoading &&
     filterBaseRows.length > 0 &&
     filteredRows.length === 0 &&
@@ -221,22 +158,23 @@ export default function RecipesScreen() {
           onSetFilter={setFilter}
           onClearAll={clearAllFilters}
         />
-        {!pantryEmpty ? (
-          <Pressable
-            onPress={showDifferentIdeas}
-            disabled={discoveryLoading}
-            className="mt-3 min-h-[44px] items-center justify-center rounded-xl border border-primary bg-primary-light px-4 py-3"
-            accessibilityRole="button"
-            accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
-          >
-            <Text className="text-sm font-bold text-primary-dark">
-              {discoveryLoading ? RECIPES_COPY.discoveryPanel.searching : RECIPES_COPY.cookNowCard.showDifferentIdeas}
-            </Text>
-          </Pressable>
+        {pantryEmpty ? (
+          <Text className="mt-2 text-xs text-muted">{RECIPES_COPY.cookNowCard.emptyPantryBrowseHint}</Text>
         ) : null}
+        <Pressable
+          onPress={showDifferentIdeas}
+          disabled={discoveryLoading}
+          className="mt-3 min-h-[44px] items-center justify-center rounded-xl border border-primary bg-primary-light px-4 py-3"
+          accessibilityRole="button"
+          accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
+        >
+          <Text className="text-sm font-bold text-primary-dark">
+            {discoveryLoading ? RECIPES_COPY.discoveryPanel.searching : RECIPES_COPY.cookNowCard.showDifferentIdeas}
+          </Text>
+        </Pressable>
       </Card>
 
-      {discoveryLoading && !pantryEmpty ? (
+      {discoveryLoading ? (
         <View className="mt-4 flex-row items-center gap-2">
           <ActivityIndicator color={THEME.primary} />
           <Text className="text-sm text-muted">{RECIPES_COPY.moreIdeasCard.loading}</Text>
@@ -246,7 +184,7 @@ export default function RecipesScreen() {
         <Text className="mt-3 text-sm text-muted">{discoveryError}</Text>
       ) : null}
 
-      {showKitchenEmpty ? <RecipesEmptyState pantryEmpty={pantryEmpty} /> : null}
+      {showCatalogEmpty ? <RecipesEmptyState pantryEmpty={false} /> : null}
       {showFilterEmpty ? <RecipesTabFiltersEmptyState onClearAll={clearAllFilters} /> : null}
       {showSearchEmpty ? (
         <Text className="mt-4 text-sm text-muted">{RECIPES_COPY.discoveryPanel.noFilterResults}</Text>

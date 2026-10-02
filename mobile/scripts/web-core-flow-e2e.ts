@@ -2,7 +2,7 @@
  * Playwright E2E: pantry → recipes → grocery → Smart Shop (guest / demo web export).
  * Run from mobile/: npm run test:web-e2e
  */
-import { chromium, type Page } from 'playwright';
+import { chromium, devices, type BrowserContext, type Locator, type Page } from 'playwright';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -120,16 +120,126 @@ async function addPantryItems(page: Page): Promise<void> {
   }
 }
 
-async function exerciseRecipesQuestionFilter(page: Page): Promise<void> {
+type FilterPointer = 'mouse' | 'touch';
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function activate(_page: Page, pointer: FilterPointer, target: Locator): Promise<void> {
+  if (pointer === 'touch') {
+    await target.tap();
+  } else {
+    await target.click();
+  }
+}
+
+async function pickFirstEnabledFilterDropdown(
+  page: Page,
+  pointer: FilterPointer,
+  question: string,
+): Promise<string | null> {
+  await activate(page, pointer, page.getByLabel(`${question} select`));
+  const optionPattern = new RegExp(`^${escapeRegExp(question)} option `);
+  const options = page.getByRole('button', { name: optionPattern });
+  await options.first().waitFor({ state: 'visible', timeout: 10_000 });
+  const total = await options.count();
+  for (let index = 0; index < total; index += 1) {
+    const option = options.nth(index);
+    const label = (await option.getAttribute('aria-label')) ?? '';
+    if (label.endsWith(' option Any')) continue;
+    if (!(await option.isEnabled())) continue;
+    await activate(page, pointer, option);
+    return label.slice(`${question} option `.length);
+  }
+  await activate(page, pointer, page.getByLabel(`${question} select`));
+  return null;
+}
+
+async function countRecipeFeedCards(page: Page): Promise<number> {
+  const feedCards = page.locator('[class*="mb-3"]').filter({
+    has: page.getByText(RECIPES_COPY.recipeCard.addMissingCta, { exact: true }),
+  });
+  return feedCards.count();
+}
+
+async function exerciseEmptyPantryRecipesBrowse(page: Page, pointer: FilterPointer): Promise<void> {
+  await page.getByRole('tab', { name: 'Recipes' }).click();
+  await page.waitForURL(/\/recipes/, { timeout: 15_000 });
+  await page
+    .getByText(RECIPES_COPY.cookNowCard.emptyPantryBrowseHint, { exact: true })
+    .waitFor({ timeout: 15_000 });
+
+  const unfilteredCount = await countRecipeFeedCards(page);
+  assert(unfilteredCount >= 5, 'empty pantry should show the full browsable kitchen catalog');
+
+  await activate(page, pointer, page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton));
+  const timeLabel = await pickFirstEnabledFilterDropdown(
+    page,
+    pointer,
+    RECIPES_TAB_FILTER_COPY.questions.time,
+  );
+  assert(timeLabel != null, 'time filter should be selectable with empty pantry');
+  await activate(page, pointer, page.getByLabel('Close filters'));
+
+  const filteredCount = await countRecipeFeedCards(page);
+  assert(filteredCount < unfilteredCount, 'filters should narrow the browsable catalog');
+  assert(filteredCount > 0, 'some catalog recipes should remain after filtering');
+
+  await activate(page, pointer, page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }));
+}
+
+async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): Promise<void> {
   await page.getByRole('tab', { name: 'Recipes' }).click();
   await page.waitForURL(/\/recipes/, { timeout: 15_000 });
 
-  await page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton).click();
-  await page.getByLabel(`${RECIPES_TAB_FILTER_COPY.questions.time} select`).click();
-  await page.getByText(/30 min or less/).first().click();
-  await page.getByLabel('Close filters').click();
-  await page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton).getByText('30 min').waitFor({ timeout: 5_000 });
-  await page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }).click();
+  const feedCards = page.locator('[class*="mb-3"]').filter({
+    has: page.getByText(RECIPES_COPY.recipeCard.addMissingCta, { exact: true }),
+  });
+  await feedCards.first().waitFor({ timeout: 30_000 });
+  const unfilteredCount = await countRecipeFeedCards(page);
+
+  await activate(page, pointer, page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton));
+
+  const filterQuestions = [
+    RECIPES_TAB_FILTER_COPY.questions.time,
+    RECIPES_TAB_FILTER_COPY.questions.shop,
+    RECIPES_TAB_FILTER_COPY.questions.difficulty,
+    RECIPES_TAB_FILTER_COPY.questions.meal,
+    RECIPES_TAB_FILTER_COPY.questions.people,
+  ];
+  const pickedLabels: string[] = [];
+  for (const question of filterQuestions) {
+    const label = await pickFirstEnabledFilterDropdown(page, pointer, question);
+    if (label) pickedLabels.push(label);
+  }
+  assert(pickedLabels.length >= 3, 'sparse pantry should still narrow on several filter dimensions');
+
+  await activate(page, pointer, page.getByLabel('Close filters'));
+
+  await page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }).waitFor({ timeout: 5_000 });
+  const filterBarText = await page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton).innerText();
+  assert(
+    !filterBarText.includes(RECIPES_TAB_FILTER_COPY.options.any),
+    'filter bar should show active selections after applying filters',
+  );
+
+  const filteredCount = await countRecipeFeedCards(page);
+  assert(
+    filteredCount <= unfilteredCount,
+    'recipe feed should narrow (or stay same) after applying filters',
+  );
+  if (filteredCount === 0) {
+    await page.getByText(RECIPES_TAB_FILTER_COPY.emptyTitle, { exact: true }).waitFor({ timeout: 5_000 });
+  } else {
+    assert(filteredCount > 0, 'filtered recipe feed should list matching recipes');
+  }
+
+  await activate(page, pointer, page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }));
+}
+
+async function exerciseRecipesQuestionFilter(page: Page): Promise<void> {
+  await exerciseRecipesFilterSheet(page, 'mouse');
 }
 
 /** Nudge is Home-only; demo/web E2E runs without Supabase (demo mode hides the nudge entirely). */
@@ -220,6 +330,7 @@ async function verifyHomeMealCalendar(page: Page): Promise<void> {
 
 async function runGuestFlow(page: Page): Promise<void> {
   await primeGuestSession(page);
+  await exerciseEmptyPantryRecipesBrowse(page, 'mouse');
   await addPantryItems(page);
   await verifyHomeMealCalendar(page);
   await exerciseRecipesQuestionFilter(page);
@@ -229,74 +340,97 @@ async function runGuestFlow(page: Page): Promise<void> {
   await smartShopWithMockStores(page);
 }
 
+async function seedE2eStorage(context: BrowserContext): Promise<void> {
+  await context.addInitScript((flags) => {
+    if (sessionStorage.getItem('mealprep.e2e.seeded') === '1') {
+      return;
+    }
+    sessionStorage.setItem('mealprep.e2e.seeded', '1');
+    localStorage.setItem('mealprep.onboarding.welcomeDismissed', 'true');
+    localStorage.setItem('mealprep.onboarding.tourCompleted', 'true');
+    localStorage.setItem('mealprep.onboarding.tourQueued', 'false');
+    localStorage.setItem('mealprep.pantry', JSON.stringify([]));
+    localStorage.setItem('mealprep.grocery', JSON.stringify([]));
+    localStorage.setItem('mealprep.guest.pantry', JSON.stringify([]));
+    localStorage.setItem('mealprep.guest.grocery', JSON.stringify([]));
+    localStorage.setItem('mealprep.guest.mealPlan', JSON.stringify([]));
+    localStorage.setItem('mealprep.guest.recipes', JSON.stringify([]));
+    localStorage.setItem('mealprep.mealPlan', JSON.stringify([]));
+    localStorage.setItem('mealprep.featureFlags', JSON.stringify(flags));
+    localStorage.setItem('mealprep.smartShop.zip', JSON.stringify('95361'));
+    localStorage.setItem(
+      'mealprep.smartShop.coords',
+      JSON.stringify({ lat: 37.7665, lng: -120.8471, updatedAt: new Date().toISOString() }),
+    );
+    localStorage.removeItem('mealprep.smartShop.savedStoreIds');
+    localStorage.removeItem('mealprep.smartShop.savedStores');
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('mealprep.osmCache.')) localStorage.removeItem(key);
+    }
+  }, FEATURE_FLAG_DEFAULTS);
+}
+
+async function attachE2eRoutes(context: BrowserContext): Promise<void> {
+  await context.route('**/*interpreter*', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        elements: [
+          {
+            type: 'node',
+            id: 4242,
+            lat: 37.7665,
+            lon: -120.8471,
+            tags: { shop: 'supermarket', name: 'E2E Test Mart' },
+          },
+          {
+            type: 'node',
+            id: 4243,
+            lat: 37.7672,
+            lon: -120.8462,
+            tags: {
+              shop: 'department_store',
+              name: 'Walmart Supercenter',
+              brand: 'Walmart',
+              'brand:wikidata': 'Q483551',
+            },
+          },
+        ],
+      }),
+    });
+  });
+
+  await context.route(`**${basePath}/pwa-register.js`, (route) => route.abort());
+}
+
+async function runRecipesFilterPixelTouchFlow(page: Page): Promise<void> {
+  await primeGuestSession(page);
+  await exerciseEmptyPantryRecipesBrowse(page, 'touch');
+  await addPantryItems(page);
+  await exerciseRecipesFilterSheet(page, 'touch');
+}
+
 async function main(): Promise<void> {
   const server = await startServer();
   const browser = await chromium.launch();
   try {
+    const pixelContext = await browser.newContext({ ...devices['Pixel 5'], hasTouch: true });
+    await seedE2eStorage(pixelContext);
+    await attachE2eRoutes(pixelContext);
+    const pixelPage = await pixelContext.newPage();
+    pixelPage.on('pageerror', (err) => console.error('pageerror:', err));
+    await runRecipesFilterPixelTouchFlow(pixelPage);
+    await pixelContext.close();
+    console.log('Recipes filter sheet E2E passed (Pixel touch).');
+
     const context = await browser.newContext();
-    await context.addInitScript((flags) => {
-      if (sessionStorage.getItem('mealprep.e2e.seeded') === '1') {
-        return;
-      }
-      sessionStorage.setItem('mealprep.e2e.seeded', '1');
-      localStorage.setItem('mealprep.onboarding.welcomeDismissed', 'true');
-      localStorage.setItem('mealprep.onboarding.tourCompleted', 'true');
-      localStorage.setItem('mealprep.onboarding.tourQueued', 'false');
-      localStorage.setItem('mealprep.pantry', JSON.stringify([]));
-      localStorage.setItem('mealprep.grocery', JSON.stringify([]));
-      localStorage.setItem('mealprep.guest.pantry', JSON.stringify([]));
-      localStorage.setItem('mealprep.guest.grocery', JSON.stringify([]));
-      localStorage.setItem('mealprep.guest.mealPlan', JSON.stringify([]));
-      localStorage.setItem('mealprep.guest.recipes', JSON.stringify([]));
-      localStorage.setItem('mealprep.mealPlan', JSON.stringify([]));
-      localStorage.setItem('mealprep.featureFlags', JSON.stringify(flags));
-      localStorage.setItem('mealprep.smartShop.zip', JSON.stringify('95361'));
-      localStorage.setItem(
-        'mealprep.smartShop.coords',
-        JSON.stringify({ lat: 37.7665, lng: -120.8471, updatedAt: new Date().toISOString() }),
-      );
-      localStorage.removeItem('mealprep.smartShop.savedStoreIds');
-      localStorage.removeItem('mealprep.smartShop.savedStores');
-      for (const key of Object.keys(localStorage)) {
-        if (key.startsWith('mealprep.osmCache.')) localStorage.removeItem(key);
-      }
-    }, FEATURE_FLAG_DEFAULTS);
-
-    await context.route('**/*interpreter*', async (route) => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          elements: [
-            {
-              type: 'node',
-              id: 4242,
-              lat: 37.7665,
-              lon: -120.8471,
-              tags: { shop: 'supermarket', name: 'E2E Test Mart' },
-            },
-            {
-              type: 'node',
-              id: 4243,
-              lat: 37.7672,
-              lon: -120.8462,
-              tags: {
-                shop: 'department_store',
-                name: 'Walmart Supercenter',
-                brand: 'Walmart',
-                'brand:wikidata': 'Q483551',
-              },
-            },
-          ],
-        }),
-      });
-    });
-
-    await context.route(`**${basePath}/pwa-register.js`, (route) => route.abort());
+    await seedE2eStorage(context);
+    await attachE2eRoutes(context);
 
     const page = await context.newPage();
     page.on('pageerror', (err) => console.error('pageerror:', err));

@@ -23,7 +23,6 @@ export function usePantryDiscoverySuggestions(
   const enabled = options?.enabled ?? true;
   const minPercent = DEFAULT_MIN_PANTRY_MATCH_PERCENT;
   const accessToken = getRecipeDiscoveryAccessToken(session);
-  const pantryEmpty = pantry.length === 0;
   const [refreshSeed, setRefreshSeed] = useState(options?.refreshSeed ?? 0);
 
   const [suggestions, setSuggestions] = useState<PantryDiscoverySuggestion[]>([]);
@@ -35,7 +34,7 @@ export function usePantryDiscoverySuggestions(
   }, []);
 
   useEffect(() => {
-    if (!enabled || pantryEmpty) {
+    if (!enabled) {
       setSuggestions([]);
       setError(null);
       setLoading(false);
@@ -67,7 +66,7 @@ export function usePantryDiscoverySuggestions(
     return () => {
       cancelled = true;
     };
-  }, [accessToken, enabled, minPercent, pantry, pantryEmpty, refreshSeed]);
+  }, [accessToken, enabled, minPercent, pantry, refreshSeed]);
 
   return { suggestions, loading, error, refreshSeed, refreshDiscovery };
 }
