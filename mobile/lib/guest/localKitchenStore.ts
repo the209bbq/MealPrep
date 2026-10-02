@@ -33,6 +33,8 @@ export function normalizeMealPlanItemList(items: MealPlanItem[]): MealPlanItem[]
     scheduledOn: row.scheduledOn ?? null,
     mealSlot: row.mealSlot ?? null,
     madeAt: row.madeAt ?? null,
+    leftoverOfId: row.leftoverOfId ?? null,
+    linkedLeftoverId: row.linkedLeftoverId ?? null,
   }));
 }
 

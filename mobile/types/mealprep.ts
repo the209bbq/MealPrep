@@ -164,6 +164,10 @@ export interface MealPlanItem {
   scheduledOn: string | null;
   /** Optional meal slot when `scheduledOn` is set. */
   mealSlot: MealSlot | null;
+  /** When set, this row is a leftover meal linked to the source plan item (no grocery ingredients). */
+  leftoverOfId: string | null;
+  /** When set, the linked leftover row id (source meal only). */
+  linkedLeftoverId: string | null;
 }
 
 export interface MealPrepSummary {

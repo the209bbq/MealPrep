@@ -49,6 +49,7 @@ export function MealWeekCalendarCard() {
     scheduleMealFromRecipe,
     updateMealPlanSchedule,
     removeMealPlanItem,
+    shopForWeekScheduledMeals,
   } = useApp();
 
   const ownerId = session?.user?.id ?? profile.id ?? (demoMode ? 'demo-user' : GUEST_OWNER_ID);
@@ -174,6 +175,13 @@ export function MealWeekCalendarCard() {
             )}
           </View>
         ))}
+
+        <Pressable
+          onPress={shopForWeekScheduledMeals}
+          className="mt-3 items-center rounded-xl bg-primary py-3"
+        >
+          <Text className="text-sm font-bold text-onPrimary">{MEAL_CALENDAR.shopForWeekLabel}</Text>
+        </Pressable>
       </Card>
 
       <MealCalendarMonthModal

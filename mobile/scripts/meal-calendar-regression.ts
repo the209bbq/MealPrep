@@ -9,6 +9,12 @@ import { groupMealsByDay, mealsForLocalDate } from '../lib/mealCalendar/groupMea
 import { mergeGuestMealPlanIntoAccount } from '../lib/guest/mergeGuestKitchen';
 import { buildGoogleCalendarTemplateUrl, cookEventTitle, googleCalendarEventTimes } from '../lib/mealCalendar/googleCalendar';
 import { buildIcsCalendar, buildIcsEvent } from '../lib/mealCalendar/ics';
+import {
+  applyMealPlanRemoval,
+  buildLinkedLeftoverEntry,
+  leftoverMealTitle,
+} from '../lib/mealCalendar/leftovers';
+import { mealPlanItemsInWeekWindow, recipeIdsForScheduledMeals } from '../lib/mealCalendar/weekGroceries';
 import type { MealPlanItem } from '../types/mealprep';
 
 function assert(condition: boolean, message: string): void {
@@ -30,6 +36,8 @@ function planRow(partial: Partial<MealPlanItem> & Pick<MealPlanItem, 'id' | 'tit
     addedAt: '2026-10-01T12:00:00.000Z',
     scheduledOn: partial.scheduledOn ?? null,
     mealSlot: partial.mealSlot ?? null,
+    leftoverOfId: partial.leftoverOfId ?? null,
+    linkedLeftoverId: partial.linkedLeftoverId ?? null,
   };
 }
 
@@ -89,6 +97,49 @@ function main(): void {
     isoDate: start,
     mealSlot: 'lunch',
   }).includes('SUMMARY:Cook: X'), 'ics summary');
+
+  const weekStart = start;
+  const weekEnd = addLocalDays(weekStart, 6);
+  const weekPlan = [
+    planRow({ id: 'w1', title: 'Cook meal', scheduledOn: weekStart, mealSlot: 'dinner' }),
+    planRow({
+      id: 'w-lo',
+      title: 'Leftovers: Cook meal',
+      scheduledOn: addLocalDays(weekStart, 1),
+      mealSlot: 'lunch',
+      recipeSlug: null,
+      leftoverOfId: 'w1',
+    }),
+    planRow({ id: 'w-old', title: 'Outside', scheduledOn: addLocalDays(weekStart, -1), mealSlot: 'dinner' }),
+  ];
+  const windowItems = mealPlanItemsInWeekWindow(weekPlan, weekStart, 7);
+  assert(windowItems.length === 1 && windowItems[0].id === 'w1', 'week window excludes leftovers and past');
+  const recipeIds = recipeIdsForScheduledMeals(windowItems, [], 'user-1');
+  assert(recipeIds.length === 1 && recipeIds[0] === 'lemon-chicken', 'week shop recipe ids');
+
+  const parent = planRow({
+    id: 'p1',
+    title: 'Roast',
+    scheduledOn: weekStart,
+    mealSlot: 'dinner',
+    linkedLeftoverId: 'c1',
+  });
+  const child = planRow({
+    id: 'c1',
+    title: 'Leftovers: Roast',
+    scheduledOn: addLocalDays(weekStart, 1),
+    mealSlot: 'lunch',
+    recipeSlug: null,
+    leftoverOfId: 'p1',
+  });
+  assert(leftoverMealTitle('Roast') === 'Leftovers: Roast', 'leftover title');
+  const built = buildLinkedLeftoverEntry(parent);
+  assert(built.scheduledOn === addLocalDays(weekStart, 1), 'leftover next day');
+  assert(built.mealSlot === 'lunch', 'leftover lunch slot');
+  const afterParentRemove = applyMealPlanRemoval([parent, child], 'p1');
+  assert(afterParentRemove.length === 0, 'remove parent drops linked leftover');
+  const afterChildRemove = applyMealPlanRemoval([parent, child], 'c1');
+  assert(afterChildRemove.length === 1 && afterChildRemove[0].linkedLeftoverId === null, 'remove leftover clears parent link');
 
   console.log('OK meal-calendar regression');
 }

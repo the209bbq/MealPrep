@@ -28,6 +28,7 @@ export function activeMealPlanRecipeIds(
   const ids: string[] = [];
   for (const item of mealPlan) {
     if (item.made) continue;
+    if (item.leftoverOfId) continue;
     const id = resolveMealPlanRecipeId(item, recipes, userId);
     if (id) ids.push(id);
   }

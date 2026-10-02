@@ -33,6 +33,7 @@ import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
 import { router } from 'expo-router';
 import { APP_ROUTES } from '../config/appRoutes';
+import { MEAL_CALENDAR } from '../config/mealCalendar';
 import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
 import {
   applyPantryDeductions,
@@ -67,6 +68,7 @@ import {
   writeGuestPantry,
   writeGuestRecipes,
 } from '../lib/guest/localKitchenStore';
+import { localDateString } from '../lib/communityDeals/localDate';
 import { mergeGuestKitchenIntoAccount } from '../lib/guest/mergeGuestKitchen';
 import { readJson, removeStorageKey, writeJson } from '../lib/storage';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
@@ -80,7 +82,16 @@ import {
   resolveDiscoveryGroceryRecipeId,
 } from '../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
+import {
+  mealPlanItemsInWeekWindow,
+  recipeIdsForScheduledMeals,
+} from '../lib/mealCalendar/weekGroceries';
 import { activeMealPlanRecipeIds, isRecipeOnMealPlan, resolveMealPlanRecipeId } from '../lib/mealPlan/resolve';
+import {
+  applyMealPlanRemoval,
+  buildLinkedLeftoverEntry,
+  idsRemovedByMealPlanDelete,
+} from '../lib/mealCalendar/leftovers';
 import { hydrateLocationFromProfile } from '../lib/smartShop/profileLocation';
 import {
   fetchLiveBundle,
@@ -138,6 +149,8 @@ function initialMealPlan(demoMode: boolean): MealPlanItem[] {
       scheduledOn: row.scheduledOn ?? null,
       mealSlot: row.mealSlot ?? null,
       madeAt: row.madeAt ?? null,
+      leftoverOfId: row.leftoverOfId ?? null,
+      linkedLeftoverId: row.linkedLeftoverId ?? null,
     }));
   }
   const legacyIds = readJson<string[]>(STORAGE_KEYS.selectedRecipes, ['lemon-chicken', 'pulled-pork']);
@@ -155,6 +168,8 @@ function initialMealPlan(demoMode: boolean): MealPlanItem[] {
       addedAt: now,
       scheduledOn: null,
       mealSlot: null,
+      leftoverOfId: null,
+      linkedLeftoverId: null,
     };
   });
 }
@@ -240,11 +255,13 @@ interface AppContextValue {
     imageUrl: string | null;
     scheduledOn: string;
     mealSlot: MealSlot;
+    makesLeftovers?: boolean;
   }) => Promise<void>;
   updateMealPlanSchedule: (
     id: string,
     patch: Partial<Pick<MealPlanItem, 'scheduledOn' | 'mealSlot'>>,
   ) => Promise<void>;
+  shopForWeekScheduledMeals: () => void;
   addMissingForPlannedMealsToGrocery: () => void;
   userPreferences: UserPreferences;
   setUserPreference: <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => void;
@@ -763,14 +780,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const removeMealPlanItem = useCallback(
     async (id: string) => {
-      setMealPlan((prev) => prev.filter((item) => item.id !== id));
+      const target = mealPlan.find((row) => row.id === id);
+      const deleteIds = idsRemovedByMealPlanDelete(mealPlan, id);
+      setMealPlan((prev) => applyMealPlanRemoval(prev, id));
       if (!demoMode && supabase && userId) {
-        await deleteMealPlanItem(supabase, userId, id).catch((error: unknown) => {
+        try {
+          if (target?.leftoverOfId) {
+            await updateMealPlanItem(supabase, userId, target.leftoverOfId, { linkedLeftoverId: null });
+          }
+          for (const delId of deleteIds) {
+            await deleteMealPlanItem(supabase, userId, delId);
+          }
+        } catch (error: unknown) {
           setAuthError(error instanceof Error ? error.message : 'Failed to remove meal plan item');
-        });
+        }
       }
     },
-    [demoMode, supabase, userId],
+    [demoMode, mealPlan, supabase, userId],
   );
 
   const openMealMadeReview = useCallback(
@@ -935,6 +961,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         madeAt: entry.madeAt ?? null,
         scheduledOn: entry.scheduledOn ?? null,
         mealSlot: entry.mealSlot ?? null,
+        leftoverOfId: entry.leftoverOfId ?? null,
+        linkedLeftoverId: entry.linkedLeftoverId ?? null,
       };
       const recipeId = resolveMealPlanRecipeId(
         { ...normalized, id: 'pending' },
@@ -945,7 +973,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (demoMode || isGuest) {
         const id = isGuest ? `guest-plan-${Date.now()}` : `demo-plan-${Date.now()}`;
         setMealPlan((prev) => [{ ...normalized, id }, ...prev]);
-        if (userPreferences.autoAddMissingToGrocery && recipeId) {
+        if (
+          userPreferences.autoAddMissingToGrocery &&
+          recipeId &&
+          !normalized.leftoverOfId
+        ) {
           const missing = pantryRecipeMatches.byRecipeId.get(recipeId)?.missing ?? [];
           appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
         }
@@ -954,7 +986,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!supabase || !userId) throw new Error('Sign in to save your meal plan.');
       const saved = await insertMealPlanItem(supabase, userId, normalized);
       setMealPlan((prev) => [saved, ...prev]);
-      if (userPreferences.autoAddMissingToGrocery && recipeId) {
+      if (
+        userPreferences.autoAddMissingToGrocery &&
+        recipeId &&
+        !normalized.leftoverOfId
+      ) {
         const missing = pantryRecipeMatches.byRecipeId.get(recipeId)?.missing ?? [];
         appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
       }
@@ -1001,8 +1037,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       imageUrl: string | null;
       scheduledOn: string;
       mealSlot: MealSlot;
+      makesLeftovers?: boolean;
     }) => {
-      await addMealPlanEntry({
+      const parentBase: Omit<MealPlanItem, 'id'> = {
         recipeSlug: input.recipeSlug,
         recipeApiId: input.recipeApiId,
         title: input.title,
@@ -1012,9 +1049,59 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addedAt: new Date().toISOString(),
         scheduledOn: input.scheduledOn,
         mealSlot: input.mealSlot,
-      });
+        leftoverOfId: null,
+        linkedLeftoverId: null,
+      };
+
+      const maybeAppendMissing = (recipeId: string | null) => {
+        if (!userPreferences.autoAddMissingToGrocery || !recipeId) return;
+        const missing = pantryRecipeMatches.byRecipeId.get(recipeId)?.missing ?? [];
+        appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
+      };
+
+      if (demoMode || isGuest) {
+        const parentId = isGuest ? `guest-plan-${Date.now()}` : `demo-plan-${Date.now()}`;
+        let parent: MealPlanItem = { ...parentBase, id: parentId };
+        const rows: MealPlanItem[] = [parent];
+        if (input.makesLeftovers) {
+          const childId = isGuest ? `guest-plan-${Date.now()}-lo` : `demo-plan-${Date.now()}-lo`;
+          const child: MealPlanItem = { ...buildLinkedLeftoverEntry(parent), id: childId };
+          parent = { ...parent, linkedLeftoverId: childId };
+          rows[0] = parent;
+          rows.push(child);
+        }
+        setMealPlan((prev) => [...rows, ...prev]);
+        maybeAppendMissing(
+          resolveMealPlanRecipeId(parent, recipes, ownerId),
+        );
+        return;
+      }
+
+      if (!supabase || !userId) throw new Error('Sign in to save your meal plan.');
+      const savedParent = await insertMealPlanItem(supabase, userId, parentBase);
+      let rows: MealPlanItem[] = [savedParent];
+      if (input.makesLeftovers) {
+        const childBase = buildLinkedLeftoverEntry(savedParent);
+        const savedChild = await insertMealPlanItem(supabase, userId, childBase);
+        const linkedParent = await updateMealPlanItem(supabase, userId, savedParent.id, {
+          linkedLeftoverId: savedChild.id,
+        });
+        rows = [linkedParent, savedChild];
+      }
+      setMealPlan((prev) => [...rows, ...prev]);
+      maybeAppendMissing(resolveMealPlanRecipeId(rows[0], recipes, ownerId));
     },
-    [addMealPlanEntry],
+    [
+      appendMissingIngredientsForRecipe,
+      demoMode,
+      isGuest,
+      ownerId,
+      pantryRecipeMatches.byRecipeId,
+      recipes,
+      supabase,
+      userId,
+      userPreferences.autoAddMissingToGrocery,
+    ],
   );
 
   const toggleMealPlanKitchenRecipe = useCallback(
@@ -1036,6 +1123,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addedAt: new Date().toISOString(),
         scheduledOn: null,
         mealSlot: null,
+        leftoverOfId: null,
+        linkedLeftoverId: null,
       });
       notifyTutorialStepCompleteRef.current('recipes');
     },
@@ -1231,6 +1320,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addedAt: new Date().toISOString(),
         scheduledOn: null,
         mealSlot: null,
+        leftoverOfId: null,
+        linkedLeftoverId: null,
       });
       notifyTutorialStepCompleteRef.current('recipes');
     },
@@ -1270,6 +1361,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, [ownerId, pantry, pantryRecipeMatches.byRecipeId, persistGroceryList, plannedRecipeIds, showGroceryAddedToast]);
+
+  const shopForWeekScheduledMeals = useCallback(() => {
+    const startIso = localDateString();
+    const weekItems = mealPlanItemsInWeekWindow(mealPlan, startIso, MEAL_CALENDAR.daysAhead);
+    const recipeIds = recipeIdsForScheduledMeals(weekItems, recipes, ownerId);
+    const dismissals = readGroceryDismissals(ownerId);
+    setGrocery((prev) => {
+      let next = prev;
+      for (const recipeId of recipeIds) {
+        const match = pantryRecipeMatches.byRecipeId.get(recipeId);
+        if (!match || match.missing.length === 0) continue;
+        next = mergeMissingIntoGrocery({
+          missing: match.missing,
+          recipeId,
+          pantry,
+          previous: next,
+          groceryDismissals: dismissals,
+        }).items;
+      }
+      persistGroceryList(next);
+      return next;
+    });
+    router.push(APP_ROUTES.grocery);
+  }, [
+    mealPlan,
+    ownerId,
+    pantry,
+    pantryRecipeMatches.byRecipeId,
+    persistGroceryList,
+    recipes,
+  ]);
 
   const addPantryFromScan = useCallback(
     (name: string, photoUri: string | null) => {
@@ -1614,6 +1736,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isOnMealPlan,
       scheduleMealFromRecipe,
       updateMealPlanSchedule,
+      shopForWeekScheduledMeals,
       addMissingForPlannedMealsToGrocery,
       userPreferences,
       setUserPreference,
@@ -1700,6 +1823,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isOnMealPlan,
       scheduleMealFromRecipe,
       updateMealPlanSchedule,
+      shopForWeekScheduledMeals,
       addMissingForPlannedMealsToGrocery,
       userPreferences,
       setUserPreference,

@@ -193,6 +193,7 @@ async function verifyHomeMealCalendar(page: Page): Promise<void> {
   await page.waitForURL(/\/?$|\/index/, { timeout: 15_000 });
   await page.getByText('This week', { exact: true }).waitFor({ timeout: 15_000 });
   await page.getByText('+ Add meal', { exact: true }).first().waitFor({ timeout: 10_000 });
+  await page.getByText('Shop for this week', { exact: true }).waitFor({ timeout: 10_000 });
 }
 
 async function runGuestFlow(page: Page): Promise<void> {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { MEAL_CALENDAR } from '../../config/mealCalendar';
 import { MEAL_SLOTS, type MealSlot, type Recipe } from '../../types/mealprep';
@@ -19,6 +19,7 @@ interface AddMealPickerSheetProps {
     title: string;
     imageUrl: string | null;
     mealSlot: MealSlot;
+    makesLeftovers: boolean;
   }) => void;
 }
 
@@ -57,6 +58,15 @@ export function AddMealPickerSheet({
 }: AddMealPickerSheetProps) {
   const [query, setQuery] = useState('');
   const [slot, setSlot] = useState<MealSlot>(defaultSlot);
+  const [makesLeftovers, setMakesLeftovers] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setSlot(defaultSlot);
+      setMakesLeftovers(false);
+      setQuery('');
+    }
+  }, [defaultSlot, visible]);
 
   const options = useMemo(
     () =>
@@ -95,6 +105,14 @@ export function AddMealPickerSheet({
             ))}
           </View>
 
+          <Pressable
+            onPress={() => setMakesLeftovers((prev) => !prev)}
+            className="mt-3 flex-row items-center justify-between rounded-xl border border-border px-3 py-2"
+          >
+            <Text className="text-sm font-semibold text-ink">{MEAL_CALENDAR.makesLeftoversLabel}</Text>
+            <Text className="text-xs font-bold text-primary-dark">{makesLeftovers ? 'On' : 'Off'}</Text>
+          </Pressable>
+
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -108,7 +126,7 @@ export function AddMealPickerSheet({
                 key={row.recipeId}
                 onPress={() => {
                   const refs = resolveRecipeRefs(row.recipeId, recipes);
-                  onPick({ ...refs, recipeId: row.recipeId, mealSlot: slot });
+                  onPick({ ...refs, recipeId: row.recipeId, mealSlot: slot, makesLeftovers });
                   onClose();
                 }}
                 className="border-t border-border py-3"

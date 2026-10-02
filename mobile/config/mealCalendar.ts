@@ -27,6 +27,8 @@ export const MEAL_CALENDAR = {
     prodId: '-//MealPlanatic//Meal Calendar//EN',
     weekFileName: 'meal-plan-week.ics',
   },
+  shopForWeekLabel: 'Shop for this week',
+  makesLeftoversLabel: 'Makes leftovers',
   picker: {
     maxRecipes: 40,
   },

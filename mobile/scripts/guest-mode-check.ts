@@ -49,6 +49,8 @@ function mealPlanRow(recipeApiId: number, title: string, id: string): MealPlanIt
     addedAt: '2026-01-01T00:00:00.000Z',
     scheduledOn: null,
     mealSlot: null,
+    leftoverOfId: null,
+    linkedLeftoverId: null,
   };
 }
 
