@@ -11,8 +11,10 @@ import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
 import type { PantryItem } from '../../types/mealprep';
 import { searchDiscoveryRecipes } from './client';
-import { pantryIngredientSearchQueries } from './pantryQueries';
+import { buildRotatingPantrySearchPlans } from './pantryQueryPlans';
 import { scoreDiscoveryRecipeAgainstPantry } from './scorePantry';
+import { collapseNearDuplicateRecipeRows } from '../recipes/nearDuplicate';
+import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import type { RecipeDiscoveryListItem } from './types';
 
 export interface PantryDiscoverySuggestion {
@@ -34,54 +36,29 @@ interface CacheEntry {
 
 const suggestionCache = new Map<string, CacheEntry>();
 
-/** Max RecipeAPI list page to randomize within (keeps free-tier usage predictable). */
-const PANTRY_DISCOVERY_MAX_PAGE = 12;
-
-function pantryCacheKey(pantry: PantryItem[]): string {
-  return pantry
+function pantryCacheKey(pantry: PantryItem[], refreshSeed: number): string {
+  return `${refreshSeed}:${pantry
     .map((p) => `${p.id}:${p.name}`)
     .sort()
-    .join('|');
+    .join('|')}`;
 }
 
-function hashString(input: string): number {
-  let hash = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 31 + input.charCodeAt(i)) | 0;
-  }
-  return hash;
-}
-
-function discoveryPageForQuery(pantry: PantryItem[], search: string, queryIndex: number): number {
-  const bucket = Math.floor(Date.now() / RECIPE_DISCOVERY.cacheTtlMs);
-  const seed = `${pantryCacheKey(pantry)}:${search}:${queryIndex}:${bucket}`;
-  const page = 1 + (Math.abs(hashString(seed)) % PANTRY_DISCOVERY_MAX_PAGE);
-  return page;
-}
-
-function buildPantrySearchPlans(pantry: PantryItem[]): { search: string; ingredients?: string }[] {
-  const queries = pantryIngredientSearchQueries(pantry);
-  if (queries.length === 0) return [];
-
-  const plans: { search: string; ingredients?: string }[] = queries.map((search) => ({
-    search,
-    ingredients: search,
+function discoveryRowsFromSuggestions(rows: PantryDiscoverySuggestion[]): RecipesTabRow[] {
+  return rows.map((row) => ({
+    kind: 'discovery' as const,
+    recipe: row.recipe,
+    match: row.match,
   }));
+}
 
-  if (queries.length >= 2) {
-    const combined = queries.slice(0, 3).join(' ');
-    if (combined.trim()) {
-      plans.unshift({ search: combined, ingredients: combined });
-    }
-  }
-
-  const seen = new Set<string>();
-  return plans.filter((plan) => {
-    const key = plan.search.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function collapseDiscoveryNearDuplicates(rows: PantryDiscoverySuggestion[]): PantryDiscoverySuggestion[] {
+  const asRows = discoveryRowsFromSuggestions(rows);
+  const collapsed = collapseNearDuplicateRecipeRows(asRows);
+  const byApiId = new Map(rows.map((row) => [row.recipe.id, row]));
+  return collapsed
+    .filter((row): row is Extract<RecipesTabRow, { kind: 'discovery' }> => row.kind === 'discovery')
+    .map((row) => byApiId.get(row.recipe.id))
+    .filter((row): row is PantryDiscoverySuggestion => row != null);
 }
 
 function rankSuggestions(rows: PantryDiscoverySuggestion[]): PantryDiscoverySuggestion[] {
@@ -124,13 +101,14 @@ function filterDiscoveryByPantryOverlap(
 export async function fetchPantryDiscoverySuggestions(
   pantry: PantryItem[],
   accessToken: string | null,
-  options?: { minPercent?: number; forceRefresh?: boolean },
+  options?: { minPercent?: number; forceRefresh?: boolean; refreshSeed?: number },
 ): Promise<PantryDiscoveryResult> {
   if (pantry.length === 0) {
     return { suggestions: [], errorMessage: null, fromCache: false };
   }
 
-  const cacheKey = pantryCacheKey(pantry);
+  const refreshSeed = options?.refreshSeed ?? 0;
+  const cacheKey = pantryCacheKey(pantry, refreshSeed);
   if (!options?.forceRefresh) {
     const hit = suggestionCache.get(cacheKey);
     if (hit && hit.expiresAt > Date.now()) {
@@ -138,7 +116,7 @@ export async function fetchPantryDiscoverySuggestions(
     }
   }
 
-  const plans = buildPantrySearchPlans(pantry);
+  const plans = buildRotatingPantrySearchPlans(pantry, { seed: refreshSeed });
   if (plans.length === 0) {
     const empty: PantryDiscoveryResult = { suggestions: [], errorMessage: null, fromCache: false };
     suggestionCache.set(cacheKey, { result: empty, expiresAt: Date.now() + RECIPE_DISCOVERY.cacheTtlMs });
@@ -155,7 +133,7 @@ export async function fetchPantryDiscoverySuggestions(
         {
           search: plan.search,
           ingredients: plan.ingredients,
-          page: discoveryPageForQuery(pantry, plan.search, queryIndex),
+          page: plan.page,
           perPage: PANTRY_DISCOVERY_PER_QUERY,
         },
         accessToken,
@@ -176,16 +154,17 @@ export async function fetchPantryDiscoverySuggestions(
   const minPercent = options?.minPercent ?? DEFAULT_MIN_PANTRY_MATCH_PERCENT;
   const ranked = rankSuggestions(scored);
   const filtered = filterDiscoveryByPantryOverlap(ranked, minPercent, pantry.length);
+  const deduped = collapseDiscoveryNearDuplicates(filtered);
 
   const errorMessage =
-    failures === plans.length && filtered.length === 0
+    failures === plans.length && deduped.length === 0
       ? accessToken
         ? RECIPES_COPY.discoveryErrors.pantrySuggestionsUnavailable
         : RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild
       : null;
 
   const result: PantryDiscoveryResult = {
-    suggestions: filtered.slice(0, RECIPE_MATCHING.homeRecommendationsLimit * 4),
+    suggestions: deduped.slice(0, RECIPE_MATCHING.homeRecommendationsLimit * 4),
     errorMessage,
     fromCache: false,
   };

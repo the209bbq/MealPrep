@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
 import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedFeedCard';
@@ -56,6 +56,7 @@ export default function RecipesScreen() {
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
   const [pickedDetailRow, setPickedDetailRow] = useState<RecipesTabRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const minPantryMatchPercent = RECIPES_TAB.defaultMinPercent;
   const pantryEmpty = pantry.length === 0;
@@ -64,6 +65,7 @@ export default function RecipesScreen() {
     suggestions: discoverySuggestions,
     loading: discoveryLoading,
     error: discoveryError,
+    refreshDiscovery,
   } = usePantryDiscoverySuggestions(pantry, session, { enabled: discoveryEnabled });
 
   function openDetail(row: RecipesTabRow) {
@@ -127,8 +129,13 @@ export default function RecipesScreen() {
 
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
-    return buildUnifiedRecipesFeed(narrowed, searchQuery);
-  }, [filterBaseRows, filters, searchQuery]);
+    return buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
+  }, [filterBaseRows, filters, searchQuery, feedDiversitySeed]);
+
+  function showDifferentIdeas() {
+    setFeedDiversitySeed((value) => value + 1);
+    refreshDiscovery();
+  }
 
   const detailRow = useMemo(() => {
     if (pickedDetailRow) return pickedDetailRow;
@@ -214,6 +221,19 @@ export default function RecipesScreen() {
           onSetFilter={setFilter}
           onClearAll={clearAllFilters}
         />
+        {!pantryEmpty ? (
+          <Pressable
+            onPress={showDifferentIdeas}
+            disabled={discoveryLoading}
+            className="mt-3 min-h-[44px] items-center justify-center rounded-xl border border-primary bg-primary-light px-4 py-3"
+            accessibilityRole="button"
+            accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
+          >
+            <Text className="text-sm font-bold text-primary-dark">
+              {discoveryLoading ? RECIPES_COPY.discoveryPanel.searching : RECIPES_COPY.cookNowCard.showDifferentIdeas}
+            </Text>
+          </Pressable>
+        ) : null}
       </Card>
 
       {discoveryLoading && !pantryEmpty ? (

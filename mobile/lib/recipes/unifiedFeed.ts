@@ -1,5 +1,6 @@
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
-import { compareRecipePantryMatches } from '../recipeMatch';
+import { applyFeedDiversity } from './feedDiversity';
+import { collapseNearDuplicateRecipeRows } from './nearDuplicate';
 
 /** Normalized title key for de-duplicating kitchen vs online recipes. */
 export function normalizeRecipeTitleForDedup(name: string): string {
@@ -62,15 +63,17 @@ export function dedupeRecipesTabRows(rows: readonly RecipesTabRow[]): RecipesTab
 }
 
 export function rankRecipesTabRows(rows: readonly RecipesTabRow[]): RecipesTabRow[] {
-  return [...rows].sort((a, b) => compareRecipePantryMatches(a.match, b.match));
+  return applyFeedDiversity(rows, { seed: 0 });
 }
 
 export function buildUnifiedRecipesFeed(
   rows: readonly RecipesTabRow[],
   searchQuery: string,
+  options?: { diversitySeed?: number },
 ): RecipesTabRow[] {
-  const deduped = dedupeRecipesTabRows(rows);
-  const ranked = rankRecipesTabRows(deduped);
-  if (!searchQuery.trim()) return ranked;
-  return ranked.filter((row) => recipesTabRowMatchesSearch(row, searchQuery));
+  const exactDeduped = dedupeRecipesTabRows(rows);
+  const nearDeduped = collapseNearDuplicateRecipeRows(exactDeduped);
+  const diversified = applyFeedDiversity(nearDeduped, { seed: options?.diversitySeed ?? 0 });
+  if (!searchQuery.trim()) return diversified;
+  return diversified.filter((row) => recipesTabRowMatchesSearch(row, searchQuery));
 }

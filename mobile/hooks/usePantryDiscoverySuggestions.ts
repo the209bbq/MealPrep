@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DEFAULT_MIN_PANTRY_MATCH_PERCENT } from '../config/recipeMatching';
 import { RECIPES_COPY } from '../config/recipesCopy';
 import { getRecipeDiscoveryAccessToken } from '../lib/recipeDiscovery/accessToken';
@@ -12,20 +12,27 @@ import type { PantryItem } from '../types/mealprep';
 export function usePantryDiscoverySuggestions(
   pantry: PantryItem[],
   session: Session | null,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; refreshSeed?: number },
 ): {
   suggestions: PantryDiscoverySuggestion[];
   loading: boolean;
   error: string | null;
+  refreshSeed: number;
+  refreshDiscovery: () => void;
 } {
   const enabled = options?.enabled ?? true;
   const minPercent = DEFAULT_MIN_PANTRY_MATCH_PERCENT;
   const accessToken = getRecipeDiscoveryAccessToken(session);
   const pantryEmpty = pantry.length === 0;
+  const [refreshSeed, setRefreshSeed] = useState(options?.refreshSeed ?? 0);
 
   const [suggestions, setSuggestions] = useState<PantryDiscoverySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshDiscovery = useCallback(() => {
+    setRefreshSeed((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     if (!enabled || pantryEmpty) {
@@ -37,7 +44,10 @@ export function usePantryDiscoverySuggestions(
 
     let cancelled = false;
     setLoading(true);
-    void fetchPantryDiscoverySuggestions(pantry, accessToken, { minPercent })
+    void fetchPantryDiscoverySuggestions(pantry, accessToken, {
+      minPercent,
+      refreshSeed,
+    })
       .then((result) => {
         if (!cancelled) {
           setSuggestions(result.suggestions);
@@ -57,7 +67,7 @@ export function usePantryDiscoverySuggestions(
     return () => {
       cancelled = true;
     };
-  }, [accessToken, enabled, minPercent, pantry, pantryEmpty]);
+  }, [accessToken, enabled, minPercent, pantry, pantryEmpty, refreshSeed]);
 
-  return { suggestions, loading, error };
+  return { suggestions, loading, error, refreshSeed, refreshDiscovery };
 }
