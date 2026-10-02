@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 import { MEAL_CALENDAR } from '../../config/mealCalendar';
 import { MEAL_SLOTS, type MealSlot, type Recipe } from '../../types/mealprep';
 import { buildMealPickerRecipeOptions } from '../../lib/mealCalendar/recipePickerOptions';
+import { findKitchenRecipeById } from '../../lib/mealPlan/kitchenRecipeLookup';
 import type { PantryMatchIndex } from '../../lib/recipeMatch';
 
 interface AddMealPickerSheetProps {
@@ -29,7 +30,7 @@ function resolveRecipeRefs(recipeId: string, recipes: Recipe[]): {
   title: string;
   imageUrl: string | null;
 } {
-  const recipe = recipes.find((row) => row.id === recipeId);
+  const recipe = findKitchenRecipeById(recipes, recipeId);
   if (recipeId.startsWith('recipeapi-')) {
     const apiId = Number.parseInt(recipeId.replace(/^recipeapi-(\d+).*/, '$1'), 10);
     return {
@@ -114,7 +115,7 @@ function AddMealPickerSheetForm({
                 onPress={() => setSlot(value)}
                 className={`rounded-full px-3 py-1.5 ${slot === value ? 'bg-primary' : 'bg-primary-light'}`}
               >
-                <Text className={`text-xs font-bold ${slot === value ? 'text-onPrimary' : 'text-primary-dark'}`}>
+                <Text className={`text-xs font-bold ${slot === value ? 'text-on-primary' : 'text-primary-dark'}`}>
                   {MEAL_CALENDAR.slotLabels[value]}
                 </Text>
               </Pressable>

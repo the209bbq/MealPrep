@@ -159,8 +159,38 @@ export function buildGroceryList(
   }
 
   const recipeItems = list.sort((a, b) => a.name.localeCompare(b.name));
-  const manuals = manualItems.sort((a, b) => a.name.localeCompare(b.name));
-  return [...recipeItems, ...manuals];
+  return mergeManualGroceryLines(recipeItems, manualItems);
+}
+
+function groceryLineKey(item: Pick<GroceryListItem, 'name' | 'unit'>): string {
+  return `${normalizeIngredientName(item.name)}::${item.unit.trim().toLowerCase()}`;
+}
+
+/** Merge manual lines into recipe-derived lines by normalized name + unit (case-insensitive). */
+export function mergeManualGroceryLines(
+  recipeItems: GroceryListItem[],
+  manualItems: GroceryListItem[],
+): GroceryListItem[] {
+  const merged = recipeItems.map((row) => ({ ...row }));
+  const indexByKey = new Map(merged.map((row, index) => [groceryLineKey(row), index]));
+
+  for (const manual of manualItems) {
+    const key = groceryLineKey(manual);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex != null) {
+      const existing = merged[existingIndex];
+      merged[existingIndex] = {
+        ...existing,
+        quantity: roundQty(existing.quantity + manual.quantity),
+        checked: existing.checked || manual.checked,
+      };
+      continue;
+    }
+    merged.push(manual);
+    indexByKey.set(key, merged.length - 1);
+  }
+
+  return merged.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function createManualGroceryItem(input: {

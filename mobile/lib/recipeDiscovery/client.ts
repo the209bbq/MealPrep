@@ -7,8 +7,13 @@ import {
   RECIPE_DISCOVERY_CLIENT_CACHE_KEY_PREFIX,
   RECIPE_DISCOVERY_CLIENT_CACHE_TTL_MS,
   RECIPE_DISCOVERY_CLIENT_FAILURE_CACHE_TTL_MS,
+  RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE,
   RECIPE_DISCOVERY_QUOTA_ERROR_CODES,
 } from '../../config/recipeDiscoveryClient';
+import {
+  isRecipeDiscoveryCircuitOpen,
+  openRecipeDiscoveryCircuit,
+} from './circuitBreaker';
 import { readJson, writeJson } from '../storage';
 import { filterDemoRecipes, getDemoRecipeById } from './demoSamples';
 import type {
@@ -136,6 +141,10 @@ async function callProxy<T>(
   body: Record<string, unknown>,
   accessToken: string | null,
 ): Promise<T> {
+  if (isRecipeDiscoveryCircuitOpen()) {
+    throw new RecipeDiscoveryQuotaError(RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE, 'RATE_LIMIT');
+  }
+
   const url = getRecipeApiProxyUrl();
   if (!url) {
     throw new RecipeDiscoveryNotConfiguredError(
@@ -170,8 +179,12 @@ async function callProxy<T>(
     throw new RecipeDiscoveryAuthError(json.error ?? 'Sign in required');
   }
   if (isQuotaResponse(response.status, json)) {
+    openRecipeDiscoveryCircuit();
     const code = json.code ?? 'RATE_LIMIT';
-    throw new RecipeDiscoveryQuotaError(json.error ?? 'Recipe search quota exceeded', code);
+    throw new RecipeDiscoveryQuotaError(
+      RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE,
+      code,
+    );
   }
   if (!response.ok) {
     const errField = json.error;
@@ -210,6 +223,10 @@ export async function searchDiscoveryRecipes(
   }
 
   const query = filtersToQuery(filters);
+  if (isRecipeDiscoveryCircuitOpen()) {
+    throw new RecipeDiscoveryQuotaError(RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE, 'RATE_LIMIT');
+  }
+
   const cacheKey = `list:${JSON.stringify(query)}`;
   if (cacheHasFailure(cacheKey)) {
     throw new Error('Recent recipe search failed');
@@ -224,6 +241,10 @@ export async function searchDiscoveryRecipes(
     cacheSet(cacheKey, payload, false);
     return { items: payload.data, meta: payload.meta };
   } catch (error) {
+    if (error instanceof RecipeDiscoveryQuotaError) {
+      openRecipeDiscoveryCircuit();
+      throw error;
+    }
     if (!(error instanceof RecipeDiscoveryNotConfiguredError || error instanceof RecipeDiscoveryAuthError)) {
       cacheSet(cacheKey, null, true);
     }

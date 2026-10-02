@@ -571,6 +571,15 @@ export async function replaceGroceryList(
     return existingMapped;
   }
 
+  if (sortedItems.length === 0) {
+    const { error: deleteAllError } = await client
+      .from('grocery_list_items')
+      .delete()
+      .eq('user_id', userId);
+    if (deleteAllError) throw deleteAllError;
+    return [];
+  }
+
   const existingById = new Map(existing.map((row) => [row.id, row]));
   const existingIds = new Set(existing.map((row) => row.id));
   const existingByKey = new Map(existing.map((row) => [groceryRowKey(row.ingredient_id, row.unit), row]));

@@ -8,7 +8,7 @@ import { UndoToast } from './UndoToast';
 
 /** Global overlays: onboarding, undo toasts. */
 export function AppOverlays() {
-  const { undoToast, dismissUndoToast, onboarding, openAuthSheet } = useApp();
+  const { undoToast, dismissUndoToast, onboarding, openAuthSheet, isGuest } = useApp();
 
   return (
     <View pointerEvents="box-none" className="absolute inset-0 z-50">
@@ -25,6 +25,7 @@ export function AppOverlays() {
         visible={onboarding.showTutorialModal}
         progress={onboarding.tutorialProgress}
         recapVisible={onboarding.tutorialRecapVisible}
+        guestMode={isGuest}
         onBeginTask={onboarding.beginTutorialTask}
         onSkipStep={onboarding.skipTutorialStep}
         onSkipTutorial={onboarding.skipTour}

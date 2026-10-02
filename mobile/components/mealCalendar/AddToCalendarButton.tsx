@@ -9,14 +9,26 @@ interface AddToCalendarButtonProps {
   target: ScheduleRecipeTarget;
   size?: number;
   className?: string;
+  /** Close overlays (e.g. recipe detail sheet) before opening the schedule sheet. */
+  onBeforeOpen?: () => void;
+  /** Override default schedule sheet opener (for tests / nested providers). */
+  onOpenSchedule?: (target: ScheduleRecipeTarget) => void;
 }
 
-export function AddToCalendarButton({ target, size = 22, className = 'p-1.5' }: AddToCalendarButtonProps) {
+export function AddToCalendarButton({
+  target,
+  size = 22,
+  className = 'p-1.5',
+  onBeforeOpen,
+  onOpenSchedule,
+}: AddToCalendarButtonProps) {
   const { openScheduleRecipe } = useScheduleRecipeSheet();
+  const open = onOpenSchedule ?? openScheduleRecipe;
 
   function handlePress(event: GestureResponderEvent): void {
     event.stopPropagation?.();
-    openScheduleRecipe(target);
+    onBeforeOpen?.();
+    open(target);
   }
 
   return (

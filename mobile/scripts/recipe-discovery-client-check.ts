@@ -11,6 +11,11 @@ import {
   RECIPE_DISCOVERY_PARALLEL_SEARCHES,
 } from '../config/recipeDiscoveryClient';
 import type { PantryItem } from '../types/mealprep';
+import {
+  clearRecipeDiscoveryCircuit,
+  isRecipeDiscoveryCircuitOpen,
+  openRecipeDiscoveryCircuit,
+} from '../lib/recipeDiscovery/circuitBreaker';
 
 const pantry: PantryItem[] = Array.from({ length: 6 }, (_, index) => ({
   id: String(index),
@@ -35,5 +40,11 @@ assert.ok(pantryPlans.every((plan) => plan.page === 1), 'pantry default page sho
 
 const rotated = buildRotatingPantrySearchPlans(pantry, { seed: 3 });
 assert.ok(rotated.some((plan) => plan.page >= 1 && plan.page <= 12));
+
+clearRecipeDiscoveryCircuit();
+assert.equal(isRecipeDiscoveryCircuitOpen(), false, 'circuit starts closed');
+openRecipeDiscoveryCircuit();
+assert.equal(isRecipeDiscoveryCircuitOpen(), true, 'circuit opens after quota');
+clearRecipeDiscoveryCircuit();
 
 console.log('recipe-discovery-client-check: ok');

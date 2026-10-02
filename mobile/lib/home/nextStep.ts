@@ -17,10 +17,19 @@ export function resolveHomeNextStep(input: {
   pantryItemCount: number;
   openGroceryCount: number;
   rankedMatches: RecipePantryMatch[];
+  guestMode?: boolean;
 }): HomeNextStep {
-  const { pantryItemCount, openGroceryCount, rankedMatches } = input;
+  const { pantryItemCount, openGroceryCount, rankedMatches, guestMode } = input;
 
   if (pantryItemCount === 0) {
+    if (guestMode) {
+      return {
+        kind: 'build_pantry',
+        title: 'Add a few pantry items',
+        body: 'Type what you have on hand — we match recipes without needing a photo scan.',
+        ctaLabel: 'Add to pantry',
+      };
+    }
     return {
       kind: 'scan_pantry',
       title: 'Stock your pantry first',
@@ -65,7 +74,9 @@ export function resolveHomeNextStep(input: {
   return {
     kind: 'build_pantry',
     title: 'Add a few more staples',
-    body: 'Scan or add ingredients so we can suggest meals that match what you have (50%+ overlap).',
-    ctaLabel: 'Update pantry',
+    body: guestMode
+      ? 'Add ingredients manually so we can suggest meals that match what you have (50%+ overlap).'
+      : 'Scan or add ingredients so we can suggest meals that match what you have (50%+ overlap).',
+    ctaLabel: guestMode ? 'Add to pantry' : 'Update pantry',
   };
 }

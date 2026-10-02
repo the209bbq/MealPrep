@@ -64,7 +64,7 @@ function ScheduleRecipeSheetForm({
               >
                 <Text
                   className={`text-xs font-bold ${
-                    selectedDay === day.isoDate ? 'text-onPrimary' : 'text-primary-dark'
+                    selectedDay === day.isoDate ? 'text-on-primary' : 'text-primary-dark'
                   }`}
                 >
                   {day.label}

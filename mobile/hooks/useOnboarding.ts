@@ -105,14 +105,12 @@ export function useOnboarding(input: {
   const dismissWelcomeForBrowse = useCallback(() => {
     setWelcomeDismissed(true);
     writeWelcomeDismissed(true);
-    queueTutorial();
-  }, [queueTutorial]);
+  }, []);
 
   const dismissWelcomeForSignUp = useCallback(() => {
     setWelcomeDismissed(true);
     writeWelcomeDismissed(true);
-    queueTutorial();
-  }, [queueTutorial]);
+  }, []);
 
   const finishTutorial = useCallback(() => {
     setTourCompleted(true);

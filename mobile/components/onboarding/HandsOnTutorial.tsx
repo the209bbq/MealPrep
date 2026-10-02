@@ -4,13 +4,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HANDS_ON_TUTORIAL_STEP_COUNT, ONBOARDING_COPY } from '../../config/onboarding';
 import { THEME } from '../../config/appConfig';
 import type { HandsOnTutorialProgress } from '../../lib/onboarding/tutorialProgress';
-import { HANDS_ON_TUTORIAL_STEP_ORDER, isTutorialRecapScreen } from '../../lib/onboarding/tutorialProgress';
+import {
+  allTutorialStepsSkipped,
+  HANDS_ON_TUTORIAL_STEP_ORDER,
+  isTutorialRecapScreen,
+} from '../../lib/onboarding/tutorialProgress';
 import type { TutorialTaskLaunch } from '../../hooks/useOnboarding';
 
 type HandsOnTutorialProps = {
   visible: boolean;
   progress: HandsOnTutorialProgress;
   recapVisible: boolean;
+  guestMode?: boolean;
   onBeginTask: (launch: TutorialTaskLaunch) => void;
   onSkipStep: () => void;
   onSkipTutorial: () => void;
@@ -25,6 +30,7 @@ export function HandsOnTutorial({
   onSkipStep,
   onSkipTutorial,
   onFinish,
+  guestMode = false,
 }: HandsOnTutorialProps) {
   const insets = useSafeAreaInsets();
   const { tutorial } = ONBOARDING_COPY;
@@ -32,6 +38,7 @@ export function HandsOnTutorial({
   const stepIndex = Math.min(progress.activeIndex, HANDS_ON_TUTORIAL_STEP_COUNT - 1);
   const stepCopy = tutorial.steps[stepIndex];
   const showRecap = recapVisible || isTutorialRecapScreen(progress);
+  const allSkipped = showRecap && allTutorialStepsSkipped(progress);
 
   function handlePrimary() {
     if (showRecap) {
@@ -39,6 +46,10 @@ export function HandsOnTutorial({
       return;
     }
     if (!stepCopy) return;
+    if (guestMode && stepCopy.id === 'scan') {
+      onBeginTask({ kind: 'pantry', action: 'manual' });
+      return;
+    }
     onBeginTask({
       kind: 'route',
       href: stepCopy.primaryHref,
@@ -112,8 +123,12 @@ export function HandsOnTutorial({
                 <View className="rounded-full bg-primary-light p-4">
                   <Ionicons name="checkmark-circle" size={36} color={THEME.primary} />
                 </View>
-                <Text className="mt-4 text-center text-xl font-bold text-ink">{tutorial.recap.title}</Text>
-                <Text className="mt-2 text-center text-sm leading-6 text-muted">{tutorial.recap.body}</Text>
+                <Text className="mt-4 text-center text-xl font-bold text-ink">
+                  {allSkipped ? tutorial.recap.skippedTitle : tutorial.recap.title}
+                </Text>
+                <Text className="mt-2 text-center text-sm leading-6 text-muted">
+                  {allSkipped ? tutorial.recap.skippedBody : tutorial.recap.body}
+                </Text>
               </View>
               <Pressable
                 onPress={handlePrimary}

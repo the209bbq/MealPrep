@@ -3,7 +3,14 @@
  * Run from mobile/: npm run test:grocery
  */
 
-import { buildGroceryList, createManualGroceryItem, isManualGroceryItem } from '../lib/grocery';
+import {
+  buildGroceryList,
+  createManualGroceryItem,
+  isManualGroceryItem,
+  mergeManualGroceryLines,
+} from '../lib/grocery';
+import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
+import { applyGroceryCheckRestock, reverseGroceryCheckRestock } from '../lib/grocery/restockLedger';
 import { inferGroceryCategoryFromName } from '../lib/grocery/categorize';
 import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import {
@@ -196,6 +203,50 @@ const tomatoRecipe: Recipe = {
 };
 const tomatoList = buildGroceryList([tomatoRecipe], [tomatoRecipe.id], tomatoPantry, {}, []);
 assert(!tomatoList.some((g) => g.name === 'Tomato'), 'skip grocery line when pantry name matches but units differ');
+
+const mergedManual = mergeManualGroceryLines(
+  [
+    {
+      id: 'groc-limes',
+      ingredientId: 'limes',
+      name: 'Limes',
+      category: 'produce',
+      quantity: 3,
+      unit: 'each',
+      checked: false,
+      sourceRecipeIds: ['r1'],
+    },
+  ],
+  [createManualGroceryItem({ name: 'limes', quantity: 1, unit: 'each' })],
+);
+assert(mergedManual.length === 1, 'manual limes merges with recipe Limes');
+assert(mergedManual[0].quantity === 4, 'merged grocery quantity sums');
+
+const catalog = kitchenRecipesForPantryMatch([]);
+const guestPlanList = buildGroceryList(catalog, ['pulled-pork'], [], {}, []);
+assert(
+  guestPlanList.length > 0,
+  'grocery rebuild includes built-in catalog recipes referenced by meal plan',
+);
+
+const ledger = new Map<string, { pantryItemId: string; quantityAdded: number; unit: string }>();
+const startPantry: PantryItem[] = [];
+const line: GroceryListItem = {
+  id: 'g1',
+  ingredientId: 'banana',
+  name: 'Bananas',
+  category: 'produce',
+  quantity: 2,
+  unit: 'each',
+  checked: true,
+  sourceRecipeIds: [],
+};
+let afterCheck = applyGroceryCheckRestock(startPantry, line, ledger);
+assert(afterCheck.length === 1, 'check adds pantry row once');
+afterCheck = applyGroceryCheckRestock(afterCheck, line, ledger);
+assert(afterCheck[0].quantity === 2, 'second check restock is idempotent');
+const afterUncheck = reverseGroceryCheckRestock(afterCheck, 'g1', ledger);
+assert(afterUncheck.length === 0, 'uncheck reverses restock');
 
 console.log('All grocery regression checks passed.');
 }

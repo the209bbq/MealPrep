@@ -2,6 +2,7 @@ import { PANTRY_DISCOVERY_PER_QUERY } from '../../config/recipeMatching';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
 import { RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE } from '../../config/recipeDiscoveryClient';
+import { isRecipeDiscoveryCircuitOpen } from './circuitBreaker';
 import type { PantryItem } from '../../types/mealprep';
 import { buildBrowseDiscoverySearchPlans } from './browseQueryPlans';
 import {
@@ -104,6 +105,10 @@ async function fetchDiscoveryListItems(
   plans: PantryDiscoverySearchPlan[],
   accessToken: string | null,
 ): Promise<{ items: RecipeDiscoveryListItem[]; quotaExceeded: boolean; failures: number }> {
+  if (isRecipeDiscoveryCircuitOpen()) {
+    return { items: [], quotaExceeded: true, failures: plans.length };
+  }
+
   const byId = new Map<number, RecipeDiscoveryListItem>();
   let failures = 0;
   let quotaExceeded = false;
