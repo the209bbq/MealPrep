@@ -55,5 +55,7 @@ begin
 end;
 $$;
 
+-- Supabase default privileges grant EXECUTE to anon/authenticated on new public functions.
 revoke all on function public.delete_user_owned_data(uuid) from public;
+revoke execute on function public.delete_user_owned_data(uuid) from anon, authenticated;
 grant execute on function public.delete_user_owned_data(uuid) to service_role;

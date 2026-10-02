@@ -2,6 +2,9 @@
  * Regression checks for account deletion helpers (storage paths + community anonymize policy).
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   collectPathsFromListPage,
   flattenStorageTree,
@@ -44,5 +47,20 @@ assert.ok(LEGAL_LINKS.privacy.includes(GITHUB_PAGES_APP_PATH));
 assert.ok(LEGAL_LINKS.privacy.endsWith('/privacy'));
 assert.equal(LEGAL_LINKS.privacy, githubPagesLegalUrl('privacy'));
 assert.equal(LEGAL_LINKS.terms, githubPagesLegalUrl('terms'));
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const deletionMigration = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/migrations/20261002150000_account_deletion_fks_and_rpc.sql'),
+  'utf8',
+);
+assert.match(
+  deletionMigration,
+  /revoke execute on function public\.delete_user_owned_data\(uuid\) from anon,\s*authenticated/i,
+  'migration must revoke EXECUTE from anon and authenticated (PostgREST exposure)',
+);
+assert.match(
+  deletionMigration,
+  /grant execute on function public\.delete_user_owned_data\(uuid\) to service_role/i,
+);
 
 console.log('delete-user-account-check: ok');
