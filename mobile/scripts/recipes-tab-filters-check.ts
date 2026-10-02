@@ -137,11 +137,12 @@ assert.equal(
   recipesTabFilterSummary({
     ...DEFAULT_RECIPES_TAB_FILTER_STATE,
     time: '30',
+    difficulty: 'easy',
     meal: 'dinner',
     people: 'two',
     shop: 'grab_1_2',
   }),
-  '30 min · Dinner · 2 people · 1–2 to buy',
+  '30 min · 1–2 to buy · Easy · Dinner · 2 people',
 );
 assert.equal(recipesTabNarrowingFiltersActive({ ...DEFAULT_RECIPES_TAB_FILTER_STATE, people: 'two' }), false);
 

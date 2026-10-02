@@ -328,12 +328,12 @@ const SUMMARY_PEOPLE: Record<Exclude<RecipesTabPeopleChoice, 'any'>, string> = {
 export function recipesTabFilterSummary(state: RecipesTabFilterState): string {
   const parts: string[] = [];
   if (state.time !== 'any') parts.push(SUMMARY_TIME[state.time]);
+  if (state.shop !== 'any') parts.push(SUMMARY_SHOP[state.shop]);
   if (state.difficulty !== 'any') {
     parts.push(RECIPES_TAB_FILTER_COPY.options.difficulty[state.difficulty]);
   }
   if (state.meal !== 'any') parts.push(RECIPES_TAB_FILTER_COPY.options.meal[state.meal]);
   if (state.people !== 'any') parts.push(SUMMARY_PEOPLE[state.people]);
-  if (state.shop !== 'any') parts.push(SUMMARY_SHOP[state.shop]);
   return parts.join(' · ');
 }
 
