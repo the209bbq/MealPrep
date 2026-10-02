@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { Tabs, type Href } from 'expo-router';
 import { View } from 'react-native';
 import { AppHeader } from '../../components/AppHeader';

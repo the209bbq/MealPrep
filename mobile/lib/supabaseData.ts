@@ -7,6 +7,7 @@ import { pantryPhotoUrlForStorage } from './pantryPhotoStorage';
 import { deleteScanPhoto } from './scanPhotos/client';
 import { withTimeout } from './withTimeout';
 import { groceryDedupeKey } from './recipeMatch/groceryFromMissing';
+import { groceryListsEqual } from './grocery/fingerprint';
 import { recipeApiMasterSlug, recipeApiPersonalSlug } from './recipeDiscovery/slugs';
 import { DEFAULT_USER_PLAN, isUserPlan, type UserPlan } from '../config/plans';
 import type {
@@ -539,15 +540,21 @@ export async function replaceGroceryList(
   if (fetchError) throw fetchError;
 
   const existing = (existingRows ?? []) as GroceryRow[];
+  const existingMapped = existing.map((row) => mapGrocery(row)).sort((a, b) => a.name.localeCompare(b.name));
+  const sortedItems = [...items].sort((a, b) => a.name.localeCompare(b.name));
+  if (groceryListsEqual(existingMapped, sortedItems)) {
+    return existingMapped;
+  }
+
   const existingById = new Map(existing.map((row) => [row.id, row]));
   const existingIds = new Set(existing.map((row) => row.id));
   const existingByKey = new Map(existing.map((row) => [groceryRowKey(row.ingredient_id, row.unit), row]));
   const existingByNameUnit = new Map(existing.map((row) => [groceryNameUnitKey(row.name, row.unit), row]));
 
-  const persisted: GroceryListItem[] = [];
+  const upsertRows: Record<string, unknown>[] = [];
   const keptIds = new Set<string>();
 
-  for (const item of items) {
+  for (const item of sortedItems) {
     const key = groceryRowKey(item.ingredientId, item.unit);
     const nameKey = groceryNameUnitKey(item.name, item.unit);
     const matched =
@@ -555,7 +562,10 @@ export async function replaceGroceryList(
       existingByKey.get(key) ??
       existingByNameUnit.get(nameKey);
 
-    const payload = {
+    const rowId = matched?.id ?? item.id;
+    keptIds.add(rowId);
+    upsertRows.push({
+      id: rowId,
       user_id: userId,
       ingredient_id: item.ingredientId,
       name: item.name,
@@ -564,35 +574,27 @@ export async function replaceGroceryList(
       unit: item.unit,
       checked: item.checked,
       source_recipe_ids: item.sourceRecipeIds,
-    };
-
-    if (matched) {
-      const { data, error } = await client
-        .from('grocery_list_items')
-        .update(payload)
-        .eq('id', matched.id)
-        .eq('user_id', userId)
-        .select('*')
-        .single();
-      if (error) throw error;
-      keptIds.add(matched.id);
-      persisted.push(mapGrocery(data as GroceryRow));
-      continue;
-    }
-
-    const { data, error } = await client.from('grocery_list_items').insert(payload).select('*').single();
-    if (error) throw error;
-    keptIds.add((data as GroceryRow).id);
-    persisted.push(mapGrocery(data as GroceryRow));
+    });
   }
 
   const toRemove = existing.filter((row) => !keptIds.has(row.id)).map((row) => row.id);
   if (toRemove.length > 0) {
-    const { error: deleteError } = await client.from('grocery_list_items').delete().eq('user_id', userId).in('id', toRemove);
+    const { error: deleteError } = await client
+      .from('grocery_list_items')
+      .delete()
+      .eq('user_id', userId)
+      .in('id', toRemove);
     if (deleteError) throw deleteError;
   }
 
-  return persisted.sort((a, b) => a.name.localeCompare(b.name));
+  if (upsertRows.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await client.from('grocery_list_items').upsert(upsertRows).select('*');
+  if (error) throw error;
+
+  return ((data ?? []) as GroceryRow[]).map(mapGrocery).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function updateGroceryChecked(

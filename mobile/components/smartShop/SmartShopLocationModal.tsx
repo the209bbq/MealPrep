@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { THEME } from '../../config/appConfig';

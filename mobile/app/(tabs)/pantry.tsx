@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
@@ -45,18 +45,9 @@ import {
 import { useApp } from '../../context/AppContext';
 import { countDefaultKitchenMatches } from '../../config/recipeMatching';
 import { buildPantryMatchIndex } from '../../lib/recipeMatch';
-import { reviewItemsToPantryItems, detectionsToReviewItems, mergeSecondScanIntoReview } from '../../lib/pantryVision/reviewItems';
+import { reviewItemsToPantryItems, mergeSecondScanIntoReview } from '../../lib/pantryVision/reviewItems';
 import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
 import { readJson, writeJson } from '../../lib/storage';
-import {
-  analyzePantryPhoto,
-  PantryVisionAuthError,
-  PantryVisionNotConfiguredError,
-  PantryVisionPlanRequiredError,
-  PantryVisionRateLimitError,
-  PantryVisionScanError,
-} from '../../lib/pantryVision/client';
-import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
 import { PantryImageQualityError } from '../../lib/pantryVision/prepareImageShared';
 import type { PantryScanReviewItem, PreparedPantryImage } from '../../lib/pantryVision/types';
@@ -283,6 +274,8 @@ export default function PantryScreen() {
 
     const attempt = { kind: 'prepared' as const, prepared, location: scanLocation };
 
+    const pantryVisionClient = await import('../../lib/pantryVision/client');
+
     setPendingScanPhotoPath(null);
     if (scanUserId) {
       const uploadPromise = uploadScanPhoto(prepared, 'pantry', scanUserId);
@@ -293,7 +286,8 @@ export default function PantryScreen() {
     }
 
     try {
-      const result = await analyzePantryPhoto(prepared, scanAccessToken, { scanLocation });
+      const { detectionsToReviewItems } = await import('../../lib/pantryVision/reviewItems');
+      const result = await pantryVisionClient.analyzePantryPhoto(prepared, scanAccessToken, { scanLocation });
       const rows = detectionsToReviewItems(
         result.items,
         pantry,
@@ -314,6 +308,13 @@ export default function PantryScreen() {
       setReviewItems(rows);
       setPhase('review');
     } catch (error) {
+      const {
+        PantryVisionAuthError,
+        PantryVisionNotConfiguredError,
+        PantryVisionPlanRequiredError,
+        PantryVisionRateLimitError,
+        PantryVisionScanError,
+      } = pantryVisionClient;
       const title =
         error instanceof PantryVisionRateLimitError
           ? 'Too many scans'
@@ -350,6 +351,7 @@ export default function PantryScreen() {
     setPreviewUri(uri);
     const attempt = { kind: 'uri' as const, uri, location: scanLocation };
     try {
+      const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
       const prepared = await preparePantryImage(uri);
       await runVisionFromPrepared(prepared, scanLocation);
     } catch (error) {
@@ -372,11 +374,13 @@ export default function PantryScreen() {
     setScanAgainBusy(true);
     try {
       const scanLocation = lastScanAttempt.location;
+      const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
+      const pantryVisionClient = await import('../../lib/pantryVision/client');
       const prepared =
         lastScanAttempt.kind === 'prepared'
           ? lastScanAttempt.prepared
           : await preparePantryImage(lastScanAttempt.uri);
-      const result = await analyzePantryPhoto(prepared, accessToken, {
+      const result = await pantryVisionClient.analyzePantryPhoto(prepared, accessToken, {
         scanLocation,
         bypassCache: true,
       });
@@ -385,6 +389,7 @@ export default function PantryScreen() {
       );
       setModelLabel(result.model);
     } catch (error) {
+      const { PantryVisionScanError } = await import('../../lib/pantryVision/client');
       const message =
         error instanceof PantryVisionScanError
           ? error.message

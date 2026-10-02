@@ -1,4 +1,5 @@
 import { PANTRY_DISCOVERY_MAX_QUERIES } from '../../config/recipeMatching';
+import { RECIPE_DISCOVERY_PARALLEL_SEARCHES } from '../../config/recipeDiscoveryClient';
 import type { PantryItem } from '../../types/mealprep';
 import { pantryIngredientSearchQueries } from './pantryQueries';
 
@@ -27,6 +28,7 @@ function rotate<T>(items: T[], startIndex: number): T[] {
 }
 
 function pageForPlan(seed: number, planIndex: number, planKey: string): number {
+  if (seed === 0) return 1;
   const mixed = Math.abs(hashString(`${seed}:${planIndex}:${planKey}`));
   return 1 + (mixed % PANTRY_DISCOVERY_MAX_PAGE);
 }
@@ -40,7 +42,7 @@ export function buildRotatingPantrySearchPlans(
   options?: { seed?: number; maxQueries?: number },
 ): PantryDiscoverySearchPlan[] {
   const seed = options?.seed ?? 0;
-  const maxQueries = options?.maxQueries ?? PANTRY_DISCOVERY_MAX_QUERIES;
+  const maxQueries = options?.maxQueries ?? Math.min(PANTRY_DISCOVERY_MAX_QUERIES, RECIPE_DISCOVERY_PARALLEL_SEARCHES);
 
   const allTerms = pantryIngredientSearchQueries(pantry, Math.max(maxQueries * 3, 12));
   if (allTerms.length === 0) return [];
@@ -83,5 +85,5 @@ export function buildRotatingPantrySearchPlans(
     planIndex += 1;
   }
 
-  return plans.slice(0, maxQueries + 3);
+  return plans.slice(0, maxQueries);
 }

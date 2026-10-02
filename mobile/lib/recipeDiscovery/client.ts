@@ -3,6 +3,13 @@ import {
   isDemoMode,
   RECIPE_DISCOVERY,
 } from '../../config/appConfig';
+import {
+  RECIPE_DISCOVERY_CLIENT_CACHE_KEY_PREFIX,
+  RECIPE_DISCOVERY_CLIENT_CACHE_TTL_MS,
+  RECIPE_DISCOVERY_CLIENT_FAILURE_CACHE_TTL_MS,
+  RECIPE_DISCOVERY_QUOTA_ERROR_CODES,
+} from '../../config/recipeDiscoveryClient';
+import { readJson, writeJson } from '../storage';
 import { filterDemoRecipes, getDemoRecipeById } from './demoSamples';
 import type {
   RecipeApiDetailResponse,
@@ -24,24 +31,72 @@ export class RecipeDiscoveryAuthError extends Error {
   code = 'UNAUTHENTICATED';
 }
 
+export class RecipeDiscoveryQuotaError extends Error {
+  code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = 'RecipeDiscoveryQuotaError';
+    this.code = code;
+  }
+}
+
 interface MemoryCacheEntry {
   payload: unknown;
   expiresAt: number;
+  failed?: boolean;
 }
 
 const memoryCache = new Map<string, MemoryCacheEntry>();
 
-function cacheGet<T>(key: string): T | null {
-  const hit = memoryCache.get(key);
-  if (!hit || hit.expiresAt < Date.now()) {
-    memoryCache.delete(key);
-    return null;
-  }
-  return hit.payload as T;
+interface PersistedCacheEntry {
+  payload?: unknown;
+  expiresAt: number;
+  failed?: boolean;
 }
 
-function cacheSet(key: string, payload: unknown): void {
-  memoryCache.set(key, { payload, expiresAt: Date.now() + RECIPE_DISCOVERY.cacheTtlMs });
+function persistentCacheKey(key: string): string {
+  return `${RECIPE_DISCOVERY_CLIENT_CACHE_KEY_PREFIX}:${key}`;
+}
+
+function readCacheEntry(key: string): MemoryCacheEntry | null {
+  const hit = memoryCache.get(key);
+  if (hit) {
+    if (hit.expiresAt < Date.now()) {
+      memoryCache.delete(key);
+    } else {
+      return hit;
+    }
+  }
+
+  const persisted = readJson<PersistedCacheEntry | null>(persistentCacheKey(key), null);
+  if (!persisted || persisted.expiresAt < Date.now()) {
+    return null;
+  }
+  const entry: MemoryCacheEntry = {
+    payload: persisted.payload,
+    expiresAt: persisted.expiresAt,
+    failed: persisted.failed,
+  };
+  memoryCache.set(key, entry);
+  return entry;
+}
+
+function cacheGet<T>(key: string): T | null {
+  const entry = readCacheEntry(key);
+  if (!entry || entry.failed) return null;
+  return entry.payload as T;
+}
+
+function cacheHasFailure(key: string): boolean {
+  const entry = readCacheEntry(key);
+  return entry?.failed === true;
+}
+
+function cacheSet(key: string, payload: unknown, failed = false): void {
+  const ttl = failed ? RECIPE_DISCOVERY_CLIENT_FAILURE_CACHE_TTL_MS : RECIPE_DISCOVERY_CLIENT_CACHE_TTL_MS;
+  const expiresAt = Date.now() + ttl;
+  memoryCache.set(key, { payload, expiresAt, failed });
+  writeJson(persistentCacheKey(key), { payload: failed ? null : payload, expiresAt, failed });
 }
 
 function filtersToQuery(filters: RecipeDiscoverySearchFilters): Record<string, string | number> {
@@ -60,6 +115,21 @@ function filtersToQuery(filters: RecipeDiscoverySearchFilters): Record<string, s
     query.cook_time_max = filters.maxTotalMinutes;
   }
   return query;
+}
+
+function isQuotaResponse(status: number, json: RecipeApiErrorEnvelope & { code?: string; error?: string }): boolean {
+  if (status === 429) return true;
+  const code = json.code ?? (typeof json.error === 'object' && json.error && 'code' in json.error
+    ? String((json.error as { code?: string }).code)
+    : undefined);
+  if (code != null && RECIPE_DISCOVERY_QUOTA_ERROR_CODES.has(code)) return true;
+  const message =
+    typeof json.error === 'string'
+      ? json.error
+      : typeof json.error === 'object' && json.error && 'message' in json.error
+        ? String((json.error as { message?: string }).message)
+        : '';
+  return /USAGE_LIMIT_EXCEEDED/i.test(message);
 }
 
 async function callProxy<T>(
@@ -99,6 +169,10 @@ async function callProxy<T>(
   if (response.status === 401) {
     throw new RecipeDiscoveryAuthError(json.error ?? 'Sign in required');
   }
+  if (isQuotaResponse(response.status, json)) {
+    const code = json.code ?? 'RATE_LIMIT';
+    throw new RecipeDiscoveryQuotaError(json.error ?? 'Recipe search quota exceeded', code);
+  }
   if (!response.ok) {
     const errField = json.error;
     const apiMsg =
@@ -137,14 +211,24 @@ export async function searchDiscoveryRecipes(
 
   const query = filtersToQuery(filters);
   const cacheKey = `list:${JSON.stringify(query)}`;
+  if (cacheHasFailure(cacheKey)) {
+    throw new Error('Recent recipe search failed');
+  }
   const cached = cacheGet<RecipeApiListResponse>(cacheKey);
   if (cached) {
     return { items: cached.data, meta: cached.meta };
   }
 
-  const payload = await callProxy<RecipeApiListResponse>({ action: 'list', query }, accessToken);
-  cacheSet(cacheKey, payload);
-  return { items: payload.data, meta: payload.meta };
+  try {
+    const payload = await callProxy<RecipeApiListResponse>({ action: 'list', query }, accessToken);
+    cacheSet(cacheKey, payload, false);
+    return { items: payload.data, meta: payload.meta };
+  } catch (error) {
+    if (!(error instanceof RecipeDiscoveryNotConfiguredError || error instanceof RecipeDiscoveryAuthError)) {
+      cacheSet(cacheKey, null, true);
+    }
+    throw error;
+  }
 }
 
 export async function fetchDiscoveryRecipeDetail(
@@ -162,7 +246,7 @@ export async function fetchDiscoveryRecipeDetail(
   if (cached) return cached.data;
 
   const payload = await callProxy<RecipeApiDetailResponse>({ action: 'detail', id }, accessToken);
-  cacheSet(cacheKey, payload);
+  cacheSet(cacheKey, payload, false);
   return payload.data;
 }
 

@@ -81,7 +81,7 @@ export async function preparePantryImage(uri: string): Promise<PreparedPantryIma
   );
   let qualityWarnings: string[] | undefined;
   if (thumb.base64) {
-    const evaluation = evaluateJpegBase64Quality(thumb.base64);
+    const evaluation = await evaluateJpegBase64Quality(thumb.base64);
     if (evaluation.hardReject === 'blank') {
       throw new PantryImageQualityError('blank', evaluation.hardRejectMessage ?? PHOTO_SCAN.imageBlankMessage);
     }

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../lib/icons/Ionicons';
 import { useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, Text } from 'react-native';
 import { SCAN_PHOTOS } from '../config/scanPhotos';

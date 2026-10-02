@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../lib/icons/Ionicons';
 import { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { GUEST_SAVE_NUDGE_CONFIG } from '../config/guestSaveNudge';
