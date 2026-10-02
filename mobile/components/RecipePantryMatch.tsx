@@ -10,13 +10,18 @@ import {
 } from '../config/recipesCopy';
 import { Ionicons } from '@expo/vector-icons';
 
+import type { Recipe } from '../types/mealprep';
+import { scheduleTargetFromRecipeId } from '../lib/mealCalendar/scheduleTarget';
+import { AddToCalendarButton } from './mealCalendar/AddToCalendarButton';
+
 interface CookFromPantryCardProps {
   recommendations: RecipePantryMatch[];
+  recipes: Recipe[];
   onOpenRecipe: (recipeId: string) => void;
   onAddMissing?: (recipeId: string) => void;
 }
 
-export function CookFromPantryCard({ recommendations, onOpenRecipe, onAddMissing }: CookFromPantryCardProps) {
+export function CookFromPantryCard({ recommendations, recipes, onOpenRecipe, onAddMissing }: CookFromPantryCardProps) {
   if (recommendations.length === 0) return null;
 
   return (
@@ -39,7 +44,15 @@ export function CookFromPantryCard({ recommendations, onOpenRecipe, onAddMissing
                 {recipePantryListSubtitle(match.matchedCount, match.totalIngredients, match.missingCount)}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={THEME.muted} />
+            <View className="flex-row items-center gap-1">
+              <AddToCalendarButton
+                target={{
+                  ...scheduleTargetFromRecipeId(match.recipeId, recipes),
+                  title: match.recipeName,
+                }}
+              />
+              <Ionicons name="chevron-forward" size={18} color={THEME.muted} />
+            </View>
           </Pressable>
           {match.missingCount > 0 && onAddMissing ? (
             <Pressable

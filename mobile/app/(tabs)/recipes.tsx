@@ -29,6 +29,8 @@ import {
 } from '../../lib/recipeMatch';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { nutritionLabel } from '../../lib/nutrition';
+import { AddToCalendarButton } from '../../components/mealCalendar/AddToCalendarButton';
+import { scheduleTargetFromDiscoveryRecipe, scheduleTargetFromKitchenRecipe } from '../../lib/mealCalendar/scheduleTarget';
 import type { Recipe } from '../../types/mealprep';
 
 function rankKitchenRecipesByPantry(kitchenRecipes: Recipe[], ranked: RecipePantryMatch[]): Recipe[] {
@@ -72,14 +74,17 @@ function DiscoveryRecipeListSection({
                   <Text className="text-base font-bold text-ink">{recipe.name}</Text>
                   <RecipePantryMatchBadge match={match} />
                 </View>
-                <Pressable
-                  onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
-                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
-                >
+                <View className="flex-row items-center gap-1">
+                  <AddToCalendarButton target={scheduleTargetFromDiscoveryRecipe(recipe)} />
+                  <Pressable
+                    onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
+                    className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
+                  >
                   <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
                     {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
                   </Text>
                 </Pressable>
+                </View>
               </View>
             </Pressable>
             {missingCount > 0 && onAddMissing ? (
@@ -140,14 +145,17 @@ function RecipeListSection({
                     {recipe.servings} servings · {recipe.minutes} min · {nutritionLabel(recipe)}
                   </Text>
                 </View>
-                <Pressable
-                  onPress={() => void toggleMealPlanKitchenRecipe(recipe.id)}
-                  className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
-                >
-                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
-                    {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
-                  </Text>
-                </Pressable>
+                <View className="flex-row items-center gap-1">
+                  <AddToCalendarButton target={scheduleTargetFromKitchenRecipe(recipe)} />
+                  <Pressable
+                    onPress={() => void toggleMealPlanKitchenRecipe(recipe.id)}
+                    className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
+                  >
+                    <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
+                      {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
             </Pressable>
             {missingCount > 0 && onAddMissing ? (
@@ -448,14 +456,17 @@ export default function RecipesScreen() {
                       <Text className="text-base font-bold text-ink">{recipe.name}</Text>
                       <RecipePantryMatchBadge match={match} />
                     </View>
-                    <Pressable
-                      onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
-                      className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
-                    >
-                      <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
-                        {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
-                      </Text>
-                    </Pressable>
+                    <View className="flex-row items-center gap-1">
+                      <AddToCalendarButton target={scheduleTargetFromDiscoveryRecipe(recipe)} />
+                      <Pressable
+                        onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
+                        className={`rounded-full px-3 py-1 ${onPlan ? 'bg-primary' : 'border border-border bg-paper'}`}
+                      >
+                        <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-muted'}`}>
+                          {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                 </Pressable>
                 {missingCount > 0 ? (
@@ -473,7 +484,10 @@ export default function RecipesScreen() {
       ) : null}
 
       {active && activeMatch ? (
-        <Card title={RECIPES_COPY.pantryCheck.title} subtitle={active.name} className="mt-3">
+        <Card title={RECIPES_COPY.pantryCheck.title} subtitle={active.name} className="relative mt-3">
+          <View className="absolute right-4 top-4">
+            <AddToCalendarButton target={scheduleTargetFromKitchenRecipe(active)} />
+          </View>
           <Text className="mt-2 text-sm font-semibold text-primary-dark">{RECIPES_COPY.pantryCheck.youHave}</Text>
           {activeMatch.matched.length === 0 ? (
             <Text className="mt-1 text-sm text-muted">{RECIPES_COPY.pantryCheck.noPantryItemsYet}</Text>

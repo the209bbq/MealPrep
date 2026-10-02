@@ -28,6 +28,7 @@ export function activeMealPlanRecipeIds(
   const ids: string[] = [];
   for (const item of mealPlan) {
     if (item.made) continue;
+    if (item.leftoverOfId) continue;
     const id = resolveMealPlanRecipeId(item, recipes, userId);
     if (id) ids.push(id);
   }
@@ -40,6 +41,7 @@ export function isRecipeOnMealPlan(
 ): MealPlanItem | undefined {
   return mealPlan.find((item) => {
     if (item.made) return false;
+    if (item.scheduledOn) return false;
     if (options.recipeSlug && item.recipeSlug === options.recipeSlug) return true;
     if (options.recipeApiId != null && item.recipeApiId === options.recipeApiId) return true;
     return false;

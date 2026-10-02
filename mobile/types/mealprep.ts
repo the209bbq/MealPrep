@@ -147,6 +147,9 @@ export interface GroceryListItem {
   sourceRecipeIds: string[];
 }
 
+export const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+export type MealSlot = (typeof MEAL_SLOTS)[number];
+
 /** User meal plan row (kitchen slug and/or RecipeAPI id with display snapshot). */
 export interface MealPlanItem {
   id: string;
@@ -157,6 +160,14 @@ export interface MealPlanItem {
   made: boolean;
   madeAt: string | null;
   addedAt: string;
+  /** Local calendar date (`YYYY-MM-DD`); null = unscheduled queue (legacy behavior). */
+  scheduledOn: string | null;
+  /** Optional meal slot when `scheduledOn` is set. */
+  mealSlot: MealSlot | null;
+  /** When set, this row is a leftover meal linked to the source plan item (no grocery ingredients). */
+  leftoverOfId: string | null;
+  /** When set, the linked leftover row id (source meal only). */
+  linkedLeftoverId: string | null;
 }
 
 export interface MealPrepSummary {

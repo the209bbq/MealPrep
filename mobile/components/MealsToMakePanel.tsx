@@ -1,6 +1,8 @@
 import { Pressable, Text, View } from 'react-native';
 import { Card } from './Card';
+import { AddToCalendarButton } from './mealCalendar/AddToCalendarButton';
 import type { MealPlanItem } from '../types/mealprep';
+import { scheduleTargetFromMealPlanItem } from '../lib/mealCalendar/scheduleTarget';
 import { THEME } from '../config/appConfig';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -46,7 +48,10 @@ export function MealsToMakePanel({
           className={`flex-row items-center justify-between py-2.5 ${index > 0 ? 'border-t border-border' : ''}`}
         >
           <Text className="mr-2 flex-1 font-semibold text-ink" numberOfLines={2}>{item.title}</Text>
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row items-center gap-1">
+            {!item.scheduledOn ? (
+              <AddToCalendarButton target={scheduleTargetFromMealPlanItem(item)} />
+            ) : null}
             <Pressable
               onPress={() => onMarkMade(item.id)}
               className="rounded-full bg-primary-light px-3 py-1.5"

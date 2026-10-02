@@ -104,9 +104,17 @@ export function mergeGuestGroceryIntoAccount(
 
 function activeMealPlanKey(item: MealPlanItem): string | null {
   if (item.made) return null;
-  if (item.recipeApiId != null) return `api:${item.recipeApiId}`;
-  if (item.recipeSlug) return `slug:${item.recipeSlug}`;
-  return null;
+  const recipePart =
+    item.recipeApiId != null
+      ? `api:${item.recipeApiId}`
+      : item.recipeSlug
+        ? `slug:${item.recipeSlug}`
+        : null;
+  if (!recipePart) return null;
+  if (item.scheduledOn) {
+    return `${recipePart}@${item.scheduledOn}@${item.mealSlot ?? ''}`;
+  }
+  return recipePart;
 }
 
 export function mergeGuestMealPlanIntoAccount(
