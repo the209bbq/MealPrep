@@ -6,16 +6,17 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { CookFromPantryCard } from '../../components/RecipePantryMatch';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { MealMadeReviewSheet } from '../../components/MealMadeReviewSheet';
+import { MealWeekCalendarCard } from '../../components/mealCalendar/MealWeekCalendarCard';
 import { MealsToMakePanel } from '../../components/MealsToMakePanel';
 import { NextStepCard } from '../../components/NextStepCard';
 import { TabEmptyState } from '../../components/onboarding/TabEmptyState';
 import { THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
+import { unscheduledActiveMeals } from '../../lib/mealCalendar/groupMeals';
 import { resolveHomeNextStep } from '../../lib/home/nextStep';
 
 export default function HomeScreen() {
   const {
-    summary,
     demoMode,
     pantry,
     grocery,
@@ -38,6 +39,7 @@ export default function HomeScreen() {
   } = useApp();
 
   const openGroceryCount = useMemo(() => grocery.filter((g) => !g.checked).length, [grocery]);
+  const unscheduledMeals = useMemo(() => unscheduledActiveMeals(mealPlan), [mealPlan]);
 
   const pantryDiscoveryEnabled = pantry.length > 0 && pantryRecipeRecommendations.length === 0;
   const { suggestions: pantryDiscoverySuggestions } = usePantryDiscoverySuggestions(pantry, session, {
@@ -110,25 +112,14 @@ export default function HomeScreen() {
           <NextStepCard step={nextStep} onPress={handleNextStep} />
         )}
 
-        <View className="mt-4 flex-row flex-wrap gap-2">
-          {[
-            { label: 'Meals planned', value: String(summary.mealsPlanned) },
-            { label: 'Pantry items', value: String(summary.pantryItems) },
-            { label: 'To buy', value: String(summary.groceryRemaining) },
-          ].map((stat) => (
-            <View key={stat.label} className="min-w-[30%] flex-1 rounded-xl bg-primary-light px-3 py-2">
-              <Text className="text-xs font-semibold text-primary-dark">{stat.label}</Text>
-              <Text className="text-xl font-bold text-ink">{stat.value}</Text>
-            </View>
-          ))}
-        </View>
+        <MealWeekCalendarCard />
 
         {demoMode ? (
           <Text className="mt-3 text-xs text-muted">Demo mode — local data only until you sign in with a connected account.</Text>
         ) : null}
 
         <MealsToMakePanel
-          items={mealPlan}
+          items={unscheduledMeals}
           onRemove={(id) => void removeMealPlanItem(id)}
           onMarkMade={openMealMadeReview}
           onUndoMade={(id) => void undoLastMealMade(id)}

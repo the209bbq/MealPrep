@@ -8,6 +8,7 @@ import { APP_ROUTES } from './appRoutes';
 import { SMART_SHOP_STORES } from './smartShop';
 import appBrand from './appBrand.json';
 
+export { MEAL_CALENDAR } from './mealCalendar';
 export { THEME } from './theme';
 
 export const APP_NAME = appBrand.name;

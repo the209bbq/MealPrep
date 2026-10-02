@@ -177,9 +177,17 @@ async function smartShopWithMockStores(page: Page): Promise<void> {
   await page.getByText('Store site', { exact: true }).first().waitFor({ timeout: 15_000 });
 }
 
+async function verifyHomeMealCalendar(page: Page): Promise<void> {
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.waitForURL(/\/?$|\/index/, { timeout: 15_000 });
+  await page.getByText('This week', { exact: true }).waitFor({ timeout: 15_000 });
+  await page.getByText('+ Add meal', { exact: true }).first().waitFor({ timeout: 10_000 });
+}
+
 async function runGuestFlow(page: Page): Promise<void> {
   await primeGuestSession(page);
   await addPantryItems(page);
+  await verifyHomeMealCalendar(page);
   await addMissingFromRecipes(page);
   await verifyGroceryList(page);
   await smartShopWithMockStores(page);

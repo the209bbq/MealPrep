@@ -40,6 +40,7 @@ export function isRecipeOnMealPlan(
 ): MealPlanItem | undefined {
   return mealPlan.find((item) => {
     if (item.made) return false;
+    if (item.scheduledOn) return false;
     if (options.recipeSlug && item.recipeSlug === options.recipeSlug) return true;
     if (options.recipeApiId != null && item.recipeApiId === options.recipeApiId) return true;
     return false;

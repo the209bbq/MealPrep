@@ -13,15 +13,17 @@ import type {
   FeatureFlagKey,
   FeatureFlags,
   GroceryListItem,
+  MealPlanItem,
+  MealSlot,
   PantryCategory,
   PantryItem,
   Recipe,
   RecipeIngredient,
   UserAnalytics,
-  MealPlanItem,
   UserProfile,
   UserRole,
 } from '../types/mealprep';
+import { MEAL_SLOTS } from '../types/mealprep';
 
 type ProfileRow = {
   id: string;
@@ -108,9 +110,17 @@ type MealPlanRow = {
   made: boolean;
   made_at?: string | null;
   added_at: string;
+  scheduled_on?: string | null;
+  meal_slot?: string | null;
 };
 
-const MEAL_PLAN_MIGRATION_SQL = 'supabase/migrations/20261001130000_meal_plan_made_at_prefs.sql';
+const MEAL_PLAN_MIGRATION_SQL =
+  'supabase/migrations/20261002130600_meal_plan_scheduled_on.sql (and 20261001130000_meal_plan_made_at_prefs.sql if made_at missing)';
+
+function parseMealSlot(value: string | null | undefined): MealSlot | null {
+  if (!value) return null;
+  return MEAL_SLOTS.includes(value as MealSlot) ? (value as MealSlot) : null;
+}
 
 function asCategory(value: string): PantryCategory {
   const categories: PantryCategory[] = [
@@ -209,6 +219,8 @@ export function mapMealPlanItem(row: MealPlanRow): MealPlanItem {
     made: row.made_at != null ? true : row.made,
     madeAt: row.made_at ?? (row.made ? row.added_at : null),
     addedAt: row.added_at,
+    scheduledOn: row.scheduled_on ?? null,
+    mealSlot: parseMealSlot(row.meal_slot),
   };
 }
 
@@ -657,6 +669,8 @@ export async function insertMealPlanItem(
     image_url: item.imageUrl,
     made: item.made,
     added_at: item.addedAt,
+    scheduled_on: item.scheduledOn,
+    meal_slot: item.mealSlot,
   };
 
   let { data, error } = await client
@@ -666,9 +680,21 @@ export async function insertMealPlanItem(
     .single();
 
   if (error && isMissingSchemaError(error)) {
-    const fallback = await client.from('meal_plan_items').insert(basePayload).select('*').single();
+    const fallbackPayload = { ...basePayload };
+    delete (fallbackPayload as { scheduled_on?: string | null }).scheduled_on;
+    delete (fallbackPayload as { meal_slot?: string | null }).meal_slot;
+    const fallback = await client
+      .from('meal_plan_items')
+      .insert({ ...fallbackPayload, made_at: item.madeAt })
+      .select('*')
+      .single();
     data = fallback.data;
     error = fallback.error;
+    if (error && isMissingSchemaError(error)) {
+      const legacy = await client.from('meal_plan_items').insert(fallbackPayload).select('*').single();
+      data = legacy.data;
+      error = legacy.error;
+    }
   }
 
   if (error) {
@@ -681,7 +707,7 @@ export async function updateMealPlanItem(
   client: SupabaseClient,
   userId: string,
   id: string,
-  patch: Partial<Pick<MealPlanItem, 'made' | 'madeAt'>>,
+  patch: Partial<Pick<MealPlanItem, 'made' | 'madeAt' | 'scheduledOn' | 'mealSlot'>>,
 ): Promise<MealPlanItem> {
   const made = patch.made;
   const madeAt =
@@ -696,6 +722,8 @@ export async function updateMealPlanItem(
   const withTimestamp: Record<string, unknown> = {};
   if (made !== undefined) withTimestamp.made = made;
   if (madeAt !== undefined) withTimestamp.made_at = madeAt;
+  if (patch.scheduledOn !== undefined) withTimestamp.scheduled_on = patch.scheduledOn;
+  if (patch.mealSlot !== undefined) withTimestamp.meal_slot = patch.mealSlot;
 
   let { data, error } = await client
     .from('meal_plan_items')
@@ -705,9 +733,11 @@ export async function updateMealPlanItem(
     .select('*')
     .single();
 
-  if (error && isMissingSchemaError(error) && 'made_at' in withTimestamp) {
+  if (error && isMissingSchemaError(error)) {
     const fallbackPayload: Record<string, unknown> = {};
     if (made !== undefined) fallbackPayload.made = made;
+    if (patch.scheduledOn !== undefined) fallbackPayload.scheduled_on = patch.scheduledOn;
+    if (patch.mealSlot !== undefined) fallbackPayload.meal_slot = patch.mealSlot;
     const fallback = await client
       .from('meal_plan_items')
       .update(fallbackPayload)

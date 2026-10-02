@@ -47,6 +47,8 @@ function mealPlanRow(recipeApiId: number, title: string, id: string): MealPlanIt
     made: false,
     madeAt: null,
     addedAt: '2026-01-01T00:00:00.000Z',
+    scheduledOn: null,
+    mealSlot: null,
   };
 }
 

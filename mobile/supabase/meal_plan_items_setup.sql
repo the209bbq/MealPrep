@@ -44,3 +44,19 @@ alter table public.meal_plan_items
 
 alter table public.profiles
   add column if not exists auto_add_missing_to_grocery boolean not null default true;
+
+alter table public.meal_plan_items
+  add column if not exists scheduled_on date;
+
+alter table public.meal_plan_items
+  add column if not exists meal_slot text;
+
+alter table public.meal_plan_items
+  drop constraint if exists meal_plan_items_meal_slot_check;
+
+alter table public.meal_plan_items
+  add constraint meal_plan_items_meal_slot_check
+  check (meal_slot is null or meal_slot in ('breakfast', 'lunch', 'dinner'));
+
+create index if not exists meal_plan_items_user_scheduled_on_idx
+  on public.meal_plan_items (user_id, scheduled_on);

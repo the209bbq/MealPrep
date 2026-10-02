@@ -105,6 +105,7 @@ import type {
   GroceryListItem,
   MealPlanItem,
   MealPrepSummary,
+  MealSlot,
   PantryItem,
   PantryCategory,
   PantryStorageLocation,
@@ -131,7 +132,14 @@ const STORAGE_KEYS = {
 function initialMealPlan(demoMode: boolean): MealPlanItem[] {
   if (!demoMode) return [];
   const stored = readJson<MealPlanItem[] | null>(STORAGE_KEYS.mealPlan, null);
-  if (stored && stored.length > 0) return stored;
+  if (stored && stored.length > 0) {
+    return stored.map((row) => ({
+      ...row,
+      scheduledOn: row.scheduledOn ?? null,
+      mealSlot: row.mealSlot ?? null,
+      madeAt: row.madeAt ?? null,
+    }));
+  }
   const legacyIds = readJson<string[]>(STORAGE_KEYS.selectedRecipes, ['lemon-chicken', 'pulled-pork']);
   const now = new Date().toISOString();
   return legacyIds.map((slug) => {
@@ -145,6 +153,8 @@ function initialMealPlan(demoMode: boolean): MealPlanItem[] {
       made: false,
       madeAt: null,
       addedAt: now,
+      scheduledOn: null,
+      mealSlot: null,
     };
   });
 }
@@ -222,6 +232,19 @@ interface AppContextValue {
   mealMadeReviewRows: ReturnType<typeof matchedRowsForReview>;
   mealMadeBusy: boolean;
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
+  scheduleMealFromRecipe: (input: {
+    recipeId: string;
+    recipeSlug: string | null;
+    recipeApiId: number | null;
+    title: string;
+    imageUrl: string | null;
+    scheduledOn: string;
+    mealSlot: MealSlot;
+  }) => Promise<void>;
+  updateMealPlanSchedule: (
+    id: string,
+    patch: Partial<Pick<MealPlanItem, 'scheduledOn' | 'mealSlot'>>,
+  ) => Promise<void>;
   addMissingForPlannedMealsToGrocery: () => void;
   userPreferences: UserPreferences;
   setUserPreference: <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => void;
@@ -910,6 +933,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const normalized: Omit<MealPlanItem, 'id'> = {
         ...entry,
         madeAt: entry.madeAt ?? null,
+        scheduledOn: entry.scheduledOn ?? null,
+        mealSlot: entry.mealSlot ?? null,
       };
       const recipeId = resolveMealPlanRecipeId(
         { ...normalized, id: 'pending' },
@@ -947,6 +972,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
+  const updateMealPlanSchedule = useCallback(
+    async (id: string, patch: Partial<Pick<MealPlanItem, 'scheduledOn' | 'mealSlot'>>) => {
+      let previous: MealPlanItem | undefined;
+      setMealPlan((prev) => {
+        previous = prev.find((row) => row.id === id);
+        return prev.map((row) => (row.id === id ? { ...row, ...patch } : row));
+      });
+      if (!previous) return;
+      if (demoMode || isGuest) return;
+      if (!supabase || !userId) return;
+      try {
+        await updateMealPlanItem(supabase, userId, id, patch);
+      } catch (error: unknown) {
+        setMealPlan((prev) => prev.map((row) => (row.id === id ? previous! : row)));
+        setAuthError(error instanceof Error ? error.message : 'Failed to update meal schedule');
+      }
+    },
+    [demoMode, isGuest, supabase, userId],
+  );
+
+  const scheduleMealFromRecipe = useCallback(
+    async (input: {
+      recipeId: string;
+      recipeSlug: string | null;
+      recipeApiId: number | null;
+      title: string;
+      imageUrl: string | null;
+      scheduledOn: string;
+      mealSlot: MealSlot;
+    }) => {
+      await addMealPlanEntry({
+        recipeSlug: input.recipeSlug,
+        recipeApiId: input.recipeApiId,
+        title: input.title,
+        imageUrl: input.imageUrl,
+        made: false,
+        madeAt: null,
+        addedAt: new Date().toISOString(),
+        scheduledOn: input.scheduledOn,
+        mealSlot: input.mealSlot,
+      });
+    },
+    [addMealPlanEntry],
+  );
+
   const toggleMealPlanKitchenRecipe = useCallback(
     async (recipeId: string) => {
       const recipe = recipes.find((r) => r.id === recipeId);
@@ -964,6 +1034,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         made: false,
         madeAt: null,
         addedAt: new Date().toISOString(),
+        scheduledOn: null,
+        mealSlot: null,
       });
       notifyTutorialStepCompleteRef.current('recipes');
     },
@@ -1157,6 +1229,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         made: false,
         madeAt: null,
         addedAt: new Date().toISOString(),
+        scheduledOn: null,
+        mealSlot: null,
       });
       notifyTutorialStepCompleteRef.current('recipes');
     },
@@ -1538,6 +1612,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mealMadeReviewRows,
       mealMadeBusy,
       isOnMealPlan,
+      scheduleMealFromRecipe,
+      updateMealPlanSchedule,
       addMissingForPlannedMealsToGrocery,
       userPreferences,
       setUserPreference,
@@ -1622,6 +1698,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mealMadeReviewRows,
       mealMadeBusy,
       isOnMealPlan,
+      scheduleMealFromRecipe,
+      updateMealPlanSchedule,
       addMissingForPlannedMealsToGrocery,
       userPreferences,
       setUserPreference,

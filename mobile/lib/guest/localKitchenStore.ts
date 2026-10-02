@@ -27,12 +27,21 @@ export function writeGuestGrocery(items: GroceryListItem[]): void {
   writeJson(GUEST_KITCHEN_STORAGE_KEYS.grocery, items);
 }
 
+export function normalizeMealPlanItemList(items: MealPlanItem[]): MealPlanItem[] {
+  return items.map((row) => ({
+    ...row,
+    scheduledOn: row.scheduledOn ?? null,
+    mealSlot: row.mealSlot ?? null,
+    madeAt: row.madeAt ?? null,
+  }));
+}
+
 export function readGuestMealPlan(): MealPlanItem[] {
-  return readJson<MealPlanItem[]>(GUEST_KITCHEN_STORAGE_KEYS.mealPlan, []);
+  return normalizeMealPlanItemList(readJson<MealPlanItem[]>(GUEST_KITCHEN_STORAGE_KEYS.mealPlan, []));
 }
 
 export function writeGuestMealPlan(items: MealPlanItem[]): void {
-  writeJson(GUEST_KITCHEN_STORAGE_KEYS.mealPlan, items);
+  writeJson(GUEST_KITCHEN_STORAGE_KEYS.mealPlan, normalizeMealPlanItemList(items));
 }
 
 export function readGuestRecipes(): Recipe[] {
