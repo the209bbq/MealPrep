@@ -35,6 +35,8 @@ export type FeatureFlags = Record<FeatureFlagKey, boolean>;
 export interface UserPreferences {
   /** When true, adding a recipe to Meals to make auto-adds missing ingredients to the grocery list. */
   autoAddMissingToGrocery: boolean;
+  /** When true, checking off grocery items adds them to the pantry (with merge). */
+  addCheckedItemsToPantry: boolean;
 }
 
 export interface UserProfile {

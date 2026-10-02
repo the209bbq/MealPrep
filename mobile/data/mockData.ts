@@ -1,6 +1,7 @@
 import type { PantryItem, UserProfile } from '../types/mealprep';
 import { DEMO_USERS, FEATURE_FLAG_DEFAULTS } from '../config/appConfig';
 import { DEFAULT_USER_PLAN } from '../config/plans';
+import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
 import { catalogToRecipes } from './kitchenCatalog';
 
 export const MOCK_RECIPES = catalogToRecipes();
@@ -81,6 +82,7 @@ export function profileForRole(role: 'admin' | 'member'): UserProfile {
     dietaryNotes: role === 'admin' ? 'High protein, no shellfish' : 'Gluten conscious',
     createdAt: new Date().toISOString(),
     preferences: {
+      ...USER_PREFERENCE_DEFAULTS,
       autoAddMissingToGrocery: true,
     },
   };

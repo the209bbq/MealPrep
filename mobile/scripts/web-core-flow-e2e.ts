@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { FEATURE_FLAG_DEFAULTS } from '../config/appConfig';
 import { GUEST_SAVE_NUDGE_CONFIG } from '../config/guestSaveNudge';
 import { GROCERY_COPY } from '../config/grocery';
+import { PANTRY_RESTOCK_COPY } from '../config/pantryRestock';
 import { RECIPES_COPY } from '../config/recipesCopy';
 import { RECIPES_TAB_FILTER_COPY } from '../config/recipesTabFilters';
 import { SMART_SHOP_COPY } from '../config/smartShop';
@@ -164,6 +165,14 @@ async function verifyGroceryList(page: Page): Promise<void> {
 
   assert(!/\bsalt\b/i.test(body), 'grocery list should skip staple salt');
   assert(!/\bolive oil\b/i.test(body), 'grocery list should skip staple oil');
+
+  const openCheckbox = page.getByRole('checkbox', { checked: false }).first();
+  if (await openCheckbox.isVisible().catch(() => false)) {
+    await openCheckbox.click();
+    await page
+      .getByText(PANTRY_RESTOCK_COPY.addedToPantry(1), { exact: false })
+      .waitFor({ timeout: 8_000 });
+  }
 }
 
 async function smartShopWithMockStores(page: Page): Promise<void> {
