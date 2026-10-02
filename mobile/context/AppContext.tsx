@@ -69,6 +69,7 @@ import {
   writeGuestRecipes,
 } from '../lib/guest/localKitchenStore';
 import { localDateString } from '../lib/communityDeals/localDate';
+import { formatAddedToCalendarMessage } from '../lib/mealCalendar/formatScheduleToast';
 import { mergeGuestKitchenIntoAccount } from '../lib/guest/mergeGuestKitchen';
 import { readJson, removeStorageKey, writeJson } from '../lib/storage';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
@@ -256,7 +257,12 @@ interface AppContextValue {
     scheduledOn: string;
     mealSlot: MealSlot;
     makesLeftovers?: boolean;
-  }) => Promise<void>;
+  }) => Promise<{ parentId: string; leftoverId?: string | null }>;
+  notifyMealScheduled: (
+    result: { parentId: string; leftoverId?: string | null },
+    scheduledOn: string,
+    mealSlot: MealSlot,
+  ) => void;
   updateMealPlanSchedule: (
     id: string,
     patch: Partial<Pick<MealPlanItem, 'scheduledOn' | 'mealSlot'>>,
@@ -1074,7 +1080,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         maybeAppendMissing(
           resolveMealPlanRecipeId(parent, recipes, ownerId),
         );
-        return;
+        return {
+          parentId: parent.id,
+          leftoverId: rows.length > 1 ? rows[1].id : null,
+        };
       }
 
       if (!supabase || !userId) throw new Error('Sign in to save your meal plan.');
@@ -1090,6 +1099,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       setMealPlan((prev) => [...rows, ...prev]);
       maybeAppendMissing(resolveMealPlanRecipeId(rows[0], recipes, ownerId));
+      return {
+        parentId: rows[0].id,
+        leftoverId: rows.length > 1 ? rows[1].id : null,
+      };
     },
     [
       appendMissingIngredientsForRecipe,
@@ -1102,6 +1115,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       userId,
       userPreferences.autoAddMissingToGrocery,
     ],
+  );
+
+  const notifyMealScheduled = useCallback(
+    (
+      result: { parentId: string; leftoverId?: string | null },
+      scheduledOn: string,
+      mealSlot: MealSlot,
+    ) => {
+      setUndoToast({
+        message: formatAddedToCalendarMessage(scheduledOn, mealSlot),
+        onUndo: () => {
+          void removeMealPlanItem(result.parentId);
+        },
+      });
+    },
+    [removeMealPlanItem],
   );
 
   const toggleMealPlanKitchenRecipe = useCallback(
@@ -1735,6 +1764,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mealMadeBusy,
       isOnMealPlan,
       scheduleMealFromRecipe,
+      notifyMealScheduled,
       updateMealPlanSchedule,
       shopForWeekScheduledMeals,
       addMissingForPlannedMealsToGrocery,
@@ -1822,6 +1852,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mealMadeBusy,
       isOnMealPlan,
       scheduleMealFromRecipe,
+      notifyMealScheduled,
       updateMealPlanSchedule,
       shopForWeekScheduledMeals,
       addMissingForPlannedMealsToGrocery,
@@ -1838,6 +1869,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       previewPantryResort,
       resortPantryItemsInDefaultLocation,
       onboarding,
+      notifyMealScheduled,
+      scheduleMealFromRecipe,
+      shopForWeekScheduledMeals,
     ],
   );
 

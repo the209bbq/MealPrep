@@ -147,7 +147,7 @@ export interface GroceryListItem {
   sourceRecipeIds: string[];
 }
 
-export const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner'] as const;
+export const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 export type MealSlot = (typeof MEAL_SLOTS)[number];
 
 /** User meal plan row (kitchen slug and/or RecipeAPI id with display snapshot). */

@@ -37,6 +37,7 @@ export default function HomeScreen() {
     addMissingForPlannedMealsToGrocery,
     addMissingRecipeIngredientsToGrocery,
     session,
+    recipes,
   } = useApp();
 
   const openGroceryCount = useMemo(() => grocery.filter((g) => !g.checked).length, [grocery]);
@@ -130,6 +131,7 @@ export default function HomeScreen() {
 
         <CookFromPantryCard
           recommendations={cookFromPantryRecommendations}
+          recipes={recipes}
           onOpenRecipe={(recipeId) => {
             if (recipeId.startsWith('recipeapi-')) {
               const apiId = Number.parseInt(recipeId.replace(/^recipeapi-(\d+).*/, '$1'), 10);

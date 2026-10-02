@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card } from '../../components/Card';
+import { AddToCalendarButton } from '../../components/mealCalendar/AddToCalendarButton';
 import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { THEME } from '../../config/appConfig';
 import { RECIPES_COPY } from '../../config/recipesCopy';
@@ -23,6 +24,7 @@ import {
 import { getRecipeDiscoveryAccessToken } from '../../lib/recipeDiscovery/accessToken';
 import { recipeApiToAppRecipe } from '../../lib/recipeDiscovery/mapToAppRecipe';
 import { isRecipeApiInLibrary } from '../../lib/recipeDiscovery/slugs';
+import { scheduleTargetFromDiscoveryRecipe } from '../../lib/mealCalendar/scheduleTarget';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 export default function DiscoverRecipeDetailScreen() {
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
@@ -148,6 +150,9 @@ export default function DiscoverRecipeDetailScreen() {
           ) : null}
           <Text className="mt-2 text-xs font-semibold uppercase text-primary">{recipe.cuisine}</Text>
           <Text className="text-2xl font-bold text-ink">{recipe.name}</Text>
+          <View className="mt-1 flex-row items-center">
+            <AddToCalendarButton target={scheduleTargetFromDiscoveryRecipe(recipe)} size={24} className="p-1" />
+          </View>
           <Text className="mt-2 text-sm text-muted">{recipe.description}</Text>
           <Text className="mt-3 text-sm text-ink">
             {recipe.servings} servings · {recipe.prep_time + recipe.cook_time} min ·{' '}

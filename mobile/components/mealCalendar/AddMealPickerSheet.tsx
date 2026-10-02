@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { MEAL_CALENDAR } from '../../config/mealCalendar';
 import { MEAL_SLOTS, type MealSlot, type Recipe } from '../../types/mealprep';
@@ -56,17 +56,34 @@ export function AddMealPickerSheet({
   onClose,
   onPick,
 }: AddMealPickerSheetProps) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      {visible ? (
+        <AddMealPickerSheetForm
+          key={`${isoDate}-${defaultSlot}`}
+          isoDate={isoDate}
+          defaultSlot={defaultSlot}
+          recipes={recipes}
+          pantryMatches={pantryMatches}
+          onClose={onClose}
+          onPick={onPick}
+        />
+      ) : null}
+    </Modal>
+  );
+}
+
+function AddMealPickerSheetForm({
+  isoDate,
+  defaultSlot,
+  recipes,
+  pantryMatches,
+  onClose,
+  onPick,
+}: Omit<AddMealPickerSheetProps, 'visible'>) {
   const [query, setQuery] = useState('');
   const [slot, setSlot] = useState<MealSlot>(defaultSlot);
   const [makesLeftovers, setMakesLeftovers] = useState(false);
-
-  useEffect(() => {
-    if (visible) {
-      setSlot(defaultSlot);
-      setMakesLeftovers(false);
-      setQuery('');
-    }
-  }, [defaultSlot, visible]);
 
   const options = useMemo(
     () =>
@@ -85,8 +102,7 @@ export function AddMealPickerSheet({
   }, [options, query]);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
+    <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
         <Pressable className="max-h-[80%] rounded-t-3xl bg-card px-4 pb-8 pt-4" onPress={() => undefined}>
           <Text className="text-lg font-bold text-ink">Add meal</Text>
           <Text className="mt-1 text-sm text-muted">{isoDate}</Text>
@@ -151,6 +167,5 @@ export function AddMealPickerSheet({
           </Pressable>
         </Pressable>
       </Pressable>
-    </Modal>
   );
 }

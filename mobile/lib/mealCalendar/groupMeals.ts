@@ -5,7 +5,8 @@ import { buildLocalDayRange } from './dates';
 const SLOT_ORDER: Record<MealSlot, number> = {
   breakfast: 0,
   lunch: 1,
-  dinner: 2,
+  snack: 2,
+  dinner: 3,
 };
 
 export function compareScheduledMeals(a: MealPlanItem, b: MealPlanItem): number {

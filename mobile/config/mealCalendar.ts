@@ -8,6 +8,7 @@ export const MEAL_CALENDAR = {
     breakfast: { hour: 8, minute: 0, durationMinutes: 45 },
     lunch: { hour: 12, minute: 30, durationMinutes: 60 },
     dinner: { hour: 18, minute: 0, durationMinutes: 75 },
+    snack: { hour: 15, minute: 0, durationMinutes: 30 },
   } satisfies Record<
     MealSlot,
     { hour: number; minute: number; durationMinutes: number }
@@ -16,7 +17,9 @@ export const MEAL_CALENDAR = {
     breakfast: 'Breakfast',
     lunch: 'Lunch',
     dinner: 'Dinner',
+    snack: 'Snack',
   } satisfies Record<MealSlot, string>,
+  addToCalendarAccessibilityLabel: 'Add to calendar',
   googleCalendar: {
     templateBaseUrl: 'https://calendar.google.com/calendar/render',
     /** Future: two-way sync via Google Calendar API + OAuth (not implemented). */

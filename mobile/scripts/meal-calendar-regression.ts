@@ -14,8 +14,10 @@ import {
   buildLinkedLeftoverEntry,
   leftoverMealTitle,
 } from '../lib/mealCalendar/leftovers';
+import { formatAddedToCalendarMessage } from '../lib/mealCalendar/formatScheduleToast';
+import { quickScheduleDayOptions } from '../lib/mealCalendar/quickScheduleDays';
 import { mealPlanItemsInWeekWindow, recipeIdsForScheduledMeals } from '../lib/mealCalendar/weekGroceries';
-import type { MealPlanItem } from '../types/mealprep';
+import { MEAL_SLOTS, type MealPlanItem } from '../types/mealprep';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -133,6 +135,19 @@ function main(): void {
     leftoverOfId: 'p1',
   });
   assert(leftoverMealTitle('Roast') === 'Leftovers: Roast', 'leftover title');
+
+  const quickDays = quickScheduleDayOptions('2026-10-02');
+  assert(quickDays.length === 7, 'quick schedule days count');
+  assert(quickDays[0].label === 'Today', 'quick today');
+  assert(quickDays[1].label === 'Tomorrow', 'quick tomorrow');
+  assert(quickDays[2].label.includes('Oct'), 'quick labeled weekday');
+
+  assert(
+    Boolean(formatAddedToCalendarMessage('2026-10-02', 'dinner').match(/Added to .* dinner/)),
+    'toast message',
+  );
+  assert(MEAL_SLOTS.includes('snack'), 'snack slot');
+
   const built = buildLinkedLeftoverEntry(parent);
   assert(built.scheduledOn === addLocalDays(weekStart, 1), 'leftover next day');
   assert(built.mealSlot === 'lunch', 'leftover lunch slot');
