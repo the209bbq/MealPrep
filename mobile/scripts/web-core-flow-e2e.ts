@@ -2,7 +2,7 @@
  * Playwright E2E: pantry → recipes → grocery → Smart Shop (guest / demo web export).
  * Run from mobile/: npm run test:web-e2e
  */
-import { chromium, devices, type BrowserContext, type Page } from 'playwright';
+import { chromium, devices, type BrowserContext, type Locator, type Page } from 'playwright';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -126,26 +126,31 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function pickFirstEnabledFilterChip(
+async function activate(_page: Page, pointer: FilterPointer, target: Locator): Promise<void> {
+  if (pointer === 'touch') {
+    await target.tap();
+  } else {
+    await target.click();
+  }
+}
+
+async function pickFirstEnabledFilterDropdown(
   page: Page,
   pointer: FilterPointer,
   question: string,
 ): Promise<string> {
-  const pattern = new RegExp(`^${escapeRegExp(question)} `);
-  const chips = page.getByRole('button', { name: pattern });
-  await chips.first().waitFor({ state: 'visible', timeout: 10_000 });
-  const total = await chips.count();
+  await activate(page, pointer, page.getByLabel(`${question} select`));
+  const optionPattern = new RegExp(`^${escapeRegExp(question)} option `);
+  const options = page.getByRole('button', { name: optionPattern });
+  await options.first().waitFor({ state: 'visible', timeout: 10_000 });
+  const total = await options.count();
   for (let index = 0; index < total; index += 1) {
-    const chip = chips.nth(index);
-    const label = (await chip.getAttribute('aria-label')) ?? '';
-    if (label.endsWith(' Any')) continue;
-    if (!(await chip.isEnabled())) continue;
-    if (pointer === 'touch') {
-      await chip.tap();
-    } else {
-      await chip.click();
-    }
-    return label.slice(question.length + 1);
+    const option = options.nth(index);
+    const label = (await option.getAttribute('aria-label')) ?? '';
+    if (label.endsWith(' option Any')) continue;
+    if (!(await option.isEnabled())) continue;
+    await activate(page, pointer, option);
+    return label.slice(`${question} option `.length);
   }
   throw new Error(`No enabled filter option for: ${question}`);
 }
@@ -160,12 +165,7 @@ async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): P
   await feedCards.first().waitFor({ timeout: 30_000 });
   const unfilteredCount = await feedCards.count();
 
-  const openFilter = page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton);
-  if (pointer === 'touch') {
-    await openFilter.tap();
-  } else {
-    await openFilter.click();
-  }
+  await activate(page, pointer, page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton));
 
   const filterQuestions = [
     RECIPES_TAB_FILTER_COPY.questions.time,
@@ -176,16 +176,11 @@ async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): P
   ];
   const pickedLabels: string[] = [];
   for (const question of filterQuestions) {
-    pickedLabels.push(await pickFirstEnabledFilterChip(page, pointer, question));
+    pickedLabels.push(await pickFirstEnabledFilterDropdown(page, pointer, question));
   }
   assert(pickedLabels.length === 5, 'should pick one option per filter question');
 
-  const closeFilters = page.getByLabel('Close filters');
-  if (pointer === 'touch') {
-    await closeFilters.tap();
-  } else {
-    await closeFilters.click();
-  }
+  await activate(page, pointer, page.getByLabel('Close filters'));
 
   await page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }).waitFor({ timeout: 5_000 });
   const filterBarText = await page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton).innerText();
@@ -205,11 +200,7 @@ async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): P
     assert(filteredCount > 0, 'filtered recipe feed should list matching recipes');
   }
 
-  if (pointer === 'touch') {
-    await page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }).tap();
-  } else {
-    await page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }).click();
-  }
+  await activate(page, pointer, page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }));
 }
 
 async function exerciseRecipesQuestionFilter(page: Page): Promise<void> {
