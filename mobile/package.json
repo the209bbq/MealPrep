@@ -56,7 +56,7 @@
     "test:onboarding": "npx tsx scripts/onboarding-routing-check.ts && npx tsx scripts/auth-config-check.ts",
     "test:web-hydration": "npx tsx scripts/web-hydration-check.ts",
     "test:web-e2e": "npx tsx scripts/web-core-flow-e2e.ts",
-    "test:guest-mode": "npx tsx scripts/guest-mode-check.ts",
+    "test:guest-mode": "npx tsx scripts/guest-mode-check.ts && npx tsx scripts/guest-save-nudge-check.ts",
     "test:photo-scan-gate": "npx tsx scripts/photo-scan-gate-check.ts",
     "test:pantry-image-quality": "npx tsx scripts/pantry-image-quality-check.ts",
     "test:prepare-image-web": "npx tsx scripts/infer-image-mime-check.ts && npx tsx scripts/pantry-image-quality-check.ts && npx tsx scripts/prepare-image-web-check.ts",

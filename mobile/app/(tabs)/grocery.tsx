@@ -12,7 +12,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { GroceryEmptyState } from '../../components/grocery/GroceryEmptyState';
-import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { GroceryItemRow } from '../../components/grocery/GroceryItemRow';
 import { CATEGORY_LABELS, THEME } from '../../config/appConfig';
 import { APP_ROUTES } from '../../config/appRoutes';
@@ -159,8 +158,6 @@ export default function GroceryScreen() {
               </Pressable>
             </View>
           </View>
-
-          <GuestSaveNudge className="mt-3" />
 
           {totalCount === 0 ? (
             <View className="mt-6">
