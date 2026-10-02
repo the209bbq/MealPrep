@@ -1,3 +1,4 @@
+import { resolveRecipeServings } from '../profile/servings';
 import type { Recipe, RecipeIngredient } from '../../types/mealprep';
 
 function roundQty(value: number): number {
@@ -7,13 +8,18 @@ function roundQty(value: number): number {
 export function recipeServingScale(
   recipe: Pick<Recipe, 'id' | 'servings'>,
   servingOverrides: Record<string, number>,
+  householdSize?: number,
 ): number {
-  const servings = servingOverrides[recipe.id] ?? recipe.servings;
+  const servings = resolveRecipeServings(recipe, servingOverrides, householdSize);
   return recipe.servings > 0 ? servings / recipe.servings : 1;
 }
 
-export function withServingScale(recipe: Recipe, servingOverrides: Record<string, number>): Recipe {
-  const scale = recipeServingScale(recipe, servingOverrides);
+export function withServingScale(
+  recipe: Recipe,
+  servingOverrides: Record<string, number>,
+  householdSize?: number,
+): Recipe {
+  const scale = recipeServingScale(recipe, servingOverrides, householdSize);
   if (scale === 1) return recipe;
   return {
     ...recipe,

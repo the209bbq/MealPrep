@@ -1,3 +1,4 @@
+import { resolveRecipeServings } from '../profile/servings';
 import type { PantryItem, Recipe, RecipeIngredient } from '../../types/mealprep';
 import type { MatchedIngredient, RecipePantryMatch } from '../recipeMatch/match';
 import { convertQuantity, unitKind, unitsAreConvertible } from '../units/conversion';
@@ -16,8 +17,12 @@ export interface PantryDeductionResult {
   nextPantry: PantryItem[];
 }
 
-function recipeScale(recipe: Recipe, servingOverrides: Record<string, number>): number {
-  const servings = servingOverrides[recipe.id] ?? recipe.servings;
+function recipeScale(
+  recipe: Recipe,
+  servingOverrides: Record<string, number>,
+  householdSize?: number,
+): number {
+  const servings = resolveRecipeServings(recipe, servingOverrides, householdSize);
   return recipe.servings > 0 ? servings / recipe.servings : 1;
 }
 
@@ -26,8 +31,9 @@ export function buildPantryDeductionLines(
   recipe: Recipe,
   servingOverrides: Record<string, number>,
   excludedPantryItemIds: Set<string>,
+  householdSize?: number,
 ): PantryDeductionLine[] {
-  const scale = recipeScale(recipe, servingOverrides);
+  const scale = recipeScale(recipe, servingOverrides, householdSize);
   const lines: PantryDeductionLine[] = [];
 
   for (const row of match.matched) {

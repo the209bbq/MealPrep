@@ -47,11 +47,11 @@ export default function AdminScreen() {
   }
 
   if (!demoMode && !session) {
-    return <Redirect href={APP_ROUTES.profile} />;
+    return <Redirect href={APP_ROUTES.home} />;
   }
 
   if (!isAdmin) {
-    return <Redirect href={APP_ROUTES.profile} />;
+    return <Redirect href={APP_ROUTES.home} />;
   }
 
   return (

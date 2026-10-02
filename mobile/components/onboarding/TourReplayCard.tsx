@@ -8,7 +8,7 @@ type TourReplayCardProps = {
 };
 
 export function TourReplayCard({ onReplay, className = 'mt-4' }: TourReplayCardProps) {
-  const { profile: copy } = ONBOARDING_COPY;
+  const { account: copy } = ONBOARDING_COPY;
   return (
     <Card className={className} title={copy.showTourAgainTitle} subtitle={copy.showTourAgainBlurb}>
       <Pressable

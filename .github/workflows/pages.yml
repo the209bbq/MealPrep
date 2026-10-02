@@ -48,7 +48,7 @@ jobs:
           touch _site/.nojekyll
           test -f _site/app/404.html || (echo "missing SPA 404 fallback in mobile/dist" && exit 1)
           cd _site/app
-          for route in admin pantry grocery recipes smart-shop discover-recipes; do
+          for route in admin pantry grocery recipes smart-shop discover-recipes privacy terms; do
             if [ -f "$route.html" ]; then
               mkdir -p "$route"
               cp "$route.html" "$route/index.html"

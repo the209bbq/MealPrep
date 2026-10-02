@@ -1,5 +1,6 @@
 import type { UserRole } from '../types/mealprep';
 
+/** Paid tiers; see `config/familyPlans.ts` for future `family` placeholder. */
 export const USER_PLANS = ['free', 'paid'] as const;
 export type UserPlan = (typeof USER_PLANS)[number];
 

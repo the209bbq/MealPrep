@@ -15,7 +15,16 @@ const appJson = JSON.parse(fs.readFileSync(path.join(mobileRoot, 'app.json'), 'u
 const baseUrl = appJson.expo?.experiments?.baseUrl ?? '';
 const basePath = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 
-const ROUTE_NAMES = ['profile', 'admin', 'pantry', 'grocery', 'recipes', 'smart-shop'];
+const ROUTE_NAMES = [
+  'profile',
+  'admin',
+  'pantry',
+  'grocery',
+  'recipes',
+  'smart-shop',
+  'privacy',
+  'terms',
+];
 
 function walkFiles(dir, acc = []) {
   if (!fs.existsSync(dir)) return acc;
