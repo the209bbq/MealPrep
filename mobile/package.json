@@ -53,7 +53,7 @@
     "test:add-price": "npx tsx scripts/add-price-suggestions-check.ts",
     "test:pantry-vision": "npx tsx scripts/pantry-vision-postprocess-check.ts",
     "test:pantry-vision-gemini": "npx tsx scripts/pantry-vision-gemini-inline-check.ts && npx tsx scripts/pantry-vision-gemini-budget-check.ts",
-    "test:onboarding": "npx tsx scripts/onboarding-routing-check.ts",
+    "test:onboarding": "npx tsx scripts/onboarding-routing-check.ts && npx tsx scripts/auth-config-check.ts",
     "test:web-hydration": "npx tsx scripts/web-hydration-check.ts",
     "test:web-e2e": "npx tsx scripts/web-core-flow-e2e.ts",
     "test:guest-mode": "npx tsx scripts/guest-mode-check.ts",
