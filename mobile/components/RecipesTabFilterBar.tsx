@@ -87,53 +87,49 @@ function FilterQuestion({
   filters: RecipesTabFilterState;
   onSelect: (next: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const choices = choicesForDimension(dimension);
 
   return (
     <View className="mb-4">
-      <Text className="mb-1 text-sm font-semibold text-ink">{question}</Text>
-      <Pressable
-        onPress={() => setOpen((prev) => !prev)}
-        accessibilityRole="button"
-        accessibilityLabel={`${question} select`}
-        className="flex-row items-center justify-between rounded-xl border border-border bg-card px-3 py-2.5"
+      <Text className="mb-2 text-sm font-semibold text-ink">{question}</Text>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text className="text-sm text-ink">{optionLabel(dimension, value)}</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={THEME.muted} />
-      </Pressable>
-      {open ? (
-        <View className="mt-1 rounded-xl border border-border bg-paper">
-          {choices.map((choice) => {
-            const count = countRecipesTabFilterOption(
-              baseRows,
-              filters,
-              dimension,
-              choice as RecipesTabFilterState[typeof dimension],
-            );
-            const disabled = count === 0 && choice !== value;
-            const selected = choice === value;
-            return (
-              <Pressable
-                key={choice}
-                disabled={disabled}
-                onPress={() => {
-                  onSelect(choice);
-                  setOpen(false);
-                }}
-                className={`border-b border-border px-3 py-2.5 ${disabled ? 'opacity-40' : ''}`}
+        {choices.map((choice) => {
+          const count = countRecipesTabFilterOption(
+            baseRows,
+            filters,
+            dimension,
+            choice as RecipesTabFilterState[typeof dimension],
+          );
+          const disabled = count === 0 && choice !== value;
+          const selected = choice === value;
+          const label = optionLabel(dimension, choice);
+          const chipLabel = choice !== 'any' ? `${label} (${count})` : label;
+          return (
+            <Pressable
+              key={choice}
+              disabled={disabled}
+              onPress={() => onSelect(choice)}
+              accessibilityRole="button"
+              accessibilityLabel={`${question} ${label}`}
+              accessibilityState={{ selected, disabled }}
+              className={`mr-2 rounded-full px-3 py-2 ${
+                selected ? 'bg-primary' : 'border border-border bg-card'
+              } ${disabled ? 'opacity-40' : ''}`}
+            >
+              <Text
+                className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-ink'}`}
               >
-                <Text
-                  className={`text-sm ${selected ? 'font-bold text-primary' : 'text-ink'}`}
-                >
-                  {optionLabel(dimension, choice)}
-                  {choice !== 'any' ? ` (${count})` : ''}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
+                {chipLabel}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -175,11 +171,14 @@ export function RecipesTabFilterBar({
       </View>
 
       <Modal visible={sheetOpen} animationType="slide" transparent onRequestClose={() => setSheetOpen(false)}>
-        <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setSheetOpen(false)}>
+        <View className="flex-1 justify-end">
           <Pressable
-            className="max-h-[80%] rounded-t-3xl bg-paper px-4 pb-8 pt-4"
-            onPress={(e) => e.stopPropagation()}
-          >
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss filter sheet"
+            className="absolute inset-0 bg-black/40"
+            onPress={() => setSheetOpen(false)}
+          />
+          <View className="max-h-[80%] rounded-t-3xl bg-paper px-4 pb-8 pt-4">
             <View className="mb-2 flex-row items-center justify-between">
               <Text className="text-base font-bold text-ink">{RECIPES_TAB_FILTER_COPY.filterButton}</Text>
               <Pressable
@@ -191,7 +190,7 @@ export function RecipesTabFilterBar({
                 <Ionicons name="close" size={22} color={THEME.muted} />
               </Pressable>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               <FilterQuestion
                 question={RECIPES_TAB_FILTER_COPY.questions.time}
                 dimension="time"
@@ -244,8 +243,8 @@ export function RecipesTabFilterBar({
                 <Text className="text-sm font-bold text-ink">{RECIPES_TAB_FILTER_COPY.clearFilters}</Text>
               </Pressable>
             ) : null}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </>
   );
