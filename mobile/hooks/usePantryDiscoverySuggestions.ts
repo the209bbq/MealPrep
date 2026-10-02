@@ -15,7 +15,6 @@ export function usePantryDiscoverySuggestions(
   options?: { enabled?: boolean; refreshSeed?: number },
 ): {
   suggestions: PantryDiscoverySuggestion[];
-  closeSuggestions: PantryDiscoverySuggestion[];
   loading: boolean;
   error: string | null;
   refreshSeed: number;
@@ -24,11 +23,9 @@ export function usePantryDiscoverySuggestions(
   const enabled = options?.enabled ?? true;
   const minPercent = DEFAULT_MIN_PANTRY_MATCH_PERCENT;
   const accessToken = getRecipeDiscoveryAccessToken(session);
-  const pantryEmpty = pantry.length === 0;
   const [refreshSeed, setRefreshSeed] = useState(options?.refreshSeed ?? 0);
 
   const [suggestions, setSuggestions] = useState<PantryDiscoverySuggestion[]>([]);
-  const [closeSuggestions, setCloseSuggestions] = useState<PantryDiscoverySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,9 +34,8 @@ export function usePantryDiscoverySuggestions(
   }, []);
 
   useEffect(() => {
-    if (!enabled || pantryEmpty) {
+    if (!enabled) {
       setSuggestions([]);
-      setCloseSuggestions([]);
       setError(null);
       setLoading(false);
       return;
@@ -54,14 +50,12 @@ export function usePantryDiscoverySuggestions(
       .then((result) => {
         if (!cancelled) {
           setSuggestions(result.suggestions);
-          setCloseSuggestions(result.closeSuggestions);
           setError(result.errorMessage);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSuggestions([]);
-          setCloseSuggestions([]);
           setError(RECIPES_COPY.discoveryErrors.loadFailed);
         }
       })
@@ -72,7 +66,7 @@ export function usePantryDiscoverySuggestions(
     return () => {
       cancelled = true;
     };
-  }, [accessToken, enabled, minPercent, pantry, pantryEmpty, refreshSeed]);
+  }, [accessToken, enabled, minPercent, pantry, refreshSeed]);
 
-  return { suggestions, closeSuggestions, loading, error, refreshSeed, refreshDiscovery };
+  return { suggestions, loading, error, refreshSeed, refreshDiscovery };
 }

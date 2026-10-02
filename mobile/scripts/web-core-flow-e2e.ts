@@ -156,6 +156,39 @@ async function pickFirstEnabledFilterDropdown(
   return null;
 }
 
+async function countRecipeFeedCards(page: Page): Promise<number> {
+  const feedCards = page.locator('[class*="mb-3"]').filter({
+    has: page.getByText(RECIPES_COPY.recipeCard.addMissingCta, { exact: true }),
+  });
+  return feedCards.count();
+}
+
+async function exerciseEmptyPantryRecipesBrowse(page: Page, pointer: FilterPointer): Promise<void> {
+  await page.getByRole('tab', { name: 'Recipes' }).click();
+  await page.waitForURL(/\/recipes/, { timeout: 15_000 });
+  await page
+    .getByText(RECIPES_COPY.cookNowCard.emptyPantryBrowseHint, { exact: true })
+    .waitFor({ timeout: 15_000 });
+
+  const unfilteredCount = await countRecipeFeedCards(page);
+  assert(unfilteredCount >= 5, 'empty pantry should show the full browsable kitchen catalog');
+
+  await activate(page, pointer, page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton));
+  const timeLabel = await pickFirstEnabledFilterDropdown(
+    page,
+    pointer,
+    RECIPES_TAB_FILTER_COPY.questions.time,
+  );
+  assert(timeLabel != null, 'time filter should be selectable with empty pantry');
+  await activate(page, pointer, page.getByLabel('Close filters'));
+
+  const filteredCount = await countRecipeFeedCards(page);
+  assert(filteredCount < unfilteredCount, 'filters should narrow the browsable catalog');
+  assert(filteredCount > 0, 'some catalog recipes should remain after filtering');
+
+  await activate(page, pointer, page.getByText(RECIPES_TAB_FILTER_COPY.clear, { exact: true }));
+}
+
 async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): Promise<void> {
   await page.getByRole('tab', { name: 'Recipes' }).click();
   await page.waitForURL(/\/recipes/, { timeout: 15_000 });
@@ -164,7 +197,7 @@ async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): P
     has: page.getByText(RECIPES_COPY.recipeCard.addMissingCta, { exact: true }),
   });
   await feedCards.first().waitFor({ timeout: 30_000 });
-  const unfilteredCount = await feedCards.count();
+  const unfilteredCount = await countRecipeFeedCards(page);
 
   await activate(page, pointer, page.getByLabel(RECIPES_TAB_FILTER_COPY.filterButton));
 
@@ -191,7 +224,7 @@ async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): P
     'filter bar should show active selections after applying filters',
   );
 
-  const filteredCount = await feedCards.count();
+  const filteredCount = await countRecipeFeedCards(page);
   assert(
     filteredCount <= unfilteredCount,
     'recipe feed should narrow (or stay same) after applying filters',
@@ -297,6 +330,7 @@ async function verifyHomeMealCalendar(page: Page): Promise<void> {
 
 async function runGuestFlow(page: Page): Promise<void> {
   await primeGuestSession(page);
+  await exerciseEmptyPantryRecipesBrowse(page, 'mouse');
   await addPantryItems(page);
   await verifyHomeMealCalendar(page);
   await exerciseRecipesQuestionFilter(page);
@@ -376,6 +410,7 @@ async function attachE2eRoutes(context: BrowserContext): Promise<void> {
 
 async function runRecipesFilterPixelTouchFlow(page: Page): Promise<void> {
   await primeGuestSession(page);
+  await exerciseEmptyPantryRecipesBrowse(page, 'touch');
   await addPantryItems(page);
   await exerciseRecipesFilterSheet(page, 'touch');
 }

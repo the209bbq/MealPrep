@@ -1,10 +1,10 @@
-import { DEFAULT_MIN_PANTRY_MATCH_PERCENT, PANTRY_DISCOVERY_PER_QUERY } from '../../config/recipeMatching';
-import { splitRankedMatchesForRecipesTab } from '../recipes/recipesFeedTiers';
+import { PANTRY_DISCOVERY_PER_QUERY } from '../../config/recipeMatching';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
 import type { PantryItem } from '../../types/mealprep';
+import { buildBrowseDiscoverySearchPlans } from './browseQueryPlans';
 import { searchDiscoveryRecipes } from './client';
-import { buildRotatingPantrySearchPlans } from './pantryQueryPlans';
+import { buildRotatingPantrySearchPlans, type PantryDiscoverySearchPlan } from './pantryQueryPlans';
 import { scoreDiscoveryRecipeAgainstPantry } from './scorePantry';
 import { collapseNearDuplicateRecipeRows } from '../recipes/nearDuplicate';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
@@ -17,7 +17,6 @@ export interface PantryDiscoverySuggestion {
 
 export interface PantryDiscoveryResult {
   suggestions: PantryDiscoverySuggestion[];
-  closeSuggestions: PantryDiscoverySuggestion[];
   /** Set when every query failed (network/auth/proxy). */
   errorMessage: string | null;
   fromCache: boolean;
@@ -56,37 +55,15 @@ function collapseDiscoveryNearDuplicates(rows: PantryDiscoverySuggestion[]): Pan
 }
 
 function rankSuggestions(rows: PantryDiscoverySuggestion[]): PantryDiscoverySuggestion[] {
-  return rows
-    .filter((row) => row.match.matchedCount >= 1)
-    .sort((a, b) => {
-      if (b.match.matchedCount !== a.match.matchedCount) {
-        return b.match.matchedCount - a.match.matchedCount;
-      }
-      if (b.match.percentMatch !== a.match.percentMatch) {
-        return b.match.percentMatch - a.match.percentMatch;
-      }
-      return a.match.missingCount - b.match.missingCount;
-    });
-}
-
-function tierDiscoveryByPantryOverlap(
-  rows: PantryDiscoverySuggestion[],
-  minPercent: number,
-  pantryItemCount: number,
-): { canMake: PantryDiscoverySuggestion[]; close: PantryDiscoverySuggestion[] } {
-  if (rows.length === 0 || pantryItemCount === 0) {
-    return { canMake: [], close: [] };
-  }
-  const { canMake, close } = splitRankedMatchesForRecipesTab(
-    rows.map((row) => row.match),
-    { minPercent, pantryItemCount },
-  );
-  const byId = new Map(rows.map((row) => [row.match.recipeId, row]));
-  const mapTier = (matches: typeof canMake) =>
-    matches
-      .map((m) => byId.get(m.recipeId))
-      .filter((row): row is PantryDiscoverySuggestion => row != null);
-  return { canMake: mapTier(canMake), close: mapTier(close) };
+  return [...rows].sort((a, b) => {
+    if (b.match.matchedCount !== a.match.matchedCount) {
+      return b.match.matchedCount - a.match.matchedCount;
+    }
+    if (b.match.percentMatch !== a.match.percentMatch) {
+      return b.match.percentMatch - a.match.percentMatch;
+    }
+    return a.match.missingCount - b.match.missingCount;
+  });
 }
 
 export async function fetchPantryDiscoverySuggestions(
@@ -94,12 +71,8 @@ export async function fetchPantryDiscoverySuggestions(
   accessToken: string | null,
   options?: { minPercent?: number; forceRefresh?: boolean; refreshSeed?: number },
 ): Promise<PantryDiscoveryResult> {
-  if (pantry.length === 0) {
-    return { suggestions: [], closeSuggestions: [], errorMessage: null, fromCache: false };
-  }
-
   const refreshSeed = options?.refreshSeed ?? 0;
-  const cacheKey = pantryCacheKey(pantry, refreshSeed);
+  const cacheKey = pantry.length === 0 ? `browse:${refreshSeed}` : pantryCacheKey(pantry, refreshSeed);
   if (!options?.forceRefresh) {
     const hit = suggestionCache.get(cacheKey);
     if (hit && hit.expiresAt > Date.now()) {
@@ -107,14 +80,12 @@ export async function fetchPantryDiscoverySuggestions(
     }
   }
 
-  const plans = buildRotatingPantrySearchPlans(pantry, { seed: refreshSeed });
+  const plans: PantryDiscoverySearchPlan[] =
+    pantry.length === 0
+      ? buildBrowseDiscoverySearchPlans(refreshSeed)
+      : buildRotatingPantrySearchPlans(pantry, { seed: refreshSeed });
   if (plans.length === 0) {
-    const empty: PantryDiscoveryResult = {
-      suggestions: [],
-      closeSuggestions: [],
-      errorMessage: null,
-      fromCache: false,
-    };
+    const empty: PantryDiscoveryResult = { suggestions: [], errorMessage: null, fromCache: false };
     suggestionCache.set(cacheKey, { result: empty, expiresAt: Date.now() + RECIPE_DISCOVERY.cacheTtlMs });
     return empty;
   }
@@ -147,22 +118,18 @@ export async function fetchPantryDiscoverySuggestions(
     match: scoreDiscoveryRecipeAgainstPantry(recipe, pantry),
   }));
 
-  const minPercent = options?.minPercent ?? DEFAULT_MIN_PANTRY_MATCH_PERCENT;
   const ranked = rankSuggestions(scored);
-  const tiered = tierDiscoveryByPantryOverlap(ranked, minPercent, pantry.length);
-  const dedupedCanMake = collapseDiscoveryNearDuplicates(tiered.canMake);
-  const dedupedClose = collapseDiscoveryNearDuplicates(tiered.close);
+  const deduped = collapseDiscoveryNearDuplicates(ranked);
 
   const errorMessage =
-    failures === plans.length && dedupedCanMake.length === 0 && dedupedClose.length === 0
+    failures === plans.length && deduped.length === 0
       ? accessToken
         ? RECIPES_COPY.discoveryErrors.pantrySuggestionsUnavailable
         : RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild
       : null;
 
   const result: PantryDiscoveryResult = {
-    suggestions: dedupedCanMake,
-    closeSuggestions: dedupedClose,
+    suggestions: deduped,
     errorMessage,
     fromCache: false,
   };

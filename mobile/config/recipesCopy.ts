@@ -12,12 +12,7 @@ export const RECIPES_COPY = {
     subtitle: 'Meals you can make with what is already in your pantry',
     sortFilterLabel: 'Sort & filter',
     showDifferentIdeas: 'Show different ideas',
-    thinPantryHint: 'Add more pantry items for better matches',
-  },
-
-  unifiedFeed: {
-    closeSectionTitle: 'Close: need 1–2 items',
-    closeSectionSubtitle: 'A few groceries away — still filtered by your choices above',
+    emptyPantryBrowseHint: 'Add pantry items to see what you can make now',
   },
 
   pantryFilterLabels: {
