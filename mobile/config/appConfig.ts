@@ -34,13 +34,6 @@ export const TABS: TabConfig[] = [
     iconActive: 'cart',
   },
   {
-    name: 'profile',
-    title: 'Profile',
-    href: APP_ROUTES.profile,
-    icon: 'person-circle-outline',
-    iconActive: 'person-circle',
-  },
-  {
     name: 'admin',
     title: 'Admin',
     href: APP_ROUTES.admin,

@@ -78,7 +78,7 @@ export function buildGroceryList(
   pantry: PantryItem[],
   servingOverrides: Record<string, number>,
   previous: GroceryListItem[],
-  options?: BuildGroceryListOptions,
+  options?: BuildGroceryListOptions & { householdSize?: number },
 ): GroceryListItem[] {
   const dismissals = options?.groceryDismissals ?? new Set<string>();
   const needed = new Map<
@@ -88,7 +88,10 @@ export function buildGroceryList(
 
   for (const recipe of recipes) {
     if (!selectedRecipeIds.includes(recipe.id)) continue;
-    const servings = servingOverrides[recipe.id] ?? recipe.servings;
+    const householdSize = options?.householdSize;
+    const servings =
+      servingOverrides[recipe.id] ??
+      (householdSize != null && householdSize > 0 ? householdSize : recipe.servings);
     const scale = recipe.servings > 0 ? servings / recipe.servings : 1;
     for (const ingredient of recipe.ingredients) {
       const key = `${normalizeIngredientName(ingredient.name)}::${ingredient.unit.trim().toLowerCase()}`;

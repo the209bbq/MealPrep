@@ -189,7 +189,7 @@ export interface UserAnalytics {
 }
 
 export interface TabConfig {
-  name: 'index' | 'pantry' | 'recipes' | 'grocery' | 'profile' | 'admin';
+  name: 'index' | 'pantry' | 'recipes' | 'grocery' | 'admin';
   title: string;
   href: Href;
   icon: string;

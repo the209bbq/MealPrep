@@ -33,6 +33,16 @@ import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
 import { router } from 'expo-router';
 import { APP_ROUTES } from '../config/appRoutes';
+import { deleteUserAccount } from '../lib/account/deleteAccount';
+import {
+  isPostSignupSetupDone,
+  consumeAwaitingProfileSetup,
+  markAwaitingProfileSetup,
+  markPostSignupSetupDone,
+} from '../lib/account/postSignupSetupStorage';
+import type { AvatarUploadResult } from '../lib/avatars/uploadAvatar';
+import { clearAvatarPhoto, uploadAvatarImage } from '../lib/avatars/uploadAvatar';
+import type { PreparedAvatarImage } from '../lib/avatars/types';
 import { MEAL_CALENDAR } from '../config/mealCalendar';
 import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
 import {
@@ -108,6 +118,7 @@ import {
   updateMasterRecipe,
   updateMealPlanItem,
   updatePantryItem,
+  updateProfileFields,
   updateProfilePreferences,
   upsertFeatureFlag,
   upsertImportedRecipe,
@@ -306,6 +317,25 @@ interface AppContextValue {
   addMissingRecipeIngredientsToGrocery: (recipeId: string) => void;
   addMissingDiscoveryRecipeIngredientsToGrocery: (item: RecipeDiscoveryListItem) => void;
   onboarding: ReturnType<typeof useOnboarding>;
+  accountUi: {
+    sheet: 'closed' | 'auth' | 'account';
+    showPostSignupSetup: boolean;
+    openAuthSheet: () => void;
+    openAccountSheet: () => void;
+    closeSheet: () => void;
+  };
+  openAuthSheet: () => void;
+  openAccountSheet: () => void;
+  saveProfileSetup: (patch: {
+    name?: string;
+    homeZip?: string;
+    householdSize?: number;
+    dietaryNotes?: string;
+  }) => Promise<void>;
+  uploadProfilePhoto: (prepared: PreparedAvatarImage) => Promise<AvatarUploadResult>;
+  removeProfilePhoto: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  completePostSignupSetup: () => void;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -349,16 +379,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mealMadeUndo, setMealMadeUndo] = useState<MealMadeUndoState | null>(null);
   const [mealMadeBusy, setMealMadeBusy] = useState(false);
   const [liveAnalytics, setLiveAnalytics] = useState<UserAnalytics | null>(null);
+  const [accountSheet, setAccountSheet] = useState<'closed' | 'auth' | 'account'>('closed');
+  const [showPostSignupSetup, setShowPostSignupSetup] = useState(false);
+  const [demoProfilePatch, setDemoProfilePatch] = useState<Partial<UserProfile>>({});
 
   const profile = useMemo<UserProfile>(() => {
     if (demoMode) {
-      return { ...profileForRole(role), preferences: userPreferences };
+      return { ...profileForRole(role), ...demoProfilePatch, preferences: userPreferences };
     }
     if (liveProfile) {
       return { ...liveProfile, preferences: userPreferences };
     }
     return { ...GUEST_PROFILE, preferences: userPreferences };
-  }, [demoMode, liveProfile, role, userPreferences]);
+  }, [demoMode, demoProfilePatch, liveProfile, role, userPreferences]);
   const isAdmin = profile.role === 'admin';
   const maintenanceActive = featureFlags.maintenanceMode && !isAdmin;
   const userId = session?.user.id ?? null;
@@ -464,6 +497,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLiveDataLoaded(true);
   }, [supabase, userId]);
 
+  const openAuthSheet = useCallback(() => setAccountSheet('auth'), []);
+  const openAccountSheet = useCallback(() => setAccountSheet('account'), []);
+  const closeAccountSheet = useCallback(() => setAccountSheet('closed'), []);
+
+  const completePostSignupSetup = useCallback(() => {
+    if (userId) markPostSignupSetupDone(userId);
+    setShowPostSignupSetup(false);
+  }, [userId]);
+
+  const saveProfileSetup = useCallback(
+    async (patch: {
+      name?: string;
+      homeZip?: string;
+      householdSize?: number;
+      dietaryNotes?: string;
+    }) => {
+      if (demoMode) {
+        setDemoProfilePatch((prev) => ({
+          ...prev,
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.homeZip !== undefined ? { homeZip: patch.homeZip } : {}),
+          ...(patch.householdSize !== undefined ? { householdSize: patch.householdSize } : {}),
+          ...(patch.dietaryNotes !== undefined ? { dietaryNotes: patch.dietaryNotes } : {}),
+        }));
+        if (patch.homeZip) {
+          const { persistHomeLocation } = await import('../lib/smartShop/profileLocation');
+          await persistHomeLocation({ zip: patch.homeZip });
+        }
+        return;
+      }
+      if (!supabase || !userId) throw new Error('Sign in to save your profile.');
+      const updated = await updateProfileFields(supabase, userId, {
+        name: patch.name,
+        homeZip: patch.homeZip,
+        householdSize: patch.householdSize,
+        dietaryNotes: patch.dietaryNotes,
+      });
+      setLiveProfile(updated);
+      if (patch.homeZip) {
+        const { persistHomeLocation } = await import('../lib/smartShop/profileLocation');
+        await persistHomeLocation({ zip: patch.homeZip });
+      }
+    },
+    [demoMode, supabase, userId],
+  );
+
+  const uploadProfilePhoto = useCallback(
+    async (prepared: PreparedAvatarImage) => {
+      if (demoMode) {
+        const result = { photoUrl: prepared.uri, storagePath: 'demo' };
+        setDemoProfilePatch((prev) => ({ ...prev, photoUrl: result.photoUrl }));
+        return result;
+      }
+      if (!userId) throw new Error('Sign in to upload a profile photo.');
+      const result = await uploadAvatarImage(prepared, userId);
+      setLiveProfile((prev) => (prev ? { ...prev, photoUrl: result.photoUrl } : prev));
+      return result;
+    },
+    [demoMode, userId],
+  );
+
+  const removeProfilePhoto = useCallback(async () => {
+    if (demoMode) {
+      setDemoProfilePatch((prev) => ({ ...prev, photoUrl: null }));
+      return;
+    }
+    if (!userId) return;
+    await clearAvatarPhoto(userId);
+    setLiveProfile((prev) => (prev ? { ...prev, photoUrl: null } : prev));
+  }, [demoMode, userId]);
+
   useEffect(() => {
     if (demoMode || !supabase) return;
 
@@ -474,9 +578,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAuthReady(true);
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       setAuthReady(true);
+      const email = nextSession?.user?.email;
+      const id = nextSession?.user?.id;
+      if (event === 'SIGNED_IN' && email && id && !isPostSignupSetupDone(id)) {
+        if (consumeAwaitingProfileSetup(email)) {
+          setShowPostSignupSetup(true);
+        }
+      }
     });
 
     return () => {
@@ -518,6 +629,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setGrocery((prev) => {
       const next = buildGroceryList(recipes, plannedRecipeIds, pantry, servingOverrides, prev, {
         groceryDismissals: dismissals,
+        householdSize: profile.householdSize,
       });
       if (demoMode) {
         writeJson(STORAGE_KEYS.grocery, next);
@@ -549,13 +661,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     plannedRecipeIds,
     recipes,
     servingOverrides,
+    profile.householdSize,
     supabase,
     userId,
   ]);
 
   useEffect(() => {
     refreshGrocery();
-  }, [pantry, recipes, plannedRecipeIds, servingOverrides, featureFlags.grocerySync, refreshGrocery]);
+  }, [
+    pantry,
+    recipes,
+    plannedRecipeIds,
+    servingOverrides,
+    profile.householdSize,
+    featureFlags.grocerySync,
+    refreshGrocery,
+  ]);
 
   useEffect(() => {
     if (demoMode) writeJson(STORAGE_KEYS.role, role);
@@ -612,10 +733,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const pantryRecipeMatches = useMemo(() => {
     const kitchenRecipes = kitchenRecipesForPantryMatch(recipes).map((recipe) =>
-      withServingScale(recipe, servingOverrides),
+      withServingScale(recipe, servingOverrides, profile.householdSize),
     );
     return buildPantryMatchIndex(kitchenRecipes, pantry);
-  }, [pantry, recipes, servingOverrides]);
+  }, [pantry, profile.householdSize, recipes, servingOverrides]);
 
   const pantryRecipeRecommendations = useMemo(() => {
     const kitchenRecipes = kitchenRecipesForPantryMatch(recipes);
@@ -640,7 +761,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (email: string, password: string, name: string) => {
       if (!supabase) return;
       setAuthError(null);
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -648,7 +769,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           data: { name: name.trim() || email.split('@')[0] },
         },
       });
-      if (error) setAuthError(error.message);
+      if (error) {
+        setAuthError(error.message);
+        return;
+      }
+      if (data.session?.user) {
+        setShowPostSignupSetup(true);
+      } else if (email.trim()) {
+        markAwaitingProfileSetup(email.trim());
+      }
     },
     [supabase],
   );
@@ -693,7 +822,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     for (const key of Object.values(STORAGE_KEYS)) {
       removeStorageKey(key);
     }
-  }, [profile.id, supabase]);
+    closeAccountSheet();
+  }, [profile.id, supabase, closeAccountSheet]);
+
+  const deleteAccount = useCallback(async () => {
+    await deleteUserAccount();
+    await signOut();
+    completePostSignupSetup();
+  }, [completePostSignupSetup, signOut]);
 
   const isOnMealPlan = useCallback(
     (options: { recipeSlug?: string; recipeApiId?: number }) =>
@@ -900,7 +1036,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .map((row) => row.matchedPantryItem!.id)
         .filter((id) => !mealMadeReview.selectedPantryIds.has(id)),
     );
-    const lines = buildPantryDeductionLines(match, recipe, servingOverrides, excluded);
+    const lines = buildPantryDeductionLines(
+      match,
+      recipe,
+      servingOverrides,
+      excluded,
+      profile.householdSize,
+    );
     const pantrySnapshot = pantry.map((row) => ({ ...row }));
     const { nextPantry } = applyPantryDeductions(pantry, lines);
     const madeAt = new Date().toISOString();
@@ -1796,8 +1938,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addMissingRecipeIngredientsToGrocery,
       addMissingDiscoveryRecipeIngredientsToGrocery,
       onboarding,
+      accountUi: {
+        sheet: accountSheet,
+        showPostSignupSetup,
+        openAuthSheet,
+        openAccountSheet,
+        closeSheet: closeAccountSheet,
+      },
+      openAuthSheet,
+      openAccountSheet,
+      saveProfileSetup,
+      uploadProfilePhoto,
+      removeProfilePhoto,
+      deleteAccount,
+      completePostSignupSetup,
     }),
     [
+      accountSheet,
       addPantryFromScan,
       addManualPantryItem,
       updatePantryItemEntry,
@@ -1872,6 +2029,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifyMealScheduled,
       scheduleMealFromRecipe,
       shopForWeekScheduledMeals,
+      showPostSignupSetup,
+      openAuthSheet,
+      openAccountSheet,
+      closeAccountSheet,
+      saveProfileSetup,
+      uploadProfilePhoto,
+      removeProfilePhoto,
+      deleteAccount,
+      completePostSignupSetup,
     ],
   );
 

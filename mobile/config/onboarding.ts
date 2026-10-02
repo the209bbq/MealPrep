@@ -63,7 +63,7 @@ export type OnboardingCopy = {
       cta: string;
     };
   };
-  profile: {
+  account: {
     showTourAgainTitle: string;
     showTourAgainBlurb: string;
     showTourAgainButton: string;
@@ -150,11 +150,11 @@ export const ONBOARDING_COPY: OnboardingCopy = {
     ],
     recap: {
       title: 'You are set',
-      body: 'Scan → recipes → list → Smart Shop. Come back any time from your profile to replay this tour.',
+      body: 'Scan → recipes → list → Smart Shop. Tap your avatar any time to replay this tour from Account.',
       cta: 'Start cooking',
     },
   },
-  profile: {
+  account: {
     showTourAgainTitle: 'App tutorial',
     showTourAgainBlurb: 'Replay the hands-on walkthrough: scan, recipes, grocery list, and Smart Shop.',
     showTourAgainButton: 'Show tutorial again',

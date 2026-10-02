@@ -1,5 +1,6 @@
 import { View } from 'react-native';
 import { useApp } from '../context/AppContext';
+import { AccountOverlays } from './account/AccountOverlays';
 import { HandsOnTutorial } from './onboarding/HandsOnTutorial';
 import { TutorialContinuePill } from './onboarding/TutorialContinuePill';
 import { WelcomeScreen } from './onboarding/WelcomeScreen';
@@ -7,13 +8,17 @@ import { UndoToast } from './UndoToast';
 
 /** Global overlays: onboarding, undo toasts. */
 export function AppOverlays() {
-  const { undoToast, dismissUndoToast, onboarding } = useApp();
+  const { undoToast, dismissUndoToast, onboarding, openAuthSheet } = useApp();
 
   return (
     <View pointerEvents="box-none" className="absolute inset-0 z-50">
+      <AccountOverlays />
       <WelcomeScreen
         visible={onboarding.showWelcome}
-        onGetStarted={onboarding.dismissWelcomeForSignUp}
+        onGetStarted={() => {
+          onboarding.dismissWelcomeForSignUp();
+          openAuthSheet();
+        }}
         onLookAround={onboarding.dismissWelcomeForBrowse}
       />
       <HandsOnTutorial

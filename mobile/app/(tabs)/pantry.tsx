@@ -28,7 +28,6 @@ import {
   PantryStorageLocationFilterChips,
 } from '../../components/PantryStorageLocationChips';
 import { CATEGORY_LABELS, isPantryVisionConfigured, PHOTO_SCAN, THEME } from '../../config/appConfig';
-import { APP_ROUTES } from '../../config/appRoutes';
 import { GUEST_MODE_COPY } from '../../config/guestMode';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
@@ -106,6 +105,7 @@ export default function PantryScreen() {
     clearPantryLocation,
     clearAllPantry,
     resortPantryItemsInDefaultLocation,
+    openAuthSheet,
   } = useApp();
   const [filter, setFilter] = useState<PantryCategory | 'all'>('all');
   const hydrated = useHydrated();
@@ -689,6 +689,7 @@ export default function PantryScreen() {
                 onPrepareError={handleWebPrepareError}
                 onImagePrepared={(location, prepared) => void runVisionFromPrepared(prepared, location)}
                 onRequestNativeScan={(location, source) => void handleNativeScan(location, source)}
+                onRequestSignIn={openAuthSheet}
               />
 
               {featureFlags.photoScan ? <PantryScanTip className="mt-2" /> : null}
@@ -749,7 +750,7 @@ export default function PantryScreen() {
               <Text className="mt-1 text-xs text-muted">{scanError}</Text>
               {scanGuestSignInCta ? (
                 <Pressable
-                  onPress={() => router.push(APP_ROUTES.profile)}
+                  onPress={openAuthSheet}
                   className="mt-3 items-center rounded-xl bg-primary py-2.5"
                 >
                   <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>

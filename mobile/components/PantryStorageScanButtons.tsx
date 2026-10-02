@@ -19,6 +19,7 @@ export interface PantryStorageScanButtonsProps {
   onPrepareError?: (message: string) => void;
   onImagePrepared: (location: PantryStorageLocation, prepared: PreparedPantryImage) => void;
   onRequestNativeScan: (location: PantryStorageLocation, source: 'camera' | 'library') => void;
+  onRequestSignIn?: () => void;
 }
 
 export function PantryStorageScanButtons({

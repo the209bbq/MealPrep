@@ -20,6 +20,7 @@ const port = Number(process.env.PORT ?? 8765);
 const origin = `http://127.0.0.1:${port}`;
 
 const ROUTES = ['/', '/pantry', '/recipes', '/grocery', '/profile', '/smart-shop'];
+/** /profile redirects to home (legacy email links). */
 
 function hydrationErrorsFromText(text: string): string[] {
   return text

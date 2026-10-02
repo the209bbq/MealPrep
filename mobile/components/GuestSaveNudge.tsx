@@ -1,9 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { GUEST_SAVE_NUDGE_CONFIG } from '../config/guestSaveNudge';
-import { APP_ROUTES } from '../config/appRoutes';
 import { THEME } from '../config/appConfig';
 import { useApp } from '../context/AppContext';
 import { useHydrated } from '../hooks/useHydrated';
@@ -16,7 +14,7 @@ import {
 const { copy } = GUEST_SAVE_NUDGE_CONFIG;
 
 export function GuestSaveNudge({ className = 'mt-4' }: { className?: string }) {
-  const { demoMode, session, pantry, mealPlan } = useApp();
+  const { demoMode, session, pantry, mealPlan, openAuthSheet } = useApp();
   const hydrated = useHydrated();
   const [dismissedAtOverrideMs, setDismissedAtOverrideMs] = useState<number | null>(null);
   const dismissedAtMs =
@@ -46,7 +44,7 @@ export function GuestSaveNudge({ className = 'mt-4' }: { className?: string }) {
         {copy.message}
       </Text>
       <Pressable
-        onPress={() => router.push(APP_ROUTES.profile)}
+        onPress={openAuthSheet}
         accessibilityRole="button"
         className="rounded-lg bg-primary px-2.5 py-1.5"
       >

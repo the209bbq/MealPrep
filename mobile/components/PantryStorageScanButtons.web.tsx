@@ -1,8 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { APP_ROUTES } from '../config/appRoutes';
 import { THEME } from '../config/appConfig';
 import { GUEST_MODE_COPY } from '../config/guestMode';
 import { resolvePhotoScanAccess } from '../lib/guest/resolvePhotoScanAccess';
@@ -24,6 +22,7 @@ export function PantryStorageScanButtons({
   photoScanGate,
   photoScanAccess,
   contextSession,
+  onRequestSignIn,
 }: PantryStorageScanButtonsProps) {
   const actions = pantryStorageScanActions();
   const [guestGateLocation, setGuestGateLocation] = useState<PantryStorageLocation | null>(null);
@@ -132,7 +131,7 @@ export function PantryStorageScanButtons({
           <Text className="mt-1 text-sm leading-5 text-muted">{GUEST_MODE_COPY.pantryScanSignIn}</Text>
           <View className="mt-3 flex-row gap-2">
             <Pressable
-              onPress={() => router.push(APP_ROUTES.profile)}
+              onPress={() => onRequestSignIn?.()}
               className="flex-1 items-center rounded-xl bg-primary py-3"
             >
               <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>

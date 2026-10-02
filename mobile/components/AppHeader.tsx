@@ -1,17 +1,17 @@
-import { router, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { BrandLogo } from './BrandLogo';
-import { ROLE_LABELS, TABS } from '../config/appConfig';
-import { APP_ROUTES, AUTH_HEADER_COPY } from '../config/appRoutes';
+import { ACCOUNT_HEADER_COPY } from '../config/appRoutes';
+import { TABS } from '../config/appConfig';
 import { useApp } from '../context/AppContext';
-import { initials } from '../lib/initials';
+import { ProfileAvatar } from './account/ProfileAvatar';
 
 export function AppHeader() {
   const pathname = usePathname();
-  const { profile, session, demoMode } = useApp();
+  const { profile, session, demoMode, openAuthSheet, openAccountSheet } = useApp();
   const tab = TABS.find((t) => t.href === pathname || (pathname === '/' && t.name === 'index'));
   const title = tab?.title ?? 'Home';
-  const showAccountChrome = demoMode || session != null;
+  const signedIn = demoMode || session != null;
 
   return (
     <View className="bg-slate px-4 pb-3 pt-2">
@@ -22,27 +22,23 @@ export function AppHeader() {
             {title}
           </Text>
         </View>
-        <View className="shrink-0 items-end">
-          {showAccountChrome ? (
-            <>
-              <View className="h-8 w-8 items-center justify-center rounded-full bg-primary">
-                <Text className="text-xs font-bold text-on-primary">{initials(profile.name)}</Text>
-              </View>
-              <Text className="mt-1 text-[10px] font-bold uppercase tracking-wide text-on-primary-muted">
-                {ROLE_LABELS[profile.role]}
-              </Text>
-            </>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={AUTH_HEADER_COPY.signInAccessibilityLabel}
-              onPress={() => router.push(APP_ROUTES.profile)}
-              className="min-h-[36px] items-center justify-center rounded-full border border-on-primary-muted/40 px-3 py-1.5"
-            >
-              <Text className="text-xs font-bold text-on-primary">{AUTH_HEADER_COPY.signInLabel}</Text>
-            </Pressable>
-          )}
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            signedIn
+              ? ACCOUNT_HEADER_COPY.avatarAccessibilityLabelSignedIn
+              : ACCOUNT_HEADER_COPY.avatarAccessibilityLabelGuest
+          }
+          onPress={signedIn ? openAccountSheet : openAuthSheet}
+          className="shrink-0"
+        >
+          <ProfileAvatar
+            name={profile.name}
+            photoUrl={profile.photoUrl}
+            guest={!signedIn}
+            size={36}
+          />
+        </Pressable>
       </View>
     </View>
   );

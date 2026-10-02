@@ -32,6 +32,7 @@ type ProfileRow = {
   role: UserRole;
   plan?: string | null;
   photo_url: string | null;
+  avatar_path?: string | null;
   household_size: number;
   dietary_notes: string | null;
   home_zip: string | null;
@@ -770,6 +771,38 @@ export async function updateMealPlanItem(
     throw new Error(formatSupabaseError(error, MEAL_PLAN_MIGRATION_SQL));
   }
   return mapMealPlanItem(data as MealPlanRow);
+}
+
+export type ProfileFieldUpdate = {
+  name?: string;
+  householdSize?: number;
+  dietaryNotes?: string;
+  homeZip?: string;
+  photoUrl?: string | null;
+  avatarPath?: string | null;
+};
+
+export async function updateProfileFields(
+  client: SupabaseClient,
+  userId: string,
+  patch: ProfileFieldUpdate,
+): Promise<UserProfile> {
+  const row: Record<string, string | number | null> = {};
+  if (patch.name !== undefined) row.name = patch.name.trim();
+  if (patch.householdSize !== undefined) row.household_size = patch.householdSize;
+  if (patch.dietaryNotes !== undefined) row.dietary_notes = patch.dietaryNotes;
+  if (patch.homeZip !== undefined) {
+    row.home_zip = patch.homeZip.trim() ? patch.homeZip.trim().slice(0, 10) : null;
+    row.home_lat = null;
+    row.home_lng = null;
+    row.home_location_updated_at = new Date().toISOString();
+  }
+  if (patch.photoUrl !== undefined) row.photo_url = patch.photoUrl;
+  if (patch.avatarPath !== undefined) row.avatar_path = patch.avatarPath;
+
+  const { data, error } = await client.from('profiles').update(row).eq('id', userId).select('*').single();
+  if (error) throw error;
+  return mapProfile(data as ProfileRow);
 }
 
 export async function updateProfilePreferences(
