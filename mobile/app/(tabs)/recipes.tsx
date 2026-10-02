@@ -1,15 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { DiscoverRecipesPanel } from '../../components/DiscoverRecipesPanel';
-import { FilterChips } from '../../components/FilterChips';
+import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
 import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
 import { DEFAULT_MIN_MATCHED_INGREDIENTS } from '../../config/recipeMatching';
-import { RECIPES_COPY, type RecipesPantryFilterCopyId } from '../../config/recipesCopy';
+import { RECIPES_COPY } from '../../config/recipesCopy';
+import {
+  applyRecipesTabFilters,
+  discoveryRecipeServingOverrideId,
+  recipesTabNarrowingFiltersActive,
+  recipesTabPeopleTargetServings,
+  type RecipesTabRow,
+} from '../../config/recipesTabFilters';
+import { useRecipesTabFilters } from '../../hooks/useRecipesTabFilters';
 import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
 import { useApp } from '../../context/AppContext';
 import { splitDiscoveryCookNowLists } from '../../lib/recipeDiscovery/pantryCookNow';
@@ -17,15 +25,19 @@ import type { PantryDiscoverySuggestion } from '../../lib/recipeDiscovery/pantry
 import {
   filterRankedMatchesWithPartialFallback,
   type PantryMatchIndex,
-  type RecipePantryFilterMode,
+  type RecipePantryMatch,
 } from '../../lib/recipeMatch';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { nutritionLabel } from '../../lib/nutrition';
 import type { Recipe } from '../../types/mealprep';
 
-const FILTER_OPTIONS: { id: RecipePantryFilterMode; label: string }[] = (
-  ['best_match', 'have_all', 'missing_1_2', 'all'] as RecipesPantryFilterCopyId[]
-).map((id) => ({ id, label: RECIPES_COPY.pantryFilterLabels[id] }));
+function rankKitchenRecipesByPantry(kitchenRecipes: Recipe[], ranked: RecipePantryMatch[]): Recipe[] {
+  const rankedIds = ranked.map((m) => m.recipeId);
+  const idSet = new Set(rankedIds);
+  const list = kitchenRecipes.filter((r) => idSet.has(r.id));
+  list.sort((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
+  return list;
+}
 
 function DiscoveryRecipeListSection({
   title,
@@ -174,7 +186,7 @@ export default function RecipesScreen() {
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
   const [pickedRecipeId, setPickedRecipeId] = useState<string | null>(null);
-  const [pantryFilter, setPantryFilter] = useState<RecipePantryFilterMode>('best_match');
+  const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const minPantryMatchPercent = RECIPES_TAB.defaultMinPercent;
   const pantryEmpty = pantry.length === 0;
   const discoveryEnabled = !pantryEmpty;
@@ -192,35 +204,90 @@ export default function RecipesScreen() {
 
   const kitchenRecipes = useMemo(() => kitchenRecipesForPantryMatch(recipes), [recipes]);
 
-  const filteredKitchenRecipes = useMemo(() => {
+  const baseKitchenRecipes = useMemo(() => {
     if (pantryEmpty) return [];
-    const minMatchedCount =
-      pantryFilter === 'all'
-        ? 0
-        : RECIPES_TAB.hideZeroPantryMatches
-          ? DEFAULT_MIN_MATCHED_INGREDIENTS
-          : 0;
+    const minMatchedCount = RECIPES_TAB.hideZeroPantryMatches ? DEFAULT_MIN_MATCHED_INGREDIENTS : 0;
     const { matches: ranked } = filterRankedMatchesWithPartialFallback(
       pantryRecipeMatches.ranked,
-      pantryFilter,
+      'all',
       minPantryMatchPercent,
       {
         minMatchedCount,
         pantryItemCount: pantry.length,
       },
     );
-    const rankedIds = ranked.map((m) => m.recipeId);
-    const idSet = new Set(rankedIds);
-    const list = kitchenRecipes.filter((r) => idSet.has(r.id));
-    list.sort((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
-    return list;
+    return rankKitchenRecipesByPantry(kitchenRecipes, ranked);
+  }, [minPantryMatchPercent, pantry.length, pantryEmpty, pantryRecipeMatches.ranked, kitchenRecipes]);
+
+  const baseDiscoverySuggestions = useMemo(() => {
+    if (pantryEmpty) return [];
+    const { matches } = filterRankedMatchesWithPartialFallback(
+      discoverySuggestions.map((row) => row.match),
+      'all',
+      minPantryMatchPercent,
+      { pantryItemCount: pantry.length },
+    );
+    const allowed = new Set(matches.map((m) => m.recipeId));
+    return discoverySuggestions.filter((row) => allowed.has(row.match.recipeId));
+  }, [discoverySuggestions, minPantryMatchPercent, pantry.length, pantryEmpty]);
+
+  const filterBaseRows = useMemo((): RecipesTabRow[] => {
+    const kitchenRows: RecipesTabRow[] = baseKitchenRecipes.map((recipe) => ({
+      kind: 'kitchen',
+      recipe,
+      match:
+        pantryRecipeMatches.byRecipeId.get(recipe.id) ??
+        ({
+          recipeId: recipe.id,
+          recipeName: recipe.name,
+          totalIngredients: 0,
+          matchedCount: 0,
+          missingCount: 0,
+          percentMatch: 0,
+          matched: [],
+          missing: [],
+        } satisfies RecipePantryMatch),
+    }));
+    const discoveryRows: RecipesTabRow[] = baseDiscoverySuggestions.map((row) => ({
+      kind: 'discovery',
+      recipe: row.recipe,
+      match: row.match,
+    }));
+    return [...kitchenRows, ...discoveryRows];
+  }, [baseDiscoverySuggestions, baseKitchenRecipes, pantryRecipeMatches.byRecipeId]);
+
+  const filteredKitchenRecipes = useMemo(() => {
+    const rows = filterBaseRows.filter((row) => row.kind === 'kitchen') as Extract<
+      RecipesTabRow,
+      { kind: 'kitchen' }
+    >[];
+    const filtered = applyRecipesTabFilters(rows, filters);
+    return filtered.map((row) => row.recipe);
+  }, [filterBaseRows, filters]);
+
+  const filteredDiscoverySuggestions = useMemo(() => {
+    const rows = filterBaseRows.filter((row) => row.kind === 'discovery') as Extract<
+      RecipesTabRow,
+      { kind: 'discovery' }
+    >[];
+    const filtered = applyRecipesTabFilters(rows, filters);
+    return filtered.map((row) => ({ recipe: row.recipe, match: row.match }));
+  }, [filterBaseRows, filters]);
+
+  const peopleTargetServings = recipesTabPeopleTargetServings(filters.people);
+  useEffect(() => {
+    if (peopleTargetServings == null) return;
+    for (const recipe of kitchenRecipes) {
+      setServingOverride(recipe.id, peopleTargetServings);
+    }
+    for (const { recipe } of baseDiscoverySuggestions) {
+      setServingOverride(discoveryRecipeServingOverrideId(recipe.id), peopleTargetServings);
+    }
   }, [
-    minPantryMatchPercent,
-    pantry.length,
-    pantryEmpty,
-    pantryFilter,
-    pantryRecipeMatches.ranked,
+    baseDiscoverySuggestions,
     kitchenRecipes,
+    peopleTargetServings,
+    setServingOverride,
   ]);
 
   const cookNowRecipes = useMemo(
@@ -235,27 +302,9 @@ export default function RecipesScreen() {
     [filteredKitchenRecipes, pantryRecipeMatches.byRecipeId],
   );
 
-  const filteredDiscoverySuggestions = useMemo(() => {
-    if (pantryEmpty) return [];
-    const { matches } = filterRankedMatchesWithPartialFallback(
-      discoverySuggestions.map((row) => row.match),
-      pantryFilter,
-      minPantryMatchPercent,
-      { pantryItemCount: pantry.length },
-    );
-    const allowed = new Set(matches.map((m) => m.recipeId));
-    return discoverySuggestions.filter((row) => allowed.has(row.match.recipeId));
-  }, [discoverySuggestions, minPantryMatchPercent, pantry.length, pantryEmpty, pantryFilter]);
-
   const { cookNow: cookNowDiscovery, needItems: needItemsDiscovery } = useMemo(
-    () =>
-      splitDiscoveryCookNowLists(
-        filteredDiscoverySuggestions,
-        pantryFilter,
-        minPantryMatchPercent,
-        pantry.length,
-      ),
-    [filteredDiscoverySuggestions, minPantryMatchPercent, pantry.length, pantryFilter],
+    () => splitDiscoveryCookNowLists(filteredDiscoverySuggestions),
+    [filteredDiscoverySuggestions],
   );
 
   const hasCookNowMatches = cookNowRecipes.length > 0 || cookNowDiscovery.length > 0;
@@ -277,9 +326,18 @@ export default function RecipesScreen() {
   const servings = active ? servingOverrides[active.id] ?? active.servings : 4;
   const scale = active && active.servings > 0 ? servings / active.servings : 1;
 
+  const hasUnfilteredResults = baseKitchenRecipes.length > 0 || baseDiscoverySuggestions.length > 0;
+  const showFilterEmpty =
+    !pantryEmpty &&
+    recipesTabNarrowingFiltersActive(filters) &&
+    hasUnfilteredResults &&
+    filteredKitchenRecipes.length === 0 &&
+    filteredDiscoverySuggestions.length === 0;
+
   const showKitchenEmpty =
     pantryEmpty ||
-    (!discoveryLoading &&
+    (!showFilterEmpty &&
+      !discoveryLoading &&
       filteredKitchenRecipes.length === 0 &&
       filteredDiscoverySuggestions.length === 0);
 
@@ -300,20 +358,16 @@ export default function RecipesScreen() {
         title={RECIPES_COPY.cookNowCard.title}
         subtitle={RECIPES_COPY.cookNowCard.subtitle}
       >
-        <Text className="mt-1 text-xs font-semibold text-muted">{RECIPES_COPY.cookNowCard.sortFilterLabel}</Text>
-        <FilterChips
-          allowClear={false}
-          options={FILTER_OPTIONS}
-          selectedId={pantryFilter}
-          onSelect={(id) => setPantryFilter((id as RecipePantryFilterMode) ?? 'best_match')}
+        <RecipesTabFilterBar
+          baseRows={filterBaseRows}
+          filters={filters}
+          onSetFilter={setFilter}
+          onClearAll={clearAllFilters}
         />
       </Card>
 
       {showKitchenEmpty ? <RecipesEmptyState pantryEmpty={pantryEmpty} /> : null}
-
-      {!pantryEmpty && !showKitchenEmpty && filteredKitchenRecipes.length === 0 && filteredDiscoverySuggestions.length > 0 ? (
-        <Text className="mt-3 text-sm text-muted">{RECIPES_COPY.kitchenFilteredEmptyWithDiscovery}</Text>
-      ) : null}
+      {showFilterEmpty ? <RecipesTabFiltersEmptyState onClearAll={clearAllFilters} /> : null}
 
       {hasCookNowMatches ? (
         <RecipeListSection
