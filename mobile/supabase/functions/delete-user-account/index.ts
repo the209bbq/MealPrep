@@ -3,8 +3,10 @@
 //
 // Settings: leave "Verify JWT" ENABLED.
 //
-// Secrets: SUPABASE_SERVICE_ROLE_KEY is injected automatically by Supabase.
-// Optional: SUPABASE_URL (defaults from project).
+// Requires SQL migration: 20261002150000_account_deletion_fks_and_rpc.sql
+// (and 20261002143000_avatars_storage.sql for avatars bucket).
+//
+// Secrets: SUPABASE_SERVICE_ROLE_KEY (default), SUPABASE_URL, SUPABASE_ANON_KEY.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
@@ -12,6 +14,83 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const USER_STORAGE_BUCKETS = ['avatars', 'scan-photos'] as const;
+
+type StorageListEntry = { name: string; id: string | null };
+
+function isSafeUserStoragePath(objectPath: string, userId: string): boolean {
+  const normalized = objectPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.includes('..')) return false;
+  const prefix = `${userId}/`;
+  return normalized === userId || normalized.startsWith(prefix);
+}
+
+function collectPathsFromListPage(
+  userId: string,
+  folderPrefix: string,
+  entries: StorageListEntry[],
+): { filePaths: string[]; childFolderPrefixes: string[] } {
+  const filePaths: string[] = [];
+  const childFolderPrefixes: string[] = [];
+  const base = folderPrefix.replace(/\/$/, '') || userId;
+  if (!isSafeUserStoragePath(base, userId)) return { filePaths, childFolderPrefixes };
+
+  for (const entry of entries) {
+    if (!entry.name) continue;
+    const fullPath = `${base}/${entry.name}`;
+    if (!isSafeUserStoragePath(fullPath, userId)) continue;
+    if (entry.id === null) childFolderPrefixes.push(fullPath);
+    else filePaths.push(fullPath);
+  }
+  return { filePaths, childFolderPrefixes };
+}
+
+/** @sync mobile/lib/account/deleteUserServerLogic.ts */
+async function listAllObjectPathsUnderUserPrefix(
+  admin: ReturnType<typeof createClient>,
+  bucketId: string,
+  userId: string,
+): Promise<string[]> {
+  const files: string[] = [];
+  const queue = [userId];
+
+  while (queue.length > 0) {
+    const folder = queue.shift()!;
+    if (!isSafeUserStoragePath(folder, userId)) continue;
+
+    const { data, error } = await admin.storage.from(bucketId).list(folder, {
+      limit: 1000,
+      sortBy: { column: 'name', order: 'asc' },
+    });
+    if (error || !data?.length) continue;
+
+    const { filePaths, childFolderPrefixes } = collectPathsFromListPage(
+      userId,
+      folder,
+      data as StorageListEntry[],
+    );
+    files.push(...filePaths);
+    queue.push(...childFolderPrefixes);
+  }
+
+  return [...new Set(files.filter((path) => isSafeUserStoragePath(path, userId)))];
+}
+
+async function deleteUserStorage(admin: ReturnType<typeof createClient>, userId: string): Promise<void> {
+  for (const bucketId of USER_STORAGE_BUCKETS) {
+    const paths = await listAllObjectPathsUnderUserPrefix(admin, bucketId, userId);
+    if (paths.length === 0) continue;
+    const chunkSize = 100;
+    for (let i = 0; i < paths.length; i += chunkSize) {
+      const chunk = paths.slice(i, i + chunkSize);
+      const { error } = await admin.storage.from(bucketId).remove(chunk);
+      if (error) {
+        console.warn('[delete-user-account] storage remove failed', bucketId, error.message);
+      }
+    }
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -58,23 +137,15 @@ Deno.serve(async (req) => {
   const userId = userData.user.id;
   const admin = createClient(supabaseUrl, serviceKey);
 
-  const buckets = ['avatars', 'scan-photos'];
-  for (const bucketId of buckets) {
-    const prefix = `${userId}/`;
-    const { data: objects, error: listError } = await admin.storage.from(bucketId).list(userId, {
-      limit: 200,
+  const { error: rpcError } = await admin.rpc('delete_user_owned_data', { p_user_id: userId });
+  if (rpcError) {
+    return new Response(JSON.stringify({ error: rpcError.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-    if (listError) continue;
-    const paths: string[] = [];
-    for (const entry of objects ?? []) {
-      if (entry.name) paths.push(`${userId}/${entry.name}`);
-      if (entry.id && entry.name?.includes('/')) paths.push(entry.name);
-    }
-    if (paths.length > 0) {
-      await admin.storage.from(bucketId).remove(paths);
-    }
-    await admin.storage.from(bucketId).remove([prefix]).catch(() => undefined);
   }
+
+  await deleteUserStorage(admin, userId);
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
   if (deleteError) {
