@@ -1,12 +1,5 @@
-import {
-  DEFAULT_MIN_MATCHED_INGREDIENTS,
-  DEFAULT_MIN_PANTRY_MATCH_PERCENT,
-  PANTRY_DISCOVERY_PER_QUERY,
-  RECIPE_MATCHING,
-  RECIPES_TAB_PARTIAL_MATCH_LIMIT,
-  RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT,
-} from '../../config/recipeMatching';
-import { filterRankedMatchesWithPartialFallback } from '../recipeMatch/match';
+import { DEFAULT_MIN_PANTRY_MATCH_PERCENT, PANTRY_DISCOVERY_PER_QUERY } from '../../config/recipeMatching';
+import { splitRankedMatchesForRecipesTab } from '../recipes/recipesFeedTiers';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
 import type { PantryItem } from '../../types/mealprep';
@@ -24,6 +17,7 @@ export interface PantryDiscoverySuggestion {
 
 export interface PantryDiscoveryResult {
   suggestions: PantryDiscoverySuggestion[];
+  closeSuggestions: PantryDiscoverySuggestion[];
   /** Set when every query failed (network/auth/proxy). */
   errorMessage: string | null;
   fromCache: boolean;
@@ -63,7 +57,7 @@ function collapseDiscoveryNearDuplicates(rows: PantryDiscoverySuggestion[]): Pan
 
 function rankSuggestions(rows: PantryDiscoverySuggestion[]): PantryDiscoverySuggestion[] {
   return rows
-    .filter((row) => row.match.matchedCount >= RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT)
+    .filter((row) => row.match.matchedCount >= 1)
     .sort((a, b) => {
       if (b.match.matchedCount !== a.match.matchedCount) {
         return b.match.matchedCount - a.match.matchedCount;
@@ -75,27 +69,24 @@ function rankSuggestions(rows: PantryDiscoverySuggestion[]): PantryDiscoverySugg
     });
 }
 
-function filterDiscoveryByPantryOverlap(
+function tierDiscoveryByPantryOverlap(
   rows: PantryDiscoverySuggestion[],
   minPercent: number,
   pantryItemCount: number,
-): PantryDiscoverySuggestion[] {
-  if (rows.length === 0 || pantryItemCount === 0) return [];
-  const { matches } = filterRankedMatchesWithPartialFallback(
+): { canMake: PantryDiscoverySuggestion[]; close: PantryDiscoverySuggestion[] } {
+  if (rows.length === 0 || pantryItemCount === 0) {
+    return { canMake: [], close: [] };
+  }
+  const { canMake, close } = splitRankedMatchesForRecipesTab(
     rows.map((row) => row.match),
-    'all',
-    minPercent,
-    {
-      minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
-      pantryItemCount,
-      partialMinMatchedCount: RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT,
-      partialMatchMax: RECIPES_TAB_PARTIAL_MATCH_LIMIT,
-    },
+    { minPercent, pantryItemCount },
   );
   const byId = new Map(rows.map((row) => [row.match.recipeId, row]));
-  return matches
-    .map((m) => byId.get(m.recipeId))
-    .filter((row): row is PantryDiscoverySuggestion => row != null);
+  const mapTier = (matches: typeof canMake) =>
+    matches
+      .map((m) => byId.get(m.recipeId))
+      .filter((row): row is PantryDiscoverySuggestion => row != null);
+  return { canMake: mapTier(canMake), close: mapTier(close) };
 }
 
 export async function fetchPantryDiscoverySuggestions(
@@ -104,7 +95,7 @@ export async function fetchPantryDiscoverySuggestions(
   options?: { minPercent?: number; forceRefresh?: boolean; refreshSeed?: number },
 ): Promise<PantryDiscoveryResult> {
   if (pantry.length === 0) {
-    return { suggestions: [], errorMessage: null, fromCache: false };
+    return { suggestions: [], closeSuggestions: [], errorMessage: null, fromCache: false };
   }
 
   const refreshSeed = options?.refreshSeed ?? 0;
@@ -118,7 +109,12 @@ export async function fetchPantryDiscoverySuggestions(
 
   const plans = buildRotatingPantrySearchPlans(pantry, { seed: refreshSeed });
   if (plans.length === 0) {
-    const empty: PantryDiscoveryResult = { suggestions: [], errorMessage: null, fromCache: false };
+    const empty: PantryDiscoveryResult = {
+      suggestions: [],
+      closeSuggestions: [],
+      errorMessage: null,
+      fromCache: false,
+    };
     suggestionCache.set(cacheKey, { result: empty, expiresAt: Date.now() + RECIPE_DISCOVERY.cacheTtlMs });
     return empty;
   }
@@ -153,18 +149,20 @@ export async function fetchPantryDiscoverySuggestions(
 
   const minPercent = options?.minPercent ?? DEFAULT_MIN_PANTRY_MATCH_PERCENT;
   const ranked = rankSuggestions(scored);
-  const filtered = filterDiscoveryByPantryOverlap(ranked, minPercent, pantry.length);
-  const deduped = collapseDiscoveryNearDuplicates(filtered);
+  const tiered = tierDiscoveryByPantryOverlap(ranked, minPercent, pantry.length);
+  const dedupedCanMake = collapseDiscoveryNearDuplicates(tiered.canMake);
+  const dedupedClose = collapseDiscoveryNearDuplicates(tiered.close);
 
   const errorMessage =
-    failures === plans.length && deduped.length === 0
+    failures === plans.length && dedupedCanMake.length === 0 && dedupedClose.length === 0
       ? accessToken
         ? RECIPES_COPY.discoveryErrors.pantrySuggestionsUnavailable
         : RECIPES_COPY.discoveryPanel.searchNotAvailableInBuild
       : null;
 
   const result: PantryDiscoveryResult = {
-    suggestions: deduped.slice(0, RECIPE_MATCHING.homeRecommendationsLimit * 4),
+    suggestions: dedupedCanMake,
+    closeSuggestions: dedupedClose,
     errorMessage,
     fromCache: false,
   };

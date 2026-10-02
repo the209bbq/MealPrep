@@ -7,7 +7,7 @@ import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedF
 import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { RECIPES_TAB, THEME } from '../../config/appConfig';
-import { DEFAULT_MIN_MATCHED_INGREDIENTS } from '../../config/recipeMatching';
+import { RECIPES_TAB_THIN_PANTRY_ITEM_MAX } from '../../config/recipeMatching';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import {
   applyRecipesTabFilters,
@@ -19,11 +19,9 @@ import {
 import { useRecipesTabFilters } from '../../hooks/useRecipesTabFilters';
 import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
 import { useApp } from '../../context/AppContext';
+import { splitRankedMatchesForRecipesTab } from '../../lib/recipes/recipesFeedTiers';
 import { buildUnifiedRecipesFeed, dedupeRecipesTabRows } from '../../lib/recipes/unifiedFeed';
-import {
-  filterRankedMatchesWithPartialFallback,
-  type RecipePantryMatch,
-} from '../../lib/recipeMatch';
+import type { RecipePantryMatch } from '../../lib/recipeMatch';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import type { Recipe } from '../../types/mealprep';
 
@@ -63,6 +61,7 @@ export default function RecipesScreen() {
   const discoveryEnabled = !pantryEmpty;
   const {
     suggestions: discoverySuggestions,
+    closeSuggestions: discoveryCloseSuggestions,
     loading: discoveryLoading,
     error: discoveryError,
     refreshDiscovery,
@@ -75,35 +74,19 @@ export default function RecipesScreen() {
 
   const kitchenRecipes = useMemo(() => kitchenRecipesForPantryMatch(recipes), [recipes]);
 
-  const baseKitchenRecipes = useMemo(() => {
-    if (pantryEmpty) return [];
-    const minMatchedCount = RECIPES_TAB.hideZeroPantryMatches ? DEFAULT_MIN_MATCHED_INGREDIENTS : 0;
-    const { matches: ranked } = filterRankedMatchesWithPartialFallback(
-      pantryRecipeMatches.ranked,
-      'all',
-      minPantryMatchPercent,
-      {
-        minMatchedCount,
-        pantryItemCount: pantry.length,
-      },
-    );
-    return rankKitchenRecipesByPantry(kitchenRecipes, ranked);
-  }, [minPantryMatchPercent, pantry.length, pantryEmpty, pantryRecipeMatches.ranked, kitchenRecipes]);
+  const tieredBaseRows = useMemo(() => {
+    if (pantryEmpty) {
+      return { canMake: [] as RecipesTabRow[], close: [] as RecipesTabRow[] };
+    }
 
-  const baseDiscoverySuggestions = useMemo(() => {
-    if (pantryEmpty) return [];
-    const { matches } = filterRankedMatchesWithPartialFallback(
-      discoverySuggestions.map((row) => row.match),
-      'all',
-      minPantryMatchPercent,
-      { pantryItemCount: pantry.length },
-    );
-    const allowed = new Set(matches.map((m) => m.recipeId));
-    return discoverySuggestions.filter((row) => allowed.has(row.match.recipeId));
-  }, [discoverySuggestions, minPantryMatchPercent, pantry.length, pantryEmpty]);
+    const kitchenSplit = splitRankedMatchesForRecipesTab(pantryRecipeMatches.ranked, {
+      minPercent: minPantryMatchPercent,
+      pantryItemCount: pantry.length,
+    });
+    const kitchenCanMake = rankKitchenRecipesByPantry(kitchenRecipes, kitchenSplit.canMake);
+    const kitchenClose = rankKitchenRecipesByPantry(kitchenRecipes, kitchenSplit.close);
 
-  const filterBaseRows = useMemo((): RecipesTabRow[] => {
-    const kitchenRows: RecipesTabRow[] = baseKitchenRecipes.map((recipe) => ({
+    const toKitchenRow = (recipe: Recipe): RecipesTabRow => ({
       kind: 'kitchen',
       recipe,
       match:
@@ -118,19 +101,54 @@ export default function RecipesScreen() {
           matched: [],
           missing: [],
         } satisfies RecipePantryMatch),
-    }));
-    const discoveryRows: RecipesTabRow[] = baseDiscoverySuggestions.map((row) => ({
-      kind: 'discovery',
-      recipe: row.recipe,
-      match: row.match,
-    }));
-    return dedupeRecipesTabRows([...kitchenRows, ...discoveryRows]);
-  }, [baseDiscoverySuggestions, baseKitchenRecipes, pantryRecipeMatches.byRecipeId]);
+    });
 
-  const filteredRows = useMemo(() => {
-    const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
+    const canMake: RecipesTabRow[] = [
+      ...kitchenCanMake.map(toKitchenRow),
+      ...discoverySuggestions.map((row) => ({
+        kind: 'discovery' as const,
+        recipe: row.recipe,
+        match: row.match,
+      })),
+    ];
+    const close: RecipesTabRow[] = [
+      ...kitchenClose.map(toKitchenRow),
+      ...discoveryCloseSuggestions.map((row) => ({
+        kind: 'discovery' as const,
+        recipe: row.recipe,
+        match: row.match,
+      })),
+    ];
+
+    return {
+      canMake: dedupeRecipesTabRows(canMake),
+      close: dedupeRecipesTabRows(close),
+    };
+  }, [
+    discoveryCloseSuggestions,
+    discoverySuggestions,
+    kitchenRecipes,
+    minPantryMatchPercent,
+    pantry.length,
+    pantryEmpty,
+    pantryRecipeMatches.byRecipeId,
+    pantryRecipeMatches.ranked,
+  ]);
+
+  const filterBaseRows = useMemo(
+    (): RecipesTabRow[] => [...tieredBaseRows.canMake, ...tieredBaseRows.close],
+    [tieredBaseRows],
+  );
+
+  const filteredCanMakeRows = useMemo(() => {
+    const narrowed = applyRecipesTabFilters(tieredBaseRows.canMake, filters);
     return buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
-  }, [filterBaseRows, filters, searchQuery, feedDiversitySeed]);
+  }, [tieredBaseRows.canMake, filters, searchQuery, feedDiversitySeed]);
+
+  const filteredCloseRows = useMemo(() => {
+    const narrowed = applyRecipesTabFilters(tieredBaseRows.close, filters);
+    return buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
+  }, [tieredBaseRows.close, filters, searchQuery, feedDiversitySeed]);
 
   function showDifferentIdeas() {
     setFeedDiversitySeed((value) => value + 1);
@@ -153,10 +171,19 @@ export default function RecipesScreen() {
     for (const recipe of kitchenRecipes) {
       setServingOverride(recipe.id, peopleTargetServings);
     }
-    for (const { recipe } of baseDiscoverySuggestions) {
+    for (const { recipe } of discoverySuggestions) {
       setServingOverride(discoveryRecipeServingOverrideId(recipe.id), peopleTargetServings);
     }
-  }, [baseDiscoverySuggestions, kitchenRecipes, peopleTargetServings, setServingOverride]);
+    for (const { recipe } of discoveryCloseSuggestions) {
+      setServingOverride(discoveryRecipeServingOverrideId(recipe.id), peopleTargetServings);
+    }
+  }, [
+    discoveryCloseSuggestions,
+    discoverySuggestions,
+    kitchenRecipes,
+    peopleTargetServings,
+    setServingOverride,
+  ]);
 
   const detailServings = useMemo(() => {
     if (!detailRow) return 4;
@@ -181,7 +208,8 @@ export default function RecipesScreen() {
     !pantryEmpty &&
     recipesTabNarrowingFiltersActive(filters) &&
     hasUnfilteredResults &&
-    filteredRows.length === 0 &&
+    filteredCanMakeRows.length === 0 &&
+    filteredCloseRows.length === 0 &&
     !searchQuery.trim();
 
   const showKitchenEmpty =
@@ -195,7 +223,8 @@ export default function RecipesScreen() {
     !pantryEmpty &&
     !discoveryLoading &&
     filterBaseRows.length > 0 &&
-    filteredRows.length === 0 &&
+    filteredCanMakeRows.length === 0 &&
+    filteredCloseRows.length === 0 &&
     Boolean(searchQuery.trim());
 
   return (
@@ -221,6 +250,9 @@ export default function RecipesScreen() {
           onSetFilter={setFilter}
           onClearAll={clearAllFilters}
         />
+        {!pantryEmpty && pantry.length <= RECIPES_TAB_THIN_PANTRY_ITEM_MAX ? (
+          <Text className="mt-2 text-xs text-muted">{RECIPES_COPY.cookNowCard.thinPantryHint}</Text>
+        ) : null}
         {!pantryEmpty ? (
           <Pressable
             onPress={showDifferentIdeas}
@@ -252,7 +284,7 @@ export default function RecipesScreen() {
         <Text className="mt-4 text-sm text-muted">{RECIPES_COPY.discoveryPanel.noFilterResults}</Text>
       ) : null}
 
-      {filteredRows.map((row) => (
+      {filteredCanMakeRows.map((row) => (
         <RecipesUnifiedFeedCard
           key={row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`}
           row={row}
@@ -264,6 +296,25 @@ export default function RecipesScreen() {
           onAddMissingDiscovery={addMissingDiscoveryRecipeIngredientsToGrocery}
         />
       ))}
+
+      {filteredCloseRows.length > 0 ? (
+        <View className="mt-5">
+          <Text className="text-sm font-bold text-ink">{RECIPES_COPY.unifiedFeed.closeSectionTitle}</Text>
+          <Text className="mt-0.5 text-xs text-muted">{RECIPES_COPY.unifiedFeed.closeSectionSubtitle}</Text>
+          {filteredCloseRows.map((row) => (
+            <RecipesUnifiedFeedCard
+              key={`close-${row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`}`}
+              row={row}
+              onOpen={() => openDetail(row)}
+              isOnMealPlan={isOnMealPlan}
+              onToggleKitchen={(recipeId) => void toggleMealPlanKitchenRecipe(recipeId)}
+              onToggleDiscovery={(recipe) => void toggleMealPlanDiscoveryRecipe(recipe)}
+              onAddMissingKitchen={addMissingRecipeIngredientsToGrocery}
+              onAddMissingDiscovery={addMissingDiscoveryRecipeIngredientsToGrocery}
+            />
+          ))}
+        </View>
+      ) : null}
 
       <RecipeDetailSheet
         visible={detailRow != null}

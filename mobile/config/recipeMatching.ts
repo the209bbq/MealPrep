@@ -21,9 +21,15 @@ export const KITCHEN_LIST_DEFAULT_MIN_PERCENT = 0;
 /** Recipes must match at least this many pantry ingredients (non-staples) to appear. */
 export const DEFAULT_MIN_MATCHED_INGREDIENTS = 2;
 
-/** When strict % + count filters hide everything, still show best partial overlaps (Recipes tab). */
+/** Minimum pantry ingredient hits for the Recipes tab "close" section (not full can-make). */
 export const RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT = 1;
+/** Legacy cap used by filterRankedMatchesWithPartialFallback (non–Recipes-tab callers). */
 export const RECIPES_TAB_PARTIAL_MATCH_LIMIT = 12;
+/** Max rows in the labeled "Close: need 1–2 items" section on Recipes. */
+export const RECIPES_TAB_CLOSE_MATCH_LIMIT = 6;
+
+/** Show a compact hint below filters when the pantry is still small. */
+export const RECIPES_TAB_THIN_PANTRY_ITEM_MAX = 7;
 
 /** Max pantry ingredient names to use as RecipeAPI search queries per refresh. */
 export const PANTRY_DISCOVERY_MAX_QUERIES = 5;

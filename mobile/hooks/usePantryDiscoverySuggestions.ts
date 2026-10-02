@@ -15,6 +15,7 @@ export function usePantryDiscoverySuggestions(
   options?: { enabled?: boolean; refreshSeed?: number },
 ): {
   suggestions: PantryDiscoverySuggestion[];
+  closeSuggestions: PantryDiscoverySuggestion[];
   loading: boolean;
   error: string | null;
   refreshSeed: number;
@@ -27,6 +28,7 @@ export function usePantryDiscoverySuggestions(
   const [refreshSeed, setRefreshSeed] = useState(options?.refreshSeed ?? 0);
 
   const [suggestions, setSuggestions] = useState<PantryDiscoverySuggestion[]>([]);
+  const [closeSuggestions, setCloseSuggestions] = useState<PantryDiscoverySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +39,7 @@ export function usePantryDiscoverySuggestions(
   useEffect(() => {
     if (!enabled || pantryEmpty) {
       setSuggestions([]);
+      setCloseSuggestions([]);
       setError(null);
       setLoading(false);
       return;
@@ -51,12 +54,14 @@ export function usePantryDiscoverySuggestions(
       .then((result) => {
         if (!cancelled) {
           setSuggestions(result.suggestions);
+          setCloseSuggestions(result.closeSuggestions);
           setError(result.errorMessage);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSuggestions([]);
+          setCloseSuggestions([]);
           setError(RECIPES_COPY.discoveryErrors.loadFailed);
         }
       })
@@ -69,5 +74,5 @@ export function usePantryDiscoverySuggestions(
     };
   }, [accessToken, enabled, minPercent, pantry, pantryEmpty, refreshSeed]);
 
-  return { suggestions, loading, error, refreshSeed, refreshDiscovery };
+  return { suggestions, closeSuggestions, loading, error, refreshSeed, refreshDiscovery };
 }
