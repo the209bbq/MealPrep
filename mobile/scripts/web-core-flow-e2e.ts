@@ -133,7 +133,7 @@ async function verifyGroceryList(page: Page): Promise<void> {
   await page.getByText(GROCERY_COPY.viewGroceryListAction, { exact: true }).click();
   await page.waitForURL(/\/grocery/, { timeout: 15_000 });
 
-  await page.getByText(GROCERY_COPY.listTitle, { exact: true }).waitFor({ timeout: 10_000 });
+  await page.getByText(GROCERY_COPY.listTitle, { exact: true }).first().waitFor({ timeout: 10_000 });
   const body = (await page.locator('body').innerText()).toLowerCase();
   assert(body.includes('to buy'), 'grocery tab should show open items');
   assert(/\d+ to buy/.test(body), 'grocery tab should show open item count');

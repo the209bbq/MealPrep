@@ -150,7 +150,7 @@ export const ONBOARDING_COPY: OnboardingCopy = {
     ],
     recap: {
       title: 'You are set',
-      body: 'Scan → recipes → list → Smart Shop. Come back any time from Profile to replay this tour.',
+      body: 'Scan → recipes → list → Smart Shop. Come back any time from your profile to replay this tour.',
       cta: 'Start cooking',
     },
   },
@@ -178,7 +178,7 @@ export const ONBOARDING_COPY: OnboardingCopy = {
       icon: 'restaurant-outline',
       title: 'Add your pantry to see recipes',
       body: 'We match meals to what you already have — start with a quick scan.',
-      ctaLabel: 'Go to Pantry',
+      ctaLabel: 'Go to pantry',
       href: APP_ROUTES.pantry,
     },
     grocery: {

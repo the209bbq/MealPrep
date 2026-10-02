@@ -59,7 +59,7 @@ export default function AdminScreen() {
       <InstallAppBanner />
       <Card className="mt-4" title="Admin panel" subtitle={`Signed in as ${profile.name}`}>
         <Text className="mt-2 text-sm text-muted">
-          Kitchen admin tools mirror the softball app&apos;s league admin pattern — global data, seeds, and toggles.
+          Manage seeds, feature toggles, subscription plans, and platform analytics for MealPlanatic.
         </Text>
         {!demoMode ? (
           <Pressable onPress={() => void signOut()} className="mt-3 self-start rounded-full border border-border px-4 py-2">

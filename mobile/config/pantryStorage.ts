@@ -37,7 +37,7 @@ export function pantryStorageScanActions(): PantryStorageScanAction[] {
 
 export const PANTRY_SCAN_TIP = {
   message:
-    'Tip: For best results, scan one shelf at a time—hold the phone close, use good light, and keep labels facing the camera.',
+    'Tip: For best results, scan one shelf at a time — hold the phone close, use good light, and keep labels facing the camera.',
   dismissStorageKey: 'mealprep.pantryScanTipDismissed',
   /** Show the tip again on review when at or below this many detections. */
   fewItemsThreshold: 3,
@@ -48,7 +48,7 @@ export const PANTRY_LOCATION_FILTER_STORAGE_KEY = 'mealprep.pantryLocationFilter
 
 export const PANTRY_LIST_COPY = {
   emptyFiltered: 'No items match your filters.',
-  showAllFilters: 'Show all locations & categories',
+  showAllFilters: 'Show all locations and categories',
   storageFilterLabel: 'Storage',
   allLocationsChipLabel: 'All',
 } as const;

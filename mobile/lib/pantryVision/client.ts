@@ -61,7 +61,7 @@ async function parseErrorResponse(response: Response, text: string): Promise<nev
   if (response.status === 503 && (json.code === 'NOT_CONFIGURED' || json.error?.includes('not set up'))) {
     logPantryScanFailure('NOT_CONFIGURED');
     throw new PantryVisionNotConfiguredError(
-      json.error ?? 'Pantry photo scan is not configured on the server.',
+      json.error ?? 'Pantry photo scan is not available on this app yet. Ask an admin to finish setup.',
     );
   }
   if (response.status === 401 || json.code === 'UNAUTHENTICATED') {

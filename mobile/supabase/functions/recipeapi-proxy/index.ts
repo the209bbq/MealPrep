@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
   if (!apiKey) {
     return new Response(
       JSON.stringify({
-        error: 'Recipe discovery is not set up yet. Add RECIPEAPI_KEY in Supabase Edge Function secrets.',
+        error: 'Recipe discovery is not set up yet. Ask an admin to finish setup.',
         code: 'NOT_CONFIGURED',
       }),
       {
@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
     } else if (body.action === 'detail') {
       const id = Number(body.id);
       if (!Number.isFinite(id) || id <= 0) {
-        return new Response(JSON.stringify({ error: 'Invalid recipe id' }), {
+        return new Response(JSON.stringify({ error: 'Invalid recipe ID' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

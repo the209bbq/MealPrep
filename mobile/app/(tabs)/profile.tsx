@@ -34,7 +34,7 @@ export default function ProfileScreen() {
       return (
         <ScrollView className="flex-1 bg-paper px-4 pb-8">
           <Card className="mt-4" title="Sign in" subtitle="Connecting…">
-            <Text className="mt-2 text-sm text-muted">Loading authentication.</Text>
+            <Text className="mt-2 text-sm text-muted">Loading your account.</Text>
           </Card>
         </ScrollView>
       );

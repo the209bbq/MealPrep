@@ -38,7 +38,7 @@ export function MealsToMakePanel({
     <Card
       className={compact ? 'mt-3' : 'mt-4'}
       title={`Meals to make (${active.length})`}
-      subtitle={compact ? 'Made it deducts pantry & moves to cooked' : 'Your cooking queue for the week'}
+      subtitle={compact ? 'Made it updates your pantry and moves the meal to Cooked.' : 'Your cooking queue for the week'}
     >
       {active.map((item, index) => (
         <View

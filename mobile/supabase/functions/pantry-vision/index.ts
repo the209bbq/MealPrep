@@ -1092,7 +1092,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error:
-          'Pantry photo scan is not set up yet. Add GEMINI_API_KEY in Supabase Edge Function secrets and redeploy.',
+          'Pantry photo scan is not set up yet. Ask an admin to finish setup.',
         code: 'NOT_CONFIGURED',
       },
       503,
@@ -1153,7 +1153,7 @@ Deno.serve(async (req) => {
       200,
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Pantry vision error';
+    const message = error instanceof Error ? error.message : 'Something went wrong while analyzing your photo.';
     return jsonResponse({ error: message, code: 'UPSTREAM_ERROR' }, 502);
   }
 });

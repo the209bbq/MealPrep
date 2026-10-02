@@ -45,18 +45,18 @@ export async function callKrogerProxy(body: Record<string, unknown>): Promise<Kr
       body: JSON.stringify(body),
     });
   } catch {
-    return { configured: false, error: 'Could not reach kroger-deals Edge Function' };
+    return { configured: false, error: 'Could not reach store pricing. Try again shortly.' };
   }
 
   let payload: KrogerProxyResponse;
   try {
     payload = (await response.json()) as KrogerProxyResponse;
   } catch {
-    return { configured: false, error: 'Invalid response from kroger-deals' };
+    return { configured: false, error: 'Could not load store prices. Try again shortly.' };
   }
 
   if (response.status === 503) {
-    return { ...payload, configured: false, error: payload.error ?? 'Kroger not configured on server' };
+    return { ...payload, configured: false, error: payload.error ?? 'Live Kroger prices are not set up yet.' };
   }
   if (!response.ok) {
     throw new Error(payload.error ?? `Kroger proxy failed (${response.status})`);

@@ -65,7 +65,7 @@ export const krogerPricingProvider: PricingProvider = {
     });
 
     if (!isKrogerServerConfigured(data)) {
-      throw new Error(data.error ?? 'Kroger not configured on server');
+      throw new Error(data.error ?? 'Live Kroger prices are not set up yet.');
     }
     if (!data.result) throw new Error('Kroger proxy returned no deal data');
     return data.result;

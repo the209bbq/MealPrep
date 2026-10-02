@@ -63,7 +63,7 @@ export function StoreRetailerButtons({ store, grocery }: Props) {
         ))}
       </View>
       {items.length > 6 ? (
-        <Text className="mt-1 text-xs text-muted">+{items.length - 6} more items — use Shop whole list</Text>
+        <Text className="mt-1 text-xs text-muted">+{items.length - 6} more items — use “Shop whole list” above</Text>
       ) : null}
       {clipboardToast ? (
         <Text className="mt-2 text-xs font-semibold text-success-dark">{clipboardToast}</Text>
