@@ -29,6 +29,7 @@ import { readImportLinkFromClipboard } from '../../lib/recipeImport/pasteImportL
 import type { RecipeImportExtractedDto, RecipeImportFallbacksDto } from '../../lib/recipeImport/types';
 import { uploadRecipeImportPhotos, uploadRecipeImportVideo } from '../../lib/recipeImport/uploadImportVideo';
 import { RecipeImportReviewSheet } from './RecipeImportReviewSheet';
+import { ViralRecipesShelf } from './ViralRecipesShelf';
 
 async function pickRecipeImages(max: number): Promise<{ mimeType: string; data: string }[]> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -369,6 +370,7 @@ export function RecipeImportBox({
             </Pressable>
           </View>
         ) : null}
+        <ViralRecipesShelf />
       </View>
 
       <RecipeImportReviewSheet
