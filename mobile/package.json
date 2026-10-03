@@ -62,7 +62,7 @@
     "test:pantry-vision-merge": "npx tsx scripts/pantry-vision-merge-check.ts",
     "test:ingredient-normalize-pantry": "npx tsx scripts/ingredient-normalize-pantry-check.ts",
     "eval:pantry-vision-photos": "npx tsx scripts/pantry-vision-photo-eval.ts",
-    "test:onboarding": "npx tsx scripts/onboarding-routing-check.ts && npx tsx scripts/auth-config-check.ts && npx tsx scripts/legal-pages-check.ts && npx tsx scripts/delete-user-account-check.ts && npx tsx scripts/android-release-check.ts",
+    "test:onboarding": "npx tsx scripts/onboarding-routing-check.ts && npx tsx scripts/auth-config-check.ts && npx tsx scripts/legal-pages-check.ts && npx tsx scripts/delete-user-account-check.ts && npx tsx scripts/android-release-check.ts && npx tsx scripts/web-upgrade-offer-web-check.ts",
     "test:web-hydration": "npx tsx scripts/web-hydration-check.ts",
     "test:web-e2e": "npx tsx scripts/web-core-flow-e2e.ts",
     "test:guest-mode": "npx tsx scripts/guest-mode-check.ts && npx tsx scripts/guest-save-nudge-check.ts && npx tsx scripts/guest-pantry-hydration-check.ts",
