@@ -14,6 +14,14 @@ import {
   isSocialCaptionSourceType,
   normalizeImportUrl,
 } from '../supabase/functions/recipe-import/urlClassification.ts';
+import {
+  isAllowedHttpPort,
+  isBlockedHostname,
+  isBlockedIpv4Host,
+  isBlockedIpv6Host,
+  resolveRedirectLocation,
+  validatePublicHttpFetchUrl,
+} from '../supabase/functions/recipe-import/ssrfGuard.ts';
 import { youtubeVideoIdFromUrl } from '../lib/recipeImport/youtube.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +46,41 @@ assert.equal(
 
 const normalized = normalizeImportUrl('allrecipes.com/recipe/123');
 assert.ok(normalized?.startsWith('https://'));
+
+assert.equal(normalizeImportUrl('http://127.0.0.1/recipe'), null);
+assert.equal(normalizeImportUrl('http://localhost/x'), null);
+assert.equal(normalizeImportUrl('http://10.0.0.1/x'), null);
+assert.equal(normalizeImportUrl('http://192.168.1.1/x'), null);
+assert.equal(normalizeImportUrl('http://169.254.1.1/x'), null);
+assert.equal(normalizeImportUrl('http://100.64.0.1/x'), null);
+assert.equal(normalizeImportUrl('http://172.16.0.1/x'), null);
+assert.equal(normalizeImportUrl('http://0.1.2.3/x'), null);
+assert.equal(normalizeImportUrl('http://[::1]/x'), null);
+assert.equal(normalizeImportUrl('http://server.local/recipe'), null);
+assert.equal(normalizeImportUrl('http://api.internal/x'), null);
+assert.equal(normalizeImportUrl('http://user:pass@example.com/x'), null);
+assert.equal(normalizeImportUrl('http://example.com:8080/x'), null);
+assert.equal(validatePublicHttpFetchUrl('https://example.com:443/x').ok, true);
+assert.equal(validatePublicHttpFetchUrl('https://example.com:8443/x').ok, false);
+
+assert.equal(isBlockedIpv4Host('127.0.0.1'), true);
+assert.equal(isBlockedIpv4Host('8.8.8.8'), false);
+assert.equal(isBlockedIpv6Host('::1'), true);
+assert.equal(isBlockedIpv6Host('fe80::1'), true);
+assert.equal(isBlockedIpv6Host('fc00::1'), true);
+assert.equal(isBlockedHostname('app.local'), true);
+
+const okHttps = validatePublicHttpFetchUrl('https://www.allrecipes.com/recipe/1/');
+assert.equal(okHttps.ok, true);
+const redirectResolved = resolveRedirectLocation(
+  new URL('https://example.com/a'),
+  '/b',
+);
+assert.equal(redirectResolved, 'https://example.com/b');
+assert.equal(
+  isAllowedHttpPort(new URL('http://example.com:80/path')),
+  true,
+);
 
 const graphFixture = JSON.parse(
   fs.readFileSync(path.join(fixturesDir, 'allrecipes-graph.json'), 'utf8'),

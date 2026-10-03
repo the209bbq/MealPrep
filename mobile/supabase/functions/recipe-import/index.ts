@@ -24,6 +24,11 @@ import {
   stripHtmlToText,
 } from './jsonLdParser.ts';
 import type { RecipeImportExtracted } from './recipeImportSchema.ts';
+import {
+  RECIPE_FETCH_MAX_REDIRECTS,
+  resolveRedirectLocation,
+  validatePublicHttpFetchUrl,
+} from './ssrfGuard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -128,22 +133,7 @@ async function writeImportCache(urlKey: string, sourceUrl: string, payload: Reci
   });
 }
 
-async function fetchRecipePage(url: string): Promise<string | null> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      redirect: 'follow',
-      headers: {
-        'User-Agent': FETCH_USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-      },
-      signal: AbortSignal.timeout(WEB_FETCH_TIMEOUT_MS),
-    });
-  } catch {
-    return null;
-  }
-  if (!response.ok) return null;
-
+async function readResponseBodyLimited(response: Response): Promise<string | null> {
   const reader = response.body?.getReader();
   if (!reader) return null;
   const chunks: Uint8Array[] = [];
@@ -163,6 +153,44 @@ async function fetchRecipePage(url: string): Promise<string | null> {
     offset += chunk.length;
   }
   return new TextDecoder('utf-8', { fatal: false }).decode(merged);
+}
+
+async function fetchRecipePage(url: string): Promise<string | null> {
+  let currentUrl = url;
+
+  for (let hop = 0; hop <= RECIPE_FETCH_MAX_REDIRECTS; hop += 1) {
+    const validated = validatePublicHttpFetchUrl(currentUrl);
+    if (!validated.ok) return null;
+
+    let response: Response;
+    try {
+      response = await fetch(validated.url.toString(), {
+        redirect: 'manual',
+        headers: {
+          'User-Agent': FETCH_USER_AGENT,
+          Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(WEB_FETCH_TIMEOUT_MS),
+      });
+    } catch {
+      return null;
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      if (hop >= RECIPE_FETCH_MAX_REDIRECTS) return null;
+      const location = response.headers.get('location');
+      if (!location) return null;
+      const next = resolveRedirectLocation(validated.url, location);
+      if (!next) return null;
+      currentUrl = next;
+      continue;
+    }
+
+    if (!response.ok) return null;
+    return await readResponseBodyLimited(response);
+  }
+
+  return null;
 }
 
 type ImportFromUrlResult =

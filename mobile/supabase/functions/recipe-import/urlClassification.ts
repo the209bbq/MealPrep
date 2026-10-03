@@ -1,3 +1,5 @@
+import { validatePublicHttpFetchUrl } from './ssrfGuard.ts';
+
 export type RecipeImportSourceType = 'youtube' | 'web' | 'tiktok' | 'instagram';
 
 const YOUTUBE_HOSTS = new Set([
@@ -17,8 +19,9 @@ export function normalizeImportUrl(raw: string): string | null {
   if (!trimmed) return null;
   try {
     const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    const url = new URL(withProtocol);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    const validated = validatePublicHttpFetchUrl(withProtocol);
+    if (!validated.ok) return null;
+    const url = validated.url;
     url.hash = '';
     return url.toString();
   } catch {
