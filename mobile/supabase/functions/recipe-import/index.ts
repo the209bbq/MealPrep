@@ -338,6 +338,7 @@ async function importFromCaption(
           social_author_url: socialMeta?.authorUrl ?? backfilled.social_author_url,
         },
         socialMeta?.thumbnailUrl ?? backfilled.image_url ?? imageUrlForCachedImport(backfilled, sourceType, normalizedUrl),
+        normalizedUrl,
       ),
       cached: true,
     };
@@ -361,6 +362,7 @@ async function importFromCaption(
       social_author_url: socialMeta?.authorUrl ?? normalizedUrl,
     },
     socialMeta?.thumbnailUrl,
+    normalizedUrl,
   );
   await writeImportCache(cacheKey, normalizedUrl, withSocial);
   return { recipe: withSocial, cached: false };
@@ -388,6 +390,7 @@ async function importFromUrl(
     const withImage = withImportImageUrl(
       { ...backfilled, source_url: normalizedUrl },
       backfilled.image_url ?? imageUrlForCachedImport(backfilled, sourceType, normalizedUrl),
+      normalizedUrl,
     );
     return { recipe: withImage, cached: true };
   }
@@ -398,7 +401,7 @@ async function importFromUrl(
     if (!extracted) return null;
     const withCreator = await enrichYouTubeRecipeCreator(extracted, normalizedUrl, watchUrl);
     const imageUrl = resolveYouTubeImportImageUrl(normalizedUrl, watchUrl, null);
-    const withImage = withImportImageUrl(withCreator, imageUrl);
+    const withImage = withImportImageUrl(withCreator, imageUrl, watchUrl);
     if (!recipeLooksValid(withImage)) {
       const creatorHint =
         withCreator.youtube_channel_name ??
@@ -423,7 +426,7 @@ async function importFromUrl(
     const fromLd = recipeJsonLdToExtracted(jsonLd, normalizedUrl);
     if (fromLd && recipeLooksValid(fromLd)) {
       const withAuthor = await enrichWebRecipeCreator(fromLd, html);
-      const withImage = withImportImageUrl(withAuthor, extractOgImageFromHtml(html, normalizedUrl));
+      const withImage = withImportImageUrl(withAuthor, extractOgImageFromHtml(html, normalizedUrl), normalizedUrl);
       await writeImportCache(cacheKey, normalizedUrl, withImage);
       return { recipe: withImage, cached: false };
     }
@@ -433,7 +436,7 @@ async function importFromUrl(
   const fromGemini = await extractRecipeFromPageText(apiKey, pageText, normalizedUrl);
   if (!fromGemini) return null;
   const withAuthor = await enrichWebRecipeCreator(fromGemini, html);
-  const withImage = withImportImageUrl(withAuthor, extractOgImageFromHtml(html, normalizedUrl));
+  const withImage = withImportImageUrl(withAuthor, extractOgImageFromHtml(html, normalizedUrl), normalizedUrl);
   if (!recipeLooksValid(withImage)) {
     return {
       notRecipe: true,

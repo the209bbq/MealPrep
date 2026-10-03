@@ -2,9 +2,16 @@
 //
 // Deploy: supabase functions deploy viral-recipes
 // Secrets: YOUTUBE_API_KEY (same as recipe-import)
+// Optional: VIRAL_RECIPES_USE_VIDEO_CATEGORY=false to omit videoCategoryId=26
 // Default: Verify JWT enabled — guests may call with the anon key.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import {
+  ALL_VIRAL_RECIPE_CATEGORIES,
+  collectCategoryCandidates,
+  TARGET_PER_CATEGORY,
+  type ViralRecipesCategory,
+} from './youtubeDiscovery.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,18 +19,7 @@ const corsHeaders = {
 };
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const TARGET_PER_CATEGORY = 20;
-const YOUTUBE_SEARCH_MAX = 25;
-
-type ViralRecipesCategory = 'viral' | 'quick' | 'budget';
-
-const CATEGORY_QUERIES: Record<ViralRecipesCategory, string> = {
-  viral: 'viral recipe',
-  quick: 'easy dinner recipe',
-  budget: 'budget meal recipe',
-};
-
-const ALL_CATEGORIES: ViralRecipesCategory[] = ['viral', 'quick', 'budget'];
+const REFRESH_LOCK_MINUTES = 2;
 
 interface ViralRecipeLinkRow {
   video_id: string;
@@ -37,6 +33,7 @@ interface ViralRecipeLinkRow {
   view_count: number;
   published_at: string | null;
   sort_rank: number;
+  cached_at?: string;
 }
 
 interface ViralRecipeItemDto {
@@ -50,6 +47,17 @@ interface ViralRecipeItemDto {
   watchUrl: string;
   viewCount: number;
   publishedAt: string | null;
+}
+
+interface CacheMetaRow {
+  refreshed_at: string;
+  refreshing_until: string | null;
+  refresh_backoff_until: string | null;
+}
+
+function youtubeSearchOptions(): { useVideoCategoryId: boolean } {
+  const raw = (Deno.env.get('VIRAL_RECIPES_USE_VIDEO_CATEGORY') ?? 'true').trim().toLowerCase();
+  return { useVideoCategoryId: raw !== 'false' && raw !== '0' };
 }
 
 function rowToDto(row: ViralRecipeLinkRow): ViralRecipeItemDto {
@@ -67,193 +75,138 @@ function rowToDto(row: ViralRecipeLinkRow): ViralRecipeItemDto {
   };
 }
 
-function publishedAfterIso(): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - 30);
-  return d.toISOString();
+function isHttpsUrlOnHost(raw: string, allowedHosts: readonly string[]): string | null {
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:') return null;
+    const host = parsed.hostname.toLowerCase();
+    const ok = allowedHosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+    if (!ok) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
-function pickThumbnail(thumbnails: Record<string, { url?: string }> | undefined): string {
-  const order = ['high', 'medium', 'default'];
-  for (const key of order) {
-    const url = thumbnails?.[key]?.url;
-    if (url) return url;
-  }
-  return '';
+function validateVideoId(videoId: string): string | null {
+  if (!/^[A-Za-z0-9_-]{6,32}$/.test(videoId)) return null;
+  return videoId;
 }
 
-async function youtubeSearch(apiKey: string, query: string): Promise<string[]> {
-  const url = new URL('https://www.googleapis.com/youtube/v3/search');
-  url.searchParams.set('part', 'snippet');
-  url.searchParams.set('type', 'video');
-  url.searchParams.set('safeSearch', 'strict');
-  url.searchParams.set('order', 'viewCount');
-  url.searchParams.set('publishedAfter', publishedAfterIso());
-  url.searchParams.set('maxResults', String(YOUTUBE_SEARCH_MAX));
-  url.searchParams.set('q', query);
-  url.searchParams.set('key', apiKey);
+function validateChannelId(channelId: string): string | null {
+  if (!/^[A-Za-z0-9_-]{10,64}$/.test(channelId)) return null;
+  return channelId;
+}
 
-  const response = await fetch(url.toString(), { signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`YouTube search failed: ${response.status} ${text.slice(0, 200)}`);
+function buildWatchUrl(videoId: string): string | null {
+  const id = validateVideoId(videoId);
+  if (!id) return null;
+  return isHttpsUrlOnHost(`https://www.youtube.com/watch?v=${id}`, ['youtube.com']);
+}
+
+function buildChannelUrl(channelId: string): string | null {
+  const id = validateChannelId(channelId);
+  if (!id) return null;
+  return isHttpsUrlOnHost(`https://www.youtube.com/channel/${id}`, ['youtube.com']);
+}
+
+function validateThumbnailUrl(raw: string): string | null {
+  return isHttpsUrlOnHost(raw, ['i.ytimg.com', 'yt3.ggpht.com']);
+}
+
+function sanitizeRow(row: ViralRecipeLinkRow): ViralRecipeLinkRow | null {
+  const videoId = validateVideoId(row.video_id);
+  const channelId = validateChannelId(row.channel_id);
+  const watchUrl = buildWatchUrl(row.video_id);
+  const channelUrl = channelId ? buildChannelUrl(channelId) : null;
+  const thumbnailUrl = validateThumbnailUrl(row.thumbnail_url);
+  const title = row.title.trim();
+  const channelTitle = row.channel_title.trim();
+  if (!videoId || !channelId || !watchUrl || !channelUrl || !thumbnailUrl || !title || !channelTitle) {
+    return null;
   }
-
-  const body = (await response.json()) as {
-    items?: Array<{
-      id?: { videoId?: string };
-      snippet?: {
-        title?: string;
-        channelId?: string;
-        channelTitle?: string;
-        publishedAt?: string;
-        thumbnails?: Record<string, { url?: string }>;
-      };
-    }>;
+  return {
+    ...row,
+    video_id: videoId,
+    channel_id: channelId,
+    title,
+    channel_title: channelTitle,
+    thumbnail_url: thumbnailUrl,
+    channel_url: channelUrl,
+    watch_url: watchUrl,
   };
-
-  const videoIds: string[] = [];
-  for (const item of body.items ?? []) {
-    const id = item.id?.videoId;
-    if (id) videoIds.push(id);
-  }
-  return videoIds;
 }
 
-async function youtubeVideoStats(
-  apiKey: string,
-  videoIds: string[],
-): Promise<
-  Map<
-    string,
-    {
-      viewCount: number;
-      title: string;
-      channelId: string;
-      channelTitle: string;
-      publishedAt: string | null;
-      thumbnailUrl: string;
-    }
-  >
-> {
-  const map = new Map<
-    string,
-    {
-      viewCount: number;
-      title: string;
-      channelId: string;
-      channelTitle: string;
-      publishedAt: string | null;
-      thumbnailUrl: string;
-    }
-  >();
-  if (videoIds.length === 0) return map;
+async function buildCategoryRows(apiKey: string, category: ViralRecipesCategory): Promise<ViralRecipeLinkRow[]> {
+  const candidates = await collectCategoryCandidates(apiKey, category, youtubeSearchOptions());
+  const rows: ViralRecipeLinkRow[] = [];
 
-  const url = new URL('https://www.googleapis.com/youtube/v3/videos');
-  url.searchParams.set('part', 'snippet,statistics');
-  url.searchParams.set('id', videoIds.join(','));
-  url.searchParams.set('key', apiKey);
-
-  const response = await fetch(url.toString(), { signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`YouTube videos.list failed: ${response.status} ${text.slice(0, 200)}`);
-  }
-
-  const body = (await response.json()) as {
-    items?: Array<{
-      id?: string;
-      snippet?: {
-        title?: string;
-        channelId?: string;
-        channelTitle?: string;
-        publishedAt?: string;
-        thumbnails?: Record<string, { url?: string }>;
-      };
-      statistics?: { viewCount?: string };
-    }>;
-  };
-
-  for (const item of body.items ?? []) {
-    const id = item.id;
-    if (!id) continue;
-    const title = item.snippet?.title?.trim() ?? '';
-    const channelId = item.snippet?.channelId?.trim() ?? '';
-    const channelTitle = item.snippet?.channelTitle?.trim() ?? '';
-    if (!title || !channelId) continue;
-    map.set(id, {
-      viewCount: Number(item.statistics?.viewCount ?? 0),
-      title,
-      channelId,
-      channelTitle,
-      publishedAt: item.snippet?.publishedAt ?? null,
-      thumbnailUrl: pickThumbnail(item.snippet?.thumbnails),
-    });
-  }
-  return map;
-}
-
-async function buildCategoryRows(
-  apiKey: string,
-  category: ViralRecipesCategory,
-  seenVideoIds: Set<string>,
-): Promise<ViralRecipeLinkRow[]> {
-  const query = CATEGORY_QUERIES[category];
-  const ids = await youtubeSearch(apiKey, query);
-  const stats = await youtubeVideoStats(apiKey, ids);
-
-  const candidates: ViralRecipeLinkRow[] = [];
-  for (const videoId of ids) {
-    if (seenVideoIds.has(videoId)) continue;
-    const detail = stats.get(videoId);
-    if (!detail?.thumbnailUrl) continue;
-    candidates.push({
-      video_id: videoId,
+  for (const candidate of candidates) {
+    const draft: ViralRecipeLinkRow = {
+      video_id: candidate.videoId,
       category,
-      title: detail.title,
-      thumbnail_url: detail.thumbnailUrl,
-      channel_id: detail.channelId,
-      channel_title: detail.channelTitle,
-      channel_url: `https://www.youtube.com/channel/${detail.channelId}`,
-      watch_url: `https://www.youtube.com/watch?v=${videoId}`,
-      view_count: detail.viewCount,
-      published_at: detail.publishedAt,
+      title: candidate.title,
+      thumbnail_url: candidate.thumbnailUrl,
+      channel_id: candidate.channelId,
+      channel_title: candidate.channelTitle,
+      channel_url: `https://www.youtube.com/channel/${candidate.channelId}`,
+      watch_url: `https://www.youtube.com/watch?v=${candidate.videoId}`,
+      view_count: candidate.viewCount,
+      published_at: candidate.publishedAt,
       sort_rank: 0,
-    });
+      cached_at: new Date().toISOString(),
+    };
+    const sanitized = sanitizeRow(draft);
+    if (sanitized) rows.push(sanitized);
+    if (rows.length >= TARGET_PER_CATEGORY) break;
   }
 
-  candidates.sort((a, b) => b.view_count - a.view_count);
-  const picked = candidates.slice(0, TARGET_PER_CATEGORY);
-  picked.forEach((row, index) => {
+  rows.forEach((row, index) => {
     row.sort_rank = index;
-    seenVideoIds.add(row.video_id);
   });
-  return picked;
+  return rows;
+}
+
+async function swapCachedRows(
+  admin: ReturnType<typeof createClient>,
+  allRows: ViralRecipeLinkRow[],
+): Promise<void> {
+  if (allRows.length > 0) {
+    const { error: upsertError } = await admin
+      .from('viral_recipe_links')
+      .upsert(allRows, { onConflict: 'category,video_id' });
+    if (upsertError) throw upsertError;
+  }
+
+  for (const category of ALL_VIRAL_RECIPE_CATEGORIES) {
+    const videoIds = allRows.filter((row) => row.category === category).map((row) => row.video_id);
+    if (videoIds.length === 0) continue;
+    const { error: deleteError } = await admin
+      .from('viral_recipe_links')
+      .delete()
+      .eq('category', category)
+      .not('video_id', 'in', `(${videoIds.join(',')})`);
+    if (deleteError) throw deleteError;
+  }
 }
 
 async function refreshAllCategories(
   admin: ReturnType<typeof createClient>,
   apiKey: string,
 ): Promise<void> {
-  const seen = new Set<string>();
   const allRows: ViralRecipeLinkRow[] = [];
-  for (const category of ALL_CATEGORIES) {
-    const rows = await buildCategoryRows(apiKey, category, seen);
+  for (const category of ALL_VIRAL_RECIPE_CATEGORIES) {
+    const rows = await buildCategoryRows(apiKey, category);
     allRows.push(...rows);
   }
 
-  const { error: deleteError } = await admin.from('viral_recipe_links').delete().neq('video_id', '');
-  if (deleteError) throw deleteError;
-
-  if (allRows.length > 0) {
-    const { error: insertError } = await admin.from('viral_recipe_links').insert(allRows);
-    if (insertError) throw insertError;
+  if (allRows.length === 0) {
+    throw new Error('YouTube returned no usable videos');
   }
 
-  const { error: metaError } = await admin
-    .from('viral_recipes_cache_meta')
-    .upsert({ id: 1, refreshed_at: new Date().toISOString() });
-  if (metaError) throw metaError;
+  await swapCachedRows(admin, allRows);
+  const { error: completeError } = await admin.rpc('complete_viral_recipes_refresh_success');
+  if (completeError) throw completeError;
 }
 
 async function readCategory(
@@ -272,17 +225,40 @@ async function readCategory(
   return (data ?? []) as ViralRecipeLinkRow[];
 }
 
-async function cacheIsFresh(admin: ReturnType<typeof createClient>): Promise<boolean> {
+async function readCacheMeta(admin: ReturnType<typeof createClient>): Promise<CacheMetaRow | null> {
   const { data, error } = await admin
     .from('viral_recipes_cache_meta')
-    .select('refreshed_at')
+    .select('refreshed_at, refreshing_until, refresh_backoff_until')
     .eq('id', 1)
     .maybeSingle();
   if (error) throw error;
-  const refreshedAt = data?.refreshed_at;
-  if (!refreshedAt) return false;
-  const age = Date.now() - new Date(refreshedAt).getTime();
-  return age < CACHE_TTL_MS;
+  return (data as CacheMetaRow | null) ?? null;
+}
+
+function cacheNeedsRefresh(meta: CacheMetaRow | null): boolean {
+  if (!meta?.refreshed_at) return true;
+  const now = Date.now();
+  if (meta.refresh_backoff_until && new Date(meta.refresh_backoff_until).getTime() > now) {
+    return false;
+  }
+  if (meta.refreshing_until && new Date(meta.refreshing_until).getTime() > now) {
+    return false;
+  }
+  const age = now - new Date(meta.refreshed_at).getTime();
+  return age >= CACHE_TTL_MS;
+}
+
+async function tryAcquireRefreshLock(admin: ReturnType<typeof createClient>): Promise<boolean> {
+  const { data, error } = await admin.rpc('try_acquire_viral_recipes_refresh_lock', {
+    p_lock_minutes: REFRESH_LOCK_MINUTES,
+  });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function markRefreshFailure(admin: ReturnType<typeof createClient>): Promise<void> {
+  const { error } = await admin.rpc('complete_viral_recipes_refresh_failure', { p_backoff_hours: 1 });
+  if (error) throw error;
 }
 
 function parseCategory(input: unknown): ViralRecipesCategory | null {
@@ -377,8 +353,10 @@ Deno.serve(async (req) => {
 
   try {
     let refreshed = false;
-    const fresh = await cacheIsFresh(admin);
-    if (!fresh) {
+    const meta = await readCacheMeta(admin);
+    const shouldRefresh = cacheNeedsRefresh(meta);
+
+    if (shouldRefresh) {
       const apiKey = Deno.env.get('YOUTUBE_API_KEY') ?? '';
       if (!apiKey.trim()) {
         return new Response(
@@ -389,8 +367,17 @@ Deno.serve(async (req) => {
           { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
-      await refreshAllCategories(admin, apiKey);
-      refreshed = true;
+
+      const acquired = await tryAcquireRefreshLock(admin);
+      if (acquired) {
+        try {
+          await refreshAllCategories(admin, apiKey);
+          refreshed = true;
+        } catch (err) {
+          console.error('viral-recipes refresh failed', err);
+          await markRefreshFailure(admin);
+        }
+      }
     }
 
     const rows = await readCategory(admin, category);

@@ -26,7 +26,7 @@ export function extractOgImageFromHtml(html: string, pageUrl: string): string | 
     readMetaContent(html, 'property', 'og:image:url') ??
     readMetaContent(html, 'name', 'twitter:image');
   if (!raw) return null;
-  return resolveAndSanitizeHttpUrl(raw, pageUrl) ?? sanitizeHttpUrl(raw);
+  return resolveAndSanitizeHttpUrl(raw, pageUrl);
 }
 
 export function parseYouTubeOembedThumbnailUrl(raw: unknown): string | null {
@@ -44,18 +44,31 @@ export function resolveYouTubeImportImageUrl(
   watchUrl: string,
   oembedThumbnail?: string | null,
 ): string | null {
-  const fromOembed = sanitizeHttpUrl(oembedThumbnail);
+  const fromOembed = sanitizeImportImageUrl(oembedThumbnail, watchUrl);
   if (fromOembed) return fromOembed;
   const videoId = youtubeVideoIdFromImportUrl(normalizedUrl) ?? youtubeVideoIdFromImportUrl(watchUrl);
   if (videoId) return youtubeHqDefaultThumbnailUrl(videoId);
   return null;
 }
 
+export function sanitizeImportImageUrl(
+  url: string | null | undefined,
+  pageUrl?: string | null,
+): string | null {
+  if (url == null || !url.trim()) return null;
+  if (pageUrl?.trim()) {
+    const resolved = resolveAndSanitizeHttpUrl(url, pageUrl);
+    if (resolved) return resolved;
+  }
+  return sanitizeHttpUrl(url);
+}
+
 export function withImportImageUrl(
   recipe: RecipeImportExtracted,
   imageUrl: string | null | undefined,
+  pageUrl?: string | null,
 ): RecipeImportExtracted {
-  const safe = sanitizeHttpUrl(imageUrl);
+  const safe = sanitizeImportImageUrl(imageUrl, pageUrl);
   if (!safe) return recipe;
   return { ...recipe, image_url: safe };
 }

@@ -14,5 +14,7 @@ export function youtubeThumbnailUrlFromWatchUrl(watchUrl: string | null | undefi
 }
 
 export function sanitizeRecipeImageUrl(url: string | null | undefined): string | null {
-  return sanitizeHttpUrl(url);
+  const safe = sanitizeHttpUrl(url);
+  if (!safe?.startsWith('https://')) return null;
+  return safe;
 }

@@ -11,7 +11,7 @@ export const VIRAL_RECIPES = {
   requestTimeoutMs: 20_000,
   proxyUrl: process.env.EXPO_PUBLIC_VIRAL_RECIPES_URL ?? '',
   clientCacheTtlMs: 30 * 60 * 1000,
-  migrationFilePath: 'mobile/supabase/migrations/20261003170000_viral_recipes_cache.sql',
+  migrationFilePath: 'mobile/supabase/migrations/20261003180000_viral_recipes_cache.sql',
 } as const;
 
 export const VIRAL_RECIPES_CATEGORY_LABELS: Record<ViralRecipesCategory, string> = {
@@ -20,10 +20,11 @@ export const VIRAL_RECIPES_CATEGORY_LABELS: Record<ViralRecipesCategory, string>
   budget: 'Budget',
 };
 
-export const VIRAL_RECIPES_CATEGORY_QUERIES: Record<ViralRecipesCategory, string> = {
-  viral: 'viral recipe',
-  quick: 'easy dinner recipe',
-  budget: 'budget meal recipe',
+/** Mirrors `CATEGORY_SEARCH_QUERIES` in supabase/functions/viral-recipes/youtubeDiscovery.ts */
+export const VIRAL_RECIPES_CATEGORY_QUERIES: Record<ViralRecipesCategory, readonly string[]> = {
+  viral: ['viral dinner recipe', 'tiktok famous dinner recipe'],
+  quick: ['15 minute dinner recipe', 'easy weeknight dinner recipe'],
+  budget: ['cheap dinner recipe', 'budget family dinner recipe'],
 };
 
 export const VIRAL_RECIPES_COPY = {

@@ -309,7 +309,14 @@ assert.equal(
   extractOgImageFromHtml(ogHtml, 'https://www.example.com/recipe'),
   'https://cdn.example.com/dish.jpg',
 );
-assert.equal(sanitizeRecipeImageUrl('javascript:alert(1)'), null);
+assert.equal(
+  extractOgImageFromHtml(
+    '<html><head><meta property="og:image" content="/images/dish.jpg" /></head></html>',
+    'https://www.example.com/recipe/page',
+  ),
+  'https://www.example.com/images/dish.jpg',
+);
+assert.equal(sanitizeRecipeImageUrl('http://cdn.example.com/dish.jpg'), null);
 assert.equal(
   youtubeThumbnailUrlFromWatchUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')?.includes('hqdefault.jpg'),
   true,
