@@ -40,64 +40,106 @@
       a {
         color: #0d6b4d;
       }
-      .box {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px 14px;
-        background: #fff;
-        margin: 1rem 0;
-      }
     </style>
   </head>
   <body>
     <h1>Privacy Policy</h1>
-    <p class="muted">MealPlanatic · Last updated: October 2, 2026</p>
-    <p class="box muted">
-      <strong>Template notice:</strong> This policy is written for Google Play and general transparency.
-      The app owner should have a qualified advisor review it before relying on it for legal compliance.
-    </p>
+    <p class="muted">MealPlanatic · Last updated: October 3, 2026</p>
 
     <p>
-      MealPlanatic helps you plan meals, track your pantry, build grocery lists, and compare store prices.
-      This policy explains what we collect, why, and your choices.
+      MealPlanatic helps you plan meals, track your pantry, build grocery lists, compare store prices, and discover
+      recipes. This policy explains what we collect, how we use it, and the choices you have. We do not sell your
+      personal information and we do not show third-party ads in the app.
     </p>
 
     <h2>Information we collect</h2>
     <ul>
-      <li><strong>Account:</strong> email address, display name, and password (stored securely by our auth provider).</li>
-      <li><strong>Profile:</strong> optional profile photo, home ZIP, household size, and dietary notes you enter.</li>
-      <li><strong>Kitchen data:</strong> pantry items, recipes you save, meal plans, and grocery lists.</li>
-      <li><strong>Location (approximate):</strong> ZIP code and coordinates you save for nearby store search — not continuous GPS tracking unless you choose to use device location features.</li>
-      <li><strong>Photos:</strong> optional pantry shelf photos, price-tag photos, and profile avatars you upload.</li>
-      <li><strong>Community prices:</strong> store deals and prices you submit for other shoppers (may be kept after account deletion in anonymized form — see below).</li>
-      <li><strong>Usage:</strong> basic app diagnostics and error logs needed to keep the service running.</li>
+      <li>
+        <strong>Account (Supabase Auth):</strong> email address, display name, and password (stored and authenticated by
+        Supabase). You can sign in with email and password.
+      </li>
+      <li>
+        <strong>Profile:</strong> optional profile photo, home ZIP, household size, and dietary notes you enter.
+      </li>
+      <li>
+        <strong>Kitchen data:</strong> pantry items, recipes you save, meal plans, grocery lists, and Smart Shop saved
+        stores — synced to your account when you are signed in.
+      </li>
+      <li>
+        <strong>Guest use (signed out):</strong> if you browse without an account, pantry, grocery, recipes, and meal
+        plan data are stored locally on your device only until you sign in or clear site data.
+      </li>
+      <li>
+        <strong>Location for store search:</strong> ZIP code and coordinates you save for nearby store search, or
+        approximate location if you allow device location permission. We do not track your location continuously in the
+        background.
+      </li>
+      <li>
+        <strong>Photos you upload:</strong> optional pantry shelf photos, Smart Shop shelf-tag photos, and profile
+        avatars.
+      </li>
+      <li>
+        <strong>Community prices:</strong> store deals and prices you submit may be shown to other shoppers (without
+        requiring your name after account deletion — see Retention).
+      </li>
+      <li>
+        <strong>Scan corrections (text only):</strong> when you edit items after a photo scan, we may log anonymous,
+        text-only correction data (item names and categories) to improve recognition. This log does not include your
+        photos.
+      </li>
+      <li>
+        <strong>Diagnostics:</strong> basic error and usage information needed to operate and secure the service.
+      </li>
     </ul>
 
     <h2>How we use information</h2>
     <ul>
       <li>Sync your kitchen data across devices when you sign in.</li>
       <li>Rank recipes against your pantry and build your grocery list.</li>
-      <li>Find stores and compare prices near your saved ZIP.</li>
-      <li>Run <strong>AI photo scanning</strong> (Google Gemini) on images you choose to upload, to detect pantry items or read shelf tags.</li>
-      <li>Improve reliability and security of the app.</li>
+      <li>Search online recipes through our RecipeAPI proxy when you use recipe discovery.</li>
+      <li>Find stores and compare prices near your saved ZIP, including Kroger deal data when available.</li>
+      <li>
+        Run <strong>AI photo scanning</strong>: images you choose to scan are sent to <strong>Google Gemini</strong> (via
+        our Supabase Edge Function) to detect pantry items or read shelf tags.
+      </li>
+      <li>Provide nutrition information where available (including USDA-sourced data served through our backend).</li>
+      <li>Let you add meals to <strong>Google Calendar</strong> or download <strong>.ics</strong> files — we open a
+        calendar link or file; we do not read or modify your Google Calendar account.</li>
+    </ul>
+
+    <h2>Photo storage and training</h2>
+    <ul>
+      <li>
+        <strong>Scan photos (private):</strong> pantry and shelf-tag photos you scan are stored in private Supabase
+        storage tied to your account. Only you can access them. We delete these files on a rolling basis after about
+        <strong>30 days</strong>, and when you delete your account.
+      </li>
+      <li>
+        <strong>Training photos (opt-in, off by default):</strong> in Kitchen preferences you can choose to share scan
+        photos for scanner improvement. When enabled, copies go to a separate private admin-only bucket used only for
+        tuning recognition — not for advertising.
+      </li>
     </ul>
 
     <h2>Service providers</h2>
     <p>
-      We use <strong>Supabase</strong> (database, authentication, file storage, and server functions) to host and
-      process your data. Photo scanning sends image data to <strong>Google Gemini</strong> only when you start a scan.
-      We do not sell your personal information.
+      We use <strong>Supabase</strong> (database, authentication, file storage, and server functions) to host and process
+      your data. Photo scanning uses <strong>Google Gemini</strong> only when you start a scan. Recipe search uses
+      <strong>RecipeAPI.io</strong> through our proxy. Store deals may use <strong>Kroger</strong> APIs where configured.
+      Nutrition data may include <strong>USDA</strong> sources via our backend. These providers process data on our
+      instructions to run the app.
     </p>
 
     <h2>Retention and deletion</h2>
     <p>
-      You can delete your account in the app: open your <strong>avatar → Account → Delete account</strong>.
-      That removes your profile, pantry, meal plans, grocery lists, saved stores, and personal recipes, and deletes
-      your auth account. Optional scan and avatar files in storage tied to your account are removed as part of that process.
+      You can delete your account in the app (<strong>avatar → Account → Delete account</strong>) or on the web at
+      <a href="https://the209bbq.github.io/MealPrep/app/delete-account">Account deletion page</a>. That removes your
+      profile, pantry, meal plans, grocery lists, saved stores, personal recipes, auth account, and private scan/avatar
+      files tied to your account.
     </p>
     <p>
-      <strong>Community store prices</strong> you reported may remain visible to other users after deletion, but without
-      your name or account link (reporter identity is cleared).
+      <strong>Community store prices</strong> you reported may remain visible after deletion, but without your name or
+      account link.
     </p>
 
     <h2>Children</h2>
@@ -106,7 +148,7 @@
     <h2>Contact</h2>
     <p>
       Questions about privacy:
-      <a href="mailto:davidjones21354@gmail.com">davidjones21354@gmail.com</a>
+      <a href="mailto:support@mealplanatic.app">support@mealplanatic.app</a>
     </p>
 
     <p class="muted"><a href="terms.html">Terms of Use</a></p>

@@ -1,6 +1,7 @@
 import { Text, View } from 'react-native';
 import { ACCOUNT_UPGRADE_COPY } from '../../config/account';
 import { PLAN_LABELS, type UserPlan } from '../../config/plans';
+import { shouldShowUpgradeOffer } from '../../lib/platform/shouldShowUpgradeOffer';
 
 type Props = {
   plan: UserPlan;
@@ -13,7 +14,11 @@ export function AccountPlanSection({ plan }: Props) {
       <Text className="text-xs font-bold uppercase text-muted">Plan</Text>
       <Text className="mt-1 text-base font-bold text-ink">{PLAN_LABELS[plan]}</Text>
       <Text className="mt-2 text-sm leading-5 text-muted">
-        {isPaid ? ACCOUNT_UPGRADE_COPY.paidBlurb : ACCOUNT_UPGRADE_COPY.freeBlurb}
+        {isPaid
+          ? ACCOUNT_UPGRADE_COPY.paidBlurb
+          : shouldShowUpgradeOffer()
+            ? ACCOUNT_UPGRADE_COPY.freeBlurb
+            : ACCOUNT_UPGRADE_COPY.freeBlurbNativeNoBilling}
       </Text>
     </View>
   );

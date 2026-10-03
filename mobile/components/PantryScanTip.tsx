@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { PANTRY_SCAN_TIP } from '../config/pantryStorage';
+import { useHydrated } from '../hooks/useHydrated';
 import { readJson, writeJson } from '../lib/storage';
 
 interface PantryScanTipProps {
@@ -8,13 +9,14 @@ interface PantryScanTipProps {
 }
 
 export function PantryScanTip({ className = '' }: PantryScanTipProps) {
-  const [visible, setVisible] = useState(
-    () => !readJson<boolean>(PANTRY_SCAN_TIP.dismissStorageKey, false),
-  );
+  const hydrated = useHydrated();
+  const [dismissedLocally, setDismissedLocally] = useState(false);
+  const dismissedInStorage = hydrated ? readJson<boolean>(PANTRY_SCAN_TIP.dismissStorageKey, false) : false;
+  const visible = hydrated && !dismissedLocally && !dismissedInStorage;
 
   function dismiss() {
     writeJson(PANTRY_SCAN_TIP.dismissStorageKey, true);
-    setVisible(false);
+    setDismissedLocally(true);
   }
 
   if (!visible) return null;

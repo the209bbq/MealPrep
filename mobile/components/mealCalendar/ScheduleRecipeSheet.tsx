@@ -122,11 +122,11 @@ function ScheduleRecipeSheetForm({
 export function ScheduleRecipeSheet({ visible, target, onClose }: ScheduleRecipeSheetProps) {
   const today = localDateString();
 
+  if (!visible || !target) return null;
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      {visible && target ? (
-        <ScheduleRecipeSheetForm key={`${target.title}-${today}`} target={target} onClose={onClose} today={today} />
-      ) : null}
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <ScheduleRecipeSheetForm key={`${target.title}-${today}`} target={target} onClose={onClose} today={today} />
     </Modal>
   );
 }

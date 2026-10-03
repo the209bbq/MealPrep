@@ -62,8 +62,10 @@ export function HandsOnTutorial({
     onBeginTask({ kind: 'pantry', action: 'manual' });
   }
 
+  if (!visible) return null;
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onSkipTutorial}>
+    <Modal visible animationType="slide" transparent onRequestClose={onSkipTutorial}>
       <View className="flex-1 justify-end bg-black/50" style={{ paddingBottom: insets.bottom }}>
         <View className="rounded-t-3xl border border-border bg-card px-5 pb-6 pt-5">
           <View className="mb-3 flex-row items-center justify-between gap-2">

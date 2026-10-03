@@ -40,8 +40,10 @@ export function AuthSheet({ visible, onClose }: AuthSheetProps) {
 
   const magicLink = isMagicLinkSignInEnabled() ? signInWithMagicLink : undefined;
 
+  if (!visible) return null;
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
       <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
         <Pressable
           className="max-h-[92%] rounded-t-3xl bg-paper px-4 pb-4 pt-3"

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { THEME } from '../../config/appConfig';
-import { PLANS_COPY } from '../../config/plans';
+import { photoScanPlanBlockedMessage } from '../../lib/plans/photoScanPlanBlockedMessage';
 import { useApp } from '../../context/AppContext';
 import { resolvePhotoScanAccess } from '../../lib/guest/resolvePhotoScanAccess';
 import { photoScanAccessUserMessage } from '../../lib/plans/photoScanAccess';
@@ -341,7 +341,7 @@ function SmartShopAddPriceSheetForm({
         setError(SMART_SHOP_COPY.addPriceSignIn);
       } else if (err instanceof PantryVisionPlanRequiredError) {
         setShowPlusGate(true);
-        setError(PLANS_COPY.photoScanUpgradeBody);
+        setError(photoScanPlanBlockedMessage().message);
       } else if (err instanceof PantryVisionRateLimitError) {
         setError(err.message);
       } else if (err instanceof PantryVisionScanError) {

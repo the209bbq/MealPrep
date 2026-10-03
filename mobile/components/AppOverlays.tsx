@@ -6,7 +6,7 @@ import { TutorialContinuePill } from './onboarding/TutorialContinuePill';
 import { WelcomeScreen } from './onboarding/WelcomeScreen';
 import { UndoToast } from './UndoToast';
 
-/** Global overlays: onboarding, undo toasts. */
+/** Global overlays: onboarding, undo toasts. Mount only after hydration (see RootOverlays). */
 export function AppOverlays() {
   const { undoToast, dismissUndoToast, onboarding, openAuthSheet, isGuest } = useApp();
 

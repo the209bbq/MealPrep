@@ -68,7 +68,7 @@ import {
   shouldDeferPantryPhotoScanForAuth,
 } from '../../lib/guest/pantryPhotoScanGate';
 import { resolvePhotoScanAccess } from '../../lib/guest/resolvePhotoScanAccess';
-import { PLANS_COPY } from '../../config/plans';
+import { photoScanPlanBlockedMessage } from '../../lib/plans/photoScanPlanBlockedMessage';
 import {
   photoScanAccessUserMessage,
   shouldDeferPhotoScanForProfile,
@@ -341,7 +341,7 @@ export default function PantryScreen() {
           : error instanceof PantryVisionAuthError
             ? 'Sign in required'
             : error instanceof PantryVisionPlanRequiredError
-              ? PLANS_COPY.photoScanUpgradeTitle
+              ? photoScanPlanBlockedMessage().title
               : error instanceof PantryVisionNotConfiguredError
                 ? 'Scan not set up'
                 : PHOTO_SCAN.scanFailedTitle;

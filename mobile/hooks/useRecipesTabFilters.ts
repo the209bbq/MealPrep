@@ -8,15 +8,21 @@ import {
   type RecipesTabFilterState,
 } from '../config/recipesTabFilters';
 import { readJson, writeJson } from '../lib/storage';
+import { useHydrated } from './useHydrated';
 
 export function useRecipesTabFilters() {
-  const [filters, setFilters] = useState<RecipesTabFilterState>(() =>
-    parseStoredRecipesTabFilterState(readJson<unknown>(RECIPES_TAB_FILTERS_STORAGE_KEY, null)),
-  );
+  const hydrated = useHydrated();
+  const [filters, setFilters] = useState<RecipesTabFilterState>(DEFAULT_RECIPES_TAB_FILTER_STATE);
 
   useEffect(() => {
+    if (!hydrated) return;
+    setFilters(parseStoredRecipesTabFilterState(readJson<unknown>(RECIPES_TAB_FILTERS_STORAGE_KEY, null)));
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     writeJson(RECIPES_TAB_FILTERS_STORAGE_KEY, filters);
-  }, [filters]);
+  }, [filters, hydrated]);
 
   const setFilter = useCallback(
     <K extends RecipesTabFilterDimension>(dimension: K, value: RecipesTabFilterState[K]) => {

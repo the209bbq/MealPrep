@@ -19,7 +19,10 @@ const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
 const port = Number(process.env.PORT ?? 8765);
 const origin = `http://127.0.0.1:${port}`;
 
-const ROUTES = ['/', '/pantry', '/recipes', '/grocery', '/profile', '/smart-shop'];
+const ROUTES = (process.env.HYDRATION_ROUTES ?? '/,/pantry,/recipes,/grocery,/profile,/smart-shop,/delete-account')
+  .split(',')
+  .map((r) => r.trim())
+  .filter(Boolean);
 /** /profile redirects to home (legacy email links). */
 
 function hydrationErrorsFromText(text: string): string[] {
