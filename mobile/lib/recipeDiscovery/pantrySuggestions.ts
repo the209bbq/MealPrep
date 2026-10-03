@@ -1,6 +1,7 @@
 import { PANTRY_DISCOVERY_PER_QUERY } from '../../config/recipeMatching';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_DISCOVERY } from '../../config/appConfig';
+import { RECIPE_SOURCES } from '../../config/recipeSources';
 import { RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE } from '../../config/recipeDiscoveryClient';
 import { isRecipeDiscoveryCircuitOpen } from './circuitBreaker';
 import type { PantryItem } from '../../types/mealprep';
@@ -154,6 +155,10 @@ export async function fetchPantryDiscoverySuggestions(
     onPartial?: (partial: PantryDiscoverySuggestion[]) => void;
   },
 ): Promise<PantryDiscoveryResult> {
+  if (!RECIPE_SOURCES.recipeApiEnabled || !RECIPE_DISCOVERY.enabled) {
+    return { suggestions: [], errorMessage: null, fromCache: false };
+  }
+
   const refreshSeed = options?.refreshSeed ?? 0;
   const cacheKey = pantry.length === 0 ? `browse:${refreshSeed}` : pantryCacheKey(pantry, refreshSeed);
   if (!options?.forceRefresh) {

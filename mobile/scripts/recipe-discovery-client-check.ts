@@ -4,6 +4,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { RECIPE_SOURCES } from '../config/recipeSources';
 import { buildBrowseDiscoverySearchPlans } from '../lib/recipeDiscovery/browseQueryPlans';
 import { buildRotatingPantrySearchPlans } from '../lib/recipeDiscovery/pantryQueryPlans';
 import {
@@ -16,6 +17,8 @@ import {
   isRecipeDiscoveryCircuitOpen,
   openRecipeDiscoveryCircuit,
 } from '../lib/recipeDiscovery/circuitBreaker';
+
+assert.equal(RECIPE_SOURCES.recipeApiEnabled, false, 'RecipeAPI paused in recipeSources config');
 
 const pantry: PantryItem[] = Array.from({ length: 6 }, (_, index) => ({
   id: String(index),

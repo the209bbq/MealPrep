@@ -8,6 +8,7 @@ import { APP_ROUTES } from './appRoutes';
 import { SMART_SHOP_STORES } from './smartShop';
 import appBrand from './appBrand.json';
 import { RECIPE_IMPORT } from './recipeImport';
+import { RECIPE_SOURCES } from './recipeSources';
 import { VIRAL_RECIPES } from './viralRecipes';
 
 export { MEAL_CALENDAR } from './mealCalendar';
@@ -63,7 +64,7 @@ export const SMART_SHOP = {
 
 /** RecipeAPI.io discovery (secret stays on Supabase Edge Function `recipeapi-proxy`). */
 export const RECIPE_DISCOVERY = {
-  enabled: true,
+  enabled: RECIPE_SOURCES.recipeApiEnabled,
   searchDebounceMs: 450,
   cacheTtlMs: 30 * 60 * 1000,
   defaultPerPage: 10,
