@@ -10,6 +10,7 @@ import {
   normalizeIngredientName,
   tokenizeIngredientName,
 } from '../lib/recipeMatch/ingredientNormalize';
+import { PANTRY_REVIEW_CONFIDENCE_THRESHOLD } from '../lib/pantryVision/detectionParse';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -49,7 +50,24 @@ assert(
 );
 assert(canonicalIngredientPhrase('Peach Halves') === 'peach half', 'peach halves -> peach half');
 assert(canonicalIngredientPhrase('Chili With Beans') === 'chili with beans', 'keep beans in chili with beans');
-assert(canonicalIngredientPhrase('Instant Oatmeal') === 'instant oatmeal', 'instant oatmeal stays whole phrase');
+assert(canonicalIngredientPhrase('Instant Oatmeal') === 'oat', 'instant oatmeal maps to oats family');
+assert(
+  canonicalIngredientPhrase('Kraft Macaroni and Cheese Dinner') === 'macaroni and cheese',
+  'mac and cheese dinner drops filler dinner',
+);
+assert(
+  canonicalIngredientPhrase('Pickled Jalapeños').includes('jalape'),
+  'pickled jalapenos keeps pickled qualifier',
+);
+assert(
+  ingredientMatchScore('tomatoes', 'condensed tomato soup') < 0.72,
+  'condensed tomato soup must not satisfy tomatoes',
+);
+assert(
+  ingredientMatchScore('tomato', 'condensed tomato soup') < 0.72,
+  'condensed tomato soup must not satisfy tomato',
+);
+assert(PANTRY_REVIEW_CONFIDENCE_THRESHOLD === 0.9, 'review chip threshold is 0.9');
 
 assert(
   !areSameIngredientForPantryDedupe('black olives', 'chopped olives'),

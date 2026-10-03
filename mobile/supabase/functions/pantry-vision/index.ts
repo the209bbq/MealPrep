@@ -11,6 +11,8 @@
 //   GEMINI_FALLBACK_MODELS = comma-separated backup model ids (optional)
 //   GEMINI_REQUEST_TIMEOUT_MS = per-call timeout (default 38000; dense photos may need 40000+)
 
+import { buildPantryRegionImageBase64List } from './pantryImageRegions.ts';
+
 // BEGIN GEMINI_ORCHESTRATION (keep in sync with geminiOrchestration.ts — npm run test:pantry-vision-gemini)
 /** @sync mobile/config/geminiConfig.ts */
 const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
@@ -295,7 +297,7 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_RETRY_BACKOFF_MS = 450;
 const GEMINI_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 503]);
 const geminiModelTimeoutMemory = new ModelTimeoutMemory();
-const PANTRY_VISION_CACHE_VERSION = 'v5';
+const PANTRY_VISION_CACHE_VERSION = 'v6';
 const PANTRY_VISION_SINGLE_PASS_MIN_ITEMS = 8;
 const PANTRY_VISION_SINGLE_PASS_MIN_AVG_CONFIDENCE = 0.72;
 const PANTRY_MAX_ITEMS = 120;
@@ -744,20 +746,34 @@ function geminiEnumeratePrompt(scanLocation: (typeof PANTRY_STORAGE)[number]): s
     'You inventory edible kitchen products from a photo for a home recipe app. Do NOT summarize or skip items.\n' +
     scanLocationPromptHint(scanLocation) +
     '\nRules:\n' +
+    '- List a product ONLY if its type is readable on the front label OR it is unmistakable fresh produce (no label needed). Never infer a product from box shape, color, or packaging style alone.\n' +
     '- Read the FRONT product label only. Ignore ingredient lists, nutrition panels, and side/back text.\n' +
     '- Skip non-food (pet food, cleaning supplies, napkins, appliances, empty jars, bags, tools).\n' +
-    '- Do not guess: omit anything you cannot read clearly from the front label. Do NOT list products that are not visible.\n' +
+    '- Do not guess: omit anything you cannot read clearly. Do NOT list products that are not visible. Do NOT invent pancake mix, stuffing mix, or similar unless that exact type is readable on the label.\n' +
     '- Do NOT use barcodes.\n' +
-    '- name: what the product actually IS for cooking (generic recipe ingredient, lowercase-friendly). Be specific when it matters: honey peanut butter not almond butter; pancake syrup not maple syrup; Kool-Aid = drink mix or powdered drink mix; Sara Lee loaf = bread not bread mix; cheddar crackers not just crackers when the label says Goldfish-style cheese crackers.\n' +
+    '- name: generic recipe ingredient (no brand in name). Use the specific product type on the label: "chicken corn chowder" not "soup"; "blue cheese stuffed olives" not "olives"; name the cereal type (e.g. "honey nut o-shaped cereal") not "sweetened cereal". Rice-A-Roni style boxes are rice/pasta mix, not stuffing mix. Fennel bulbs are fennel, not bok choy.\n' +
     '- brand: optional store or product brand when visible (separate field). Example: name "cheddar crackers", brand "Goldfish".\n' +
     '- Check lower shelves, back rows, and partially hidden items behind front-facing packages.\n' +
     '- Scan shelf by shelf top-to-bottom; on each shelf go left-to-right.\n' +
     '- One JSON object per distinct product. If three identical cans are visible, quantity 3 and unit "can".\n' +
-    '- Use realistic units (oz, lb, each, bottle, jar, can). Set confidence 0-1.\n' +
+    '- Use realistic units (oz, lb, each, bottle, jar, can). Set confidence 0-1 (lower when partially hidden or label text is small).\n' +
     'Examples (name only): {"name":"black olives","brand":"WinCo","quantity":1,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.9}\n' +
     '{"name":"pancake syrup","quantity":1,"unit":"bottle","category":"condiments","storage":"pantry","confidence":0.88}\n' +
     '{"name":"honey peanut butter","quantity":1,"unit":"jar","category":"dry_goods","storage":"pantry","confidence":0.87}\n' +
     '{"name":"cake flour","quantity":1,"unit":"box","category":"dry_goods","storage":"pantry","confidence":0.86}\n' +
+    'Return JSON only matching the schema.'
+  );
+}
+
+function geminiRegionEnumeratePrompt(
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+  regionLabel: string,
+): string {
+  return (
+    'You inventory edible kitchen products from a CROPPED pantry photo region for a home recipe app.\n' +
+    scanLocationPromptHint(scanLocation) +
+    `\nThis crop shows the ${regionLabel}. Inventory ONLY products visible in this crop (ignore products cut off at the edges unless the front label is readable).\n` +
+    'Same rules as a full-shelf scan: list only when the product type is readable on the label or produce is unmistakable; no guessing from packaging; generic names without brands; check partially hidden and back-row items in this region; front label only; no barcodes; realistic units; confidence 0-1.\n' +
     'Return JSON only matching the schema.'
   );
 }
@@ -770,7 +786,7 @@ function geminiVerifyPrompt(scanLocation: (typeof PANTRY_STORAGE)[number], passO
     '\nFirst pass already found:\n' +
     list +
     '\nLook at the image again. Return ONLY additional visible food products missing from that list.\n' +
-    'Same rules as before: name what the product actually is, generic recipe names (brands in brand field), check lower shelves and back rows, front label only, no non-food, no guesses, omit items not visible.\n' +
+    'Same rules as before: only readable product types or unmistakable produce; no shape/color guesses; generic names (brands in brand field); check lower shelves and back rows; front label only; no non-food; omit items not visible.\n' +
     'If nothing new is visible, return {"items":[]}.\n' +
     'Do NOT repeat first-pass items. Do NOT re-list the full inventory. JSON only.'
   );
@@ -1068,9 +1084,13 @@ async function callPantryGeminiOnModel(
   model: string,
   mimeType: string,
   imageBase64: string,
+  imageBytes: Uint8Array,
   scanLocation: (typeof PANTRY_STORAGE)[number],
   budget: RequestTimeBudget,
-): Promise<{ items: DetectedPantryItem[]; passes: 1 | 2 } | { error: GeminiAttemptError }> {
+): Promise<
+  | { items: DetectedPantryItem[]; passes: 1 | 2; regionPasses: number }
+  | { error: GeminiAttemptError }
+> {
   let httpRetries = 0;
 
   while (true) {
@@ -1078,27 +1098,50 @@ async function callPantryGeminiOnModel(
       return { error: { kind: 'timeout', retryable: false } };
     }
 
-    const result = await callPantryGeminiTwoPass(
-      apiKey,
-      model,
-      mimeType,
-      imageBase64,
-      scanLocation,
-      budget,
+    const regionImages = budget.isExhausted()
+      ? []
+      : await buildPantryRegionImageBase64List(imageBytes, mimeType);
+
+    const regionTasks = regionImages.map(({ spec, base64 }) =>
+      callPantryGeminiPass(
+        apiKey,
+        model,
+        mimeType,
+        base64,
+        geminiRegionEnumeratePrompt(scanLocation, spec.label),
+        GEMINI_MAX_OUTPUT_TOKENS,
+        budget,
+      ),
     );
-    if ('items' in result) return result;
 
-    if (result.error.kind === 'timeout') {
-      geminiModelTimeoutMemory.record(model, Date.now(), isLargePantryImageBase64(imageBase64));
-      return result;
+    const [fullResult, ...regionResults] = await Promise.all([
+      callPantryGeminiTwoPass(apiKey, model, mimeType, imageBase64, scanLocation, budget),
+      ...regionTasks,
+    ]);
+
+    if ('error' in fullResult) {
+      if (fullResult.error.kind === 'timeout') {
+        geminiModelTimeoutMemory.record(model, Date.now(), isLargePantryImageBase64(imageBase64));
+        return fullResult;
+      }
+      if (!shouldRetrySameModelAfterError(fullResult.error, httpRetries)) {
+        return fullResult;
+      }
+      httpRetries += 1;
+      await sleep(GEMINI_RETRY_BACKOFF_MS * httpRetries);
+      continue;
     }
 
-    if (!shouldRetrySameModelAfterError(result.error, httpRetries)) {
-      return result;
+    let items = dedupeItems(fullResult.items);
+    let regionPasses = 0;
+    for (const regionResult of regionResults) {
+      if ('error' in regionResult) continue;
+      if (regionResult.items.length === 0) continue;
+      items = mergeItemPasses(items, regionResult.items);
+      regionPasses += 1;
     }
 
-    httpRetries += 1;
-    await sleep(GEMINI_RETRY_BACKOFF_MS * httpRetries);
+    return { items, passes: fullResult.passes, regionPasses };
   }
 }
 
@@ -1140,11 +1183,12 @@ async function callPantryGeminiWithFallbacks(
   apiKey: string,
   mimeType: string,
   imageBase64: string,
+  imageBytes: Uint8Array,
   scanLocation: (typeof PANTRY_STORAGE)[number],
 ): Promise<{
   items: DetectedPantryItem[];
   model: string;
-  debug: { modelAttempts: GeminiModelAttemptDebug[]; geminiPasses: number };
+  debug: { modelAttempts: GeminiModelAttemptDebug[]; geminiPasses: number; regionPasses: number };
 }> {
   const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
   const imageIsLarge = isLargePantryImageBase64(imageBase64);
@@ -1175,18 +1219,19 @@ async function callPantryGeminiWithFallbacks(
       model,
       mimeType,
       imageBase64,
+      imageBytes,
       scanLocation,
       budget,
     );
     if ('items' in result) {
       modelAttempts.push({ model, ok: true });
       console.log(
-        `pantry-vision: gemini ok model=${model} items=${result.items.length} passes=${result.passes}`,
+        `pantry-vision: gemini ok model=${model} items=${result.items.length} passes=${result.passes} regions=${result.regionPasses}`,
       );
       return {
         items: result.items,
         model,
-        debug: { modelAttempts, geminiPasses: result.passes },
+        debug: { modelAttempts, geminiPasses: result.passes, regionPasses: result.regionPasses },
       };
     }
     const failureMessage = formatAttemptError(model, result.error, perCallGeminiTimeoutMs());
@@ -1336,6 +1381,7 @@ Deno.serve(async (req) => {
       apiKey,
       imageResult.mimeType,
       imageBase64,
+      imageResult.bytes,
       imageResult.scanLocation,
     );
 

@@ -32,7 +32,10 @@ const PANTRY_CATEGORIES = new Set<string>([
 ]);
 
 const DEFAULT_MAX_ITEMS = 120;
-const LOW_CONFIDENCE_THRESHOLD = 0.55;
+/** Model confidence below this shows a dismissible “Check this” chip on scan review. */
+export const PANTRY_REVIEW_CONFIDENCE_THRESHOLD = 0.9;
+
+const LOW_CONFIDENCE_THRESHOLD = PANTRY_REVIEW_CONFIDENCE_THRESHOLD;
 
 function titleCaseToken(token: string): string {
   if (!token) return token;

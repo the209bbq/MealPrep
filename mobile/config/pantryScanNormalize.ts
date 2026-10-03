@@ -63,11 +63,23 @@ export const PANTRY_SCAN_STRIP_BRANDS = [
  * Phrase rewrites after brand strip (substring match, longest keys first).
  * Values are recipe-facing ingredient names (still run through normalize/tokenize).
  */
+/** Marketing/filler words stripped after brand removal (never remove cut, form, or variety). */
+export const PANTRY_SCAN_STRIP_FILLER_WORDS = [
+  'dinner',
+  'original',
+  'gourmet',
+  'classic',
+  'instant',
+] as const;
+
 export const PANTRY_SCAN_PHRASE_SYNONYMS: Readonly<Record<string, string>> = {
   '100 pure pumpkin': 'pumpkin puree',
   'pure pumpkin': 'pumpkin puree',
   '100 pumpkin': 'pumpkin puree',
-  'instant oatmeal': 'instant oatmeal',
+  'instant oatmeal': 'oats',
+  'pickled jalapenos': 'pickled jalapeno',
+  'pickled jalapeños': 'pickled jalapeno',
+  'macaroni and cheese dinner': 'macaroni and cheese',
   oatmeal: 'oats',
   'old fashioned oats': 'oats',
   'pancake syrup': 'pancake syrup',
