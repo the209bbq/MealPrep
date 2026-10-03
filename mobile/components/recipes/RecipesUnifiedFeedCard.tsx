@@ -44,7 +44,7 @@ function RecipesUnifiedFeedCardInner({ row, onOpen }: RecipesUnifiedFeedCardProp
           {name}
         </Text>
         <Text
-          className={`mt-0.5 text-xs ${readyToCook ? 'text-success-accent' : 'text-muted'}`}
+          className={`mt-0.5 text-xs ${readyToCook ? 'text-success-accent' : 'text-danger'}`}
           numberOfLines={1}
         >
           {shopLine}
