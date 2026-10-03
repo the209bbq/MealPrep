@@ -966,6 +966,26 @@ function shouldUseGeminiFileApi(byteLength) {
   return byteLength > INLINE_VIDEO_MAX_BYTES;
 }
 
+// supabase/functions/recipe-import/autoYoutubeFallback.ts
+async function tryAutoImportFromYoutubeSearch(apiKey, importFromUrl2, captionForSearch, creatorHint) {
+  const youtubeKey = Deno.env.get("YOUTUBE_API_KEY") ?? "";
+  if (!youtubeKey.trim() || !captionForSearch.trim()) return null;
+  const suggestion = await searchYoutubeRecipeVideo(
+    youtubeKey,
+    creatorHint,
+    captionForSearch
+  );
+  if (!suggestion) return null;
+  const result = await importFromUrl2(apiKey, suggestion.watchUrl, "youtube");
+  if (!result || "notRecipe" in result && result.notRecipe) return null;
+  return {
+    recipe: result.recipe,
+    cached: result.cached,
+    channelTitle: suggestion.channelTitle,
+    watchUrl: suggestion.watchUrl
+  };
+}
+
 // supabase/functions/recipe-import/index.ts
 var corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1251,6 +1271,49 @@ async function maybeAttachAuthorPublicLink(recipe) {
   if (!suggestion) return recipe;
   return { ...recipe, author_public_recipe_url: suggestion.watchUrl };
 }
+var MIN_TEXT_IMPORT_CHARS = 24;
+async function importFromPlainText(apiKey, text) {
+  const cacheKey = urlHashKey(`text|${text.slice(0, 4e3)}`);
+  const cached = await readImportCache(cacheKey);
+  if (cached) return { recipe: { ...cached, source_url: "text-import" }, cached: true };
+  const fromGemini = await extractRecipeFromPageText(apiKey, text, "text-import", "web");
+  if (!fromGemini) return null;
+  if (!recipeLooksValid(fromGemini)) {
+    return {
+      notRecipe: true,
+      message: "We could not find a recipe in that text.",
+      captionForSearch: text.slice(0, 400),
+      creatorHint: null
+    };
+  }
+  await writeImportCache(cacheKey, "text-import", fromGemini);
+  return { recipe: fromGemini, cached: false };
+}
+async function respondNotRecipeWithAutoYoutube(apiKey, sourceType, hasCaption, notRecipe) {
+  const auto = await tryAutoImportFromYoutubeSearch(
+    apiKey,
+    importFromUrl,
+    notRecipe.captionForSearch ?? "",
+    notRecipe.creatorHint ?? null
+  );
+  if (auto) {
+    return jsonResponse({
+      recipe: auto.recipe,
+      cached: auto.cached,
+      autoResolvedViaYoutube: {
+        channelTitle: auto.channelTitle,
+        watchUrl: auto.watchUrl
+      }
+    });
+  }
+  const fallbacks = await buildFallbackPayload(
+    sourceType,
+    hasCaption,
+    notRecipe.captionForSearch ?? "",
+    notRecipe.creatorHint ?? null
+  );
+  return jsonResponse({ error: notRecipe.message, code: "NOT_RECIPE", fallbacks }, 422);
+}
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -1307,6 +1370,25 @@ Deno.serve(async (req) => {
       return jsonResponse({ recipe: result.recipe, cached: result.cached, confirmedYoutube: true });
     } catch (error) {
       console.error("recipe-import confirm_youtube error", error);
+      return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    }
+  }
+  if (action === "text") {
+    const text = (body.text ?? body.captionText ?? "").trim();
+    if (text.length < MIN_TEXT_IMPORT_CHARS) {
+      return jsonResponse({ error: "Paste a longer recipe or caption to import.", code: "BAD_REQUEST" }, 400);
+    }
+    try {
+      const result = await importFromPlainText(apiKey, text);
+      if (!result) {
+        return jsonResponse({ error: "Could not import that text right now.", code: "UPSTREAM_ERROR" }, 502);
+      }
+      if ("notRecipe" in result && result.notRecipe) {
+        return await respondNotRecipeWithAutoYoutube(apiKey, "text", true, result);
+      }
+      return jsonResponse({ recipe: result.recipe, cached: result.cached });
+    } catch (error) {
+      console.error("recipe-import text error", error);
       return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
     }
   }
@@ -1413,7 +1495,23 @@ Deno.serve(async (req) => {
   }
   const normalized = normalizeImportUrl(body.url ?? "");
   if (!normalized) {
-    return jsonResponse({ error: "Invalid or missing URL", code: "BAD_REQUEST" }, 400);
+    const fallbackText = (body.text ?? body.captionText ?? "").trim();
+    if (fallbackText.length >= MIN_TEXT_IMPORT_CHARS) {
+      try {
+        const result = await importFromPlainText(apiKey, fallbackText);
+        if (!result) {
+          return jsonResponse({ error: "Could not import that text right now.", code: "UPSTREAM_ERROR" }, 502);
+        }
+        if ("notRecipe" in result && result.notRecipe) {
+          return await respondNotRecipeWithAutoYoutube(apiKey, "text", true, result);
+        }
+        return jsonResponse({ recipe: result.recipe, cached: result.cached });
+      } catch (error) {
+        console.error("recipe-import text-via-link error", error);
+        return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+      }
+    }
+    return jsonResponse({ error: "Paste a link or recipe text to import.", code: "BAD_REQUEST" }, 400);
   }
   const sourceType = classifyRecipeImportUrl(normalized);
   if (!sourceType) {
@@ -1429,13 +1527,12 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Could not import that TikTok link.", code: "UPSTREAM_ERROR" }, 502);
       }
       if ("notRecipe" in result && result.notRecipe) {
-        const fallbacks = await buildFallbackPayload(
+        return await respondNotRecipeWithAutoYoutube(
+          apiKey,
           "tiktok",
           Boolean(caption),
-          result.captionForSearch ?? caption,
-          result.creatorHint ?? null
+          result
         );
-        return jsonResponse({ error: result.message, code: "NOT_RECIPE", fallbacks }, 422);
       }
       return jsonResponse({ recipe: result.recipe, cached: result.cached });
     } catch (error) {
@@ -1467,13 +1564,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Could not import that caption.", code: "UPSTREAM_ERROR" }, 502);
       }
       if ("notRecipe" in result && result.notRecipe) {
-        const fallbacks = await buildFallbackPayload(
-          sourceType,
-          true,
-          result.captionForSearch ?? caption,
-          result.creatorHint ?? null
-        );
-        return jsonResponse({ error: result.message, code: "NOT_RECIPE", fallbacks }, 422);
+        return await respondNotRecipeWithAutoYoutube(apiKey, sourceType, true, result);
       }
       return jsonResponse({ recipe: result.recipe, cached: result.cached });
     } catch (error) {
@@ -1504,13 +1595,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Could not import that link right now.", code: "UPSTREAM_ERROR" }, 502);
     }
     if ("notRecipe" in result && result.notRecipe) {
-      const fallbacks = await buildFallbackPayload(
-        sourceType,
-        false,
-        result.captionForSearch ?? "",
-        result.creatorHint ?? null
-      );
-      return jsonResponse({ error: result.message, code: "NOT_RECIPE", fallbacks }, 422);
+      return await respondNotRecipeWithAutoYoutube(apiKey, sourceType, false, result);
     }
     return jsonResponse({ recipe: result.recipe, cached: result.cached });
   } catch (error) {

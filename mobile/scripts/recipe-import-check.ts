@@ -18,6 +18,7 @@ import {
 import { orderImportFallbackSteps } from '../supabase/functions/recipe-import/fallbackChain.ts';
 import { parseTikTokOembedPayload } from '../supabase/functions/recipe-import/tiktokOembed.ts';
 import { buildYoutubeSearchQuery, guessDishQueryFromCaption } from '../supabase/functions/recipe-import/dishGuess.ts';
+import { parseImportInput } from '../lib/recipeImport/parseImportInput.ts';
 import {
   isAllowedHttpPort,
   isBlockedHostname,
@@ -172,5 +173,17 @@ const pwaScript = fs.readFileSync(
 );
 assert.ok(pwaScript.includes('share_target'));
 assert.ok(pwaScript.includes('import=1'));
+
+const parsedLink = parseImportInput('https://www.tiktok.com/@chef/video/1');
+assert.equal(parsedLink?.kind, 'url');
+const parsedText = parseImportInput('Ingredients: 2 cups flour. Mix and bake at 350 for 30 minutes. Serve warm.');
+assert.equal(parsedText?.kind, 'text');
+const parsedCombo = parseImportInput(
+  'https://www.instagram.com/reel/abc/ Best tacos ever with lime and cilantro and onion diced fine',
+);
+assert.equal(parsedCombo?.kind, 'url');
+if (parsedCombo?.kind === 'url') {
+  assert.ok(parsedCombo.caption && parsedCombo.caption.includes('tacos'));
+}
 
 console.log('OK: recipe-import checks passed');

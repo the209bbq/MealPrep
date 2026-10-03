@@ -1,6 +1,7 @@
 import { getRecipeImportUrl, isDemoMode } from '../../config/appConfig';
 import { RECIPE_IMPORT } from '../../config/recipeImport';
 import { withTimeout } from '../withTimeout';
+import { parseImportInput } from './parseImportInput';
 import type {
   RecipeImportErrorEnvelope,
   RecipeImportExtractedDto,
@@ -146,6 +147,36 @@ async function callRecipeImport(
     cached: json.cached,
     confirmedYoutube: json.confirmedYoutube,
   };
+}
+
+export async function importRecipeFromText(
+  text: string,
+  accessToken: string | null,
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'text',
+    text: text.trim(),
+  });
+  return result.recipe;
+}
+
+export async function importRecipeSmartInput(
+  raw: string,
+  accessToken: string | null,
+): Promise<RecipeImportExtractedDto> {
+  const parsed = parseImportInput(raw);
+  if (!parsed) {
+    throw new RecipeImportUpstreamError(RECIPE_IMPORT.invalidUrlMessage);
+  }
+  if (parsed.kind === 'text') {
+    return importRecipeFromText(parsed.text, accessToken);
+  }
+  const result = await callRecipeImport(accessToken, {
+    action: 'link',
+    url: parsed.url,
+    captionText: parsed.caption,
+  });
+  return result.recipe;
 }
 
 export async function importRecipeFromLink(

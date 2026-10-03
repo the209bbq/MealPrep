@@ -12,7 +12,8 @@ export type RecipeImportRequestAction =
   | 'confirm_youtube'
   | 'photo'
   | 'video'
-  | 'screenshot';
+  | 'screenshot'
+  | 'text';
 
 export interface RecipeImportIngredientDto {
   name: string;
@@ -59,6 +60,7 @@ export interface RecipeImportSuccessResponse {
   recipe: RecipeImportExtractedDto;
   cached?: boolean;
   confirmedYoutube?: boolean;
+  autoResolvedViaYoutube?: { channelTitle: string; watchUrl: string };
 }
 
 export interface RecipeImportErrorEnvelope {
