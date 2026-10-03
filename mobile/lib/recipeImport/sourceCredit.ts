@@ -1,5 +1,6 @@
 import type { Recipe } from '../../types/mealprep';
 import type { RecipeImportExtractedDto } from './types';
+import { sanitizeHttpUrl } from './safeHttpUrl';
 
 export interface RecipeSourceCredit {
   creatorName?: string;
@@ -7,24 +8,28 @@ export interface RecipeSourceCredit {
   originalUrl?: string;
 }
 
+function safeLink(url: string | null | undefined): string | undefined {
+  return sanitizeHttpUrl(url) ?? undefined;
+}
+
 export function sourceCreditFromImportDto(draft: RecipeImportExtractedDto): RecipeSourceCredit {
-  const originalUrl = draft.source_url?.trim() || undefined;
+  const originalUrl = safeLink(draft.source_url);
   if (draft.source_type === 'youtube') {
     const creatorName = draft.youtube_channel_name?.trim() || draft.social_author_name?.trim();
-    const creatorUrl = draft.youtube_channel_url?.trim() || draft.social_author_url?.trim();
+    const creatorUrl = safeLink(draft.youtube_channel_url) ?? safeLink(draft.social_author_url);
     return { creatorName, creatorUrl, originalUrl };
   }
   const creatorName = draft.social_author_name?.trim();
-  const creatorUrl = draft.social_author_url?.trim();
+  const creatorUrl = safeLink(draft.social_author_url);
   return { creatorName, creatorUrl, originalUrl };
 }
 
 export function sourceCreditFromRecipe(recipe: Recipe): RecipeSourceCredit {
-  const originalUrl = recipe.sourceUrl?.trim() || undefined;
+  const originalUrl = safeLink(recipe.sourceUrl);
   if (recipe.sourceType === 'youtube') {
     return {
       creatorName: recipe.sourceChannelName?.trim(),
-      creatorUrl: recipe.sourceChannelUrl?.trim(),
+      creatorUrl: safeLink(recipe.sourceChannelUrl),
       originalUrl,
     };
   }
@@ -35,13 +40,13 @@ export function sourceCreditFromRecipe(recipe: Recipe): RecipeSourceCredit {
   ) {
     return {
       creatorName: recipe.sourceTitle?.trim(),
-      creatorUrl: recipe.sourceAuthorUrl?.trim(),
+      creatorUrl: safeLink(recipe.sourceAuthorUrl),
       originalUrl,
     };
   }
   return {
     creatorName: recipe.sourceTitle?.trim(),
-    creatorUrl: recipe.sourceAuthorUrl?.trim(),
+    creatorUrl: safeLink(recipe.sourceAuthorUrl),
     originalUrl,
   };
 }

@@ -1,5 +1,6 @@
 import { Linking, Pressable, Text, View } from 'react-native';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
+import { sanitizeHttpUrl } from '../../lib/recipeImport/safeHttpUrl';
 
 export interface RecipeSourceCreditLineProps {
   creatorName?: string | null;
@@ -15,19 +16,21 @@ export function RecipeSourceCreditLine({
   className = 'mt-2',
 }: RecipeSourceCreditLineProps) {
   const name = creatorName?.trim();
-  const original = originalUrl?.trim();
-  if (!name && !original) return null;
+  const safeCreator = sanitizeHttpUrl(creatorUrl);
+  const safeOriginal = sanitizeHttpUrl(originalUrl);
+  if (!name && !safeOriginal) return null;
 
   const open = (url: string) => {
-    void Linking.openURL(url);
+    const safe = sanitizeHttpUrl(url);
+    if (safe) void Linking.openURL(safe);
   };
 
   return (
     <View className={`flex-row flex-wrap items-center ${className}`}>
       {name ? (
-        creatorUrl?.trim() ? (
+        safeCreator ? (
           <Pressable
-            onPress={() => open(creatorUrl.trim())}
+            onPress={() => open(safeCreator)}
             accessibilityRole="link"
             accessibilityLabel={RECIPE_IMPORT_COPY.creatorLinkAccessibility(name)}
             hitSlop={4}
@@ -40,14 +43,14 @@ export function RecipeSourceCreditLine({
           </Text>
         )
       ) : null}
-      {name && original ? (
+      {name && safeOriginal ? (
         <Text className="text-xs text-muted" accessibilityElementsHidden importantForAccessibility="no">
           {RECIPE_IMPORT_COPY.creditSeparator}
         </Text>
       ) : null}
-      {original ? (
+      {safeOriginal ? (
         <Pressable
-          onPress={() => open(original)}
+          onPress={() => open(safeOriginal)}
           accessibilityRole="link"
           accessibilityLabel={RECIPE_IMPORT_COPY.viewOriginalAccessibility}
           hitSlop={4}

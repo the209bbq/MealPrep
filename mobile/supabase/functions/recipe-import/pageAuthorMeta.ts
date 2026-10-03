@@ -1,5 +1,7 @@
 /** Best-effort author / site attribution from HTML meta tags (never invented). */
 
+import { resolveAndSanitizeHttpUrl, sanitizeHttpUrl } from './safeHttpUrl.ts';
+
 export interface PageAuthorMeta {
   authorName: string;
   authorUrl: string | null;
@@ -16,7 +18,7 @@ function readMetaContent(html: string, attr: 'property' | 'name', key: string): 
   return content?.trim() ? content.trim() : null;
 }
 
-function readJsonLdAuthor(html: string): PageAuthorMeta | null {
+function readJsonLdAuthor(html: string, pageUrl: string): PageAuthorMeta | null {
   const scripts = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
   if (!scripts) return null;
   for (const block of scripts) {
@@ -24,7 +26,7 @@ function readJsonLdAuthor(html: string): PageAuthorMeta | null {
     if (!inner) continue;
     try {
       const parsed = JSON.parse(inner) as unknown;
-      const found = walkJsonLdForAuthor(parsed);
+      const found = walkJsonLdForAuthor(parsed, pageUrl);
       if (found) return found;
     } catch {
       continue;
@@ -33,7 +35,10 @@ function readJsonLdAuthor(html: string): PageAuthorMeta | null {
   return null;
 }
 
-function authorFromJsonLdNode(node: Record<string, unknown>): PageAuthorMeta | null {
+function authorFromJsonLdNode(
+  node: Record<string, unknown>,
+  pageUrl: string,
+): PageAuthorMeta | null {
   const author = node.author ?? node.creator;
   if (typeof author === 'string' && author.trim()) {
     return { authorName: author.trim(), authorUrl: null };
@@ -44,46 +49,48 @@ function authorFromJsonLdNode(node: Record<string, unknown>): PageAuthorMeta | n
       (typeof row.name === 'string' && row.name.trim()) ||
       (typeof row['@name'] === 'string' && (row['@name'] as string).trim()) ||
       null;
-    const url =
+    const rawUrl =
       (typeof row.url === 'string' && row.url.trim()) ||
       (typeof row['@id'] === 'string' && (row['@id'] as string).trim()) ||
       null;
-    if (name) return { authorName: name, authorUrl: url };
+    const authorUrl = rawUrl ? resolveAndSanitizeHttpUrl(rawUrl, pageUrl) : null;
+    if (name) return { authorName: name, authorUrl };
   }
   return null;
 }
 
-function walkJsonLdForAuthor(value: unknown): PageAuthorMeta | null {
+function walkJsonLdForAuthor(value: unknown, pageUrl: string): PageAuthorMeta | null {
   if (!value || typeof value !== 'object') return null;
   if (Array.isArray(value)) {
     for (const entry of value) {
-      const found = walkJsonLdForAuthor(entry);
+      const found = walkJsonLdForAuthor(entry, pageUrl);
       if (found) return found;
     }
     return null;
   }
   const obj = value as Record<string, unknown>;
-  const direct = authorFromJsonLdNode(obj);
+  const direct = authorFromJsonLdNode(obj, pageUrl);
   if (direct) return direct;
   if (Array.isArray(obj['@graph'])) {
     for (const entry of obj['@graph']) {
-      const found = walkJsonLdForAuthor(entry);
+      const found = walkJsonLdForAuthor(entry, pageUrl);
       if (found) return found;
     }
   }
   return null;
 }
 
-export function extractPageAuthorFromHtml(html: string): PageAuthorMeta | null {
-  const fromLd = readJsonLdAuthor(html);
+export function extractPageAuthorFromHtml(html: string, pageUrl: string): PageAuthorMeta | null {
+  const fromLd = readJsonLdAuthor(html, pageUrl);
   if (fromLd) return fromLd;
 
   const articleAuthor = readMetaContent(html, 'property', 'article:author');
   if (articleAuthor) {
-    const name = articleAuthor.startsWith('http')
+    const safeAuthorUrl = sanitizeHttpUrl(articleAuthor);
+    const name = safeAuthorUrl
       ? readMetaContent(html, 'name', 'author') ?? articleAuthor
       : articleAuthor;
-    const url = articleAuthor.startsWith('http') ? articleAuthor : null;
+    const url = safeAuthorUrl;
     if (name.trim()) return { authorName: name.trim(), authorUrl: url };
   }
 

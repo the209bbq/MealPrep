@@ -19,6 +19,11 @@ import { orderImportFallbackSteps } from '../supabase/functions/recipe-import/fa
 import { parseTikTokOembedPayload } from '../supabase/functions/recipe-import/tiktokOembed.ts';
 import { parseYouTubeOembedPayload } from '../supabase/functions/recipe-import/youtubeCreatorMeta.ts';
 import { extractPageAuthorFromHtml } from '../supabase/functions/recipe-import/pageAuthorMeta.ts';
+import {
+  isAllowedHttpUrlString,
+  resolveAndSanitizeHttpUrl,
+  sanitizeHttpUrl,
+} from '../lib/recipeImport/safeHttpUrl.ts';
 import { recipeMissingCreatorFields } from '../supabase/functions/recipe-import/creatorAttribution.ts';
 import { sourceCreditFromImportDto } from '../lib/recipeImport/sourceCredit.ts';
 import { buildYoutubeSearchQuery, guessDishQueryFromCaption } from '../supabase/functions/recipe-import/dishGuess.ts';
@@ -221,7 +226,31 @@ assert.equal(ytOembed?.channelUrl, 'https://www.youtube.com/@chef');
 
 const authorHtml =
   '<html><head><meta property="og:site_name" content="Serious Eats" /></head><body></body></html>';
-assert.equal(extractPageAuthorFromHtml(authorHtml)?.authorName, 'Serious Eats');
+assert.equal(
+  extractPageAuthorFromHtml(authorHtml, 'https://www.example.com/recipe')?.authorName,
+  'Serious Eats',
+);
+
+assert.equal(sanitizeHttpUrl('https://www.youtube.com/@chef'), 'https://www.youtube.com/@chef');
+assert.equal(sanitizeHttpUrl('javascript:alert(1)'), null);
+assert.equal(sanitizeHttpUrl('data:text/html,<script>'), null);
+assert.equal(isAllowedHttpUrlString('http://example.com/path'), true);
+assert.equal(
+  resolveAndSanitizeHttpUrl('/author/chef', 'https://blog.example.com/recipe/1'),
+  'https://blog.example.com/author/chef',
+);
+assert.equal(
+  resolveAndSanitizeHttpUrl('javascript:void(0)', 'https://blog.example.com/'),
+  null,
+);
+
+const jsonLdAuthorHtml = `<html><head><script type="application/ld+json">{"author":{"name":"Pat","url":"/profile/pat"}}</script></head></html>`;
+const jsonLdAuthor = extractPageAuthorFromHtml(
+  jsonLdAuthorHtml,
+  'https://recipes.example.com/dish',
+);
+assert.equal(jsonLdAuthor?.authorName, 'Pat');
+assert.equal(jsonLdAuthor?.authorUrl, 'https://recipes.example.com/profile/pat');
 
 assert.equal(
   recipeMissingCreatorFields(

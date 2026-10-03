@@ -1,4 +1,5 @@
 import { canonicalYouTubeWatchUrl } from './urlClassification.ts';
+import { sanitizeHttpUrl } from './safeHttpUrl.ts';
 
 export interface YouTubeCreatorMeta {
   channelName: string;
@@ -30,8 +31,9 @@ export function parseYouTubeOembedPayload(raw: unknown): YouTubeCreatorMeta | nu
     typeof obj.author_name === 'string' && obj.author_name.trim() ? obj.author_name.trim() : null;
   const channelUrl =
     typeof obj.author_url === 'string' && obj.author_url.trim() ? obj.author_url.trim() : null;
-  if (!channelName || !channelUrl) return null;
-  return { channelName, channelUrl };
+  const safeUrl = channelUrl ? sanitizeHttpUrl(channelUrl) : null;
+  if (!channelName || !safeUrl) return null;
+  return { channelName, channelUrl: safeUrl };
 }
 
 export async function fetchYouTubeCreatorFromOembed(pageUrl: string): Promise<YouTubeCreatorMeta | null> {

@@ -1032,6 +1032,41 @@ function validatePhotoStoragePaths(userId, paths) {
   return paths.every((path) => validateUserImportStoragePath(userId, path));
 }
 
+// supabase/functions/recipe-import/safeHttpUrl.ts
+var BLOCKED_SCHEME_PREFIXES = ["javascript:", "data:", "vbscript:", "file:"];
+function isAllowedHttpUrlString(url) {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  for (const blocked of BLOCKED_SCHEME_PREFIXES) {
+    if (lower.startsWith(blocked)) return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.username || parsed.password) return false;
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+function sanitizeHttpUrl(url) {
+  if (url == null) return null;
+  const trimmed = url.trim();
+  if (!trimmed || !isAllowedHttpUrlString(trimmed)) return null;
+  return trimmed;
+}
+function resolveAndSanitizeHttpUrl(url, pageUrl) {
+  if (url == null) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const absolute = new URL(trimmed, pageUrl).href;
+    return sanitizeHttpUrl(absolute);
+  } catch {
+    return null;
+  }
+}
+
 // supabase/functions/recipe-import/pageAuthorMeta.ts
 function readMetaContent(html, attr, key) {
   const pattern = new RegExp(
@@ -1043,7 +1078,7 @@ function readMetaContent(html, attr, key) {
   const content = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
   return content?.trim() ? content.trim() : null;
 }
-function readJsonLdAuthor(html) {
+function readJsonLdAuthor(html, pageUrl) {
   const scripts = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
   if (!scripts) return null;
   for (const block of scripts) {
@@ -1051,7 +1086,7 @@ function readJsonLdAuthor(html) {
     if (!inner) continue;
     try {
       const parsed = JSON.parse(inner);
-      const found = walkJsonLdForAuthor(parsed);
+      const found = walkJsonLdForAuthor(parsed, pageUrl);
       if (found) return found;
     } catch {
       continue;
@@ -1059,7 +1094,7 @@ function readJsonLdAuthor(html) {
   }
   return null;
 }
-function authorFromJsonLdNode(node) {
+function authorFromJsonLdNode(node, pageUrl) {
   const author = node.author ?? node.creator;
   if (typeof author === "string" && author.trim()) {
     return { authorName: author.trim(), authorUrl: null };
@@ -1067,38 +1102,40 @@ function authorFromJsonLdNode(node) {
   if (author && typeof author === "object") {
     const row = author;
     const name = typeof row.name === "string" && row.name.trim() || typeof row["@name"] === "string" && row["@name"].trim() || null;
-    const url = typeof row.url === "string" && row.url.trim() || typeof row["@id"] === "string" && row["@id"].trim() || null;
-    if (name) return { authorName: name, authorUrl: url };
+    const rawUrl = typeof row.url === "string" && row.url.trim() || typeof row["@id"] === "string" && row["@id"].trim() || null;
+    const authorUrl = rawUrl ? resolveAndSanitizeHttpUrl(rawUrl, pageUrl) : null;
+    if (name) return { authorName: name, authorUrl };
   }
   return null;
 }
-function walkJsonLdForAuthor(value) {
+function walkJsonLdForAuthor(value, pageUrl) {
   if (!value || typeof value !== "object") return null;
   if (Array.isArray(value)) {
     for (const entry of value) {
-      const found = walkJsonLdForAuthor(entry);
+      const found = walkJsonLdForAuthor(entry, pageUrl);
       if (found) return found;
     }
     return null;
   }
   const obj = value;
-  const direct = authorFromJsonLdNode(obj);
+  const direct = authorFromJsonLdNode(obj, pageUrl);
   if (direct) return direct;
   if (Array.isArray(obj["@graph"])) {
     for (const entry of obj["@graph"]) {
-      const found = walkJsonLdForAuthor(entry);
+      const found = walkJsonLdForAuthor(entry, pageUrl);
       if (found) return found;
     }
   }
   return null;
 }
-function extractPageAuthorFromHtml(html) {
-  const fromLd = readJsonLdAuthor(html);
+function extractPageAuthorFromHtml(html, pageUrl) {
+  const fromLd = readJsonLdAuthor(html, pageUrl);
   if (fromLd) return fromLd;
   const articleAuthor = readMetaContent(html, "property", "article:author");
   if (articleAuthor) {
-    const name = articleAuthor.startsWith("http") ? readMetaContent(html, "name", "author") ?? articleAuthor : articleAuthor;
-    const url = articleAuthor.startsWith("http") ? articleAuthor : null;
+    const safeAuthorUrl = sanitizeHttpUrl(articleAuthor);
+    const name = safeAuthorUrl ? readMetaContent(html, "name", "author") ?? articleAuthor : articleAuthor;
+    const url = safeAuthorUrl;
     if (name.trim()) return { authorName: name.trim(), authorUrl: url };
   }
   const metaAuthor = readMetaContent(html, "name", "author");
@@ -1135,8 +1172,9 @@ function parseYouTubeOembedPayload(raw) {
   const obj = raw;
   const channelName = typeof obj.author_name === "string" && obj.author_name.trim() ? obj.author_name.trim() : null;
   const channelUrl = typeof obj.author_url === "string" && obj.author_url.trim() ? obj.author_url.trim() : null;
-  if (!channelName || !channelUrl) return null;
-  return { channelName, channelUrl };
+  const safeUrl = channelUrl ? sanitizeHttpUrl(channelUrl) : null;
+  if (!channelName || !safeUrl) return null;
+  return { channelName, channelUrl: safeUrl };
 }
 async function fetchYouTubeCreatorFromOembed(pageUrl) {
   const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(pageUrl)}&format=json`;
@@ -1198,20 +1236,22 @@ function recipeMissingCreatorFields(recipe, sourceType) {
 }
 function applyYouTubeCreatorMeta(recipe, meta) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const channelUrl = sanitizeHttpUrl(meta.channelUrl);
   return {
     ...recipe,
     youtube_channel_name: meta.channelName,
-    youtube_channel_url: meta.channelUrl,
+    youtube_channel_url: channelUrl,
     metadata_refreshed_at: now,
     social_author_name: meta.channelName,
-    social_author_url: meta.channelUrl
+    social_author_url: channelUrl
   };
 }
 function applySocialAuthorMeta(recipe, meta) {
+  const authorUrl = sanitizeHttpUrl(meta.authorUrl) ?? sanitizeHttpUrl(recipe.source_url);
   return {
     ...recipe,
     social_author_name: meta.authorName,
-    social_author_url: meta.authorUrl ?? recipe.source_url
+    social_author_url: authorUrl
   };
 }
 async function enrichYouTubeRecipeCreator(recipe, normalizedUrl, watchUrl) {
@@ -1222,7 +1262,9 @@ async function enrichYouTubeRecipeCreator(recipe, normalizedUrl, watchUrl) {
 }
 async function enrichWebRecipeCreator(recipe, html) {
   if (!recipeMissingCreatorFields(recipe, "web")) return recipe;
-  const meta = extractPageAuthorFromHtml(html);
+  const pageUrl = recipe.source_url?.trim();
+  if (!pageUrl) return recipe;
+  const meta = extractPageAuthorFromHtml(html, pageUrl);
   if (!meta) return recipe;
   return applySocialAuthorMeta(recipe, meta);
 }
