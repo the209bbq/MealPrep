@@ -89,6 +89,9 @@ assert(ingredientMatchScore('beef', 'ground beef') >= 0.72, 'ground beef satisfi
 assert(ingredientMatchScore('cheddar', 'cheese') < 0.72, 'generic cheese must not satisfy cheddar recipe');
 assert(ingredientMatchScore('cheese', 'cheddar') >= 0.72, 'cheddar satisfies generic cheese recipe');
 assert(ingredientMatchScore('cheddar', 'mozzarella') < 0.72, 'cheddar must not match mozzarella');
+assert(ingredientMatchScore('diced tomatoes', 'tomato paste') < 0.72, 'diced tomatoes vs tomato paste');
+assert(ingredientMatchScore('diced tomatoes', 'tomato soup') < 0.72, 'diced tomatoes vs tomato soup');
+assert(ingredientMatchScore('diced tomatoes', 'ketchup') < 0.72, 'diced tomatoes vs ketchup');
 
 // --- live catalog repro ---
 const recipesPath = join(mobileRoot, 'test-fixtures', 'live-recipes.json');
