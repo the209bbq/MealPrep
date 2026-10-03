@@ -131,7 +131,7 @@ export const RECIPES_COPY = {
 
   recipeCard: {
     addMissingCta: 'Add missing to grocery list',
-    haveEverything: 'Have everything',
+    haveEverything: 'Ready to cook! 🎉',
     needItems: (count: number) => (count === 1 ? 'Missing 1 item' : `Missing ${count} items`),
   },
 

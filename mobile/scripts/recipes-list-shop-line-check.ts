@@ -16,7 +16,7 @@ function stubMatch(overrides: Partial<RecipePantryMatch>): RecipePantryMatch {
   };
 }
 
-assert.equal(recipeListShopLine(stubMatch({ missingCount: 0 })), 'Have everything');
+assert.equal(recipeListShopLine(stubMatch({ missingCount: 0 })), 'Ready to cook! 🎉');
 assert.equal(recipeListShopLine(stubMatch({ missingCount: 1 })), 'Missing 1 item');
 assert.equal(recipeListShopLine(stubMatch({ missingCount: 3 })), 'Missing 3 items');
 

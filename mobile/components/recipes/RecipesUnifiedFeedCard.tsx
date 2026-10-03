@@ -24,6 +24,7 @@ function RecipesUnifiedFeedCardInner({ row, onOpen }: RecipesUnifiedFeedCardProp
     [row],
   );
   const shopLine = useMemo(() => recipeListShopLine(row.match), [row.match]);
+  const readyToCook = row.match.missingCount === 0;
 
   return (
     <Pressable
@@ -42,7 +43,10 @@ function RecipesUnifiedFeedCardInner({ row, onOpen }: RecipesUnifiedFeedCardProp
         <Text className="text-base font-semibold text-ink" numberOfLines={2}>
           {name}
         </Text>
-        <Text className="mt-0.5 text-xs text-muted" numberOfLines={1}>
+        <Text
+          className={`mt-0.5 text-xs ${readyToCook ? 'text-success-accent' : 'text-muted'}`}
+          numberOfLines={1}
+        >
           {shopLine}
         </Text>
       </View>
