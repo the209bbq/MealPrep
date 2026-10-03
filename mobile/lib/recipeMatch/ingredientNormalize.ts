@@ -1,6 +1,7 @@
 import {
   PANTRY_SCAN_PHRASE_SYNONYMS,
   PANTRY_SCAN_STRIP_BRANDS,
+  PANTRY_SCAN_STRIP_FILLER_WORDS,
 } from '../../config/pantryScanNormalize';
 import {
   FUZZY_MATCH_THRESHOLD,
@@ -34,6 +35,16 @@ const INGREDIENT_MATCH_CACHE = new LruCache<string, number>(8192);
 const FUZZY_SCORE_CACHE = new LruCache<string, number>(8192);
 
 const PANTRY_BRANDS_SORTED = [...PANTRY_SCAN_STRIP_BRANDS].sort((a, b) => b.length - a.length);
+const PANTRY_FILLER_SORTED = [...PANTRY_SCAN_STRIP_FILLER_WORDS].sort((a, b) => b.length - a.length);
+
+function stripPantryScanFillerWords(text: string): string {
+  let out = text;
+  for (const word of PANTRY_FILLER_SORTED) {
+    const pattern = new RegExp(`\\b${word.replace(/\s+/g, '\\s+')}\\b`, 'gi');
+    out = out.replace(pattern, ' ');
+  }
+  return out;
+}
 const PANTRY_PHRASE_KEYS_SORTED = Object.keys(PANTRY_SCAN_PHRASE_SYNONYMS).sort(
   (a, b) => b.length - a.length,
 );
@@ -64,9 +75,6 @@ function applyPantryScanPhraseSynonyms(text: string): string {
     if (key === 'syrup' && /\b(?:pancake|maple|corn|chocolate|waffle|breakfast)\s+syrup\b/i.test(out)) {
       continue;
     }
-    if (key === 'oatmeal' && /\binstant\s+oatmeal\b/i.test(out)) {
-      continue;
-    }
     if (PANTRY_PHRASE_WHOLE_NAME_ONLY.has(key)) {
       const whole = new RegExp(`^${key.replace(/\s+/g, '\\s+')}$`, 'i');
       if (!whole.test(out.trim())) continue;
@@ -95,6 +103,7 @@ function normalizeIngredientNameCore(value: string): string {
   }
 
   text = applyPantryScanPhraseSynonyms(text);
+  text = stripPantryScanFillerWords(text);
   text = text.replace(/(?:^|\s)s(?=\s|$)/g, ' ');
 
   return text.replace(/\s+/g, ' ').trim();
@@ -243,6 +252,27 @@ function categoryHeadForRecipeTokens(recipeTokens: string[]): string | null {
   return null;
 }
 
+const PROCESSED_FOOD_FORM_TOKENS = new Set([
+  'soup',
+  'sauce',
+  'chowder',
+  'broth',
+  'bisque',
+  'gravy',
+  'condensed',
+  'ketchup',
+  'paste',
+  'marinara',
+  'dressing',
+  'seasoning',
+  'mix',
+  'stuffing',
+]);
+
+function tokensIncludeProcessedFoodForm(tokens: string[]): boolean {
+  return tokens.some((t) => PROCESSED_FOOD_FORM_TOKENS.has(t));
+}
+
 function specificTypeInFamily(pantryTokens: string[], family: string): boolean {
   const members = CATEGORY_MEMBER_INDEX[family];
   if (!members) return false;
@@ -262,6 +292,14 @@ function ingredientMatchScoreCore(recipeLabel: string, pantryLabel: string): num
   const recipeTokens = tokenizeIngredientName(recipeLabel);
   const pantryTokens = tokenizeIngredientName(pantryLabel);
   if (recipeTokens.length === 0 || pantryTokens.length === 0) return 0;
+
+  if (
+    !tokensIncludeProcessedFoodForm(recipeTokens) &&
+    tokensIncludeProcessedFoodForm(pantryTokens) &&
+    recipeTokens.every((t) => pantryTokens.includes(t))
+  ) {
+    return 0;
+  }
 
   if (tokensEqual(recipeTokens, pantryTokens)) return 1;
 

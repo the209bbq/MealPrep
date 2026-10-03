@@ -175,9 +175,15 @@ export function PantryScanReview({
                     {item.name}
                   </Text>
                   {item.needsReview ? (
-                    <Text className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">
-                      Check this
-                    </Text>
+                    <Pressable
+                      onPress={() => updateItem(item.key, { needsReview: false })}
+                      accessibilityLabel="Dismiss check this hint"
+                      hitSlop={6}
+                    >
+                      <Text className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">
+                        Check this ×
+                      </Text>
+                    </Pressable>
                   ) : null}
                 </View>
                 <Text className="text-[10px] text-muted">
