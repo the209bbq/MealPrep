@@ -93,6 +93,24 @@ assert(ingredientMatchScore('diced tomatoes', 'tomato paste') < 0.72, 'diced tom
 assert(ingredientMatchScore('diced tomatoes', 'tomato soup') < 0.72, 'diced tomatoes vs tomato soup');
 assert(ingredientMatchScore('diced tomatoes', 'ketchup') < 0.72, 'diced tomatoes vs ketchup');
 
+// --- specific pantry still satisfies generic recipe (form tokens kept) ---
+assert(ingredientMatchScore('tomatoes', 'diced tomatoes') >= 0.72, 'diced tomatoes satisfies tomatoes');
+assert(ingredientMatchScore('tomato', 'diced tomatoes') >= 0.72, 'diced tomatoes satisfies tomato');
+assert(
+  ingredientMatchScore('tomatoes', 'canned diced tomatoes') >= 0.72,
+  'canned diced tomatoes satisfies tomatoes',
+);
+assert(ingredientMatchScore('olives', 'black olives') >= 0.72, 'black olives satisfies olives');
+assert(ingredientMatchScore('onion', 'chopped onion') >= 0.72, 'chopped onion satisfies onion');
+assert(
+  ingredientMatchScore('chicken', 'boneless chicken breast') >= 0.72,
+  'boneless chicken breast satisfies chicken',
+);
+assert(
+  ingredientMatchScore('chicken breast', 'chicken') < 0.72,
+  'generic chicken must not satisfy chicken breast recipe',
+);
+
 // --- live catalog repro ---
 const recipesPath = join(mobileRoot, 'test-fixtures', 'live-recipes.json');
 const raw = JSON.parse(readFileSync(recipesPath, 'utf8')) as Array<{
