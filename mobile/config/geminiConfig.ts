@@ -11,12 +11,16 @@ export const DEFAULT_GEMINI_VISION_MODEL = 'gemini-3.8-flash';
  * Override entirely via optional `GEMINI_FALLBACK_MODELS` secret (comma-separated).
  */
 export const DEFAULT_GEMINI_VISION_FALLBACK_MODELS = [
+  'gemini-3.8-flash',
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
 ] as const;
+
+/** Per Gemini HTTP call; edge function reads `GEMINI_REQUEST_TIMEOUT_MS` secret (same default). */
+export const DEFAULT_GEMINI_VISION_REQUEST_TIMEOUT_MS = 38_000;
 
 export type GeminiVisionModelId =
   | typeof DEFAULT_GEMINI_VISION_MODEL

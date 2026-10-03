@@ -11,6 +11,7 @@ import {
   mergeDetectionPasses,
   parsePantryVisionPayload,
 } from '../lib/pantryVision/detectionParse';
+import type { PantryVisionDetectionRow } from '../lib/pantryVision/detectionParse';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const fixturePath = join(scriptDir, '../test-fixtures/pantry-vision-sample.json');
@@ -59,5 +60,18 @@ assert(merged.length === deduped.length + 1, 'merge pass should add olive oil');
 
 const mergedAgain = mergeDetectionPasses(deduped, passB);
 assert(stableJson(merged) === stableJson(mergedAgain), 'mergeDetectionPasses must be deterministic');
+
+const distinctOlives: PantryVisionDetectionRow[] = [
+  { name: 'black olives', quantity: 1, unit: 'can', category: 'dry_goods', confidence: 0.9 },
+  { name: 'chopped olives', quantity: 1, unit: 'jar', category: 'condiments', confidence: 0.88 },
+];
+const olivesDeduped = dedupeDetections(distinctOlives);
+assert(olivesDeduped.length === 2, 'distinct olive products must not fuzzy-merge');
+
+const distinctTomatoes: PantryVisionDetectionRow[] = [
+  { name: 'diced tomatoes', quantity: 2, unit: 'can', category: 'dry_goods', confidence: 0.9 },
+  { name: 'marinara sauce', quantity: 1, unit: 'jar', category: 'condiments', confidence: 0.87 },
+];
+assert(dedupeDetections(distinctTomatoes).length === 2, 'diced tomatoes and marinara must stay separate');
 
 console.log('OK: pantry-vision post-process checks passed');

@@ -4,19 +4,25 @@
  */
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_GEMINI_REQUEST_TIMEOUT_MS,
   GEMINI_REQUEST_TOTAL_BUDGET_MS,
-  GEMINI_REQUEST_TIMEOUT_MS,
   ModelTimeoutMemory,
   RequestTimeBudget,
   buildGeminiModelCandidates,
   deprioritizeRecentlyTimedOutModels,
   orderModelsForAttempt,
+  parseGeminiRequestTimeoutMs,
   shouldRetrySameModelAfterError,
 } from '../supabase/functions/pantry-vision/geminiOrchestration.ts';
 
 function testBuildCandidates() {
   const list = buildGeminiModelCandidates('gemini-3.6-flash', 'gemini-3.5-flash,gemini-3.6-flash');
-  assert.deepEqual(list.slice(0, 3), ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.7-flash']);
+  assert.deepEqual(list.slice(0, 4), [
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+  ]);
 }
 
 function testDeprioritizeTimedOutModels() {
@@ -28,6 +34,26 @@ function testDeprioritizeTimedOutModels() {
     now,
   );
   assert.deepEqual(ordered, ['gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.6-flash']);
+}
+
+function testSkipLargeImageTimeouts() {
+  const now = 1_000_000;
+  const largeMap = new Map<string, number>([['gemini-3.5-flash', now - 30_000]]);
+  const ordered = deprioritizeRecentlyTimedOutModels(
+    ['gemini-3.5-flash', 'gemini-3.8-flash'],
+    new Map(),
+    now,
+    5 * 60 * 1000,
+    largeMap,
+    true,
+  );
+  assert.deepEqual(ordered, ['gemini-3.8-flash']);
+}
+
+function testParseTimeout() {
+  assert.equal(parseGeminiRequestTimeoutMs(undefined), DEFAULT_GEMINI_REQUEST_TIMEOUT_MS);
+  assert.equal(parseGeminiRequestTimeoutMs('45000'), 45_000);
+  assert.equal(parseGeminiRequestTimeoutMs('not-a-number'), DEFAULT_GEMINI_REQUEST_TIMEOUT_MS);
 }
 
 function testOrderModelsForAttempt() {
@@ -54,21 +80,25 @@ function testShouldNotRetryOnTimeout() {
 function testRequestTimeBudget() {
   let now = 0;
   const budget = new RequestTimeBudget(100_000, () => now);
-  assert.equal(budget.perCallTimeoutMs(22_000), 22_000);
+  assert.equal(budget.perCallTimeoutMs(38_000), 38_000);
   now = 90_000;
-  assert.equal(budget.perCallTimeoutMs(22_000), 10_000);
+  assert.equal(budget.perCallTimeoutMs(38_000), 10_000);
   now = 98_000;
-  assert.equal(budget.perCallTimeoutMs(GEMINI_REQUEST_TIMEOUT_MS), null);
+  assert.equal(budget.perCallTimeoutMs(DEFAULT_GEMINI_REQUEST_TIMEOUT_MS), null);
   assert.equal(budget.isExhausted(), true);
 }
 
 function testBudgetConstants() {
-  assert.ok(GEMINI_REQUEST_TIMEOUT_MS >= 20_000 && GEMINI_REQUEST_TIMEOUT_MS <= 25_000);
+  assert.ok(
+    DEFAULT_GEMINI_REQUEST_TIMEOUT_MS >= 30_000 && DEFAULT_GEMINI_REQUEST_TIMEOUT_MS <= 50_000,
+  );
   assert.ok(GEMINI_REQUEST_TOTAL_BUDGET_MS >= 100_000 && GEMINI_REQUEST_TOTAL_BUDGET_MS <= 120_000);
 }
 
 testBuildCandidates();
 testDeprioritizeTimedOutModels();
+testSkipLargeImageTimeouts();
+testParseTimeout();
 testOrderModelsForAttempt();
 testShouldNotRetryOnTimeout();
 testRequestTimeBudget();

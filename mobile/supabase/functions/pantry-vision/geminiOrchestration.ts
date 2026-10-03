@@ -7,6 +7,7 @@
 /** @sync mobile/config/geminiConfig.ts */
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_GEMINI_FALLBACK_MODELS = [
+  'gemini-3.8-flash',
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
@@ -14,8 +15,27 @@ export const DEFAULT_GEMINI_FALLBACK_MODELS = [
   'gemini-2.0-flash',
 ] as const;
 
-/** Per upstream HTTP call (each Gemini generateContent). */
-export const GEMINI_REQUEST_TIMEOUT_MS = 22_000;
+/** Per upstream HTTP call (each Gemini generateContent). Override via `GEMINI_REQUEST_TIMEOUT_MS` secret. */
+export const DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 38_000;
+
+/** @deprecated Use resolveGeminiRequestTimeoutMs — kept for tests importing the default cap. */
+export const GEMINI_REQUEST_TIMEOUT_MS = DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;
+
+/** Base64 length above this is treated as a dense/large pantry photo for timeout memory. */
+export const LARGE_PANTRY_IMAGE_BASE64_LENGTH = 2_400_000;
+
+export function parseGeminiRequestTimeoutMs(raw: string | undefined): number {
+  if (!raw?.trim()) return DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 8_000 || parsed > 120_000) {
+    return DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
+export function isLargePantryImageBase64(imageBase64: string): boolean {
+  return imageBase64.length >= LARGE_PANTRY_IMAGE_BASE64_LENGTH;
+}
 
 /** Shared wall-clock budget for one pantry-vision HTTP request (under Supabase ~150s limit). */
 export const GEMINI_REQUEST_TOTAL_BUDGET_MS = 110_000;
@@ -58,10 +78,21 @@ export function deprioritizeRecentlyTimedOutModels(
   timedOutAt: ReadonlyMap<string, number>,
   nowMs: number,
   ttlMs: number = MODEL_TIMEOUT_DEPRIORITIZE_MS,
+  skipLargeImageTimeouts: ReadonlyMap<string, number> | null = null,
+  imageIsLarge: boolean = false,
 ): string[] {
+  let pool = candidates;
+  if (imageIsLarge && skipLargeImageTimeouts && skipLargeImageTimeouts.size > 0) {
+    const filtered = candidates.filter((model) => {
+      const at = skipLargeImageTimeouts.get(model);
+      return at == null || nowMs - at >= ttlMs;
+    });
+    if (filtered.length > 0) pool = filtered;
+  }
+
   const fresh: string[] = [];
   const deprioritized: string[] = [];
-  for (const model of candidates) {
+  for (const model of pool) {
     const at = timedOutAt.get(model);
     if (at != null && nowMs - at < ttlMs) {
       deprioritized.push(model);
@@ -74,13 +105,28 @@ export function deprioritizeRecentlyTimedOutModels(
 
 export class ModelTimeoutMemory {
   private readonly timedOutAt = new Map<string, number>();
+  private readonly timedOutOnLargeImageAt = new Map<string, number>();
 
-  record(model: string, nowMs: number = Date.now()): void {
+  record(model: string, nowMs: number = Date.now(), imageWasLarge: boolean = false): void {
     this.timedOutAt.set(model, nowMs);
+    if (imageWasLarge) {
+      this.timedOutOnLargeImageAt.set(model, nowMs);
+    }
   }
 
-  orderCandidates(candidates: string[], nowMs: number = Date.now()): string[] {
-    return deprioritizeRecentlyTimedOutModels(candidates, this.timedOutAt, nowMs);
+  orderCandidates(
+    candidates: string[],
+    nowMs: number = Date.now(),
+    imageIsLarge: boolean = false,
+  ): string[] {
+    return deprioritizeRecentlyTimedOutModels(
+      candidates,
+      this.timedOutAt,
+      nowMs,
+      MODEL_TIMEOUT_DEPRIORITIZE_MS,
+      this.timedOutOnLargeImageAt,
+      imageIsLarge,
+    );
   }
 }
 
@@ -133,7 +179,8 @@ export function orderModelsForAttempt(
   fallbacksFromEnv: string | undefined,
   timeoutMemory: ModelTimeoutMemory,
   nowMs: number = Date.now(),
+  imageIsLarge: boolean = false,
 ): string[] {
   const base = buildGeminiModelCandidates(primaryFromEnv, fallbacksFromEnv);
-  return timeoutMemory.orderCandidates(base, nowMs);
+  return timeoutMemory.orderCandidates(base, nowMs, imageIsLarge);
 }

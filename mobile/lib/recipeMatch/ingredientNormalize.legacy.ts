@@ -40,6 +40,8 @@ function stripPantryScanBrands(text: string): string {
   return out;
 }
 
+const PANTRY_PHRASE_WHOLE_NAME_ONLY = new Set(['oatmeal', 'syrup']);
+
 function applyPantryScanPhraseSynonyms(text: string): string {
   let out = text;
   for (const key of PANTRY_PHRASE_KEYS_SORTED) {
@@ -51,6 +53,16 @@ function applyPantryScanPhraseSynonyms(text: string): string {
       new RegExp(`\\b${replacement.replace(/\s+/g, '\\s+')}\\b`, 'i').test(out)
     ) {
       continue;
+    }
+    if (key === 'syrup' && /\b(?:pancake|maple|corn|chocolate|waffle|breakfast)\s+syrup\b/i.test(out)) {
+      continue;
+    }
+    if (key === 'oatmeal' && /\binstant\s+oatmeal\b/i.test(out)) {
+      continue;
+    }
+    if (PANTRY_PHRASE_WHOLE_NAME_ONLY.has(key)) {
+      const whole = new RegExp(`^${key.replace(/\s+/g, '\\s+')}$`, 'i');
+      if (!whole.test(out.trim())) continue;
     }
     out = out.replace(pattern, replacement);
   }
@@ -81,7 +93,11 @@ export function normalizeIngredientName(value: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+const PLURAL_KEEP_TOKENS = new Set(['beans']);
+
 function singularizeToken(token: string): string {
+  if (token === 'halves') return 'half';
+  if (PLURAL_KEEP_TOKENS.has(token)) return token;
   if (token.length <= 3) return token;
   if (token.endsWith('ies') && token.length > 4) {
     return `${token.slice(0, -3)}y`;

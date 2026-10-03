@@ -4,7 +4,9 @@
  */
 
 import {
+  areSameIngredientForPantryDedupe,
   canonicalIngredientPhrase,
+  ingredientMatchScore,
   normalizeIngredientName,
   tokenizeIngredientName,
 } from '../lib/recipeMatch/ingredientNormalize';
@@ -17,8 +19,8 @@ function assert(condition: boolean, message: string): void {
 }
 
 assert(
-  canonicalIngredientPhrase('WinCo Sliced Black Olives') === 'black olive',
-  'strip WinCo and keep black olives specificity',
+  canonicalIngredientPhrase('WinCo Sliced Black Olives') === 'sliced black olive',
+  'strip WinCo and keep sliced black olives specificity',
 );
 assert(
   canonicalIngredientPhrase("Campbell's Cream of Mushroom Soup") === 'cream of mushroom soup',
@@ -40,11 +42,27 @@ assert(
   'pure pumpkin maps to pumpkin puree',
 );
 assert(canonicalIngredientPhrase('Quaker Old Fashioned Oats') === 'oat', 'oats synonym collapses to oat token');
-assert(
-  canonicalIngredientPhrase('Hungry Jack Pancake Syrup').includes('pancake syrup'),
-  'syrup maps toward pancake syrup',
-);
 assert(canonicalIngredientPhrase('King Hawaiian Sweet Rolls') === 'roll', 'hawaiian rolls -> rolls');
+assert(
+  canonicalIngredientPhrase('Hungry Jack Pancake Syrup') === 'pancake syrup',
+  'pancake syrup must not double-apply syrup synonym',
+);
+assert(canonicalIngredientPhrase('Peach Halves') === 'peach half', 'peach halves -> peach half');
+assert(canonicalIngredientPhrase('Chili With Beans') === 'chili with beans', 'keep beans in chili with beans');
+assert(canonicalIngredientPhrase('Instant Oatmeal') === 'instant oatmeal', 'instant oatmeal stays whole phrase');
+
+assert(
+  !areSameIngredientForPantryDedupe('black olives', 'chopped olives'),
+  'black olives and chopped olives must not dedupe together',
+);
+assert(
+  !areSameIngredientForPantryDedupe('diced tomatoes', 'marinara sauce'),
+  'diced tomatoes and marinara sauce must not dedupe together',
+);
+
+assert(ingredientMatchScore('diced tomatoes', 'tomato paste') < 0.72, 'diced tomatoes vs tomato paste');
+assert(ingredientMatchScore('diced tomatoes', 'tomato soup') < 0.72, 'diced tomatoes vs tomato soup');
+assert(ingredientMatchScore('diced tomatoes', 'ketchup') < 0.72, 'diced tomatoes vs ketchup');
 
 const tokens = tokenizeIngredientName('Essential Everyday All Purpose Flour 5 lb');
 assert(tokens.join(' ').includes('all-purpose'), 'all purpose flour phrase');

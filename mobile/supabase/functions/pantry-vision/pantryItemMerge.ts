@@ -87,6 +87,11 @@ export function pantryRowsSeemCompleteForSinglePass(
   return avg >= minAvgConfidence;
 }
 
+/** Run add-missing (verify) pass unless the wall-clock budget cannot fit another Gemini call. */
+export function shouldRunPantryVerifySecondPass(budgetExhausted: boolean): boolean {
+  return !budgetExhausted;
+}
+
 function normalizeNameKey(name: string): string {
   return name
     .toLowerCase()
@@ -95,24 +100,7 @@ function normalizeNameKey(name: string): string {
     .trim();
 }
 
-function tokenOverlapMatch(a: string, b: string): boolean {
-  const aKey = normalizeNameKey(a);
-  const bKey = normalizeNameKey(b);
-  if (!aKey || !bKey) return false;
-  if (aKey === bKey) return true;
-  const aTokens = aKey.split(' ').filter(Boolean);
-  const bTokens = bKey.split(' ').filter(Boolean);
-  if (aTokens.length === 0 || bTokens.length === 0) return false;
-  const shorter = aTokens.length <= bTokens.length ? aTokens : bTokens;
-  const longer = aTokens.length <= bTokens.length ? bTokens : aTokens;
-  if (shorter.length >= 2 && shorter.every((t) => longer.includes(t))) return true;
-  const shorterSet = new Set(shorter);
-  const overlap = longer.filter((t) => shorterSet.has(t)).length;
-  const union = new Set([...aTokens, ...bTokens]).size;
-  return overlap >= 2 && overlap / union >= 0.85;
-}
-
 export const EDGE_PANTRY_MERGE_IDENTITY: PantryMergeIdentity = {
   identityKey: normalizeNameKey,
-  rowsMatch: tokenOverlapMatch,
+  rowsMatch: () => false,
 };

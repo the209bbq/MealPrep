@@ -1,5 +1,6 @@
 /** Re-export the ingredient normalization layer (single implementation module). */
 export {
+  areSameIngredientForPantryDedupe,
   canonicalIngredientPhrase,
   canonicalIngredientSearchLabel,
   expandSynonymKeys,
