@@ -122,9 +122,10 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
 
 export function PostSignupProfileSheet({ visible, onDone }: PostSignupProfileSheetProps) {
   const { profile } = useApp();
+  if (!visible) return null;
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      {visible ? <PostSignupProfileForm key={profile.id} onDone={onDone} /> : null}
+    <Modal visible animationType="slide" presentationStyle="pageSheet">
+      <PostSignupProfileForm key={profile.id} onDone={onDone} />
     </Modal>
   );
 }

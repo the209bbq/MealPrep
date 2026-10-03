@@ -19,6 +19,18 @@ export function githubPagesLegalUrl(slug: LegalPageSlug): string {
   return `${GITHUB_PAGES_ORIGIN}${GITHUB_PAGES_APP_PATH}/${slug}`;
 }
 
+/** In-app / static-export routes on GitHub Pages (no `.html` suffix). */
+export function githubPagesAppRouteUrl(routePath: string): string {
+  const normalized = routePath.startsWith('/') ? routePath : `/${routePath}`;
+  return `${GITHUB_PAGES_ORIGIN}${GITHUB_PAGES_APP_PATH}${normalized}`;
+}
+
+export const ACCOUNT_DELETION_WEB_PATH = '/delete-account';
+
+export function githubPagesAccountDeletionUrl(): string {
+  return githubPagesAppRouteUrl(ACCOUNT_DELETION_WEB_PATH);
+}
+
 /** Static HTML filenames copied from `public/` into `dist/` on web export. */
 export const LEGAL_STATIC_HTML = {
   privacy: 'privacy.html',

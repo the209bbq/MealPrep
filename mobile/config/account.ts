@@ -36,6 +36,8 @@ export const LEGAL_LINKS = {
 export const ACCOUNT_UPGRADE_COPY = {
   title: 'MealPlanatic Plus',
   freeBlurb: 'Manual pantry and recipes are free. Upgrade for photo scan and Smart Shop shelf tags.',
+  freeBlurbNativeNoBilling:
+    'Manual pantry and recipes are free. Photo scan and shelf-tag capture require MealPlanatic Plus when available on your platform.',
   paidBlurb: 'You have Plus — photo scan and shelf-tag capture are unlocked.',
   learnMoreLabel: 'Learn about Plus',
 } as const;
