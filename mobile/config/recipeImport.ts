@@ -27,6 +27,8 @@ export const RECIPE_IMPORT_COPY = {
   importBoxLabel: 'Import recipe',
   pasteLinkCta: 'Paste',
   pasteLinkAccessibility: 'Paste from clipboard',
+  pasteFromClipboardCta: 'Paste',
+  pasteFromClipboardAccessibility: 'Paste recipe link from clipboard',
   pasteAppliedHint: 'Pasted',
   cameraAccessibility: 'Add a photo or video of the recipe',
   importCta: 'Import',

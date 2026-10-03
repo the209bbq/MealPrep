@@ -18,7 +18,6 @@ import {
 import { orderImportFallbackSteps } from '../supabase/functions/recipe-import/fallbackChain.ts';
 import { parseTikTokOembedPayload } from '../supabase/functions/recipe-import/tiktokOembed.ts';
 import { buildYoutubeSearchQuery, guessDishQueryFromCaption } from '../supabase/functions/recipe-import/dishGuess.ts';
-import { parseImportInput } from '../lib/recipeImport/parseImportInput.ts';
 import {
   isAllowedHttpPort,
   isBlockedHostname,
@@ -31,6 +30,9 @@ import { youtubeVideoIdFromUrl } from '../lib/recipeImport/youtube.ts';
 import { classifyImportUrlForClient, isManualCaptionImportKind } from '../lib/recipeImport/urlClassificationClient.ts';
 import { orderImportFallbackSteps as orderImportFallbackStepsClient } from '../lib/recipeImport/fallbackChain.ts';
 import { shareTargetImportRoute } from '../lib/recipeImport/client.ts';
+import { extractUrlFromClipboardText } from '../lib/recipeImport/extractUrlFromClipboardText.ts';
+import { parseImportInput } from '../lib/recipeImport/parseImportInput.ts';
+import { validateUserImportStoragePath } from '../supabase/functions/recipe-import/storagePathValidation.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, '../test-fixtures/recipe-import-jsonld');
@@ -134,6 +136,16 @@ assert.equal(geminiPayload!.ingredients[0].name, 'salt');
 const rejected = validateGeminiRecipeImportPayload({ title: '' });
 assert.equal(rejected, null);
 
+assert.equal(
+  extractUrlFromClipboardText('Check this https://example.com/recipe) out'),
+  'https://example.com/recipe',
+);
+assert.equal(extractUrlFromClipboardText('no link here'), null);
+
+assert.equal(validateUserImportStoragePath('user-abc', 'user-abc/photo-1.jpg'), true);
+assert.equal(validateUserImportStoragePath('user-abc', 'other-user/photo-1.jpg'), false);
+assert.equal(validateUserImportStoragePath('user-abc', 'user-abc/../other/photo.jpg'), false);
+
 const oembed = parseTikTokOembedPayload({
   title: 'Garlic noodles #dinner',
   author_name: 'Chef Pat',
@@ -185,5 +197,15 @@ assert.equal(parsedCombo?.kind, 'url');
 if (parsedCombo?.kind === 'url') {
   assert.ok(parsedCombo.caption && parsedCombo.caption.includes('tacos'));
 }
+
+const importBoxSource = fs.readFileSync(
+  path.join(__dirname, '../components/recipes/RecipeImportBox.tsx'),
+  'utf8',
+);
+assert.ok(
+  !/useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]*getStringAsync/.test(importBoxSource),
+  'RecipeImportBox must not auto-read clipboard on mount',
+);
+assert.ok(importBoxSource.includes('pasteFromClipboard'), 'RecipeImportBox should paste on user tap');
 
 console.log('OK: recipe-import checks passed');

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { RecipeImportBox } from '../../components/recipes/RecipeImportBox';
+import { RecipeImportBox } from './RecipeImportBox';
 
 export function RecipeImportFromLink({ initialUrl = '' }: { initialUrl?: string }) {
   return <RecipeImportBox initialText={initialUrl} />;

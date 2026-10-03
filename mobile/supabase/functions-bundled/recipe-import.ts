@@ -875,10 +875,22 @@ function stripHtmlToText(html, maxChars) {
 \u2026`;
 }
 
+// supabase/functions/recipe-import/storagePathValidation.ts
+function validateUserImportStoragePath(userId, storagePath) {
+  if (!userId.trim()) return false;
+  const normalized = storagePath.replace(/^\/+/, "").replace(/\\/g, "/");
+  if (!normalized || normalized.includes("..")) return false;
+  const segments = normalized.split("/").filter((segment) => segment.length > 0);
+  if (segments.length < 2) return false;
+  if (segments[0] !== userId) return false;
+  return segments.every((segment) => segment !== "." && segment !== "..");
+}
+
 // supabase/functions/recipe-import/importMedia.ts
 var GEMINI_API_BASE2 = "https://generativelanguage.googleapis.com/v1beta";
 var IMPORT_UPLOAD_BUCKET = "recipe-import-uploads";
 var INLINE_VIDEO_MAX_BYTES = 6 * 1024 * 1024;
+var STALE_UPLOAD_MAX_AGE_MS = 60 * 60 * 1e3;
 function bytesToBase64(bytes) {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 1) {
@@ -886,32 +898,82 @@ function bytesToBase64(bytes) {
   }
   return btoa(binary);
 }
-async function downloadUserImportVideo(userId, storagePath) {
+function serviceStorageHeaders(serviceKey) {
+  return { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey };
+}
+async function cleanupStaleUserImportUploads(userId, maxAgeMs = STALE_UPLOAD_MAX_AGE_MS) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) return;
+  const listUrl = `${supabaseUrl}/storage/v1/object/list/${IMPORT_UPLOAD_BUCKET}`;
+  let response;
+  try {
+    response = await fetch(listUrl, {
+      method: "POST",
+      headers: {
+        ...serviceStorageHeaders(serviceKey),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prefix: `${userId}/`,
+        limit: 100,
+        sortBy: { column: "created_at", order: "asc" }
+      })
+    });
+  } catch {
+    return;
+  }
+  if (!response.ok) return;
+  const rows = await response.json();
+  const cutoff = Date.now() - maxAgeMs;
+  for (const row of rows) {
+    const name = row.name?.trim();
+    if (!name) continue;
+    const createdAt = row.created_at ? Date.parse(row.created_at) : NaN;
+    if (!Number.isFinite(createdAt) || createdAt >= cutoff) continue;
+    const path = `${userId}/${name}`;
+    if (!validateUserImportStoragePath(userId, path)) continue;
+    await deleteUserImportObject(userId, path);
+  }
+}
+async function downloadUserImportObject(userId, storagePath) {
+  if (!validateUserImportStoragePath(userId, storagePath)) return null;
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) return null;
   const normalized = storagePath.replace(/^\/+/, "");
-  const prefix = `${userId}/`;
-  if (!normalized.startsWith(prefix)) return null;
   const objectUrl = `${supabaseUrl}/storage/v1/object/${IMPORT_UPLOAD_BUCKET}/${normalized}`;
   const response = await fetch(objectUrl, {
-    headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey }
+    headers: serviceStorageHeaders(serviceKey)
   });
   if (!response.ok) return null;
-  const mimeType = (response.headers.get("content-type") ?? "video/mp4").split(";")[0].trim();
+  const mimeType = (response.headers.get("content-type") ?? "application/octet-stream").split(";")[0].trim();
   const buffer = new Uint8Array(await response.arrayBuffer());
   if (buffer.length === 0 || buffer.length > 104857600) return null;
   return { bytes: buffer, mimeType };
 }
-async function deleteUserImportVideo(storagePath) {
+async function deleteUserImportObject(userId, storagePath) {
+  if (!validateUserImportStoragePath(userId, storagePath)) return;
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) return;
   const normalized = storagePath.replace(/^\/+/, "");
   await fetch(`${supabaseUrl}/storage/v1/object/${IMPORT_UPLOAD_BUCKET}/${normalized}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey }
+    headers: serviceStorageHeaders(serviceKey)
   });
+}
+async function downloadUserImportImages(userId, storagePaths) {
+  const allowed = /* @__PURE__ */ new Set(["image/jpeg", "image/png", "image/webp"]);
+  const out = [];
+  for (const path of storagePaths) {
+    const downloaded = await downloadUserImportObject(userId, path);
+    if (!downloaded) return null;
+    const mime = downloaded.mimeType.toLowerCase();
+    if (!allowed.has(mime)) return null;
+    out.push({ mimeType: mime, base64: bytesToBase64(downloaded.bytes) });
+  }
+  return out.length > 0 ? out : null;
 }
 async function uploadVideoToGeminiFiles(apiKey, bytes, mimeType) {
   const start = await fetch(
@@ -964,6 +1026,10 @@ function buildGeminiPartsForVideo(bytes, mimeType, prompt, fileUri) {
 }
 function shouldUseGeminiFileApi(byteLength) {
   return byteLength > INLINE_VIDEO_MAX_BYTES;
+}
+function validatePhotoStoragePaths(userId, paths) {
+  if (paths.length === 0 || paths.length > 4) return false;
+  return paths.every((path) => validateUserImportStoragePath(userId, path));
 }
 
 // supabase/functions/recipe-import/autoYoutubeFallback.ts
@@ -1331,6 +1397,7 @@ Deno.serve(async (req) => {
       429
     );
   }
+  await cleanupStaleUserImportUploads(userId);
   const apiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
   if (!apiKey) {
     return jsonResponse(
@@ -1393,12 +1460,27 @@ Deno.serve(async (req) => {
     }
   }
   if (action === "photo") {
-    const images = parseImportImages(body.images);
-    if (!images) {
-      return jsonResponse({ error: "Add 1\u20134 recipe photos (JPEG/PNG/WebP).", code: "BAD_REQUEST" }, 400);
-    }
-    const cacheKey = urlHashKey(`photo|${userId}|${images.map((i) => i.base64.slice(0, 64)).join("|")}`);
+    const storagePaths = (body.photoStoragePaths ?? []).map((path) => path.trim()).filter(Boolean);
+    const pathsToCleanup = [...storagePaths];
     try {
+      let images = null;
+      if (storagePaths.length > 0) {
+        if (!validatePhotoStoragePaths(userId, storagePaths)) {
+          return jsonResponse({ error: "Invalid photo upload path.", code: "BAD_REQUEST" }, 400);
+        }
+        images = await downloadUserImportImages(userId, storagePaths);
+        if (!images) {
+          return jsonResponse({ error: "Could not read your uploaded photos.", code: "BAD_REQUEST" }, 400);
+        }
+      } else {
+        images = parseImportImages(body.images);
+        if (!images) {
+          return jsonResponse({ error: "Add 1\u20134 recipe photos (JPEG/PNG/WebP).", code: "BAD_REQUEST" }, 400);
+        }
+      }
+      const cacheKey = urlHashKey(
+        `photo|${userId}|${images.map((i) => i.base64.slice(0, 64)).join("|")}`
+      );
       const imageParts = images.map((img) => ({
         inline_data: { mime_type: img.mimeType, data: img.base64 }
       }));
@@ -1420,16 +1502,33 @@ Deno.serve(async (req) => {
     } catch (error) {
       console.error("recipe-import photo error", error);
       return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    } finally {
+      for (const path of pathsToCleanup) {
+        await deleteUserImportObject(userId, path);
+      }
     }
   }
   if (action === "screenshot") {
-    const images = parseImportImages(body.images);
-    if (!images) {
-      return jsonResponse({ error: "Add 1\u20134 screenshots.", code: "BAD_REQUEST" }, 400);
-    }
-    const normalized2 = normalizeImportUrl(body.url ?? "") ?? "screenshot-import";
-    const sourceType2 = classifyRecipeImportUrl(normalized2) ?? "web";
+    const storagePaths = (body.photoStoragePaths ?? []).map((path) => path.trim()).filter(Boolean);
+    const pathsToCleanup = [...storagePaths];
     try {
+      let images = null;
+      if (storagePaths.length > 0) {
+        if (!validatePhotoStoragePaths(userId, storagePaths)) {
+          return jsonResponse({ error: "Invalid screenshot upload path.", code: "BAD_REQUEST" }, 400);
+        }
+        images = await downloadUserImportImages(userId, storagePaths);
+        if (!images) {
+          return jsonResponse({ error: "Could not read your uploaded screenshots.", code: "BAD_REQUEST" }, 400);
+        }
+      } else {
+        images = parseImportImages(body.images);
+        if (!images) {
+          return jsonResponse({ error: "Add 1\u20134 screenshots.", code: "BAD_REQUEST" }, 400);
+        }
+      }
+      const normalized2 = normalizeImportUrl(body.url ?? "") ?? "screenshot-import";
+      const sourceType2 = classifyRecipeImportUrl(normalized2) ?? "web";
       const imageParts = images.map((img) => ({
         inline_data: { mime_type: img.mimeType, data: img.base64 }
       }));
@@ -1447,6 +1546,10 @@ Deno.serve(async (req) => {
     } catch (error) {
       console.error("recipe-import screenshot error", error);
       return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    } finally {
+      for (const path of pathsToCleanup) {
+        await deleteUserImportObject(userId, path);
+      }
     }
   }
   if (action === "video") {
@@ -1454,9 +1557,12 @@ Deno.serve(async (req) => {
     if (!storagePath) {
       return jsonResponse({ error: "Missing video upload path.", code: "BAD_REQUEST" }, 400);
     }
+    if (!validateUserImportStoragePath(userId, storagePath)) {
+      return jsonResponse({ error: "Invalid video upload path.", code: "BAD_REQUEST" }, 400);
+    }
     let geminiFileName = null;
     try {
-      const downloaded = await downloadUserImportVideo(userId, storagePath);
+      const downloaded = await downloadUserImportObject(userId, storagePath);
       if (!downloaded) {
         return jsonResponse({ error: "Could not read your uploaded video.", code: "BAD_REQUEST" }, 400);
       }
@@ -1476,21 +1582,19 @@ Deno.serve(async (req) => {
         fileUri
       );
       const extracted = await extractRecipeFromUploadedVideo(apiKey, parts, storagePath);
-      if (geminiFileName) {
-        await deleteGeminiFile(apiKey, geminiFileName);
-        geminiFileName = null;
-      }
-      await deleteUserImportVideo(storagePath);
       if (!extracted || !recipeLooksValid(extracted)) {
         const fallbacks = await buildFallbackPayload("video", false, extracted?.title ?? "", null);
         return jsonResponse({ error: "That video does not look like a recipe.", code: "NOT_RECIPE", fallbacks }, 422);
       }
       return jsonResponse({ recipe: extracted, cached: false });
     } catch (error) {
-      if (geminiFileName) await deleteGeminiFile(apiKey, geminiFileName);
-      await deleteUserImportVideo(storagePath);
       console.error("recipe-import video error", error);
       return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    } finally {
+      if (geminiFileName) {
+        await deleteGeminiFile(apiKey, geminiFileName);
+      }
+      await deleteUserImportObject(userId, storagePath);
     }
   }
   const normalized = normalizeImportUrl(body.url ?? "");

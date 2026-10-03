@@ -1,6 +1,9 @@
+import { validateUserImportStoragePath } from './storagePathValidation.ts';
+
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const IMPORT_UPLOAD_BUCKET = 'recipe-import-uploads';
+export const IMPORT_UPLOAD_BUCKET = 'recipe-import-uploads';
 const INLINE_VIDEO_MAX_BYTES = 6 * 1024 * 1024;
+const STALE_UPLOAD_MAX_AGE_MS = 60 * 60 * 1000;
 
 export interface ImportImagePayload {
   mimeType: string;
@@ -15,39 +18,120 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export async function downloadUserImportVideo(
+function serviceStorageHeaders(serviceKey: string): Record<string, string> {
+  return { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey };
+}
+
+export { validateUserImportStoragePath };
+
+export async function cleanupStaleUserImportUploads(
+  userId: string,
+  maxAgeMs: number = STALE_UPLOAD_MAX_AGE_MS,
+): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceKey) return;
+
+  const listUrl = `${supabaseUrl}/storage/v1/object/list/${IMPORT_UPLOAD_BUCKET}`;
+  let response: Response;
+  try {
+    response = await fetch(listUrl, {
+      method: 'POST',
+      headers: {
+        ...serviceStorageHeaders(serviceKey),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prefix: `${userId}/`,
+        limit: 100,
+        sortBy: { column: 'created_at', order: 'asc' },
+      }),
+    });
+  } catch {
+    return;
+  }
+  if (!response.ok) return;
+
+  const rows = (await response.json()) as Array<{ name?: string; created_at?: string }>;
+  const cutoff = Date.now() - maxAgeMs;
+  for (const row of rows) {
+    const name = row.name?.trim();
+    if (!name) continue;
+    const createdAt = row.created_at ? Date.parse(row.created_at) : NaN;
+    if (!Number.isFinite(createdAt) || createdAt >= cutoff) continue;
+    const path = `${userId}/${name}`;
+    if (!validateUserImportStoragePath(userId, path)) continue;
+    await deleteUserImportObject(userId, path);
+  }
+}
+
+export async function downloadUserImportObject(
   userId: string,
   storagePath: string,
 ): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
+  if (!validateUserImportStoragePath(userId, storagePath)) return null;
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceKey) return null;
 
   const normalized = storagePath.replace(/^\/+/, '');
-  const prefix = `${userId}/`;
-  if (!normalized.startsWith(prefix)) return null;
-
   const objectUrl = `${supabaseUrl}/storage/v1/object/${IMPORT_UPLOAD_BUCKET}/${normalized}`;
   const response = await fetch(objectUrl, {
-    headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+    headers: serviceStorageHeaders(serviceKey),
   });
   if (!response.ok) return null;
 
-  const mimeType = (response.headers.get('content-type') ?? 'video/mp4').split(';')[0]!.trim();
+  const mimeType = (response.headers.get('content-type') ?? 'application/octet-stream').split(';')[0]!
+    .trim();
   const buffer = new Uint8Array(await response.arrayBuffer());
   if (buffer.length === 0 || buffer.length > 104_857_600) return null;
   return { bytes: buffer, mimeType };
 }
 
-export async function deleteUserImportVideo(storagePath: string): Promise<void> {
+/** @deprecated use downloadUserImportObject */
+export async function downloadUserImportVideo(
+  userId: string,
+  storagePath: string,
+): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
+  return downloadUserImportObject(userId, storagePath);
+}
+
+export async function deleteUserImportObject(userId: string, storagePath: string): Promise<void> {
+  if (!validateUserImportStoragePath(userId, storagePath)) return;
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceKey) return;
   const normalized = storagePath.replace(/^\/+/, '');
   await fetch(`${supabaseUrl}/storage/v1/object/${IMPORT_UPLOAD_BUCKET}/${normalized}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+    headers: serviceStorageHeaders(serviceKey),
   });
+}
+
+/** @deprecated use deleteUserImportObject */
+export async function deleteUserImportVideo(storagePath: string): Promise<void> {
+  const segments = storagePath.replace(/^\/+/, '').split('/');
+  const userId = segments[0];
+  if (!userId) return;
+  await deleteUserImportObject(userId, storagePath);
+}
+
+export async function downloadUserImportImages(
+  userId: string,
+  storagePaths: string[],
+): Promise<ImportImagePayload[] | null> {
+  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  const out: ImportImagePayload[] = [];
+  for (const path of storagePaths) {
+    const downloaded = await downloadUserImportObject(userId, path);
+    if (!downloaded) return null;
+    const mime = downloaded.mimeType.toLowerCase();
+    if (!allowed.has(mime)) return null;
+    out.push({ mimeType: mime, base64: bytesToBase64(downloaded.bytes) });
+  }
+  return out.length > 0 ? out : null;
 }
 
 export async function uploadVideoToGeminiFiles(
@@ -112,17 +196,11 @@ export function buildGeminiPartsForVideo(
   ];
 }
 
-export function buildGeminiPartsForImages(
-  images: ImportImagePayload[],
-  prompt: string,
-): Record<string, unknown>[] {
-  const parts: Record<string, unknown>[] = images.map((img) => ({
-    inline_data: { mime_type: img.mimeType, data: img.base64 },
-  }));
-  parts.push({ text: prompt });
-  return parts;
-}
-
 export function shouldUseGeminiFileApi(byteLength: number): boolean {
   return byteLength > INLINE_VIDEO_MAX_BYTES;
+}
+
+export function validatePhotoStoragePaths(userId: string, paths: string[]): boolean {
+  if (paths.length === 0 || paths.length > 4) return false;
+  return paths.every((path) => validateUserImportStoragePath(userId, path));
 }

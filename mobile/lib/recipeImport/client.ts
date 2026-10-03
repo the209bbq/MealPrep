@@ -2,6 +2,7 @@ import { getRecipeImportUrl, isDemoMode } from '../../config/appConfig';
 import { RECIPE_IMPORT } from '../../config/recipeImport';
 import { withTimeout } from '../withTimeout';
 import { parseImportInput } from './parseImportInput';
+import { extractUrlFromClipboardText } from './extractUrlFromClipboardText';
 import type {
   RecipeImportErrorEnvelope,
   RecipeImportExtractedDto,
@@ -204,6 +205,17 @@ export async function confirmYoutubeRecipeImport(
 }
 
 export async function importRecipeFromPhotos(
+  accessToken: string | null,
+  options: { photoStoragePaths: string[] },
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'photo',
+    photoStoragePaths: options.photoStoragePaths,
+  });
+  return result.recipe;
+}
+
+export async function importRecipeFromPhotosInline(
   images: RecipeImportImagePayload[],
   accessToken: string | null,
 ): Promise<RecipeImportExtractedDto> {
@@ -215,13 +227,13 @@ export async function importRecipeFromPhotos(
 }
 
 export async function importRecipeFromScreenshots(
-  images: RecipeImportImagePayload[],
   accessToken: string | null,
-  options?: { url?: string; captionText?: string },
+  options?: { url?: string; captionText?: string; photoStoragePaths?: string[]; images?: RecipeImportImagePayload[] },
 ): Promise<RecipeImportExtractedDto> {
   const result = await callRecipeImport(accessToken, {
     action: 'screenshot',
-    images,
+    photoStoragePaths: options?.photoStoragePaths,
+    images: options?.images,
     url: options?.url,
     captionText: options?.captionText,
   });
@@ -240,8 +252,7 @@ export async function importRecipeFromUploadedVideoPath(
 }
 
 export function extractUrlFromSharedText(text: string): string | null {
-  const match = text.match(/https?:\/\/[^\s]+/i);
-  return match ? match[0].replace(/[)\]"']+$/, '') : null;
+  return extractUrlFromClipboardText(text);
 }
 
 export function shareTargetImportRoute(params: {

@@ -27,7 +27,7 @@ import {
 } from '../../lib/recipeImport/client';
 import { readImportLinkFromClipboard } from '../../lib/recipeImport/pasteImportLink';
 import type { RecipeImportExtractedDto, RecipeImportFallbacksDto } from '../../lib/recipeImport/types';
-import { uploadRecipeImportVideo } from '../../lib/recipeImport/uploadImportVideo';
+import { uploadRecipeImportPhotos, uploadRecipeImportVideo } from '../../lib/recipeImport/uploadImportVideo';
 import { RecipeImportReviewSheet } from './RecipeImportReviewSheet';
 
 async function pickRecipeImages(max: number): Promise<{ mimeType: string; data: string }[]> {
@@ -160,7 +160,7 @@ export function RecipeImportBox({
   }, []);
 
   async function runPhotoImport() {
-    if (!session && !demoMode) {
+    if ((!session && !demoMode) || !authUserId) {
       setError(RECIPE_IMPORT_COPY.guestSignInMessage);
       return;
     }
@@ -172,8 +172,16 @@ export function RecipeImportBox({
         setLoading(false);
         return;
       }
+      const paths = await uploadRecipeImportPhotos(
+        authUserId,
+        images.map((image) => ({
+          uri: '',
+          mimeType: image.mimeType,
+          base64: image.data,
+        })),
+      );
       const token = session?.access_token ?? null;
-      const extracted = await importRecipeFromPhotos(images, token);
+      const extracted = await importRecipeFromPhotos(token, { photoStoragePaths: paths });
       setReview(extracted);
       setFallbacks(null);
     } catch (err) {
@@ -208,7 +216,7 @@ export function RecipeImportBox({
   }
 
   async function runScreenshotImport() {
-    if (!session && !demoMode) {
+    if ((!session && !demoMode) || !authUserId) {
       setError(RECIPE_IMPORT_COPY.guestSignInMessage);
       return;
     }
@@ -219,9 +227,18 @@ export function RecipeImportBox({
         setLoading(false);
         return;
       }
+      const paths = await uploadRecipeImportPhotos(
+        authUserId,
+        images.map((image) => ({
+          uri: '',
+          mimeType: image.mimeType,
+          base64: image.data,
+        })),
+      );
       const token = session?.access_token ?? null;
-      const extracted = await importRecipeFromScreenshots(images, token, {
+      const extracted = await importRecipeFromScreenshots(token, {
         captionText: input.trim() || undefined,
+        photoStoragePaths: paths,
       });
       setReview(extracted);
       setFallbacks(null);

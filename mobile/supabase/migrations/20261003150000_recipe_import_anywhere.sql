@@ -15,7 +15,7 @@ values (
   'recipe-import-uploads',
   false,
   104857600,
-  array['video/mp4', 'video/quicktime', 'video/webm']
+  array['video/mp4', 'video/quicktime', 'video/webm', 'image/jpeg', 'image/png', 'image/webp']
 )
 on conflict (id) do update set
   public = excluded.public,

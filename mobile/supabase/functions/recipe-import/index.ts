@@ -29,11 +29,15 @@ import {
 import type { RecipeImportExtracted } from './recipeImportSchema.ts';
 import {
   buildGeminiPartsForVideo,
+  cleanupStaleUserImportUploads,
   deleteGeminiFile,
-  deleteUserImportVideo,
-  downloadUserImportVideo,
+  deleteUserImportObject,
+  downloadUserImportImages,
+  downloadUserImportObject,
   shouldUseGeminiFileApi,
   uploadVideoToGeminiFiles,
+  validatePhotoStoragePaths,
+  validateUserImportStoragePath,
   type ImportImagePayload,
 } from './importMedia.ts';
 import {
@@ -68,6 +72,7 @@ interface ImportRequestBody {
   captionText?: string;
   youtubeUrl?: string;
   videoStoragePath?: string;
+  photoStoragePaths?: string[];
   images?: Array<{ mimeType?: string; data?: string }>;
 }
 
@@ -481,6 +486,8 @@ Deno.serve(async (req) => {
     );
   }
 
+  await cleanupStaleUserImportUploads(userId);
+
   const apiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
   if (!apiKey) {
     return jsonResponse(
@@ -548,12 +555,30 @@ Deno.serve(async (req) => {
   }
 
   if (action === 'photo') {
-    const images = parseImportImages(body.images);
-    if (!images) {
-      return jsonResponse({ error: 'Add 1–4 recipe photos (JPEG/PNG/WebP).', code: 'BAD_REQUEST' }, 400);
-    }
-    const cacheKey = urlHashKey(`photo|${userId}|${images.map((i) => i.base64.slice(0, 64)).join('|')}`);
+    const storagePaths = (body.photoStoragePaths ?? [])
+      .map((path) => path.trim())
+      .filter(Boolean);
+    const pathsToCleanup = [...storagePaths];
     try {
+      let images: ImportImagePayload[] | null = null;
+      if (storagePaths.length > 0) {
+        if (!validatePhotoStoragePaths(userId, storagePaths)) {
+          return jsonResponse({ error: 'Invalid photo upload path.', code: 'BAD_REQUEST' }, 400);
+        }
+        images = await downloadUserImportImages(userId, storagePaths);
+        if (!images) {
+          return jsonResponse({ error: 'Could not read your uploaded photos.', code: 'BAD_REQUEST' }, 400);
+        }
+      } else {
+        images = parseImportImages(body.images);
+        if (!images) {
+          return jsonResponse({ error: 'Add 1–4 recipe photos (JPEG/PNG/WebP).', code: 'BAD_REQUEST' }, 400);
+        }
+      }
+
+      const cacheKey = urlHashKey(
+        `photo|${userId}|${images.map((i) => i.base64.slice(0, 64)).join('|')}`,
+      );
       const imageParts = images.map((img) => ({
         inline_data: { mime_type: img.mimeType, data: img.base64 },
       }));
@@ -575,17 +600,37 @@ Deno.serve(async (req) => {
     } catch (error) {
       console.error('recipe-import photo error', error);
       return jsonResponse({ error: 'Import failed unexpectedly.', code: 'UPSTREAM_ERROR' }, 502);
+    } finally {
+      for (const path of pathsToCleanup) {
+        await deleteUserImportObject(userId, path);
+      }
     }
   }
 
   if (action === 'screenshot') {
-    const images = parseImportImages(body.images);
-    if (!images) {
-      return jsonResponse({ error: 'Add 1–4 screenshots.', code: 'BAD_REQUEST' }, 400);
-    }
-    const normalized = normalizeImportUrl(body.url ?? '') ?? 'screenshot-import';
-    const sourceType = classifyRecipeImportUrl(normalized) ?? 'web';
+    const storagePaths = (body.photoStoragePaths ?? [])
+      .map((path) => path.trim())
+      .filter(Boolean);
+    const pathsToCleanup = [...storagePaths];
     try {
+      let images: ImportImagePayload[] | null = null;
+      if (storagePaths.length > 0) {
+        if (!validatePhotoStoragePaths(userId, storagePaths)) {
+          return jsonResponse({ error: 'Invalid screenshot upload path.', code: 'BAD_REQUEST' }, 400);
+        }
+        images = await downloadUserImportImages(userId, storagePaths);
+        if (!images) {
+          return jsonResponse({ error: 'Could not read your uploaded screenshots.', code: 'BAD_REQUEST' }, 400);
+        }
+      } else {
+        images = parseImportImages(body.images);
+        if (!images) {
+          return jsonResponse({ error: 'Add 1–4 screenshots.', code: 'BAD_REQUEST' }, 400);
+        }
+      }
+
+      const normalized = normalizeImportUrl(body.url ?? '') ?? 'screenshot-import';
+      const sourceType = classifyRecipeImportUrl(normalized) ?? 'web';
       const imageParts = images.map((img) => ({
         inline_data: { mime_type: img.mimeType, data: img.base64 },
       }));
@@ -603,6 +648,10 @@ Deno.serve(async (req) => {
     } catch (error) {
       console.error('recipe-import screenshot error', error);
       return jsonResponse({ error: 'Import failed unexpectedly.', code: 'UPSTREAM_ERROR' }, 502);
+    } finally {
+      for (const path of pathsToCleanup) {
+        await deleteUserImportObject(userId, path);
+      }
     }
   }
 
@@ -611,9 +660,13 @@ Deno.serve(async (req) => {
     if (!storagePath) {
       return jsonResponse({ error: 'Missing video upload path.', code: 'BAD_REQUEST' }, 400);
     }
+    if (!validateUserImportStoragePath(userId, storagePath)) {
+      return jsonResponse({ error: 'Invalid video upload path.', code: 'BAD_REQUEST' }, 400);
+    }
+
     let geminiFileName: string | null = null;
     try {
-      const downloaded = await downloadUserImportVideo(userId, storagePath);
+      const downloaded = await downloadUserImportObject(userId, storagePath);
       if (!downloaded) {
         return jsonResponse({ error: 'Could not read your uploaded video.', code: 'BAD_REQUEST' }, 400);
       }
@@ -635,11 +688,6 @@ Deno.serve(async (req) => {
         fileUri,
       );
       const extracted = await extractRecipeFromUploadedVideo(apiKey, parts, storagePath);
-      if (geminiFileName) {
-        await deleteGeminiFile(apiKey, geminiFileName);
-        geminiFileName = null;
-      }
-      await deleteUserImportVideo(storagePath);
 
       if (!extracted || !recipeLooksValid(extracted)) {
         const fallbacks = await buildFallbackPayload('video', false, extracted?.title ?? '', null);
@@ -647,10 +695,13 @@ Deno.serve(async (req) => {
       }
       return jsonResponse({ recipe: extracted, cached: false });
     } catch (error) {
-      if (geminiFileName) await deleteGeminiFile(apiKey, geminiFileName);
-      await deleteUserImportVideo(storagePath);
       console.error('recipe-import video error', error);
       return jsonResponse({ error: 'Import failed unexpectedly.', code: 'UPSTREAM_ERROR' }, 502);
+    } finally {
+      if (geminiFileName) {
+        await deleteGeminiFile(apiKey, geminiFileName);
+      }
+      await deleteUserImportObject(userId, storagePath);
     }
   }
 
