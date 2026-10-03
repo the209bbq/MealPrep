@@ -113,6 +113,10 @@ import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
 import { mapExtractedImportToRecipe } from '../lib/recipeImport/mapToAppRecipe';
 import type { RecipeImportExtractedDto } from '../lib/recipeImport/types';
 import {
+  resolveDiscoveryRecipeImageUrl,
+  resolveKitchenRecipeImageUrl,
+} from '../lib/recipes/recipeImageUrl';
+import {
   mealPlanItemsInWeekWindow,
   recipeIdsForScheduledMeals,
 } from '../lib/mealCalendar/weekGroceries';
@@ -1361,7 +1365,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         recipeSlug: recipeId,
         recipeApiId: null,
         title: recipe.name,
-        imageUrl: null,
+        imageUrl: resolveKitchenRecipeImageUrl(recipe),
         made: false,
         madeAt: null,
         addedAt: new Date().toISOString(),
@@ -1716,7 +1720,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         recipeSlug: slug,
         recipeApiId: item.id,
         title: item.name,
-        imageUrl: null,
+        imageUrl: resolveDiscoveryRecipeImageUrl(item),
         made: false,
         madeAt: null,
         addedAt: new Date().toISOString(),

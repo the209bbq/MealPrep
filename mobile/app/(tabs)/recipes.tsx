@@ -191,11 +191,11 @@ export default function RecipesScreen() {
         <Pressable
           onPress={showDifferentIdeas}
           disabled={discoveryLoading}
-          className="mt-3 min-h-[44px] items-center justify-center rounded-xl border border-primary bg-primary-light px-4 py-3"
+          className="mt-2 min-h-[40px] items-center justify-center rounded-lg px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
         >
-          <Text className="text-sm font-bold text-primary-dark">
+          <Text className="text-sm font-semibold text-primary">
             {discoveryLoading ? RECIPES_COPY.discoveryPanel.searching : RECIPES_COPY.cookNowCard.showDifferentIdeas}
           </Text>
         </Pressable>
@@ -218,16 +218,7 @@ export default function RecipesScreen() {
       ) : null}
 
       {filteredRows.map((row) => (
-        <RecipesUnifiedFeedCard
-          key={row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`}
-          row={row}
-          onOpen={() => openDetail(row)}
-          isOnMealPlan={isOnMealPlan}
-          onToggleKitchen={(recipeId) => void toggleMealPlanKitchenRecipe(recipeId)}
-          onToggleDiscovery={(recipe) => void toggleMealPlanDiscoveryRecipe(recipe)}
-          onAddMissingKitchen={addMissingRecipeIngredientsToGrocery}
-          onAddMissingDiscovery={addMissingDiscoveryRecipeIngredientsToGrocery}
-        />
+        <RecipesUnifiedFeedCard key={row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`} row={row} onOpen={() => openDetail(row)} />
       ))}
 
       <RecipeDetailSheet
@@ -243,6 +234,9 @@ export default function RecipesScreen() {
         onChangeServings={setDetailServings}
         onAddMissingKitchen={addMissingRecipeIngredientsToGrocery}
         onAddMissingDiscovery={addMissingDiscoveryRecipeIngredientsToGrocery}
+        isOnMealPlan={isOnMealPlan}
+        onToggleKitchen={(recipeId) => void toggleMealPlanKitchenRecipe(recipeId)}
+        onToggleDiscovery={(recipe) => void toggleMealPlanDiscoveryRecipe(recipe)}
       />
     </ScrollView>
   );

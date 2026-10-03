@@ -96,6 +96,7 @@ export function mapExtractedImportToRecipe(
     sourceMetadataRefreshedAt: persistYoutubeMeta ? extracted.metadata_refreshed_at : undefined,
     prepMinutes: extracted.prep_minutes,
     cookMinutes: extracted.cook_minutes,
+    imageUrl: extracted.image_url ?? null,
   };
 }
 

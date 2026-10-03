@@ -1,5 +1,6 @@
 import type { MealPlanItem, Recipe } from '../../types/mealprep';
 import { parseRecipeApiNumericId } from '../recipeDiscovery/slugs';
+import { resolveKitchenRecipeImageUrl } from '../recipes/recipeImageUrl';
 
 export interface ScheduleRecipeTarget {
   title: string;
@@ -8,12 +9,14 @@ export interface ScheduleRecipeTarget {
   imageUrl: string | null;
 }
 
-export function scheduleTargetFromKitchenRecipe(recipe: Pick<Recipe, 'id' | 'name'>): ScheduleRecipeTarget {
+export function scheduleTargetFromKitchenRecipe(
+  recipe: Pick<Recipe, 'id' | 'name' | 'imageUrl' | 'sourceUrl' | 'sourceType'>,
+): ScheduleRecipeTarget {
   return {
     title: recipe.name,
     recipeSlug: recipe.id,
     recipeApiId: null,
-    imageUrl: null,
+    imageUrl: resolveKitchenRecipeImageUrl(recipe as Recipe),
   };
 }
 

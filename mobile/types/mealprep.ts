@@ -147,6 +147,8 @@ export interface Recipe {
   nutritionSource?: string;
   nutritionCitation?: string;
   nutritionSourcedAt?: string;
+  /** HTTPS cover image when saved (import thumbnail, og:image, etc.). */
+  imageUrl?: string | null;
 }
 
 export interface GroceryListItem {

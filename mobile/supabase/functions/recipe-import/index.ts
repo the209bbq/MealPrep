@@ -51,6 +51,12 @@ import {
   enrichYouTubeRecipeCreator,
   recipeMissingCreatorFields,
 } from './creatorAttribution.ts';
+import {
+  extractOgImageFromHtml,
+  imageUrlForCachedImport,
+  resolveYouTubeImportImageUrl,
+  withImportImageUrl,
+} from './recipeImageMeta.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -312,7 +318,7 @@ async function importFromCaption(
   normalizedUrl: string,
   sourceType: 'tiktok' | 'instagram' | 'facebook',
   captionText: string,
-  socialMeta?: { authorName?: string; authorUrl?: string | null },
+  socialMeta?: { authorName?: string; authorUrl?: string | null; thumbnailUrl?: string | null },
 ): Promise<ImportFromUrlResult> {
   const cacheKey = buildImportCacheKey(normalizedUrl, sourceType, captionText);
   const cached = await readImportCache(cacheKey);
@@ -324,12 +330,15 @@ async function importFromCaption(
       cached,
     );
     return {
-      recipe: {
-        ...backfilled,
-        source_url: normalizedUrl,
-        social_author_name: socialMeta?.authorName ?? backfilled.social_author_name,
-        social_author_url: socialMeta?.authorUrl ?? backfilled.social_author_url,
-      },
+      recipe: withImportImageUrl(
+        {
+          ...backfilled,
+          source_url: normalizedUrl,
+          social_author_name: socialMeta?.authorName ?? backfilled.social_author_name,
+          social_author_url: socialMeta?.authorUrl ?? backfilled.social_author_url,
+        },
+        socialMeta?.thumbnailUrl ?? backfilled.image_url ?? imageUrlForCachedImport(backfilled, sourceType, normalizedUrl),
+      ),
       cached: true,
     };
   }
@@ -345,11 +354,14 @@ async function importFromCaption(
     };
   }
 
-  const withSocial = {
-    ...fromGemini,
-    social_author_name: socialMeta?.authorName ?? null,
-    social_author_url: socialMeta?.authorUrl ?? normalizedUrl,
-  };
+  const withSocial = withImportImageUrl(
+    {
+      ...fromGemini,
+      social_author_name: socialMeta?.authorName ?? null,
+      social_author_url: socialMeta?.authorUrl ?? normalizedUrl,
+    },
+    socialMeta?.thumbnailUrl,
+  );
   await writeImportCache(cacheKey, normalizedUrl, withSocial);
   return { recipe: withSocial, cached: false };
 }
@@ -373,7 +385,11 @@ async function importFromUrl(
       cached,
       html,
     );
-    return { recipe: { ...backfilled, source_url: normalizedUrl }, cached: true };
+    const withImage = withImportImageUrl(
+      { ...backfilled, source_url: normalizedUrl },
+      backfilled.image_url ?? imageUrlForCachedImport(backfilled, sourceType, normalizedUrl),
+    );
+    return { recipe: withImage, cached: true };
   }
 
   if (sourceType === 'youtube') {
@@ -381,7 +397,9 @@ async function importFromUrl(
     const extracted = await extractRecipeFromYouTubeVideo(apiKey, watchUrl, 'youtube', normalizedUrl);
     if (!extracted) return null;
     const withCreator = await enrichYouTubeRecipeCreator(extracted, normalizedUrl, watchUrl);
-    if (!recipeLooksValid(withCreator)) {
+    const imageUrl = resolveYouTubeImportImageUrl(normalizedUrl, watchUrl, null);
+    const withImage = withImportImageUrl(withCreator, imageUrl);
+    if (!recipeLooksValid(withImage)) {
       const creatorHint =
         withCreator.youtube_channel_name ??
         withCreator.social_author_name ??
@@ -393,8 +411,8 @@ async function importFromUrl(
         creatorHint,
       };
     }
-    await writeImportCache(cacheKey, normalizedUrl, withCreator);
-    return { recipe: withCreator, cached: false };
+    await writeImportCache(cacheKey, normalizedUrl, withImage);
+    return { recipe: withImage, cached: false };
   }
 
   const html = await fetchRecipePage(normalizedUrl);
@@ -405,8 +423,9 @@ async function importFromUrl(
     const fromLd = recipeJsonLdToExtracted(jsonLd, normalizedUrl);
     if (fromLd && recipeLooksValid(fromLd)) {
       const withAuthor = await enrichWebRecipeCreator(fromLd, html);
-      await writeImportCache(cacheKey, normalizedUrl, withAuthor);
-      return { recipe: withAuthor, cached: false };
+      const withImage = withImportImageUrl(withAuthor, extractOgImageFromHtml(html, normalizedUrl));
+      await writeImportCache(cacheKey, normalizedUrl, withImage);
+      return { recipe: withImage, cached: false };
     }
   }
 
@@ -414,16 +433,17 @@ async function importFromUrl(
   const fromGemini = await extractRecipeFromPageText(apiKey, pageText, normalizedUrl);
   if (!fromGemini) return null;
   const withAuthor = await enrichWebRecipeCreator(fromGemini, html);
-  if (!recipeLooksValid(withAuthor)) {
+  const withImage = withImportImageUrl(withAuthor, extractOgImageFromHtml(html, normalizedUrl));
+  if (!recipeLooksValid(withImage)) {
     return {
       notRecipe: true,
       message: 'We could not find a recipe on that page.',
       captionForSearch: pageText.slice(0, 400),
-      creatorHint: withAuthor.social_author_name ?? null,
+      creatorHint: withImage.social_author_name ?? null,
     };
   }
-  await writeImportCache(cacheKey, normalizedUrl, withAuthor);
-  return { recipe: withAuthor, cached: false };
+  await writeImportCache(cacheKey, normalizedUrl, withImage);
+  return { recipe: withImage, cached: false };
 }
 
 async function importTikTokLink(apiKey: string, normalizedUrl: string): Promise<ImportFromUrlResult> {
@@ -440,6 +460,7 @@ async function importTikTokLink(apiKey: string, normalizedUrl: string): Promise<
   return importFromCaption(apiKey, normalizedUrl, 'tiktok', oembed.caption, {
     authorName: authorLabel,
     authorUrl: oembed.authorUrl ?? normalizedUrl,
+    thumbnailUrl: oembed.thumbnailUrl,
   });
 }
 
