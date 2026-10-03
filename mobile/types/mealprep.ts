@@ -37,6 +37,8 @@ export interface UserPreferences {
   autoAddMissingToGrocery: boolean;
   /** When true, checking off grocery items adds them to the pantry (with merge). */
   addCheckedItemsToPantry: boolean;
+  /** Opt-in: upload pantry scan photos to improve the scanner (off by default). */
+  shareScanPhotoForTraining: boolean;
 }
 
 export interface UserProfile {

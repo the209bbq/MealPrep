@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { AdminScanCorrectionsCard } from '../../components/admin/AdminScanCorrectionsCard';
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { TourReplayCard } from '../../components/onboarding/TourReplayCard';
@@ -116,6 +117,8 @@ export default function AdminScreen() {
           </View>
         ))}
       </Card>
+
+      {!demoMode ? <AdminScanCorrectionsCard /> : null}
 
       <Card
         className="mt-4"

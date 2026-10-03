@@ -38,6 +38,10 @@ export interface PantryScanReviewItem {
   isDemoSample: boolean;
   /** Low model confidence — show “Check this” in review. */
   needsReview?: boolean;
+  /** Original AI-detected label (immutable); used for correction logging. */
+  sourceAiName?: string | null;
+  /** User added via “Did I miss anything?” (or equivalent) during review. */
+  addedManually?: boolean;
 }
 
 export interface PreparedPantryImage {

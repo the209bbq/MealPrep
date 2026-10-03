@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import { CATEGORY_LABELS, PHOTO_SCAN } from '../config/appConfig';
+import { Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { CATEGORY_LABELS, PHOTO_SCAN, THEME } from '../config/appConfig';
 import { PANTRY_SCAN_UI_COPY } from '../config/pantryScan';
+import { SCAN_CORRECTIONS_UI } from '../config/scanCorrections';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   PANTRY_SCAN_TIP,
   suggestStorageLocationForPantryItem,
   type PantryStorageLocation,
 } from '../config/pantryStorage';
-import { mergeReviewItems } from '../lib/pantryVision/matchIngredients';
-import { applyBatchStorageLocation } from '../lib/pantryVision/reviewItems';
+import { buildIngredientCatalog, mergeReviewItems } from '../lib/pantryVision/matchIngredients';
+import { applyBatchStorageLocation, createManualPantryReviewItem } from '../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
-import { PANTRY_CATEGORIES, type PantryCategory } from '../types/mealprep';
+import { PANTRY_CATEGORIES, type PantryCategory, type PantryItem, type Recipe } from '../types/mealprep';
 import { PantryScanTip } from './PantryScanTip';
 import { PantryStorageLocationChips } from './PantryStorageLocationChips';
 
@@ -29,6 +30,11 @@ interface PantryScanReviewProps {
   onBatchLocationChange?: (location: PantryStorageLocation) => void;
   /** When true, omits bottom action row (parent renders sticky footer). */
   stickyFooter?: boolean;
+  pantry: PantryItem[];
+  recipes: Recipe[];
+  scanLocationHint: PantryStorageLocation;
+  shareTrainingPhoto: boolean;
+  onShareTrainingPhotoChange: (value: boolean) => void;
 }
 
 export function PantryScanReview({
@@ -44,9 +50,29 @@ export function PantryScanReview({
   defaultBatchLocation = DEFAULT_PANTRY_STORAGE_LOCATION,
   onBatchLocationChange,
   stickyFooter = false,
+  pantry,
+  recipes,
+  scanLocationHint,
+  shareTrainingPhoto,
+  onShareTrainingPhotoChange,
 }: PantryScanReviewProps) {
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
   const [batchLocation, setBatchLocation] = useState<PantryStorageLocation>(defaultBatchLocation);
+  const [missedOpen, setMissedOpen] = useState(false);
+  const [missedName, setMissedName] = useState('');
+
+  const catalogNames = useMemo(
+    () => buildIngredientCatalog(pantry, recipes).map((entry) => entry.name),
+    [pantry, recipes],
+  );
+
+  const missedSuggestions = useMemo(() => {
+    const query = missedName.trim().toLowerCase();
+    if (query.length < 2) return [];
+    return catalogNames
+      .filter((name) => name.toLowerCase().includes(query))
+      .slice(0, 6);
+  }, [catalogNames, missedName]);
 
   const enabledCount = useMemo(() => items.filter((item) => item.enabled).length, [items]);
   const showFewItemsTip = items.length > 0 && items.length <= PANTRY_SCAN_TIP.fewItemsThreshold;
@@ -80,6 +106,16 @@ export function PantryScanReview({
     if (mergeSelection.length < 2) return;
     onChange(mergeReviewItems(items, mergeSelection));
     setMergeSelection([]);
+  }
+
+  function addMissedItem(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const photoUri = items[0]?.photoUri ?? null;
+    const row = createManualPantryReviewItem(trimmed, pantry, recipes, photoUri, scanLocationHint);
+    onChange([...items, row]);
+    setMissedName('');
+    setMissedOpen(false);
   }
 
   const actionRow = (
@@ -221,6 +257,52 @@ export function PantryScanReview({
           <Text className="text-center text-xs font-bold text-primary-dark">Merge {mergeSelection.length} selected</Text>
         </Pressable>
       ) : null}
+
+      <View className="mt-2">
+        <Pressable onPress={() => setMissedOpen((open) => !open)} className="self-start py-1">
+          <Text className="text-xs font-bold text-primary-dark">{SCAN_CORRECTIONS_UI.missedAnythingLabel}</Text>
+        </Pressable>
+        {missedOpen ? (
+          <View className="mt-1 rounded-lg border border-border bg-paper p-2">
+            <TextInput
+              value={missedName}
+              onChangeText={setMissedName}
+              placeholder={SCAN_CORRECTIONS_UI.addMissedPlaceholder}
+              className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink"
+              onSubmitEditing={() => addMissedItem(missedName)}
+              returnKeyType="done"
+            />
+            {missedSuggestions.length > 0 ? (
+              <View className="mt-1 flex-row flex-wrap gap-1">
+                {missedSuggestions.map((name) => (
+                  <Pressable
+                    key={name}
+                    onPress={() => addMissedItem(name)}
+                    className="rounded-full border border-border bg-card px-2 py-0.5"
+                  >
+                    <Text className="text-[10px] font-semibold text-slate">{name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            <Pressable
+              disabled={!missedName.trim()}
+              onPress={() => addMissedItem(missedName)}
+              className={`mt-2 self-start rounded-lg px-3 py-1.5 ${missedName.trim() ? 'bg-primary' : 'bg-slate/30'}`}
+            >
+              <Text className="text-[11px] font-bold text-on-primary">{SCAN_CORRECTIONS_UI.addMissedButton}</Text>
+            </Pressable>
+            <View className="mt-2 flex-row items-center justify-between gap-2 border-t border-border pt-2">
+              <Text className="flex-1 text-[10px] text-muted">{SCAN_CORRECTIONS_UI.sharePhotoToggleLabel}</Text>
+              <Switch
+                value={shareTrainingPhoto}
+                onValueChange={onShareTrainingPhotoChange}
+                trackColor={{ true: THEME.primary, false: THEME.border }}
+              />
+            </View>
+          </View>
+        ) : null}
+      </View>
 
       {onScanAgain ? (
         <Pressable
