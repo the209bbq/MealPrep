@@ -85,10 +85,14 @@ export function mapExtractedImportToRecipe(
     steps: extracted.steps,
     isMaster: false,
     createdAt: new Date().toISOString(),
-    sourceUrl: extracted.social_author_url ?? extracted.source_url,
+    sourceUrl: extracted.source_url,
     sourceType: extracted.source_type,
     sourceTitle: persistYoutubeMeta ? undefined : socialHandle ?? extracted.source_title,
     sourceChannelName: persistYoutubeMeta ? extracted.youtube_channel_name ?? undefined : undefined,
+    sourceChannelUrl: persistYoutubeMeta
+      ? extracted.youtube_channel_url ?? extracted.social_author_url ?? undefined
+      : undefined,
+    sourceAuthorUrl: persistYoutubeMeta ? undefined : extracted.social_author_url ?? undefined,
     sourceMetadataRefreshedAt: persistYoutubeMeta ? extracted.metadata_refreshed_at : undefined,
     prepMinutes: extracted.prep_minutes,
     cookMinutes: extracted.cook_minutes,

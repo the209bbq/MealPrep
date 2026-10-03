@@ -11,6 +11,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { RecipeImportExtractedDto } from '../../lib/recipeImport/types';
+import { sourceCreditFromImportDto } from '../../lib/recipeImport/sourceCredit';
+import { RecipeSourceCreditLine } from './RecipeSourceCreditLine';
 
 interface RecipeImportReviewSheetProps {
   visible: boolean;
@@ -116,18 +118,7 @@ function RecipeImportReviewForm({
       </View>
       <ScrollView className="flex-1 px-4 pb-10" keyboardShouldPersistTaps="handled">
         <Text className="mt-3 text-sm text-muted">{RECIPE_IMPORT_COPY.reviewSubtitle}</Text>
-        {draft.social_author_name ? (
-          <Pressable
-            onPress={() => {
-              if (draft.social_author_url) void Linking.openURL(draft.social_author_url);
-            }}
-            className="mt-2 self-start"
-          >
-            <Text className="text-xs font-semibold text-primary">
-              {RECIPE_IMPORT_COPY.socialCredit(draft.social_author_name)}
-            </Text>
-          </Pressable>
-        ) : null}
+        <RecipeSourceCreditLine {...sourceCreditFromImportDto(draft)} />
         {draft.author_public_recipe_url ? (
           <Pressable
             onPress={() => void Linking.openURL(draft.author_public_recipe_url!)}

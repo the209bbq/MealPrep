@@ -36,7 +36,7 @@ const YOUTUBE_EXTRACTION_PROMPT =
   'You are helping a meal-planning app. The video is referenced by URL only — do not download, store, or reproduce the video or audio. ' +
   'Watch the cooking video and extract a recipe with clear step-by-step INSTRUCTIONS and ingredients with quantities and units. ' +
   'Rewrite the dish title, ingredients, and steps in fresh wording (never copy the video title, description, or transcript verbatim). ' +
-  'Set youtube_channel_name to the visible YouTube channel/creator name when you can see it, otherwise null. ' +
+  'Leave youtube_channel_name null (channel attribution is added separately). ' +
   'Use generic ingredient names (no brands). If this is not a recipe video, set is_recipe false with a low confidence score.';
 
 const SOCIAL_CAPTION_PROMPT =

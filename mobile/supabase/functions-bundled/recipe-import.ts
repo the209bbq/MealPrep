@@ -1032,6 +1032,201 @@ function validatePhotoStoragePaths(userId, paths) {
   return paths.every((path) => validateUserImportStoragePath(userId, path));
 }
 
+// supabase/functions/recipe-import/pageAuthorMeta.ts
+function readMetaContent(html, attr, key) {
+  const pattern = new RegExp(
+    `<meta[^>]+${attr}=["']${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'][^>]*>`,
+    "i"
+  );
+  const tag = html.match(pattern)?.[0];
+  if (!tag) return null;
+  const content = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
+  return content?.trim() ? content.trim() : null;
+}
+function readJsonLdAuthor(html) {
+  const scripts = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  if (!scripts) return null;
+  for (const block of scripts) {
+    const inner = block.replace(/^[\s\S]*?>/i, "").replace(/<\/script>$/i, "").trim();
+    if (!inner) continue;
+    try {
+      const parsed = JSON.parse(inner);
+      const found = walkJsonLdForAuthor(parsed);
+      if (found) return found;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+function authorFromJsonLdNode(node) {
+  const author = node.author ?? node.creator;
+  if (typeof author === "string" && author.trim()) {
+    return { authorName: author.trim(), authorUrl: null };
+  }
+  if (author && typeof author === "object") {
+    const row = author;
+    const name = typeof row.name === "string" && row.name.trim() || typeof row["@name"] === "string" && row["@name"].trim() || null;
+    const url = typeof row.url === "string" && row.url.trim() || typeof row["@id"] === "string" && row["@id"].trim() || null;
+    if (name) return { authorName: name, authorUrl: url };
+  }
+  return null;
+}
+function walkJsonLdForAuthor(value) {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = walkJsonLdForAuthor(entry);
+      if (found) return found;
+    }
+    return null;
+  }
+  const obj = value;
+  const direct = authorFromJsonLdNode(obj);
+  if (direct) return direct;
+  if (Array.isArray(obj["@graph"])) {
+    for (const entry of obj["@graph"]) {
+      const found = walkJsonLdForAuthor(entry);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+function extractPageAuthorFromHtml(html) {
+  const fromLd = readJsonLdAuthor(html);
+  if (fromLd) return fromLd;
+  const articleAuthor = readMetaContent(html, "property", "article:author");
+  if (articleAuthor) {
+    const name = articleAuthor.startsWith("http") ? readMetaContent(html, "name", "author") ?? articleAuthor : articleAuthor;
+    const url = articleAuthor.startsWith("http") ? articleAuthor : null;
+    if (name.trim()) return { authorName: name.trim(), authorUrl: url };
+  }
+  const metaAuthor = readMetaContent(html, "name", "author");
+  if (metaAuthor?.trim()) {
+    return { authorName: metaAuthor.trim(), authorUrl: null };
+  }
+  const siteName = readMetaContent(html, "property", "og:site_name");
+  if (siteName?.trim()) {
+    return { authorName: siteName.trim(), authorUrl: null };
+  }
+  return null;
+}
+
+// supabase/functions/recipe-import/youtubeCreatorMeta.ts
+function youtubeVideoIdFromImportUrl(urlString) {
+  try {
+    const canonical = canonicalYouTubeWatchUrl(urlString);
+    const parsed = new URL(canonical);
+    const v = parsed.searchParams.get("v");
+    if (v && /^[\w-]{6,}$/.test(v)) return v;
+    if (parsed.hostname.includes("youtu.be")) {
+      const id = parsed.pathname.replace(/^\//, "").split("/")[0];
+      if (id) return id;
+    }
+    const shorts = parsed.pathname.match(/\/shorts\/([\w-]+)/);
+    if (shorts?.[1]) return shorts[1];
+  } catch {
+    return null;
+  }
+  return null;
+}
+function parseYouTubeOembedPayload(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw;
+  const channelName = typeof obj.author_name === "string" && obj.author_name.trim() ? obj.author_name.trim() : null;
+  const channelUrl = typeof obj.author_url === "string" && obj.author_url.trim() ? obj.author_url.trim() : null;
+  if (!channelName || !channelUrl) return null;
+  return { channelName, channelUrl };
+}
+async function fetchYouTubeCreatorFromOembed(pageUrl) {
+  const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(pageUrl)}&format=json`;
+  let response;
+  try {
+    response = await fetch(endpoint, { signal: AbortSignal.timeout(12e3) });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  try {
+    const json = await response.json();
+    return parseYouTubeOembedPayload(json);
+  } catch {
+    return null;
+  }
+}
+async function fetchYouTubeCreatorFromVideosApi(apiKey, videoId) {
+  if (!apiKey.trim() || !videoId) return null;
+  const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+  url.searchParams.set("part", "snippet");
+  url.searchParams.set("id", videoId);
+  url.searchParams.set("key", apiKey);
+  let response;
+  try {
+    response = await fetch(url.toString(), { signal: AbortSignal.timeout(12e3) });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  const body = await response.json();
+  const snippet = body.items?.[0]?.snippet;
+  const channelTitle = snippet?.channelTitle?.trim() ?? "";
+  const channelId = snippet?.channelId?.trim() ?? "";
+  if (!channelTitle || !channelId) return null;
+  return {
+    channelName: channelTitle,
+    channelUrl: `https://www.youtube.com/channel/${channelId}`
+  };
+}
+async function resolveYouTubeCreatorMeta(normalizedUrl, watchUrl) {
+  const oembed = await fetchYouTubeCreatorFromOembed(normalizedUrl) ?? await fetchYouTubeCreatorFromOembed(watchUrl);
+  if (oembed) return oembed;
+  const apiKey = Deno.env.get("YOUTUBE_API_KEY") ?? "";
+  const videoId = youtubeVideoIdFromImportUrl(watchUrl);
+  if (!videoId) return null;
+  return await fetchYouTubeCreatorFromVideosApi(apiKey, videoId);
+}
+
+// supabase/functions/recipe-import/creatorAttribution.ts
+function recipeMissingCreatorFields(recipe, sourceType) {
+  if (sourceType === "youtube") {
+    return !recipe.youtube_channel_name?.trim() || !recipe.youtube_channel_url?.trim();
+  }
+  if (sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook" || sourceType === "web") {
+    return !recipe.social_author_name?.trim();
+  }
+  return false;
+}
+function applyYouTubeCreatorMeta(recipe, meta) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  return {
+    ...recipe,
+    youtube_channel_name: meta.channelName,
+    youtube_channel_url: meta.channelUrl,
+    metadata_refreshed_at: now,
+    social_author_name: meta.channelName,
+    social_author_url: meta.channelUrl
+  };
+}
+function applySocialAuthorMeta(recipe, meta) {
+  return {
+    ...recipe,
+    social_author_name: meta.authorName,
+    social_author_url: meta.authorUrl ?? recipe.source_url
+  };
+}
+async function enrichYouTubeRecipeCreator(recipe, normalizedUrl, watchUrl) {
+  if (!recipeMissingCreatorFields(recipe, "youtube")) return recipe;
+  const meta = await resolveYouTubeCreatorMeta(normalizedUrl, watchUrl);
+  if (!meta) return recipe;
+  return applyYouTubeCreatorMeta(recipe, meta);
+}
+async function enrichWebRecipeCreator(recipe, html) {
+  if (!recipeMissingCreatorFields(recipe, "web")) return recipe;
+  const meta = extractPageAuthorFromHtml(html);
+  if (!meta) return recipe;
+  return applySocialAuthorMeta(recipe, meta);
+}
+
 // supabase/functions/recipe-import/autoYoutubeFallback.ts
 async function tryAutoImportFromYoutubeSearch(apiKey, importFromUrl2, captionForSearch, creatorHint) {
   const youtubeKey = Deno.env.get("YOUTUBE_API_KEY") ?? "";
@@ -1044,10 +1239,18 @@ async function tryAutoImportFromYoutubeSearch(apiKey, importFromUrl2, captionFor
   if (!suggestion) return null;
   const result = await importFromUrl2(apiKey, suggestion.watchUrl, "youtube");
   if (!result || "notRecipe" in result && result.notRecipe) return null;
+  const apiKeyYt = Deno.env.get("YOUTUBE_API_KEY") ?? "";
+  const fromApi = await fetchYouTubeCreatorFromVideosApi(apiKeyYt, suggestion.videoId);
+  let recipe = result.recipe;
+  if (fromApi) {
+    recipe = applyYouTubeCreatorMeta(recipe, fromApi);
+  } else {
+    recipe = await enrichYouTubeRecipeCreator(recipe, suggestion.watchUrl, suggestion.watchUrl);
+  }
   return {
-    recipe: result.recipe,
+    recipe,
     cached: result.cached,
-    channelTitle: suggestion.channelTitle,
+    channelTitle: recipe.youtube_channel_name ?? suggestion.channelTitle,
     watchUrl: suggestion.watchUrl
   };
 }
@@ -1226,16 +1429,38 @@ async function buildFallbackPayload(sourceType, hasCaption, captionForSearch, cr
 function recipeLooksValid(recipe) {
   return recipe.is_recipe && recipe.confidence >= 0.35 && (recipe.ingredients.length > 0 || recipe.steps.length > 0);
 }
+async function backfillCachedRecipeCreator(cacheKey, normalizedUrl, sourceType, cached, htmlForWeb) {
+  if (!recipeMissingCreatorFields(cached, sourceType)) {
+    return cached;
+  }
+  let enriched = cached;
+  if (sourceType === "youtube") {
+    const watchUrl = canonicalYouTubeWatchUrl(normalizedUrl);
+    enriched = await enrichYouTubeRecipeCreator(cached, normalizedUrl, watchUrl);
+  } else if (sourceType === "web" && htmlForWeb) {
+    enriched = await enrichWebRecipeCreator(cached, htmlForWeb);
+  }
+  if (enriched !== cached) {
+    await writeImportCache(cacheKey, normalizedUrl, enriched);
+  }
+  return enriched;
+}
 async function importFromCaption(apiKey, normalizedUrl, sourceType, captionText, socialMeta) {
   const cacheKey = buildImportCacheKey(normalizedUrl, sourceType, captionText);
   const cached = await readImportCache(cacheKey);
   if (cached) {
+    const backfilled = await backfillCachedRecipeCreator(
+      cacheKey,
+      normalizedUrl,
+      sourceType,
+      cached
+    );
     return {
       recipe: {
-        ...cached,
+        ...backfilled,
         source_url: normalizedUrl,
-        social_author_name: socialMeta?.authorName ?? cached.social_author_name,
-        social_author_url: socialMeta?.authorUrl ?? cached.social_author_url
+        social_author_name: socialMeta?.authorName ?? backfilled.social_author_name,
+        social_author_url: socialMeta?.authorUrl ?? backfilled.social_author_url
       },
       cached: true
     };
@@ -1261,21 +1486,33 @@ async function importFromCaption(apiKey, normalizedUrl, sourceType, captionText,
 async function importFromUrl(apiKey, normalizedUrl, sourceType) {
   const cacheKey = buildImportCacheKey(normalizedUrl, sourceType);
   const cached = await readImportCache(cacheKey);
-  if (cached) return { recipe: { ...cached, source_url: normalizedUrl }, cached: true };
+  if (cached) {
+    const html2 = sourceType === "web" && recipeMissingCreatorFields(cached, "web") ? await fetchRecipePage(normalizedUrl) : null;
+    const backfilled = await backfillCachedRecipeCreator(
+      cacheKey,
+      normalizedUrl,
+      sourceType,
+      cached,
+      html2
+    );
+    return { recipe: { ...backfilled, source_url: normalizedUrl }, cached: true };
+  }
   if (sourceType === "youtube") {
     const watchUrl = canonicalYouTubeWatchUrl(normalizedUrl);
     const extracted = await extractRecipeFromYouTubeVideo(apiKey, watchUrl, "youtube", normalizedUrl);
     if (!extracted) return null;
-    if (!recipeLooksValid(extracted)) {
+    const withCreator = await enrichYouTubeRecipeCreator(extracted, normalizedUrl, watchUrl);
+    if (!recipeLooksValid(withCreator)) {
+      const creatorHint = withCreator.youtube_channel_name ?? withCreator.social_author_name ?? null;
       return {
         notRecipe: true,
         message: "That video does not look like a recipe.",
-        captionForSearch: extracted.title,
-        creatorHint: extracted.youtube_channel_name ?? null
+        captionForSearch: withCreator.title,
+        creatorHint
       };
     }
-    await writeImportCache(cacheKey, normalizedUrl, extracted);
-    return { recipe: extracted, cached: false };
+    await writeImportCache(cacheKey, normalizedUrl, withCreator);
+    return { recipe: withCreator, cached: false };
   }
   const html = await fetchRecipePage(normalizedUrl);
   if (!html) return null;
@@ -1283,23 +1520,25 @@ async function importFromUrl(apiKey, normalizedUrl, sourceType) {
   if (jsonLd) {
     const fromLd = recipeJsonLdToExtracted(jsonLd, normalizedUrl);
     if (fromLd && recipeLooksValid(fromLd)) {
-      await writeImportCache(cacheKey, normalizedUrl, fromLd);
-      return { recipe: fromLd, cached: false };
+      const withAuthor2 = await enrichWebRecipeCreator(fromLd, html);
+      await writeImportCache(cacheKey, normalizedUrl, withAuthor2);
+      return { recipe: withAuthor2, cached: false };
     }
   }
   const pageText = stripHtmlToText(html, WEB_MAX_TEXT_CHARS);
   const fromGemini = await extractRecipeFromPageText(apiKey, pageText, normalizedUrl);
   if (!fromGemini) return null;
-  if (!recipeLooksValid(fromGemini)) {
+  const withAuthor = await enrichWebRecipeCreator(fromGemini, html);
+  if (!recipeLooksValid(withAuthor)) {
     return {
       notRecipe: true,
       message: "We could not find a recipe on that page.",
       captionForSearch: pageText.slice(0, 400),
-      creatorHint: null
+      creatorHint: withAuthor.social_author_name ?? null
     };
   }
-  await writeImportCache(cacheKey, normalizedUrl, fromGemini);
-  return { recipe: fromGemini, cached: false };
+  await writeImportCache(cacheKey, normalizedUrl, withAuthor);
+  return { recipe: withAuthor, cached: false };
 }
 async function importTikTokLink(apiKey, normalizedUrl) {
   const oembed = await fetchTikTokOembed(normalizedUrl);
