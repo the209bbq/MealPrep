@@ -12,6 +12,7 @@ import { resolveHomeNextStep } from '../../lib/home/nextStep';
 export default function HomeScreen() {
   const {
     demoMode,
+    isGuest,
     pantry,
     grocery,
     pantryRecipeMatches,
@@ -33,8 +34,9 @@ export default function HomeScreen() {
         pantryItemCount: pantry.length,
         openGroceryCount,
         rankedMatches: pantryRecipeMatches.ranked,
+        guestMode: isGuest,
       }),
-    [openGroceryCount, pantry.length, pantryRecipeMatches.ranked],
+    [isGuest, openGroceryCount, pantry.length, pantryRecipeMatches.ranked],
   );
 
   function handleNextStep() {

@@ -147,5 +147,14 @@ assert.equal(
 assert.equal(recipesTabNarrowingFiltersActive({ ...DEFAULT_RECIPES_TAB_FILTER_STATE, people: 'two' }), false);
 
 assert.equal(inferKitchenMealChoice({ ...baseRecipe, name: 'Sunday Pancakes', description: '' }), 'breakfast');
+assert.equal(
+  inferKitchenMealChoice({
+    ...baseRecipe,
+    name: 'Smash Burger Bowl',
+    description: 'Seasoned beef with pickle slaw',
+  }),
+  'dinner',
+  'main-dish bowl should not classify as side from slaw keyword',
+);
 
 console.log('recipes-tab-filters-check: ok');

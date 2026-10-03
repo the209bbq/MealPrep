@@ -40,8 +40,10 @@ import {
   PANTRY_STORAGE_LOCATIONS,
   previewResortFromDefaultPantry,
   suggestStorageLocationForCategory,
+  suggestStorageLocationForPantryItem,
   type PantryStorageLocation,
 } from '../../config/pantryStorage';
+import { inferGroceryCategoryFromName } from '../../lib/grocery/categorize';
 import { useApp } from '../../context/AppContext';
 import { countDefaultKitchenMatches } from '../../config/recipeMatching';
 import { buildPantryMatchIndex } from '../../lib/recipeMatch';
@@ -100,6 +102,7 @@ export default function PantryScreen() {
     clearAllPantry,
     resortPantryItemsInDefaultLocation,
     openAuthSheet,
+    isAdmin,
   } = useApp();
   const [filter, setFilter] = useState<PantryCategory | 'all'>('all');
   const hydrated = useHydrated();
@@ -557,15 +560,16 @@ export default function PantryScreen() {
           location: manualLocation,
         });
       } else {
+        const trimmedName = manualName.trim();
+        const inferredCategory = inferGroceryCategoryFromName(trimmedName);
+        const inferredLocation = suggestStorageLocationForPantryItem(trimmedName, inferredCategory);
         await addManualPantryItem({
-          name: manualName.trim(),
+          name: trimmedName,
           quantity: qty,
           unit: manualUnit.trim() || 'each',
-          category: manualCategory,
-          location: manualLocation,
+          category: inferredCategory,
+          location: inferredLocation,
         });
-        selectLocationFilter(manualLocation);
-        setFilter('all');
       }
       closeManualModal();
     } catch (error) {
@@ -790,7 +794,7 @@ export default function PantryScreen() {
               onScanAgain={lastScanAttempt ? () => void handleScanAgainFromReview() : undefined}
               scanAgainBusy={scanAgainBusy}
               saving={saving}
-              modelLabel={modelLabel}
+              modelLabel={isAdmin ? modelLabel : undefined}
               saveError={saveError}
               defaultBatchLocation={scanLocationHint}
               onBatchLocationChange={setScanLocationHint}

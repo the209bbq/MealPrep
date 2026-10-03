@@ -18,8 +18,10 @@ import {
   debouncedSearch,
   RecipeDiscoveryAuthError,
   RecipeDiscoveryNotConfiguredError,
+  RecipeDiscoveryQuotaError,
   searchDiscoveryRecipes,
 } from '../lib/recipeDiscovery/client';
+import { RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE } from '../config/recipeDiscoveryClient';
 import { getRecipeDiscoveryAccessToken } from '../lib/recipeDiscovery/accessToken';
 import {
   isActiveRecipeDiscoverySearch,
@@ -94,6 +96,9 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMiss
       } else if (err instanceof RecipeDiscoveryAuthError) {
         setError(err.message);
         setItems([]);
+      } else if (err instanceof RecipeDiscoveryQuotaError) {
+        setError(RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE);
+        setItems([]);
       } else {
         setError(err instanceof Error ? err.message : 'Search failed');
       }
@@ -135,6 +140,8 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMiss
         if (err instanceof RecipeDiscoveryNotConfiguredError) {
           setNotConfigured(true);
           setItems([]);
+        } else if (err instanceof RecipeDiscoveryQuotaError) {
+          setError(RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE);
         } else {
           setError(err.message);
         }

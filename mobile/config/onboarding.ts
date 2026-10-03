@@ -61,6 +61,8 @@ export type OnboardingCopy = {
       title: string;
       body: string;
       cta: string;
+      skippedTitle: string;
+      skippedBody: string;
     };
   };
   account: {
@@ -152,6 +154,8 @@ export const ONBOARDING_COPY: OnboardingCopy = {
       title: 'You are set',
       body: 'Scan → recipes → list → Smart Shop. Tap your avatar any time to replay this tour from Account.',
       cta: 'Start cooking',
+      skippedTitle: 'Tour skipped',
+      skippedBody: 'Explore pantry, recipes, and your grocery list at your own pace. Replay the tour anytime from Account.',
     },
   },
   account: {

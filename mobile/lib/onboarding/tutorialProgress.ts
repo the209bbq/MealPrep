@@ -93,6 +93,10 @@ export function currentStepId(progress: HandsOnTutorialProgress): HandsOnTutoria
   return HANDS_ON_TUTORIAL_STEP_ORDER[progress.activeIndex] ?? null;
 }
 
+export function allTutorialStepsSkipped(progress: HandsOnTutorialProgress): boolean {
+  return HANDS_ON_TUTORIAL_STEP_ORDER.every((id) => progress.steps[id] === 'skipped');
+}
+
 export function isTutorialRecapScreen(progress: HandsOnTutorialProgress): boolean {
   return progress.activeIndex >= TUTORIAL_RECAP_INDEX;
 }

@@ -35,6 +35,8 @@ export default function GroceryScreen() {
     clearCheckedGroceryItems,
     removeGroceryItem,
     onboarding,
+    kitchenError,
+    clearKitchenError,
   } = useApp();
 
   useFocusEffect(
@@ -127,6 +129,15 @@ export default function GroceryScreen() {
     <>
       <View className="flex-1 bg-paper">
         <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: showShopCta ? 100 + insets.bottom : 32 }}>
+          {kitchenError ? (
+            <Pressable
+              onPress={clearKitchenError}
+              className="mt-3 flex-row items-center justify-between rounded-xl border border-danger/30 bg-danger/10 px-3 py-2"
+            >
+              <Text className="flex-1 pr-2 text-xs font-medium text-danger">{kitchenError}</Text>
+              <Text className="text-xs font-bold text-danger">Dismiss</Text>
+            </Pressable>
+          ) : null}
           <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-5">
             <Text className="text-xs font-bold uppercase tracking-widest text-on-primary-muted">{GROCERY_COPY.listTitle}</Text>
             <Text className="mt-1 text-2xl font-bold text-on-primary">

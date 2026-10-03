@@ -77,7 +77,6 @@ export function RecipeDetailSheet({
   onAddMissingDiscovery,
 }: RecipeDetailSheetProps) {
   const insets = useSafeAreaInsets();
-
   const kitchenRecipe = useMemo(() => {
     if (!row) return null;
     if (row.kind === 'kitchen') return kitchenRecipeFromRow(row);
@@ -105,7 +104,7 @@ export function RecipeDetailSheet({
           <Text className="flex-1 text-lg font-bold text-ink" numberOfLines={1}>
             {title}
           </Text>
-          <AddToCalendarButton target={scheduleTarget} size={24} className="p-1" />
+          <AddToCalendarButton target={scheduleTarget} size={24} className="p-1" onBeforeOpen={onClose} />
         </View>
 
         <ScrollView className="flex-1 px-4 pb-10" keyboardShouldPersistTaps="handled">

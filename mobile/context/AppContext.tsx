@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../hooks/useOnboarding';
 import { useHydrated } from '../hooks/useHydrated';
+import { useHydrationGatedPersist } from '../hooks/useHydrationGatedPersist';
 import type { HandsOnTutorialStepId } from '../lib/onboarding/tutorialProgress';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -27,7 +28,8 @@ import {
   groceryDismissalKey,
   readGroceryDismissals,
 } from '../lib/grocery/dismissals';
-import { enqueueGroceryPersist } from '../lib/grocery/persistQueue';
+import { applyGroceryCheckRestock, reverseGroceryCheckRestock } from '../lib/grocery/restockLedger';
+import { bumpGroceryPersistGeneration, enqueueGroceryPersist } from '../lib/grocery/persistQueue';
 import { groceryListsEqual } from '../lib/grocery/fingerprint';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
 import { GROCERY_LIST_REFRESH_DEBOUNCE_MS } from '../config/grocerySync';
@@ -70,6 +72,7 @@ import {
 } from '../config/recipeMatching';
 import { scoreDiscoveryRecipeAgainstPantry } from '../lib/recipeDiscovery/scorePantry';
 import { kitchenRecipesForPantryMatch } from '../lib/recipeMatch/kitchenCatalogMerge';
+import { findKitchenRecipeById } from '../lib/mealPlan/kitchenRecipeLookup';
 import {
   groceryItemsToPantryItems,
   mergePantryStock,
@@ -241,6 +244,9 @@ interface AppContextValue {
   profileReady: boolean;
   authReady: boolean;
   authError: string | null;
+  /** Grocery / kitchen sync errors (shown on Grocery, not Account). */
+  kitchenError: string | null;
+  clearKitchenError: () => void;
   session: Session | null;
   profile: UserProfile;
   isAdmin: boolean;
@@ -366,6 +372,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [authReady, setAuthReady] = useState(demoMode);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [kitchenError, setKitchenError] = useState<string | null>(null);
+  const groceryRestockLedgerRef = useRef(new Map<string, { pantryItemId: string; quantityAdded: number; unit: string }>());
   const [session, setSession] = useState<Session | null>(null);
   const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
 
@@ -523,6 +531,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLiveDataLoaded(true);
   }, [supabase, userId]);
 
+  const clearKitchenError = useCallback(() => setKitchenError(null), []);
+
   const openAuthSheet = useCallback(() => setAccountSheet('auth'), []);
   const openAccountSheet = useCallback(() => setAccountSheet('account'), []);
   const closeAccountSheet = useCallback(() => setAccountSheet('closed'), []);
@@ -653,8 +663,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!featureFlags.grocerySync) return;
     if (!demoMode && userId && !liveDataLoaded) return;
     const dismissals = readGroceryDismissals(ownerId);
+    const groceryRecipes = kitchenRecipesForPantryMatch(recipes);
     setGrocery((prev) => {
-      const next = buildGroceryList(recipes, plannedRecipeIds, pantry, servingOverrides, prev, {
+      const next = buildGroceryList(groceryRecipes, plannedRecipeIds, pantry, servingOverrides, prev, {
         groceryDismissals: dismissals,
         householdSize: profile.householdSize,
       });
@@ -673,7 +684,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setGrocery(persisted);
           }),
         ).catch((error: unknown) => {
-          setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
+          setKitchenError(error instanceof Error ? error.message : 'Failed to save grocery list');
         });
         return next;
       }
@@ -711,47 +722,67 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     refreshGroceryNow,
   ]);
 
-  useEffect(() => {
-    if (demoMode) writeJson(STORAGE_KEYS.role, role);
-  }, [demoMode, role]);
+  const guestKitchenPersistReady = demoMode || (isGuest && guestKitchenHydrated);
 
-  useEffect(() => {
-    if (demoMode) writeJson(STORAGE_KEYS.pantry, pantry);
-    else if (isGuest && guestKitchenHydrated) writeGuestPantry(pantry);
-  }, [demoMode, guestKitchenHydrated, isGuest, pantry]);
+  useHydrationGatedPersist(
+    hydrated && demoMode,
+    () => writeJson(STORAGE_KEYS.role, role),
+    [role],
+  );
 
-  useEffect(() => {
-    if (demoMode) writeJson(STORAGE_KEYS.recipes, recipes);
-    else if (isGuest) writeGuestRecipes(recipes);
-  }, [demoMode, isGuest, recipes]);
+  useHydrationGatedPersist(
+    hydrated && guestKitchenPersistReady,
+    () => {
+      if (demoMode) writeJson(STORAGE_KEYS.pantry, pantry);
+      else if (isGuest) writeGuestPantry(pantry);
+    },
+    [demoMode, isGuest, pantry],
+  );
 
-  useEffect(() => {
-    if (demoMode) writeJson(STORAGE_KEYS.flags, featureFlags);
-  }, [demoMode, featureFlags]);
+  useHydrationGatedPersist(
+    hydrated && guestKitchenPersistReady,
+    () => {
+      if (demoMode) writeJson(STORAGE_KEYS.recipes, recipes);
+      else if (isGuest) writeGuestRecipes(recipes);
+    },
+    [demoMode, isGuest, recipes],
+  );
 
-  useEffect(() => {
-    if (demoMode || isGuest || userId) {
-      writeJson(STORAGE_KEYS.userPreferences, userPreferences);
-    }
-  }, [demoMode, isGuest, userId, userPreferences]);
+  useHydrationGatedPersist(
+    hydrated && demoMode,
+    () => writeJson(STORAGE_KEYS.flags, featureFlags),
+    [featureFlags],
+  );
 
-  useEffect(() => {
-    if (demoMode) writeJson(STORAGE_KEYS.mealPlan, mealPlan);
-    else if (isGuest) writeGuestMealPlan(mealPlan);
-  }, [demoMode, isGuest, mealPlan]);
+  useHydrationGatedPersist(
+    hydrated && (demoMode || isGuest || Boolean(userId)),
+    () => writeJson(STORAGE_KEYS.userPreferences, userPreferences),
+    [demoMode, isGuest, userId, userPreferences],
+  );
+
+  useHydrationGatedPersist(
+    hydrated && guestKitchenPersistReady,
+    () => {
+      if (demoMode) writeJson(STORAGE_KEYS.mealPlan, mealPlan);
+      else if (isGuest) writeGuestMealPlan(mealPlan);
+    },
+    [demoMode, isGuest, mealPlan],
+  );
 
   const summary = useMemo<MealPrepSummary>(() => {
     const activePlan = mealPlan.filter((m) => !m.made);
     const selected = recipes.filter((r) => plannedRecipeIds.includes(r.id));
     const proteinGrams = selected.reduce((sum, r) => sum + r.protein, 0);
     return {
-      date: new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
+      date: hydrated
+        ? new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+        : '',
       mealsPlanned: activePlan.length,
       pantryItems: pantry.length,
       groceryRemaining: grocery.filter((g) => !g.checked).length,
       proteinGrams,
     };
-  }, [grocery, mealPlan, pantry.length, plannedRecipeIds, recipes]);
+  }, [grocery, hydrated, mealPlan, pantry.length, plannedRecipeIds, recipes]);
 
   const analytics = useMemo<UserAnalytics>(() => {
     if (!demoMode && liveAnalytics) return liveAnalytics;
@@ -886,7 +917,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return persisted;
           }),
         ).catch((error: unknown) => {
-          setAuthError(error instanceof Error ? error.message : 'Failed to save grocery list');
+          setKitchenError(error instanceof Error ? error.message : 'Failed to save grocery list');
         });
       }
     },
@@ -1315,7 +1346,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const toggleMealPlanKitchenRecipe = useCallback(
     async (recipeId: string) => {
-      const recipe = recipes.find((r) => r.id === recipeId);
+      const recipe = findKitchenRecipeById(recipes, recipeId);
       if (!recipe) return;
       const existing = isRecipeOnMealPlan(mealPlan, { recipeSlug: recipeId });
       if (existing) {
@@ -1364,33 +1395,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (items: GroceryListItem[]) => {
       if (!userPreferences.addCheckedItemsToPantry || items.length === 0) return;
 
-      const incoming = groceryItemsToPantryItems(items);
+      const toRestock = items.filter((item) => !groceryRestockLedgerRef.current.has(item.id));
+      if (toRestock.length === 0) return;
+
       const pantrySnapshot = pantry.map((row) => ({ ...row }));
-      const { pantry: nextPantry, inserted, updated } = mergePantryStock(pantry, incoming);
+      let nextPantry = pantry;
+      for (const item of toRestock) {
+        nextPantry = applyGroceryCheckRestock(nextPantry, item, groceryRestockLedgerRef.current);
+      }
 
       setPantry(nextPantry);
 
       if (!demoMode && !isGuest && supabase && userId) {
         try {
-          for (const row of updated) {
-            await updatePantryItem(supabase, userId, row);
-          }
-          if (inserted.length > 0) {
-            const saved = await insertPantryItems(supabase, userId, inserted);
-            setPantry((prev) => {
-              const insertIds = new Set(inserted.map((row) => row.id));
-              const without = prev.filter((row) => !insertIds.has(row.id));
-              return [...saved, ...without];
-            });
-          }
+          await syncPantryToSnapshot(supabase, userId, nextPantry, pantrySnapshot);
         } catch (error: unknown) {
-          setAuthError(error instanceof Error ? error.message : 'Failed to update pantry');
+          setKitchenError(error instanceof Error ? error.message : 'Failed to update pantry');
           setPantry(pantrySnapshot);
+          for (const item of toRestock) {
+            groceryRestockLedgerRef.current.delete(item.id);
+          }
           return;
         }
       }
 
-      const toastMessage = PANTRY_RESTOCK_COPY.addedToPantry(items.length);
+      const toastMessage = PANTRY_RESTOCK_COPY.addedToPantry(toRestock.length);
       setUndoToast({
         message: toastMessage,
         onUndo: () => {
@@ -1411,6 +1440,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (id: string) => {
       const current = grocery.find((item) => item.id === id);
       const willCheck = Boolean(current && !current.checked);
+      const willUncheck = Boolean(current && current.checked);
 
       setGrocery((prev) => {
         const next = prev.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item));
@@ -1420,7 +1450,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const changed = next.find((item) => item.id === id);
           if (changed && !changed.id.startsWith('groc-')) {
             void updateGroceryChecked(supabase, changed.id, changed.checked).catch((error: unknown) => {
-              setAuthError(error instanceof Error ? error.message : 'Failed to update grocery item');
+              setKitchenError(error instanceof Error ? error.message : 'Failed to update grocery item');
             });
           }
         }
@@ -1429,9 +1459,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (willCheck && current) {
         void restockGroceriesToPantry([current]);
+      } else if (willUncheck && current && userPreferences.addCheckedItemsToPantry) {
+        const pantrySnapshot = pantry.map((row) => ({ ...row }));
+        setPantry((prev) => reverseGroceryCheckRestock(prev, id, groceryRestockLedgerRef.current));
+        if (!demoMode && !isGuest && supabase && userId) {
+          void syncPantryToSnapshot(supabase, userId, pantry, pantrySnapshot).catch((error: unknown) => {
+            setKitchenError(error instanceof Error ? error.message : 'Failed to update pantry');
+          });
+        }
       }
     },
-    [demoMode, grocery, isGuest, restockGroceriesToPantry, supabase, userId],
+    [demoMode, grocery, isGuest, pantry, restockGroceriesToPantry, supabase, userId, userPreferences.addCheckedItemsToPantry],
   );
 
   const addManualGroceryItem = useCallback(
@@ -1445,9 +1483,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         else if (isGuest) writeGuestGrocery(next);
         if (supabase && userId) {
           void enqueueGroceryPersist(() => insertGroceryItem(supabase, userId, item))
-            .then((saved) => setGrocery((current) => [...current.filter((g) => g.id !== item.id), saved]))
+            .then((saved) => {
+              if (!saved) return;
+              setGrocery((current) => [...current.filter((g) => g.id !== item.id), saved]);
+            })
             .catch((error: unknown) => {
-              setAuthError(error instanceof Error ? error.message : 'Failed to add grocery item');
+              setKitchenError(error instanceof Error ? error.message : 'Failed to add grocery item');
             });
         }
         return next;
@@ -1860,6 +1901,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearAllPantry = useCallback(async () => {
     if (pantry.length === 0) return;
+    bumpGroceryPersistGeneration();
+    groceryRestockLedgerRef.current.clear();
     if (demoMode) {
       removeStorageKey(STORAGE_KEYS.pantry);
       setPantry([]);
@@ -2011,6 +2054,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       profileReady,
       authReady,
       authError,
+      kitchenError,
+      clearKitchenError,
       session,
       profile,
       isAdmin,
@@ -2104,6 +2149,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       savePantryScanReview,
       analytics,
       authError,
+      kitchenError,
+      clearKitchenError,
       authReady,
       demoMode,
       isGuest,

@@ -148,6 +148,10 @@ export function recipesTabRowMinutes(row: RecipesTabRow): number {
   return Math.max(1, (row.recipe.prep_time ?? 0) + (row.recipe.cook_time ?? 0));
 }
 
+/** Main-dish signals — checked before side keywords so "burger bowl" is not classified as side from slaw. */
+const MAIN_DISH_MEAL_PATTERN =
+  /\b(bowl|burrito|tacos?|burger|pasta|pizza|curry|steak|salmon|chicken|pork|beef|ribs|wings|enchilada|casserole|stir[- ]?fry|roast|supper|dinner)\b/i;
+
 const MEAL_KEYWORDS: { category: Exclude<RecipesTabMealChoice, 'any'>; pattern: RegExp }[] = [
   {
     category: 'breakfast',
@@ -156,7 +160,10 @@ const MEAL_KEYWORDS: { category: Exclude<RecipesTabMealChoice, 'any'>; pattern: 
   { category: 'lunch', pattern: /\b(lunch|sandwich|wrap|salad bowl)\b/i },
   { category: 'dinner', pattern: /\b(dinner|supper|roast|casserole|stir[- ]?fry)\b/i },
   { category: 'snack', pattern: /\b(snack|bite|dessert|cookie|brownie|cake|pie|pudding)\b/i },
-  { category: 'side', pattern: /\b(side dish|side|slaw|coleslaw|soup|stew|chili|chowder|broth)\b/i },
+  {
+    category: 'side',
+    pattern: /\b(side dish|side(?!\s*of)|coleslaw|soup|stew|chili|chowder|broth)\b/i,
+  },
 ];
 
 function apiMealTypeToChoice(mealType: string | undefined | null): RecipesTabMealChoice | null {
@@ -184,9 +191,13 @@ function apiMealTypeToChoice(mealType: string | undefined | null): RecipesTabMea
 
 export function inferKitchenMealChoice(recipe: Recipe): RecipesTabMealChoice | null {
   const haystack = `${recipe.name} ${recipe.description} ${recipe.tag}`;
+  const mainDish = MAIN_DISH_MEAL_PATTERN.test(haystack);
   for (const { category, pattern } of MEAL_KEYWORDS) {
-    if (pattern.test(haystack)) return category;
+    if (!pattern.test(haystack)) continue;
+    if (category === 'side' && mainDish) continue;
+    return category;
   }
+  if (mainDish) return 'dinner';
   return null;
 }
 

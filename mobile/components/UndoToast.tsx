@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { UNDO_TOAST_AUTO_DISMISS_MS, UNDO_TOAST_BOTTOM_OFFSET_PX } from '../config/undoToast';
 
 export interface UndoToastProps {
   message: string;
@@ -9,8 +11,17 @@ export interface UndoToastProps {
 }
 
 export function UndoToast({ message, onUndo, onDismiss, actionLabel, onAction }: UndoToastProps) {
+  useEffect(() => {
+    const timer = setTimeout(() => onDismiss(), UNDO_TOAST_AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [message, onDismiss]);
+
   return (
-    <View className="absolute bottom-6 left-4 right-4 z-50">
+    <View
+      pointerEvents="box-none"
+      className="absolute left-4 right-4 z-50"
+      style={{ bottom: UNDO_TOAST_BOTTOM_OFFSET_PX }}
+    >
       <View className="flex-row items-center justify-between gap-2 rounded-2xl border border-border bg-ink px-4 py-3 shadow-lg">
         <Text className="flex-1 text-sm font-medium text-paper" numberOfLines={2}>
           {message}
