@@ -4,5 +4,5 @@
     "strict": true
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts", "global.d.ts"],
-  "exclude": ["supabase/functions/**", "scripts/**"]
+  "exclude": ["supabase/functions/**", "supabase/functions-bundled/**", "scripts/**"]
 }

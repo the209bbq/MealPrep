@@ -37,7 +37,8 @@
     "playwright": "^1.63.0",
     "sharp": "^0.34.5",
     "tailwindcss": "^3.4.19",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "esbuild": "^0.25.0"
   },
   "scripts": {
     "start": "expo start",
@@ -78,7 +79,8 @@
     "generate:brand": "node scripts/generate-brand-assets.mjs",
     "generate:pwa": "node scripts/generate-pwa-assets.mjs",
     "export:web": "npm run generate:brand && npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "bundle:fn": "node scripts/bundle-edge-function.mjs"
   },
   "private": true
 }
