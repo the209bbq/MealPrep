@@ -11,7 +11,7 @@ export const VIRAL_RECIPES = {
   requestTimeoutMs: 20_000,
   proxyUrl: process.env.EXPO_PUBLIC_VIRAL_RECIPES_URL ?? '',
   clientCacheTtlMs: 30 * 60 * 1000,
-  migrationFilePath: 'mobile/supabase/migrations/20261003170000_viral_recipes_cache.sql',
+  migrationFilePath: 'mobile/supabase/migrations/20261003180000_viral_recipes_cache.sql',
 } as const;
 
 export const VIRAL_RECIPES_CATEGORY_LABELS: Record<ViralRecipesCategory, string> = {

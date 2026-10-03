@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
+  VIRAL_RECIPES,
   VIRAL_RECIPES_CATEGORIES,
   VIRAL_RECIPES_CATEGORY_LABELS,
   VIRAL_RECIPES_CATEGORY_QUERIES,
@@ -13,5 +16,13 @@ for (const category of VIRAL_RECIPES_CATEGORIES) {
 
 assert.equal(typeof getViralRecipesUrl(), 'string');
 assert.equal(typeof isViralRecipesConfigured(), 'boolean');
+
+const migrationPath = path.join(process.cwd(), VIRAL_RECIPES.migrationFilePath.replace(/^mobile\//, ''));
+assert.ok(fs.existsSync(migrationPath), `migration file exists: ${VIRAL_RECIPES.migrationFilePath}`);
+assert.match(
+  fs.readFileSync(migrationPath, 'utf8'),
+  /primary key \(category, video_id\)/,
+  'composite primary key on category + video_id',
+);
 
 console.log('OK: viral-recipes checks passed');
