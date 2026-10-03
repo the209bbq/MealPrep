@@ -160,16 +160,21 @@ async function fetchRecipePage(url: string): Promise<string | null> {
   return new TextDecoder('utf-8', { fatal: false }).decode(merged);
 }
 
+type ImportFromUrlResult =
+  | { recipe: RecipeImportExtracted; cached: boolean }
+  | { notRecipe: true; message: string }
+  | null;
+
 async function importFromUrl(
   apiKey: string,
   normalizedUrl: string,
   sourceType: 'youtube' | 'web',
-): Promise<RecipeImportExtracted | { notRecipe: true; message: string } | null> {
+): Promise<ImportFromUrlResult> {
   const cacheKey = urlHashKey(
     sourceType === 'youtube' ? canonicalYouTubeWatchUrl(normalizedUrl) : normalizedUrl,
   );
   const cached = await readImportCache(cacheKey);
-  if (cached) return { ...cached, source_url: normalizedUrl };
+  if (cached) return { recipe: { ...cached, source_url: normalizedUrl }, cached: true };
 
   if (sourceType === 'youtube') {
     const watchUrl = canonicalYouTubeWatchUrl(normalizedUrl);
@@ -182,7 +187,7 @@ async function importFromUrl(
       };
     }
     await writeImportCache(cacheKey, normalizedUrl, extracted);
-    return extracted;
+    return { recipe: extracted, cached: false };
   }
 
   const html = await fetchRecipePage(normalizedUrl);
@@ -193,7 +198,7 @@ async function importFromUrl(
     const fromLd = recipeJsonLdToExtracted(jsonLd, normalizedUrl);
     if (fromLd && fromLd.is_recipe && (fromLd.ingredients.length > 0 || fromLd.steps.length > 0)) {
       await writeImportCache(cacheKey, normalizedUrl, fromLd);
-      return fromLd;
+      return { recipe: fromLd, cached: false };
     }
   }
 
@@ -207,7 +212,7 @@ async function importFromUrl(
     };
   }
   await writeImportCache(cacheKey, normalizedUrl, fromGemini);
-  return fromGemini;
+  return { recipe: fromGemini, cached: false };
 }
 
 Deno.serve(async (req) => {
@@ -266,7 +271,7 @@ Deno.serve(async (req) => {
     if ('notRecipe' in result && result.notRecipe) {
       return jsonResponse({ error: result.message, code: 'NOT_RECIPE' }, 422);
     }
-    return jsonResponse({ recipe: result, cached: false });
+    return jsonResponse({ recipe: result.recipe, cached: result.cached });
   } catch (error) {
     console.error('recipe-import error', error);
     return jsonResponse(
