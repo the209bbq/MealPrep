@@ -1,7 +1,6 @@
 import {
+  areSameIngredientForPantryDedupe,
   canonicalIngredientPhrase,
-  fuzzyNameScore,
-  ingredientMatchScore,
 } from '../recipeMatch/ingredientNormalize';
 import type { PantryCategory } from '../../types/mealprep';
 import {
@@ -98,8 +97,7 @@ export function stableSortDetections<T extends { name: string }>(items: T[]): T[
 
 const CLIENT_PANTRY_MERGE_IDENTITY: PantryMergeIdentity = {
   identityKey: detectionIdentityKey,
-  rowsMatch: (a, b) =>
-    ingredientMatchScore(a, b) >= 1 || fuzzyNameScore(a, b) >= 0.92,
+  rowsMatch: areSameIngredientForPantryDedupe,
 };
 
 function finalizeDetectionRow(row: PantryVisionDetectionRow): PantryVisionDetectionRow {

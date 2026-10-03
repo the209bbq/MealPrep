@@ -89,3 +89,8 @@ export function pantryRowsSeemCompleteForSinglePass(
   const avg = items.reduce((sum, row) => sum + row.confidence, 0) / items.length;
   return avg >= minAvgConfidence;
 }
+
+/** Run add-missing (verify) pass unless the wall-clock budget cannot fit another Gemini call. */
+export function shouldRunPantryVerifySecondPass(budgetExhausted: boolean): boolean {
+  return !budgetExhausted;
+}

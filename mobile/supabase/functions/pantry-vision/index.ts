@@ -9,11 +9,13 @@
 // Optional secrets:
 //   GEMINI_MODEL = e.g. gemini-3.8-flash (defaults below; keep in sync with mobile/config/geminiConfig.ts)
 //   GEMINI_FALLBACK_MODELS = comma-separated backup model ids (optional)
+//   GEMINI_REQUEST_TIMEOUT_MS = per-call timeout (default 38000; dense photos may need 40000+)
 
 // BEGIN GEMINI_ORCHESTRATION (keep in sync with geminiOrchestration.ts — npm run test:pantry-vision-gemini)
 /** @sync mobile/config/geminiConfig.ts */
 const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 const DEFAULT_GEMINI_FALLBACK_MODELS = [
+  'gemini-3.8-flash',
   'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
@@ -21,8 +23,27 @@ const DEFAULT_GEMINI_FALLBACK_MODELS = [
   'gemini-2.0-flash',
 ] as const;
 
-/** Per upstream HTTP call (each Gemini generateContent). */
-const GEMINI_REQUEST_TIMEOUT_MS = 22_000;
+/** Per upstream HTTP call (each Gemini generateContent). Override via `GEMINI_REQUEST_TIMEOUT_MS` secret. */
+const DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 38_000;
+
+/** @deprecated Use resolveGeminiRequestTimeoutMs — kept for tests importing the default cap. */
+const GEMINI_REQUEST_TIMEOUT_MS = DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;
+
+/** Base64 length above this is treated as a dense/large pantry photo for timeout memory. */
+const LARGE_PANTRY_IMAGE_BASE64_LENGTH = 2_400_000;
+
+function parseGeminiRequestTimeoutMs(raw: string | undefined): number {
+  if (!raw?.trim()) return DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 8_000 || parsed > 120_000) {
+    return DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
+function isLargePantryImageBase64(imageBase64: string): boolean {
+  return imageBase64.length >= LARGE_PANTRY_IMAGE_BASE64_LENGTH;
+}
 
 /** Shared wall-clock budget for one pantry-vision HTTP request (under Supabase ~150s limit). */
 const GEMINI_REQUEST_TOTAL_BUDGET_MS = 110_000;
@@ -65,10 +86,21 @@ function deprioritizeRecentlyTimedOutModels(
   timedOutAt: ReadonlyMap<string, number>,
   nowMs: number,
   ttlMs: number = MODEL_TIMEOUT_DEPRIORITIZE_MS,
+  skipLargeImageTimeouts: ReadonlyMap<string, number> | null = null,
+  imageIsLarge: boolean = false,
 ): string[] {
+  let pool = candidates;
+  if (imageIsLarge && skipLargeImageTimeouts && skipLargeImageTimeouts.size > 0) {
+    const filtered = candidates.filter((model) => {
+      const at = skipLargeImageTimeouts.get(model);
+      return at == null || nowMs - at >= ttlMs;
+    });
+    if (filtered.length > 0) pool = filtered;
+  }
+
   const fresh: string[] = [];
   const deprioritized: string[] = [];
-  for (const model of candidates) {
+  for (const model of pool) {
     const at = timedOutAt.get(model);
     if (at != null && nowMs - at < ttlMs) {
       deprioritized.push(model);
@@ -81,13 +113,28 @@ function deprioritizeRecentlyTimedOutModels(
 
 class ModelTimeoutMemory {
   private readonly timedOutAt = new Map<string, number>();
+  private readonly timedOutOnLargeImageAt = new Map<string, number>();
 
-  record(model: string, nowMs: number = Date.now()): void {
+  record(model: string, nowMs: number = Date.now(), imageWasLarge: boolean = false): void {
     this.timedOutAt.set(model, nowMs);
+    if (imageWasLarge) {
+      this.timedOutOnLargeImageAt.set(model, nowMs);
+    }
   }
 
-  orderCandidates(candidates: string[], nowMs: number = Date.now()): string[] {
-    return deprioritizeRecentlyTimedOutModels(candidates, this.timedOutAt, nowMs);
+  orderCandidates(
+    candidates: string[],
+    nowMs: number = Date.now(),
+    imageIsLarge: boolean = false,
+  ): string[] {
+    return deprioritizeRecentlyTimedOutModels(
+      candidates,
+      this.timedOutAt,
+      nowMs,
+      MODEL_TIMEOUT_DEPRIORITIZE_MS,
+      this.timedOutOnLargeImageAt,
+      imageIsLarge,
+    );
   }
 }
 
@@ -140,11 +187,16 @@ function orderModelsForAttempt(
   fallbacksFromEnv: string | undefined,
   timeoutMemory: ModelTimeoutMemory,
   nowMs: number = Date.now(),
+  imageIsLarge: boolean = false,
 ): string[] {
   const base = buildGeminiModelCandidates(primaryFromEnv, fallbacksFromEnv);
-  return timeoutMemory.orderCandidates(base, nowMs);
+  return timeoutMemory.orderCandidates(base, nowMs, imageIsLarge);
 }
 // END GEMINI_ORCHESTRATION
+
+function perCallGeminiTimeoutMs(): number {
+  return parseGeminiRequestTimeoutMs(Deno.env.get('GEMINI_REQUEST_TIMEOUT_MS') ?? undefined);
+}
 
 // BEGIN PANTRY_MERGE (keep in sync with pantryItemMerge.ts — npm run test:pantry-vision-merge)
 type PantryMergeRow = {
@@ -229,26 +281,13 @@ function pantryRowsSeemCompleteForSinglePass(
   return avg >= minAvgConfidence;
 }
 
-function tokenOverlapMatch(a: string, b: string): boolean {
-  const aKey = normalizeNameKey(a);
-  const bKey = normalizeNameKey(b);
-  if (!aKey || !bKey) return false;
-  if (aKey === bKey) return true;
-  const aTokens = aKey.split(' ').filter(Boolean);
-  const bTokens = bKey.split(' ').filter(Boolean);
-  if (aTokens.length === 0 || bTokens.length === 0) return false;
-  const shorter = aTokens.length <= bTokens.length ? aTokens : bTokens;
-  const longer = aTokens.length <= bTokens.length ? bTokens : aTokens;
-  if (shorter.length >= 2 && shorter.every((t) => longer.includes(t))) return true;
-  const shorterSet = new Set(shorter);
-  const overlap = longer.filter((t) => shorterSet.has(t)).length;
-  const union = new Set([...aTokens, ...bTokens]).size;
-  return overlap >= 2 && overlap / union >= 0.85;
+function shouldRunPantryVerifySecondPass(budgetExhausted: boolean): boolean {
+  return !budgetExhausted;
 }
 
 const EDGE_PANTRY_MERGE_IDENTITY: PantryMergeIdentity = {
   identityKey: normalizeNameKey,
-  rowsMatch: tokenOverlapMatch,
+  rowsMatch: () => false,
 };
 // END PANTRY_MERGE
 
@@ -256,7 +295,7 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_RETRY_BACKOFF_MS = 450;
 const GEMINI_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 503]);
 const geminiModelTimeoutMemory = new ModelTimeoutMemory();
-const PANTRY_VISION_CACHE_VERSION = 'v4';
+const PANTRY_VISION_CACHE_VERSION = 'v5';
 const PANTRY_VISION_SINGLE_PASS_MIN_ITEMS = 8;
 const PANTRY_VISION_SINGLE_PASS_MIN_AVG_CONFIDENCE = 0.72;
 const PANTRY_MAX_ITEMS = 120;
@@ -707,15 +746,17 @@ function geminiEnumeratePrompt(scanLocation: (typeof PANTRY_STORAGE)[number]): s
     '\nRules:\n' +
     '- Read the FRONT product label only. Ignore ingredient lists, nutrition panels, and side/back text.\n' +
     '- Skip non-food (pet food, cleaning supplies, napkins, appliances, empty jars, bags, tools).\n' +
-    '- Do not guess: omit anything you cannot read clearly from the front label.\n' +
+    '- Do not guess: omit anything you cannot read clearly from the front label. Do NOT list products that are not visible.\n' +
     '- Do NOT use barcodes.\n' +
-    '- name: generic recipe ingredient (lowercase-friendly), specific when it matters (e.g. black olives, chicken breast, cake flour, all-purpose flour, cream of mushroom soup). Never put store brands in name.\n' +
-    '- brand: optional store brand when visible (separate field).\n' +
+    '- name: what the product actually IS for cooking (generic recipe ingredient, lowercase-friendly). Be specific when it matters: honey peanut butter not almond butter; pancake syrup not maple syrup; Kool-Aid = drink mix or powdered drink mix; Sara Lee loaf = bread not bread mix; cheddar crackers not just crackers when the label says Goldfish-style cheese crackers.\n' +
+    '- brand: optional store or product brand when visible (separate field). Example: name "cheddar crackers", brand "Goldfish".\n' +
+    '- Check lower shelves, back rows, and partially hidden items behind front-facing packages.\n' +
     '- Scan shelf by shelf top-to-bottom; on each shelf go left-to-right.\n' +
     '- One JSON object per distinct product. If three identical cans are visible, quantity 3 and unit "can".\n' +
     '- Use realistic units (oz, lb, each, bottle, jar, can). Set confidence 0-1.\n' +
     'Examples (name only): {"name":"black olives","brand":"WinCo","quantity":1,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.9}\n' +
-    '{"name":"tomato soup","quantity":2,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.88}\n' +
+    '{"name":"pancake syrup","quantity":1,"unit":"bottle","category":"condiments","storage":"pantry","confidence":0.88}\n' +
+    '{"name":"honey peanut butter","quantity":1,"unit":"jar","category":"dry_goods","storage":"pantry","confidence":0.87}\n' +
     '{"name":"cake flour","quantity":1,"unit":"box","category":"dry_goods","storage":"pantry","confidence":0.86}\n' +
     'Return JSON only matching the schema.'
   );
@@ -729,7 +770,7 @@ function geminiVerifyPrompt(scanLocation: (typeof PANTRY_STORAGE)[number], passO
     '\nFirst pass already found:\n' +
     list +
     '\nLook at the image again. Return ONLY additional visible food products missing from that list.\n' +
-    'Same rules as before: generic recipe names in name (not brands), optional brand field, front label only, no non-food, no guesses.\n' +
+    'Same rules as before: name what the product actually is, generic recipe names (brands in brand field), check lower shelves and back rows, front label only, no non-food, no guesses, omit items not visible.\n' +
     'If nothing new is visible, return {"items":[]}.\n' +
     'Do NOT repeat first-pass items. Do NOT re-list the full inventory. JSON only.'
   );
@@ -769,7 +810,7 @@ async function callGeminiOnce(
   vision: GeminiVisionRequest,
   budget: RequestTimeBudget,
 ): Promise<GeminiCallSuccess | { error: GeminiAttemptError }> {
-  const timeoutMs = budget.perCallTimeoutMs(GEMINI_REQUEST_TIMEOUT_MS);
+  const timeoutMs = budget.perCallTimeoutMs(perCallGeminiTimeoutMs());
   if (timeoutMs == null) {
     return { error: { kind: 'timeout', retryable: false } };
   }
@@ -950,14 +991,7 @@ async function callPantryGeminiTwoPass(
 
   const passOneDeduped = dedupeItems(passOne.items);
 
-  if (
-    pantryRowsSeemCompleteForSinglePass(
-      passOneDeduped,
-      PANTRY_VISION_SINGLE_PASS_MIN_ITEMS,
-      PANTRY_VISION_SINGLE_PASS_MIN_AVG_CONFIDENCE,
-    ) ||
-    budget.isExhausted()
-  ) {
+  if (!shouldRunPantryVerifySecondPass(budget.isExhausted())) {
     return { items: passOneDeduped, passes: 1 };
   }
 
@@ -1055,7 +1089,7 @@ async function callPantryGeminiOnModel(
     if ('items' in result) return result;
 
     if (result.error.kind === 'timeout') {
-      geminiModelTimeoutMemory.record(model);
+      geminiModelTimeoutMemory.record(model, Date.now(), isLargePantryImageBase64(imageBase64));
       return result;
     }
 
@@ -1113,10 +1147,13 @@ async function callPantryGeminiWithFallbacks(
   debug: { modelAttempts: GeminiModelAttemptDebug[]; geminiPasses: number };
 }> {
   const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
+  const imageIsLarge = isLargePantryImageBase64(imageBase64);
   const candidates = orderModelsForAttempt(
     Deno.env.get('GEMINI_MODEL') ?? undefined,
     Deno.env.get('GEMINI_FALLBACK_MODELS') ?? undefined,
     geminiModelTimeoutMemory,
+    Date.now(),
+    imageIsLarge,
   );
 
   const failures: string[] = [];
@@ -1152,7 +1189,7 @@ async function callPantryGeminiWithFallbacks(
         debug: { modelAttempts, geminiPasses: result.passes },
       };
     }
-    const failureMessage = formatAttemptError(model, result.error, GEMINI_REQUEST_TIMEOUT_MS);
+    const failureMessage = formatAttemptError(model, result.error, perCallGeminiTimeoutMs());
     failures.push(failureMessage);
     modelAttempts.push({
       model,
@@ -1196,7 +1233,7 @@ async function callPriceTagGeminiWithFallbacks(
       console.log(`pantry-vision: price-tag ok model=${model} item=${result.tag.itemName}`);
       return { tag: result.tag, model };
     }
-    failures.push(formatAttemptError(model, result.error, GEMINI_REQUEST_TIMEOUT_MS));
+    failures.push(formatAttemptError(model, result.error, perCallGeminiTimeoutMs()));
     console.warn(`pantry-vision: price-tag failed ${failures[failures.length - 1]}`);
   }
 
