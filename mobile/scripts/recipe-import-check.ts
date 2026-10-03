@@ -23,6 +23,7 @@ import {
   validatePublicHttpFetchUrl,
 } from '../supabase/functions/recipe-import/ssrfGuard.ts';
 import { youtubeVideoIdFromUrl } from '../lib/recipeImport/youtube.ts';
+import { extractUrlFromClipboardText } from '../lib/recipeImport/extractUrlFromClipboardText.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, '../test-fixtures/recipe-import-jsonld');
@@ -120,5 +121,31 @@ assert.equal(geminiPayload!.ingredients[0].name, 'salt');
 
 const rejected = validateGeminiRecipeImportPayload({ title: '' });
 assert.equal(rejected, null);
+
+assert.equal(
+  extractUrlFromClipboardText('Check this https://example.com/recipe) out'),
+  'https://example.com/recipe',
+);
+assert.equal(
+  extractUrlFromClipboardText('no link here'),
+  null,
+);
+assert.equal(
+  extractUrlFromClipboardText('http://chef.test/path"'),
+  'http://chef.test/path',
+);
+
+const importFromLinkSource = fs.readFileSync(
+  path.join(__dirname, '../components/recipes/RecipeImportFromLink.tsx'),
+  'utf8',
+);
+assert.ok(
+  !/useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]*getStringAsync/.test(importFromLinkSource),
+  'RecipeImportFromLink must not auto-read clipboard on mount',
+);
+assert.ok(
+  importFromLinkSource.includes('pasteFromClipboard'),
+  'RecipeImportFromLink should paste from clipboard on explicit user action',
+);
 
 console.log('OK: recipe-import checks passed');
