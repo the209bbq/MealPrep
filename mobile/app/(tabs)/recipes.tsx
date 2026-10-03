@@ -20,13 +20,12 @@ import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySug
 import { useApp } from '../../context/AppContext';
 import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
-import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
+import { RECIPE_SOURCES } from '../../config/recipeSources';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 
 export default function RecipesScreen() {
   const params = useLocalSearchParams<{ recipeId?: string; url?: string; text?: string; import?: string }>();
   const {
-    recipes,
     pantry,
     session,
     servingOverrides,
@@ -40,6 +39,9 @@ export default function RecipesScreen() {
     isOnMealPlan,
     toggleMealPlanKitchenRecipe,
     onboarding,
+    feedKitchenRecipes,
+    refreshLibraryRecipes,
+    libraryRecipesLoading,
   } = useApp();
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
@@ -65,14 +67,16 @@ export default function RecipesScreen() {
     loading: discoveryLoading,
     error: discoveryError,
     refreshDiscovery,
-  } = usePantryDiscoverySuggestions(pantry, session, { enabled: true });
+  } = usePantryDiscoverySuggestions(pantry, session, {
+    enabled: RECIPE_SOURCES.recipeApiEnabled,
+  });
 
   function openDetail(row: RecipesTabRow) {
     setPickedDetailRow(row);
     onboarding.notifyTutorialStepComplete('recipes');
   }
 
-  const kitchenRecipes = useMemo(() => kitchenRecipesForPantryMatch(recipes), [recipes]);
+  const kitchenRecipes = useMemo(() => feedKitchenRecipes, [feedKitchenRecipes]);
 
   const filterBaseRows = useMemo((): RecipesTabRow[] => {
     const kitchenOnly = buildRecipesTabCatalogRows({
@@ -95,7 +99,11 @@ export default function RecipesScreen() {
 
   function showDifferentIdeas() {
     setFeedDiversitySeed((value) => value + 1);
-    refreshDiscovery();
+    if (RECIPE_SOURCES.recipeApiEnabled) {
+      refreshDiscovery();
+    } else {
+      refreshLibraryRecipes();
+    }
   }
 
   const detailRow = useMemo(() => {
@@ -190,13 +198,15 @@ export default function RecipesScreen() {
         ) : null}
         <Pressable
           onPress={showDifferentIdeas}
-          disabled={discoveryLoading}
+          disabled={discoveryLoading || libraryRecipesLoading}
           className="mt-2 min-h-[40px] items-center justify-center rounded-lg px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
         >
           <Text className="text-sm font-semibold text-primary">
-            {discoveryLoading ? RECIPES_COPY.discoveryPanel.searching : RECIPES_COPY.cookNowCard.showDifferentIdeas}
+            {discoveryLoading || libraryRecipesLoading
+              ? RECIPES_COPY.discoveryPanel.searching
+              : RECIPES_COPY.cookNowCard.showDifferentIdeas}
           </Text>
         </Pressable>
       </Card>

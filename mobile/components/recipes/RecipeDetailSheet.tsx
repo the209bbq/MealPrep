@@ -21,6 +21,8 @@ import {
   scheduleTargetFromKitchenRecipe,
 } from '../../lib/mealCalendar/scheduleTarget';
 import type { RecipePantryMatch } from '../../lib/recipeMatch';
+import { LIBRARY_RECIPES } from '../../config/libraryRecipes';
+import { isLibraryRecipeAppId } from '../../lib/libraryRecipes/slug';
 import type { Recipe } from '../../types/mealprep';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 
@@ -178,6 +180,10 @@ export function RecipeDetailSheet({
 
           <View className="px-4 pt-3">
             <Text className="text-xl font-bold text-ink">{kitchenRecipe.name}</Text>
+
+            {row.kind === 'kitchen' && isLibraryRecipeAppId(row.recipe.id) ? (
+              <Text className="mt-1 text-xs text-muted">{LIBRARY_RECIPES.detailTag}</Text>
+            ) : null}
 
             {row.kind === 'kitchen' && (sourceCredit?.creatorName || sourceCredit?.originalUrl) ? (
               <RecipeSourceCreditLine
