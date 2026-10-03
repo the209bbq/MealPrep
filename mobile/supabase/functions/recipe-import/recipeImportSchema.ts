@@ -21,6 +21,7 @@ export interface RecipeImportExtracted {
   /** Web pages only — never persist YouTube video titles long-term. */
   source_title?: string;
   youtube_channel_name?: string | null;
+  youtube_channel_url?: string | null;
   metadata_refreshed_at?: string;
   social_author_name?: string | null;
   social_author_url?: string | null;

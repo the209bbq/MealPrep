@@ -139,6 +139,8 @@ export interface Recipe {
   sourceType?: 'youtube' | 'web' | 'tiktok' | 'instagram' | 'facebook' | 'photo' | 'video';
   sourceTitle?: string;
   sourceChannelName?: string;
+  sourceChannelUrl?: string;
+  sourceAuthorUrl?: string;
   sourceMetadataRefreshedAt?: string;
   prepMinutes?: number | null;
   cookMinutes?: number | null;

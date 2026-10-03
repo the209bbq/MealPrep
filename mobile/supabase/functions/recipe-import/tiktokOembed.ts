@@ -1,3 +1,5 @@
+import { sanitizeHttpUrl } from './safeHttpUrl.ts';
+
 export interface TikTokOembedResult {
   caption: string;
   authorName: string;
@@ -14,8 +16,9 @@ export function parseTikTokOembedPayload(raw: unknown): TikTokOembedResult | nul
     typeof obj.author_name === 'string' && obj.author_name.trim()
       ? obj.author_name.trim()
       : 'creator';
-  const authorUrl =
+  const authorUrlRaw =
     typeof obj.author_url === 'string' && obj.author_url.trim() ? obj.author_url.trim() : null;
+  const authorUrl = authorUrlRaw ? sanitizeHttpUrl(authorUrlRaw) : null;
   const thumbnailUrl =
     typeof obj.thumbnail_url === 'string' && obj.thumbnail_url.trim()
       ? obj.thumbnail_url.trim()

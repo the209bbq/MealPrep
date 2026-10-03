@@ -1,14 +1,6 @@
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { useMemo } from 'react';
-import {
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card } from '../Card';
 import { AddToCalendarButton } from '../mealCalendar/AddToCalendarButton';
@@ -17,10 +9,9 @@ import { THEME } from '../../config/appConfig';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import { RecipeYouTubeEmbed } from './RecipeYouTubeEmbed';
-import {
-  isYoutubeSourceMetadataFresh,
-  youtubeVideoIdFromUrl,
-} from '../../lib/recipeImport/youtube';
+import { RecipeSourceCreditLine } from './RecipeSourceCreditLine';
+import { sourceCreditFromRecipe } from '../../lib/recipeImport/sourceCredit';
+import { youtubeVideoIdFromUrl } from '../../lib/recipeImport/youtube';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import { discoveryRecipeServingOverrideId } from '../../config/recipesTabFilters';
 import { nutritionLabel } from '../../lib/nutrition';
@@ -105,10 +96,7 @@ export function RecipeDetailSheet({
     kitchenRecipe.sourceType === 'youtube' && kitchenRecipe.sourceUrl
       ? youtubeVideoIdFromUrl(kitchenRecipe.sourceUrl)
       : null;
-  const showYoutubeChannel =
-    kitchenRecipe.sourceType === 'youtube' &&
-    kitchenRecipe.sourceChannelName &&
-    isYoutubeSourceMetadataFresh(kitchenRecipe.sourceMetadataRefreshedAt);
+  const sourceCredit = sourceCreditFromRecipe(kitchenRecipe);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -132,49 +120,15 @@ export function RecipeDetailSheet({
               <Text className="mt-2 text-xs text-muted">
                 {kitchenRecipe.servings} servings · {kitchenRecipe.minutes} min · {nutritionLabel(kitchenRecipe)}
               </Text>
-              {kitchenRecipe.sourceType === 'youtube' && kitchenRecipe.sourceUrl ? (
-                <>
-                  {showYoutubeChannel ? (
-                    <Text className="mt-2 text-sm text-muted">
-                      {RECIPE_IMPORT_COPY.youtubeCredit(kitchenRecipe.sourceChannelName!)}
-                    </Text>
-                  ) : (
-                    <Text className="mt-2 text-sm text-muted">{RECIPE_IMPORT_COPY.youtubeCreditUnknown}</Text>
-                  )}
-                  {youtubeVideoId ? <RecipeYouTubeEmbed videoId={youtubeVideoId} /> : null}
-                  <Pressable
-                    onPress={() => void Linking.openURL(kitchenRecipe.sourceUrl!)}
-                    className="mt-2 self-start"
-                    accessibilityRole="link"
-                  >
-                    <Text className="text-sm font-semibold text-primary">{RECIPE_IMPORT_COPY.watchOnYouTube}</Text>
-                  </Pressable>
-                </>
-              ) : kitchenRecipe.sourceUrl ? (
-                <>
-                  {kitchenRecipe.sourceTitle &&
-                  (kitchenRecipe.sourceType === 'tiktok' ||
-                    kitchenRecipe.sourceType === 'instagram' ||
-                    kitchenRecipe.sourceType === 'facebook') ? (
-                    <Pressable
-                      onPress={() => void Linking.openURL(kitchenRecipe.sourceUrl!)}
-                      className="mt-2 self-start"
-                      accessibilityRole="link"
-                    >
-                      <Text className="text-sm font-semibold text-primary">
-                        {RECIPE_IMPORT_COPY.socialCredit(kitchenRecipe.sourceTitle)}
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={() => void Linking.openURL(kitchenRecipe.sourceUrl!)}
-                      className="mt-2 self-start"
-                      accessibilityRole="link"
-                    >
-                      <Text className="text-sm font-semibold text-primary">{RECIPE_IMPORT_COPY.viewOriginal}</Text>
-                    </Pressable>
-                  )}
-                </>
+              {kitchenRecipe.sourceUrl || sourceCredit.creatorName ? (
+                <RecipeSourceCreditLine
+                  creatorName={sourceCredit.creatorName}
+                  creatorUrl={sourceCredit.creatorUrl}
+                  originalUrl={sourceCredit.originalUrl}
+                />
+              ) : null}
+              {kitchenRecipe.sourceType === 'youtube' && youtubeVideoId ? (
+                <RecipeYouTubeEmbed videoId={youtubeVideoId} />
               ) : null}
             </>
           ) : (
