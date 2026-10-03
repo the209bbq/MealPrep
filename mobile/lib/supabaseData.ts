@@ -82,6 +82,8 @@ type RecipeRow = {
   source_url: string | null;
   source_type: string | null;
   source_title: string | null;
+  source_channel_name: string | null;
+  source_metadata_refreshed_at: string | null;
   prep_minutes: number | null;
   cook_minutes: number | null;
 };
@@ -205,8 +207,15 @@ export function mapRecipe(row: RecipeRow): Recipe {
     createdAt: row.created_at,
     sourceUrl: row.source_url ?? undefined,
     sourceType:
-      row.source_type === 'youtube' || row.source_type === 'web' ? row.source_type : undefined,
+      row.source_type === 'youtube' ||
+      row.source_type === 'web' ||
+      row.source_type === 'tiktok' ||
+      row.source_type === 'instagram'
+        ? row.source_type
+        : undefined,
     sourceTitle: row.source_title ?? undefined,
+    sourceChannelName: row.source_channel_name ?? undefined,
+    sourceMetadataRefreshedAt: row.source_metadata_refreshed_at ?? undefined,
     prepMinutes: row.prep_minutes,
     cookMinutes: row.cook_minutes,
     nutritionSource: row.nutrition_source ?? undefined,
@@ -524,6 +533,8 @@ export async function upsertLinkImportedRecipe(
     source_url: recipe.sourceUrl ?? null,
     source_type: recipe.sourceType ?? null,
     source_title: recipe.sourceTitle ?? null,
+    source_channel_name: recipe.sourceChannelName ?? null,
+    source_metadata_refreshed_at: recipe.sourceMetadataRefreshedAt ?? null,
     prep_minutes: recipe.prepMinutes ?? null,
     cook_minutes: recipe.cookMinutes ?? null,
     nutrition_source: recipe.nutritionSource ?? 'Link import',

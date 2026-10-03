@@ -1,12 +1,17 @@
 // Recipe import from link — deploy folder recipe-import (Verify JWT ENABLED).
 //
+// YouTube: Gemini reads the video by URL only (no download/storage). Channel metadata is cached ≤30 days.
+// TikTok/Instagram: POST { url, captionText } — caption is sent to Gemini (same JSON schema).
+//
 // Secrets: GEMINI_API_KEY (same as pantry-vision). Optional: GEMINI_MODEL, GEMINI_FALLBACK_MODELS.
 // Uses SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY for recipe_import_cache.
 
 import {
   canonicalYouTubeWatchUrl,
   classifyRecipeImportUrl,
+  isSocialCaptionSourceType,
   normalizeImportUrl,
+  type RecipeImportSourceType,
   urlHashKey,
 } from './urlClassification.ts';
 import {
@@ -165,14 +170,47 @@ type ImportFromUrlResult =
   | { notRecipe: true; message: string }
   | null;
 
+function buildImportCacheKey(
+  normalizedUrl: string,
+  sourceType: RecipeImportSourceType,
+  captionText?: string,
+): string {
+  const base =
+    sourceType === 'youtube' ? canonicalYouTubeWatchUrl(normalizedUrl) : normalizedUrl;
+  if (captionText?.trim()) {
+    return urlHashKey(`${base}|caption|${captionText.trim()}`);
+  }
+  return urlHashKey(base);
+}
+
+async function importFromCaption(
+  apiKey: string,
+  normalizedUrl: string,
+  sourceType: 'tiktok' | 'instagram',
+  captionText: string,
+): Promise<ImportFromUrlResult> {
+  const cacheKey = buildImportCacheKey(normalizedUrl, sourceType, captionText);
+  const cached = await readImportCache(cacheKey);
+  if (cached) return { recipe: { ...cached, source_url: normalizedUrl }, cached: true };
+
+  const fromGemini = await extractRecipeFromPageText(apiKey, captionText, normalizedUrl, sourceType);
+  if (!fromGemini) return null;
+  if (!fromGemini.is_recipe || fromGemini.confidence < 0.35) {
+    return {
+      notRecipe: true,
+      message: 'We could not find a recipe in that caption. Try a fuller caption or another link.',
+    };
+  }
+  await writeImportCache(cacheKey, normalizedUrl, fromGemini);
+  return { recipe: fromGemini, cached: false };
+}
+
 async function importFromUrl(
   apiKey: string,
   normalizedUrl: string,
   sourceType: 'youtube' | 'web',
 ): Promise<ImportFromUrlResult> {
-  const cacheKey = urlHashKey(
-    sourceType === 'youtube' ? canonicalYouTubeWatchUrl(normalizedUrl) : normalizedUrl,
-  );
+  const cacheKey = buildImportCacheKey(normalizedUrl, sourceType);
   const cached = await readImportCache(cacheKey);
   if (cached) return { recipe: { ...cached, source_url: normalizedUrl }, cached: true };
 
@@ -243,9 +281,9 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { url?: string };
+  let body: { url?: string; captionText?: string };
   try {
-    body = (await req.json()) as { url?: string };
+    body = (await req.json()) as { url?: string; captionText?: string };
   } catch {
     return jsonResponse({ error: 'Invalid JSON body', code: 'BAD_REQUEST' }, 400);
   }
@@ -258,6 +296,36 @@ Deno.serve(async (req) => {
   const sourceType = classifyRecipeImportUrl(normalized);
   if (!sourceType) {
     return jsonResponse({ error: 'Unsupported URL', code: 'BAD_REQUEST' }, 400);
+  }
+
+  if (isSocialCaptionSourceType(sourceType)) {
+    const caption = (body.captionText ?? '').trim();
+    if (!caption) {
+      return jsonResponse(
+        {
+          error:
+            'TikTok/Instagram import is coming soon — paste the caption text instead.',
+          code: 'CAPTION_REQUIRED',
+        },
+        422,
+      );
+    }
+    try {
+      const result = await importFromCaption(apiKey, normalized, sourceType, caption);
+      if (!result) {
+        return jsonResponse(
+          { error: 'Could not import that caption right now. Try again shortly.', code: 'UPSTREAM_ERROR' },
+          502,
+        );
+      }
+      if ('notRecipe' in result && result.notRecipe) {
+        return jsonResponse({ error: result.message, code: 'NOT_RECIPE' }, 422);
+      }
+      return jsonResponse({ recipe: result.recipe, cached: result.cached });
+    } catch (error) {
+      console.error('recipe-import caption error', error);
+      return jsonResponse({ error: 'Import failed unexpectedly.', code: 'UPSTREAM_ERROR' }, 502);
+    }
   }
 
   try {

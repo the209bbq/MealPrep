@@ -35,16 +35,26 @@ export function mapExtractedImportToRecipe(
   const cook = extracted.cook_minutes ?? 0;
   const minutes = Math.max(1, prep + cook > 0 ? prep + cook : 30);
 
-  const tag =
-    extracted.source_type === 'youtube' ? 'Imported · YouTube' : 'Imported · Web';
+  const tagBySource: Record<RecipeImportExtractedDto['source_type'], string> = {
+    youtube: 'Imported · YouTube',
+    web: 'Imported · Web',
+    tiktok: 'Imported · TikTok',
+    instagram: 'Imported · Instagram',
+  };
+  const descriptionBySource: Record<RecipeImportExtractedDto['source_type'], string> = {
+    youtube: 'Imported from a YouTube cooking video and saved in your own words.',
+    web: 'Imported from a recipe page and saved in your own words.',
+    tiktok: 'Imported from a TikTok caption and saved in your own words.',
+    instagram: 'Imported from an Instagram caption and saved in your own words.',
+  };
+
+  const persistYoutubeMeta = extracted.source_type === 'youtube';
 
   return {
     id: linkImportRecipeSlug(userId, extracted.source_url),
     name: extracted.title,
-    tag,
-    description: extracted.source_title && extracted.source_title !== extracted.title
-      ? extracted.source_title
-      : 'Saved from a link you imported',
+    tag: tagBySource[extracted.source_type],
+    description: descriptionBySource[extracted.source_type],
     servings: Math.max(1, extracted.servings),
     minutes,
     calories: 0,
@@ -57,7 +67,9 @@ export function mapExtractedImportToRecipe(
     createdAt: new Date().toISOString(),
     sourceUrl: extracted.source_url,
     sourceType: extracted.source_type,
-    sourceTitle: extracted.source_title ?? extracted.title,
+    sourceTitle: persistYoutubeMeta ? undefined : extracted.source_title,
+    sourceChannelName: persistYoutubeMeta ? extracted.youtube_channel_name ?? undefined : undefined,
+    sourceMetadataRefreshedAt: persistYoutubeMeta ? extracted.metadata_refreshed_at : undefined,
     prepMinutes: extracted.prep_minutes,
     cookMinutes: extracted.cook_minutes,
   };

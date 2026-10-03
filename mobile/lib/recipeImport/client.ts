@@ -44,6 +44,9 @@ async function parseError(response: Response, text: string): Promise<never> {
   if (response.status === 429 || json.code === 'RATE_LIMIT') {
     throw new RecipeImportRateLimitError(message);
   }
+  if (response.status === 422 && json.code === 'CAPTION_REQUIRED') {
+    throw new RecipeImportCaptionRequiredError(message);
+  }
   if (response.status === 422 || json.code === 'NOT_RECIPE') {
     throw new RecipeImportNotRecipeError(message);
   }
@@ -72,9 +75,14 @@ const DEMO_IMPORT: RecipeImportExtractedDto = {
   source_type: 'web',
 };
 
+export class RecipeImportCaptionRequiredError extends Error {
+  code = 'CAPTION_REQUIRED';
+}
+
 export async function importRecipeFromLink(
   url: string,
   accessToken: string | null,
+  options?: { captionText?: string },
 ): Promise<RecipeImportExtractedDto> {
   if (isDemoMode()) {
     return { ...DEMO_IMPORT, source_url: url.trim() || DEMO_IMPORT.source_url };
@@ -96,7 +104,10 @@ export async function importRecipeFromLink(
         Authorization: `Bearer ${accessToken}`,
         apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+        captionText: options?.captionText?.trim() || undefined,
+      }),
     }),
     RECIPE_IMPORT.requestTimeoutMs,
     'Recipe import timed out',

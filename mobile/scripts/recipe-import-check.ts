@@ -11,8 +11,10 @@ import { validateGeminiRecipeImportPayload } from '../supabase/functions/recipe-
 import {
   canonicalYouTubeWatchUrl,
   classifyRecipeImportUrl,
+  isSocialCaptionSourceType,
   normalizeImportUrl,
 } from '../supabase/functions/recipe-import/urlClassification.ts';
+import { youtubeVideoIdFromUrl } from '../lib/recipeImport/youtube.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, '../test-fixtures/recipe-import-jsonld');
@@ -25,6 +27,10 @@ assert.equal(parseRecipeYieldToServings(['4', '6']), 4);
 assert.equal(classifyRecipeImportUrl('https://www.youtube.com/watch?v=abc'), 'youtube');
 assert.equal(classifyRecipeImportUrl('https://youtu.be/abc'), 'youtube');
 assert.equal(classifyRecipeImportUrl('https://www.allrecipes.com/recipe/1/'), 'web');
+assert.equal(classifyRecipeImportUrl('https://www.tiktok.com/@chef/video/1'), 'tiktok');
+assert.equal(classifyRecipeImportUrl('https://www.instagram.com/reel/abc/'), 'instagram');
+assert.equal(isSocialCaptionSourceType('tiktok'), true);
+assert.equal(youtubeVideoIdFromUrl('https://youtu.be/abcd1234efg'), 'abcd1234efg');
 assert.equal(
   canonicalYouTubeWatchUrl('https://youtu.be/xyz123'),
   'https://www.youtube.com/watch?v=xyz123',
@@ -64,6 +70,7 @@ const geminiPayload = validateGeminiRecipeImportPayload({
   steps: ['Mix', 'Serve'],
   is_recipe: true,
   confidence: 0.8,
+  youtube_channel_name: 'Test Kitchen',
 });
 assert.ok(geminiPayload);
 assert.equal(geminiPayload!.ingredients[0].name, 'salt');

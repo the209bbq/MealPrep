@@ -1,4 +1,4 @@
-export type RecipeImportSourceType = 'youtube' | 'web';
+export type RecipeImportSourceType = 'youtube' | 'web' | 'tiktok' | 'instagram';
 
 export interface RecipeImportIngredientDto {
   name: string;
@@ -19,6 +19,8 @@ export interface RecipeImportExtractedDto {
   source_url: string;
   source_type: RecipeImportSourceType;
   source_title?: string;
+  youtube_channel_name?: string | null;
+  metadata_refreshed_at?: string;
 }
 
 export interface RecipeImportSuccessResponse {

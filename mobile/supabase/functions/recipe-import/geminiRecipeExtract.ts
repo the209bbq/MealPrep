@@ -8,6 +8,7 @@ import {
   shouldRetrySameModelAfterError,
 } from '../pantry-vision/geminiOrchestration.ts';
 import {
+  attachImportMetadata,
   GEMINI_RECIPE_IMPORT_JSON_SCHEMA,
   validateGeminiRecipeImportPayload,
   type RecipeImportExtracted,
@@ -28,12 +29,19 @@ type GeminiAttemptError = {
 };
 
 const TEXT_EXTRACTION_PROMPT =
-  'Extract a home-cooking recipe from the page text. Use generic ingredient names (no brands). ' +
-  'Return clear step-by-step instructions as short strings. If this is not a recipe, set is_recipe false and confidence low.';
+  'Extract a home-cooking recipe from the page text. Rewrite steps and ingredient lines in your own words (do not copy marketing or blog prose). ' +
+  'Use generic ingredient names (no brands). Return clear step-by-step instructions as short strings. If this is not a recipe, set is_recipe false and confidence low.';
 
 const YOUTUBE_EXTRACTION_PROMPT =
-  'Watch this cooking video and extract the recipe. Focus on clear step-by-step INSTRUCTIONS and ingredients with quantities and units. ' +
+  'You are helping a meal-planning app. The video is referenced by URL only — do not download, store, or reproduce the video or audio. ' +
+  'Watch the cooking video and extract a recipe with clear step-by-step INSTRUCTIONS and ingredients with quantities and units. ' +
+  'Rewrite the dish title, ingredients, and steps in fresh wording (never copy the video title, description, or transcript verbatim). ' +
+  'Set youtube_channel_name to the visible YouTube channel/creator name when you can see it, otherwise null. ' +
   'Use generic ingredient names (no brands). If this is not a recipe video, set is_recipe false with a low confidence score.';
+
+const SOCIAL_CAPTION_PROMPT =
+  'Extract a home-cooking recipe from this social post caption. Rewrite the title, ingredients, and steps in your own words (do not copy the caption verbatim). ' +
+  'Use generic ingredient names (no brands). Return clear step-by-step instructions. If this is not a recipe, set is_recipe false and confidence low.';
 
 async function callGeminiJson(
   apiKey: string,
@@ -164,30 +172,24 @@ export async function extractRecipeFromYouTubeVideo(
   ];
   const extracted = await callGeminiWithFallback(apiKey, parts);
   if (!extracted) return null;
-  return {
-    ...extracted,
-    source_url: sourceUrl,
-    source_type: sourceType,
-    source_title: extracted.title,
-  };
+  return attachImportMetadata(extracted, sourceUrl, sourceType);
 }
 
 export async function extractRecipeFromPageText(
   apiKey: string,
   pageText: string,
   sourceUrl: string,
+  sourceType: RecipeImportSourceType = 'web',
 ): Promise<RecipeImportExtracted | null> {
+  const prompt = sourceType === 'tiktok' || sourceType === 'instagram'
+    ? SOCIAL_CAPTION_PROMPT
+    : TEXT_EXTRACTION_PROMPT;
   const parts = [
     {
-      text: `${TEXT_EXTRACTION_PROMPT}\n\nSource URL: ${sourceUrl}\n\nPage text:\n${pageText}`,
+      text: `${prompt}\n\nSource URL: ${sourceUrl}\n\nText:\n${pageText}`,
     },
   ];
   const extracted = await callGeminiWithFallback(apiKey, parts);
   if (!extracted) return null;
-  return {
-    ...extracted,
-    source_url: sourceUrl,
-    source_type: 'web',
-    source_title: extracted.title,
-  };
+  return attachImportMetadata(extracted, sourceUrl, sourceType);
 }

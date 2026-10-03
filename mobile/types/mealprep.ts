@@ -136,8 +136,10 @@ export interface Recipe {
   isMaster: boolean;
   createdAt: string;
   sourceUrl?: string;
-  sourceType?: 'youtube' | 'web';
+  sourceType?: 'youtube' | 'web' | 'tiktok' | 'instagram';
   sourceTitle?: string;
+  sourceChannelName?: string;
+  sourceMetadataRefreshedAt?: string;
   prepMinutes?: number | null;
   cookMinutes?: number | null;
   nutritionSource?: string;

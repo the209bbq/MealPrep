@@ -33,6 +33,15 @@ export const RECIPE_IMPORT_COPY = {
   clipboardDetected: 'Link from clipboard',
   yourRecipeBadge: 'Your recipe',
   viewOriginal: 'View original',
+  watchOnYouTube: 'Watch on YouTube',
+  youtubeCredit: (channel: string) => `Recipe video by ${channel}`,
+  youtubeCreditUnknown: 'Recipe video on YouTube',
+  socialCaptionComingSoon:
+    'TikTok/Instagram import is coming soon — paste the caption text instead',
+  socialCaptionLabel: 'Caption text',
+  socialCaptionPlaceholder: 'Paste the recipe caption from the post…',
+  importFromCaptionCta: 'Import from caption',
+  sourceLinkLabel: 'Source link',
   stepsTitle: 'Instructions',
   noSteps: 'No steps were found — check the original link.',
 } as const;

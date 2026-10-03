@@ -18,7 +18,10 @@ export interface RecipeImportExtracted {
   confidence: number;
   source_url: string;
   source_type: RecipeImportSourceType;
+  /** Web pages only — never persist YouTube video titles long-term. */
   source_title?: string;
+  youtube_channel_name?: string | null;
+  metadata_refreshed_at?: string;
 }
 
 export const GEMINI_RECIPE_IMPORT_JSON_SCHEMA: Record<string, unknown> = {
@@ -44,6 +47,7 @@ export const GEMINI_RECIPE_IMPORT_JSON_SCHEMA: Record<string, unknown> = {
     steps: { type: 'array', items: { type: 'string' } },
     is_recipe: { type: 'boolean' },
     confidence: { type: 'number' },
+    youtube_channel_name: { type: ['string', 'null'] },
   },
   required: ['title', 'servings', 'ingredients', 'steps', 'is_recipe', 'confidence'],
 };
@@ -97,6 +101,11 @@ export function validateGeminiRecipeImportPayload(raw: unknown): RecipeImportExt
       ? Math.min(1, Math.max(0, obj.confidence))
       : 0.5;
 
+  const youtube_channel_name =
+    typeof obj.youtube_channel_name === 'string' && obj.youtube_channel_name.trim()
+      ? obj.youtube_channel_name.trim()
+      : null;
+
   return {
     title,
     servings,
@@ -108,5 +117,34 @@ export function validateGeminiRecipeImportPayload(raw: unknown): RecipeImportExt
     confidence,
     source_url: '',
     source_type: 'web',
+    youtube_channel_name,
   };
+}
+
+export function attachImportMetadata(
+  recipe: RecipeImportExtracted,
+  sourceUrl: string,
+  sourceType: RecipeImportSourceType,
+): RecipeImportExtracted {
+  const now = new Date().toISOString();
+  const base: RecipeImportExtracted = {
+    ...recipe,
+    source_url: sourceUrl,
+    source_type: sourceType,
+  };
+  if (sourceType === 'youtube') {
+    return {
+      ...base,
+      source_title: undefined,
+      metadata_refreshed_at: now,
+    };
+  }
+  if (sourceType === 'tiktok' || sourceType === 'instagram') {
+    return {
+      ...base,
+      source_title: undefined,
+      youtube_channel_name: null,
+    };
+  }
+  return base;
 }

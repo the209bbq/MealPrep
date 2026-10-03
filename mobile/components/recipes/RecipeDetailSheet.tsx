@@ -16,6 +16,11 @@ import { RecipePantryMatchBadge } from '../RecipePantryMatch';
 import { THEME } from '../../config/appConfig';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
+import { RecipeYouTubeEmbed } from './RecipeYouTubeEmbed';
+import {
+  isYoutubeSourceMetadataFresh,
+  youtubeVideoIdFromUrl,
+} from '../../lib/recipeImport/youtube';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import { discoveryRecipeServingOverrideId } from '../../config/recipesTabFilters';
 import { nutritionLabel } from '../../lib/nutrition';
@@ -96,6 +101,15 @@ export function RecipeDetailSheet({
       ? scheduleTargetFromKitchenRecipe(row.recipe)
       : scheduleTargetFromDiscoveryRecipe(row.recipe);
 
+  const youtubeVideoId =
+    kitchenRecipe.sourceType === 'youtube' && kitchenRecipe.sourceUrl
+      ? youtubeVideoIdFromUrl(kitchenRecipe.sourceUrl)
+      : null;
+  const showYoutubeChannel =
+    kitchenRecipe.sourceType === 'youtube' &&
+    kitchenRecipe.sourceChannelName &&
+    isYoutubeSourceMetadataFresh(kitchenRecipe.sourceMetadataRefreshedAt);
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View className="flex-1 bg-paper" style={{ paddingTop: insets.top }}>
@@ -118,7 +132,25 @@ export function RecipeDetailSheet({
               <Text className="mt-2 text-xs text-muted">
                 {kitchenRecipe.servings} servings · {kitchenRecipe.minutes} min · {nutritionLabel(kitchenRecipe)}
               </Text>
-              {kitchenRecipe.sourceUrl ? (
+              {kitchenRecipe.sourceType === 'youtube' && kitchenRecipe.sourceUrl ? (
+                <>
+                  {showYoutubeChannel ? (
+                    <Text className="mt-2 text-sm text-muted">
+                      {RECIPE_IMPORT_COPY.youtubeCredit(kitchenRecipe.sourceChannelName!)}
+                    </Text>
+                  ) : (
+                    <Text className="mt-2 text-sm text-muted">{RECIPE_IMPORT_COPY.youtubeCreditUnknown}</Text>
+                  )}
+                  {youtubeVideoId ? <RecipeYouTubeEmbed videoId={youtubeVideoId} /> : null}
+                  <Pressable
+                    onPress={() => void Linking.openURL(kitchenRecipe.sourceUrl!)}
+                    className="mt-2 self-start"
+                    accessibilityRole="link"
+                  >
+                    <Text className="text-sm font-semibold text-primary">{RECIPE_IMPORT_COPY.watchOnYouTube}</Text>
+                  </Pressable>
+                </>
+              ) : kitchenRecipe.sourceUrl ? (
                 <Pressable
                   onPress={() => void Linking.openURL(kitchenRecipe.sourceUrl!)}
                   className="mt-2 self-start"
