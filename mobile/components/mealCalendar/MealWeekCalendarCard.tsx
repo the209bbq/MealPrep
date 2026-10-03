@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useHydrated } from '../../hooks/useHydrated';
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { router } from 'expo-router';
@@ -53,7 +54,9 @@ export function MealWeekCalendarCard() {
   } = useApp();
 
   const ownerId = session?.user?.id ?? profile.id ?? (demoMode ? 'demo-user' : GUEST_OWNER_ID);
-  const today = localDateString();
+  const hydrated = useHydrated();
+  /** Stable placeholder during static export + first paint (real local date after hydration). */
+  const today = hydrated ? localDateString() : '1970-01-01';
   const grouped = useMemo(
     () => groupMealsByDay(mealPlan, MEAL_CALENDAR.daysAhead, today),
     [mealPlan, today],

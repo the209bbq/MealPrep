@@ -1,17 +1,30 @@
 import type { ComponentProps } from 'react';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { Tabs, type Href } from 'expo-router';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { AppHeader } from '../../components/AppHeader';
 import { HydrationSafeIonicon } from '../../components/HydrationSafeIonicon';
 import { MaintenanceScreen } from '../../components/MaintenanceScreen';
 import { TABS, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
+import { useHydrated } from '../../hooks/useHydrated';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 export default function TabsLayout() {
   const { maintenanceActive, isAdmin } = useApp();
+  const hydrated = useHydrated();
+
+  if (!hydrated) {
+    return (
+      <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
+        <AppHeader />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color={THEME.primary} />
+        </View>
+      </View>
+    );
+  }
 
   if (maintenanceActive) {
     return (

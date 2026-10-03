@@ -6,6 +6,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppOverlays } from '../components/AppOverlays';
 import { AppProvider } from '../context/AppContext';
 import { ScheduleRecipeSheetProvider } from '../context/ScheduleRecipeSheetContext';
+import { useHydrated } from '../hooks/useHydrated';
+
+function RootOverlays() {
+  const hydrated = useHydrated();
+  if (!hydrated) return null;
+  return <AppOverlays />;
+}
 
 export default function RootLayout() {
   return (
@@ -19,8 +26,9 @@ export default function RootLayout() {
               <Stack.Screen name="smart-shop" options={{ presentation: 'card' }} />
               <Stack.Screen name="discover-recipes" options={{ presentation: 'card' }} />
               <Stack.Screen name="discover-recipes/[id]" options={{ presentation: 'card' }} />
+              <Stack.Screen name="delete-account" options={{ presentation: 'card' }} />
             </Stack>
-            <AppOverlays />
+            <RootOverlays />
           </ScheduleRecipeSheetProvider>
         </AppProvider>
       </SafeAreaProvider>

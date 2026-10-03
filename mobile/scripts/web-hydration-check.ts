@@ -19,7 +19,10 @@ const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
 const port = Number(process.env.PORT ?? 8765);
 const origin = `http://127.0.0.1:${port}`;
 
-const ROUTES = ['/', '/pantry', '/recipes', '/grocery', '/profile', '/smart-shop'];
+const ROUTES = (process.env.HYDRATION_ROUTES ?? '/,/pantry,/recipes,/grocery,/profile,/smart-shop,/delete-account')
+  .split(',')
+  .map((r) => r.trim())
+  .filter(Boolean);
 /** /profile redirects to home (legacy email links). */
 
 function hydrationErrorsFromText(text: string): string[] {
@@ -34,20 +37,41 @@ function hydrationErrorsFromText(text: string): string[] {
     );
 }
 
-async function visitRoutes(page: Page, prefix: string): Promise<string[]> {
+/** Benign console noise on static guest export (no backend calls required). */
+function isAllowedConsoleError(text: string): boolean {
+  if (/Failed to load resource: net::ERR_FAILED/.test(text)) return true;
+  if (/favicon\.ico/.test(text)) return true;
+  return false;
+}
+
+function strictConsoleErrorsFromText(text: string): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !isAllowedConsoleError(line));
+}
+
+async function visitRoutes(page: Page, prefix: string): Promise<{ all: string[]; consoleErrors: string[] }> {
   const lines: string[] = [];
+  const consoleErrors: string[] = [];
   page.on('console', (msg) => {
-    lines.push(msg.text());
+    const text = msg.text();
+    lines.push(text);
+    if (msg.type() === 'error' && !isAllowedConsoleError(text)) {
+      consoleErrors.push(text);
+    }
   });
   page.on('pageerror', (err) => {
-    lines.push(String(err));
+    const text = String(err);
+    lines.push(text);
+    consoleErrors.push(text);
   });
   for (const route of ROUTES) {
     const url = `${origin}${prefix}${route === '/' ? '/' : route}`;
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1_200);
   }
-  return lines;
+  return { all: lines, consoleErrors };
 }
 
 function prepareServeRoot(): string {
@@ -113,8 +137,9 @@ async function main() {
     const cleanContext = await browser.newContext();
     const cleanPage = await cleanContext.newPage();
     await cleanPage.route(`**${basePath}/pwa-register.js`, (route) => route.abort());
-    const cleanLines = await visitRoutes(cleanPage, basePath);
-    const cleanErrors = hydrationErrorsFromText(cleanLines.join('\n'));
+    const cleanVisit = await visitRoutes(cleanPage, basePath);
+    const cleanErrors = hydrationErrorsFromText(cleanVisit.all.join('\n'));
+    const cleanConsoleErrors = cleanVisit.consoleErrors;
     await cleanContext.close();
 
     const staleContext = await browser.newContext();
@@ -126,8 +151,9 @@ async function main() {
       await navigator.serviceWorker.register(`${scope}/sw.js`, { scope: `${scope}/` });
       await navigator.serviceWorker.ready;
     }, basePath);
-    const staleLines = await visitRoutes(stalePage, basePath);
-    const staleErrors = hydrationErrorsFromText(staleLines.join('\n'));
+    const staleVisit = await visitRoutes(stalePage, basePath);
+    const staleErrors = hydrationErrorsFromText(staleVisit.all.join('\n'));
+    const staleConsoleErrors = staleVisit.consoleErrors;
     await stalePage
       .evaluate(async () => {
         if (!('serviceWorker' in navigator)) return;
@@ -143,6 +169,14 @@ async function main() {
     }
     if (staleErrors.length > 0) {
       console.error('Hydration errors (with service worker):\n', staleErrors.join('\n'));
+      process.exitCode = 1;
+    }
+    if (cleanConsoleErrors.length > 0) {
+      console.error('Console errors (clean profile):\n', cleanConsoleErrors.join('\n'));
+      process.exitCode = 1;
+    }
+    if (staleConsoleErrors.length > 0) {
+      console.error('Console errors (with service worker):\n', staleConsoleErrors.join('\n'));
       process.exitCode = 1;
     }
     if (process.exitCode !== 1) {

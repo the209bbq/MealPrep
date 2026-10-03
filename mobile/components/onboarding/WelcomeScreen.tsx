@@ -15,8 +15,10 @@ export function WelcomeScreen({ visible, onGetStarted, onLookAround }: WelcomeSc
   const insets = useSafeAreaInsets();
   const { welcome } = ONBOARDING_COPY;
 
+  if (!visible) return null;
+
   return (
-    <Modal visible={visible} animationType="fade" presentationStyle="fullScreen">
+    <Modal visible animationType="fade" presentationStyle="fullScreen">
       <ScrollView
         className="flex-1 bg-paper"
         contentContainerStyle={{

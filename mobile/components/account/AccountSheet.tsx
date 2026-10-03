@@ -289,9 +289,10 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
 
 export function AccountSheet({ visible, onClose }: AccountSheetProps) {
   const { profile } = useApp();
+  if (!visible) return null;
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      {visible ? <AccountSheetBody key={profile.id || 'guest'} onClose={onClose} /> : null}
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <AccountSheetBody key={profile.id || 'guest'} onClose={onClose} />
     </Modal>
   );
 }

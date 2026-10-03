@@ -1,4 +1,4 @@
-import { Ionicons } from '../lib/icons/Ionicons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 import { View } from 'react-native';
 import { useHydrated } from '../hooks/useHydrated';

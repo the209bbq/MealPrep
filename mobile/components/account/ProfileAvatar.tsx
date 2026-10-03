@@ -1,6 +1,6 @@
-import { Ionicons } from '../../lib/icons/Ionicons';
 import { Image, Text, View } from 'react-native';
 import { THEME } from '../../config/appConfig';
+import { HydrationSafeIonicon } from '../HydrationSafeIonicon';
 import { initials } from '../../lib/initials';
 
 type ProfileAvatarProps = {
@@ -31,7 +31,7 @@ export function ProfileAvatar({ name, photoUrl, size = 32, guest = false }: Prof
         className="items-center justify-center border border-on-primary-muted/40 bg-slate"
         accessibilityLabel="Guest account"
       >
-        <Ionicons name="person-outline" size={size * 0.5} color={THEME.onPrimaryMuted} />
+        <HydrationSafeIonicon name="person-outline" size={size * 0.5} color={THEME.onPrimaryMuted} />
       </View>
     );
   }
