@@ -40,6 +40,7 @@ export interface RecipeImportExtractedDto {
   social_author_name?: string | null;
   social_author_url?: string | null;
   author_public_recipe_url?: string | null;
+  image_url?: string | null;
 }
 
 export interface YoutubeImportSuggestionDto {

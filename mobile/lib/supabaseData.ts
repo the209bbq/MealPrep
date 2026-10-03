@@ -88,6 +88,7 @@ type RecipeRow = {
   source_metadata_refreshed_at: string | null;
   prep_minutes: number | null;
   cook_minutes: number | null;
+  image_url: string | null;
 };
 
 type GroceryRow = {
@@ -223,6 +224,7 @@ export function mapRecipe(row: RecipeRow): Recipe {
     sourceMetadataRefreshedAt: row.source_metadata_refreshed_at ?? undefined,
     prepMinutes: row.prep_minutes,
     cookMinutes: row.cook_minutes,
+    imageUrl: row.image_url,
     nutritionSource: row.nutrition_source ?? undefined,
     nutritionCitation: row.nutrition_citation ?? undefined,
     nutritionSourcedAt: row.nutrition_sourced_at ?? undefined,
@@ -544,6 +546,7 @@ export async function upsertLinkImportedRecipe(
     source_metadata_refreshed_at: recipe.sourceMetadataRefreshedAt ?? null,
     prep_minutes: recipe.prepMinutes ?? null,
     cook_minutes: recipe.cookMinutes ?? null,
+    image_url: recipe.imageUrl ?? null,
     nutrition_source: recipe.nutritionSource ?? 'Link import',
     nutrition_citation: recipe.nutritionCitation ?? '',
     nutrition_sourced_at: recipe.nutritionSourcedAt ?? null,

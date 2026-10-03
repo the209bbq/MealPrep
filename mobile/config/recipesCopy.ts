@@ -131,6 +131,16 @@ export const RECIPES_COPY = {
 
   recipeCard: {
     addMissingCta: 'Add missing to grocery list',
+    haveEverything: 'Have everything',
+    needItems: (count: number) => (count === 1 ? 'Need 1 item' : `Need ${count} items`),
+  },
+
+  recipeDetail: {
+    ingredientsTab: 'Ingredients',
+    stepsTab: 'Steps',
+    servingsAndTime: (servings: number, minutes: number) =>
+      `${Math.max(1, servings)} servings · ${Math.max(1, minutes)} min`,
+    stepLabel: (index: number) => `Step ${index + 1}`,
   },
 } as const;
 

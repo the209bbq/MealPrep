@@ -27,6 +27,8 @@ export interface RecipeImportExtracted {
   social_author_url?: string | null;
   /** Optional credited link to author's public recipe (never copied). */
   author_public_recipe_url?: string | null;
+  /** HTTPS cover image (YouTube thumbnail, og:image, oEmbed thumbnail). */
+  image_url?: string | null;
 }
 
 export const GEMINI_RECIPE_IMPORT_JSON_SCHEMA: Record<string, unknown> = {

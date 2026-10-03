@@ -8,6 +8,7 @@
     "expo": "~57.0.26",
     "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.20",
+    "expo-image": "~57.0.5",
     "expo-image-manipulator": "~57.0.20",
     "expo-image-picker": "~57.0.20",
     "expo-linking": "~57.0.11",
@@ -26,8 +27,7 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-web": "^0.21.2",
-    "react-native-worklets": "0.10.1",
-    "heic2any": "^0.0.4"
+    "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
@@ -49,6 +49,7 @@
     "test:recipe-match": "npx tsx scripts/recipe-match-regression.ts && npx tsx scripts/recipe-match-perf-check.ts",
     "test:recipes-tab-filters": "npx tsx scripts/recipes-tab-filters-check.ts",
     "test:recipes-unified-feed": "npx tsx scripts/recipes-unified-feed-check.ts",
+    "test:recipes-list-shop-line": "npx tsx scripts/recipes-list-shop-line-check.ts",
     "test:recipes-diversity": "npx tsx scripts/recipes-diversity-check.ts",
     "test:recipe-discovery-client": "npx tsx scripts/recipe-discovery-client-check.ts",
     "test:recipe-import": "npx tsx scripts/recipe-import-check.ts",
@@ -77,7 +78,7 @@
     "test:prepare-image-web": "npx tsx scripts/infer-image-mime-check.ts && npx tsx scripts/pantry-image-quality-check.ts && npx tsx scripts/prepare-image-web-check.ts",
     "test:web-pantry-photo-scan": "npx tsx scripts/web-pantry-photo-scan-check.ts",
     "test:tutorial": "npx tsx scripts/tutorial-progress-check.ts",
-    "test": "npm run test:recipe-match && npm run test:recipes-tab-filters && npm run test:recipes-unified-feed && npm run test:recipes-diversity && npm run test:recipe-discovery-client && npm run test:recipe-import && npm run test:viral-recipes && npm run test:recipes-tab-catalog && npm run test:grocery && npm run test:smart-shop && npm run test:package-pricing && npm run test:community-prices && npm run test:add-price && npm run test:pantry-scan-restock && npm run test:pantry-vision && npm run test:pantry-vision-gemini && npm run test:pantry-vision-merge && npm run test:ingredient-normalize-pantry && npm run test:pantry-image-quality && npm run test:tutorial && npm run test:guest-mode && npm run test:meal-calendar && npm run test:photo-scan-gate && npm run test:scan-corrections && npm run test:prepare-image-web && npm run test:onboarding",
+    "test": "npm run test:recipe-match && npm run test:recipes-tab-filters && npm run test:recipes-unified-feed && npm run test:recipes-list-shop-line && npm run test:recipes-diversity && npm run test:recipe-discovery-client && npm run test:recipe-import && npm run test:viral-recipes && npm run test:recipes-tab-catalog && npm run test:grocery && npm run test:smart-shop && npm run test:package-pricing && npm run test:community-prices && npm run test:add-price && npm run test:pantry-scan-restock && npm run test:pantry-vision && npm run test:pantry-vision-gemini && npm run test:pantry-vision-merge && npm run test:ingredient-normalize-pantry && npm run test:pantry-image-quality && npm run test:tutorial && npm run test:guest-mode && npm run test:meal-calendar && npm run test:photo-scan-gate && npm run test:scan-corrections && npm run test:prepare-image-web && npm run test:onboarding",
     "generate:brand": "node scripts/generate-brand-assets.mjs",
     "generate:pwa": "node scripts/generate-pwa-assets.mjs",
     "export:web": "npm run generate:brand && npm run generate:pwa && npx expo export -p web && node scripts/apply-pwa-export.mjs",

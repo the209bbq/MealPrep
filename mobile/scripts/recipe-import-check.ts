@@ -20,6 +20,11 @@ import { parseTikTokOembedPayload } from '../supabase/functions/recipe-import/ti
 import { parseYouTubeOembedPayload } from '../supabase/functions/recipe-import/youtubeCreatorMeta.ts';
 import { extractPageAuthorFromHtml } from '../supabase/functions/recipe-import/pageAuthorMeta.ts';
 import {
+  extractOgImageFromHtml,
+  resolveYouTubeImportImageUrl,
+  youtubeHqDefaultThumbnailUrl,
+} from '../supabase/functions/recipe-import/recipeImageMeta.ts';
+import {
   isAllowedHttpUrlString,
   resolveAndSanitizeHttpUrl,
   sanitizeHttpUrl,
@@ -36,6 +41,12 @@ import {
   validatePublicHttpFetchUrl,
 } from '../supabase/functions/recipe-import/ssrfGuard.ts';
 import { youtubeVideoIdFromUrl } from '../lib/recipeImport/youtube.ts';
+import {
+  sanitizeRecipeImageUrl,
+  youtubeHqDefaultThumbnailUrl as clientYoutubeThumb,
+  youtubeThumbnailUrlFromWatchUrl,
+} from '../lib/recipeImport/youtubeThumbnail.ts';
+import { kitchenRecipeFeedMetaLine } from '../lib/recipes/recipeImageUrl.ts';
 import { classifyImportUrlForClient, isManualCaptionImportKind } from '../lib/recipeImport/urlClassificationClient.ts';
 import { orderImportFallbackSteps as orderImportFallbackStepsClient } from '../lib/recipeImport/fallbackChain.ts';
 import { shareTargetImportRoute } from '../lib/recipeImport/client.ts';
@@ -283,5 +294,51 @@ const credit = sourceCreditFromImportDto({
 });
 assert.equal(credit.creatorName, 'Kitchen');
 assert.equal(credit.originalUrl, 'https://www.youtube.com/watch?v=abc');
+
+assert.equal(
+  youtubeHqDefaultThumbnailUrl('abc123XYZ'),
+  'https://i.ytimg.com/vi/abc123XYZ/hqdefault.jpg',
+);
+assert.equal(
+  resolveYouTubeImportImageUrl('https://youtu.be/abc123XYZ', 'https://www.youtube.com/watch?v=abc123XYZ', null),
+  clientYoutubeThumb('abc123XYZ'),
+);
+const ogHtml =
+  '<html><head><meta property="og:image" content="https://cdn.example.com/dish.jpg" /></head></html>';
+assert.equal(
+  extractOgImageFromHtml(ogHtml, 'https://www.example.com/recipe'),
+  'https://cdn.example.com/dish.jpg',
+);
+assert.equal(
+  extractOgImageFromHtml(
+    '<html><head><meta property="og:image" content="/images/dish.jpg" /></head></html>',
+    'https://www.example.com/recipe/page',
+  ),
+  'https://www.example.com/images/dish.jpg',
+);
+assert.equal(sanitizeRecipeImageUrl('http://cdn.example.com/dish.jpg'), null);
+assert.equal(
+  youtubeThumbnailUrlFromWatchUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')?.includes('hqdefault.jpg'),
+  true,
+);
+assert.match(kitchenRecipeFeedMetaLine({
+  id: 'x',
+  name: 'Soup',
+  tag: '',
+  description: '',
+  servings: 4,
+  minutes: 20,
+  calories: 0,
+  protein: 0,
+  carbs: 0,
+  fat: 0,
+  ingredients: [],
+  steps: [],
+  isMaster: false,
+  createdAt: '',
+  sourceType: 'youtube',
+  sourceUrl: 'https://www.youtube.com/watch?v=abc',
+  sourceChannelName: 'Chef',
+} as import('../types/mealprep.ts').Recipe), /20 min · 4 servings · By Chef/);
 
 console.log('OK: recipe-import checks passed');

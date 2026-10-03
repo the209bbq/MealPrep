@@ -186,6 +186,41 @@ function orderImportFallbackSteps(context) {
   return steps;
 }
 
+// supabase/functions/recipe-import/safeHttpUrl.ts
+var BLOCKED_SCHEME_PREFIXES = ["javascript:", "data:", "vbscript:", "file:"];
+function isAllowedHttpUrlString(url) {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  for (const blocked of BLOCKED_SCHEME_PREFIXES) {
+    if (lower.startsWith(blocked)) return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.username || parsed.password) return false;
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+function sanitizeHttpUrl(url) {
+  if (url == null) return null;
+  const trimmed = url.trim();
+  if (!trimmed || !isAllowedHttpUrlString(trimmed)) return null;
+  return trimmed;
+}
+function resolveAndSanitizeHttpUrl(url, pageUrl) {
+  if (url == null) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const absolute = new URL(trimmed, pageUrl).href;
+    return sanitizeHttpUrl(absolute);
+  } catch {
+    return null;
+  }
+}
+
 // supabase/functions/recipe-import/tiktokOembed.ts
 function parseTikTokOembedPayload(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -193,7 +228,8 @@ function parseTikTokOembedPayload(raw) {
   const title = typeof obj.title === "string" ? obj.title.trim() : "";
   if (!title) return null;
   const authorName = typeof obj.author_name === "string" && obj.author_name.trim() ? obj.author_name.trim() : "creator";
-  const authorUrl = typeof obj.author_url === "string" && obj.author_url.trim() ? obj.author_url.trim() : null;
+  const authorUrlRaw = typeof obj.author_url === "string" && obj.author_url.trim() ? obj.author_url.trim() : null;
+  const authorUrl = authorUrlRaw ? sanitizeHttpUrl(authorUrlRaw) : null;
   const thumbnailUrl = typeof obj.thumbnail_url === "string" && obj.thumbnail_url.trim() ? obj.thumbnail_url.trim() : null;
   return { caption: title, authorName, authorUrl, thumbnailUrl };
 }
@@ -1032,41 +1068,6 @@ function validatePhotoStoragePaths(userId, paths) {
   return paths.every((path) => validateUserImportStoragePath(userId, path));
 }
 
-// supabase/functions/recipe-import/safeHttpUrl.ts
-var BLOCKED_SCHEME_PREFIXES = ["javascript:", "data:", "vbscript:", "file:"];
-function isAllowedHttpUrlString(url) {
-  const trimmed = url.trim();
-  if (!trimmed) return false;
-  const lower = trimmed.toLowerCase();
-  for (const blocked of BLOCKED_SCHEME_PREFIXES) {
-    if (lower.startsWith(blocked)) return false;
-  }
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.username || parsed.password) return false;
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-function sanitizeHttpUrl(url) {
-  if (url == null) return null;
-  const trimmed = url.trim();
-  if (!trimmed || !isAllowedHttpUrlString(trimmed)) return null;
-  return trimmed;
-}
-function resolveAndSanitizeHttpUrl(url, pageUrl) {
-  if (url == null) return null;
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-  try {
-    const absolute = new URL(trimmed, pageUrl).href;
-    return sanitizeHttpUrl(absolute);
-  } catch {
-    return null;
-  }
-}
-
 // supabase/functions/recipe-import/pageAuthorMeta.ts
 function readMetaContent(html, attr, key) {
   const pattern = new RegExp(
@@ -1297,6 +1298,54 @@ async function tryAutoImportFromYoutubeSearch(apiKey, importFromUrl2, captionFor
   };
 }
 
+// supabase/functions/recipe-import/recipeImageMeta.ts
+function youtubeHqDefaultThumbnailUrl(videoId) {
+  return `https://i.ytimg.com/vi/${videoId.trim()}/hqdefault.jpg`;
+}
+function readMetaContent2(html, attr, key) {
+  const pattern = new RegExp(
+    `<meta[^>]+${attr}=["']${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'][^>]*>`,
+    "i"
+  );
+  const tag = html.match(pattern)?.[0];
+  if (!tag) return null;
+  const content = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
+  return content?.trim() ? content.trim() : null;
+}
+function extractOgImageFromHtml(html, pageUrl) {
+  const raw = readMetaContent2(html, "property", "og:image") ?? readMetaContent2(html, "property", "og:image:url") ?? readMetaContent2(html, "name", "twitter:image");
+  if (!raw) return null;
+  return resolveAndSanitizeHttpUrl(raw, pageUrl);
+}
+function resolveYouTubeImportImageUrl(normalizedUrl, watchUrl, oembedThumbnail) {
+  const fromOembed = sanitizeImportImageUrl(oembedThumbnail, watchUrl);
+  if (fromOembed) return fromOembed;
+  const videoId = youtubeVideoIdFromImportUrl(normalizedUrl) ?? youtubeVideoIdFromImportUrl(watchUrl);
+  if (videoId) return youtubeHqDefaultThumbnailUrl(videoId);
+  return null;
+}
+function sanitizeImportImageUrl(url, pageUrl) {
+  if (url == null || !url.trim()) return null;
+  if (pageUrl?.trim()) {
+    const resolved = resolveAndSanitizeHttpUrl(url, pageUrl);
+    if (resolved) return resolved;
+  }
+  return sanitizeHttpUrl(url);
+}
+function withImportImageUrl(recipe, imageUrl, pageUrl) {
+  const safe = sanitizeImportImageUrl(imageUrl, pageUrl);
+  if (!safe) return recipe;
+  return { ...recipe, image_url: safe };
+}
+function imageUrlForCachedImport(recipe, sourceType, normalizedUrl) {
+  const stored = sanitizeHttpUrl(recipe.image_url);
+  if (stored) return stored;
+  if (sourceType === "youtube") {
+    return resolveYouTubeImportImageUrl(normalizedUrl, normalizedUrl, null);
+  }
+  return null;
+}
+
 // supabase/functions/recipe-import/index.ts
 var corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1498,12 +1547,16 @@ async function importFromCaption(apiKey, normalizedUrl, sourceType, captionText,
       cached
     );
     return {
-      recipe: {
-        ...backfilled,
-        source_url: normalizedUrl,
-        social_author_name: socialMeta?.authorName ?? backfilled.social_author_name,
-        social_author_url: socialMeta?.authorUrl ?? backfilled.social_author_url
-      },
+      recipe: withImportImageUrl(
+        {
+          ...backfilled,
+          source_url: normalizedUrl,
+          social_author_name: socialMeta?.authorName ?? backfilled.social_author_name,
+          social_author_url: socialMeta?.authorUrl ?? backfilled.social_author_url
+        },
+        socialMeta?.thumbnailUrl ?? backfilled.image_url ?? imageUrlForCachedImport(backfilled, sourceType, normalizedUrl),
+        normalizedUrl
+      ),
       cached: true
     };
   }
@@ -1517,11 +1570,15 @@ async function importFromCaption(apiKey, normalizedUrl, sourceType, captionText,
       creatorHint: socialMeta?.authorName ?? null
     };
   }
-  const withSocial = {
-    ...fromGemini,
-    social_author_name: socialMeta?.authorName ?? null,
-    social_author_url: socialMeta?.authorUrl ?? normalizedUrl
-  };
+  const withSocial = withImportImageUrl(
+    {
+      ...fromGemini,
+      social_author_name: socialMeta?.authorName ?? null,
+      social_author_url: socialMeta?.authorUrl ?? normalizedUrl
+    },
+    socialMeta?.thumbnailUrl,
+    normalizedUrl
+  );
   await writeImportCache(cacheKey, normalizedUrl, withSocial);
   return { recipe: withSocial, cached: false };
 }
@@ -1537,14 +1594,21 @@ async function importFromUrl(apiKey, normalizedUrl, sourceType) {
       cached,
       html2
     );
-    return { recipe: { ...backfilled, source_url: normalizedUrl }, cached: true };
+    const withImage2 = withImportImageUrl(
+      { ...backfilled, source_url: normalizedUrl },
+      backfilled.image_url ?? imageUrlForCachedImport(backfilled, sourceType, normalizedUrl),
+      normalizedUrl
+    );
+    return { recipe: withImage2, cached: true };
   }
   if (sourceType === "youtube") {
     const watchUrl = canonicalYouTubeWatchUrl(normalizedUrl);
     const extracted = await extractRecipeFromYouTubeVideo(apiKey, watchUrl, "youtube", normalizedUrl);
     if (!extracted) return null;
     const withCreator = await enrichYouTubeRecipeCreator(extracted, normalizedUrl, watchUrl);
-    if (!recipeLooksValid(withCreator)) {
+    const imageUrl = resolveYouTubeImportImageUrl(normalizedUrl, watchUrl, null);
+    const withImage2 = withImportImageUrl(withCreator, imageUrl, watchUrl);
+    if (!recipeLooksValid(withImage2)) {
       const creatorHint = withCreator.youtube_channel_name ?? withCreator.social_author_name ?? null;
       return {
         notRecipe: true,
@@ -1553,8 +1617,8 @@ async function importFromUrl(apiKey, normalizedUrl, sourceType) {
         creatorHint
       };
     }
-    await writeImportCache(cacheKey, normalizedUrl, withCreator);
-    return { recipe: withCreator, cached: false };
+    await writeImportCache(cacheKey, normalizedUrl, withImage2);
+    return { recipe: withImage2, cached: false };
   }
   const html = await fetchRecipePage(normalizedUrl);
   if (!html) return null;
@@ -1563,24 +1627,26 @@ async function importFromUrl(apiKey, normalizedUrl, sourceType) {
     const fromLd = recipeJsonLdToExtracted(jsonLd, normalizedUrl);
     if (fromLd && recipeLooksValid(fromLd)) {
       const withAuthor2 = await enrichWebRecipeCreator(fromLd, html);
-      await writeImportCache(cacheKey, normalizedUrl, withAuthor2);
-      return { recipe: withAuthor2, cached: false };
+      const withImage2 = withImportImageUrl(withAuthor2, extractOgImageFromHtml(html, normalizedUrl), normalizedUrl);
+      await writeImportCache(cacheKey, normalizedUrl, withImage2);
+      return { recipe: withImage2, cached: false };
     }
   }
   const pageText = stripHtmlToText(html, WEB_MAX_TEXT_CHARS);
   const fromGemini = await extractRecipeFromPageText(apiKey, pageText, normalizedUrl);
   if (!fromGemini) return null;
   const withAuthor = await enrichWebRecipeCreator(fromGemini, html);
-  if (!recipeLooksValid(withAuthor)) {
+  const withImage = withImportImageUrl(withAuthor, extractOgImageFromHtml(html, normalizedUrl), normalizedUrl);
+  if (!recipeLooksValid(withImage)) {
     return {
       notRecipe: true,
       message: "We could not find a recipe on that page.",
       captionForSearch: pageText.slice(0, 400),
-      creatorHint: withAuthor.social_author_name ?? null
+      creatorHint: withImage.social_author_name ?? null
     };
   }
-  await writeImportCache(cacheKey, normalizedUrl, withAuthor);
-  return { recipe: withAuthor, cached: false };
+  await writeImportCache(cacheKey, normalizedUrl, withImage);
+  return { recipe: withImage, cached: false };
 }
 async function importTikTokLink(apiKey, normalizedUrl) {
   const oembed = await fetchTikTokOembed(normalizedUrl);
@@ -1595,7 +1661,8 @@ async function importTikTokLink(apiKey, normalizedUrl) {
   const authorLabel = socialAuthorHandle(oembed.authorName);
   return importFromCaption(apiKey, normalizedUrl, "tiktok", oembed.caption, {
     authorName: authorLabel,
-    authorUrl: oembed.authorUrl ?? normalizedUrl
+    authorUrl: oembed.authorUrl ?? normalizedUrl,
+    thumbnailUrl: oembed.thumbnailUrl
   });
 }
 function parseImportImages(raw) {
