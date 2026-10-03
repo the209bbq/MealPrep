@@ -8,6 +8,7 @@ import { APP_ROUTES } from './appRoutes';
 import { SMART_SHOP_STORES } from './smartShop';
 import appBrand from './appBrand.json';
 import { RECIPE_IMPORT } from './recipeImport';
+import { VIRAL_RECIPES } from './viralRecipes';
 
 export { MEAL_CALENDAR } from './mealCalendar';
 export { THEME } from './theme';
@@ -143,6 +144,17 @@ export const getRecipeImportUrl = (): string => {
   if (!base) return '';
   return `${base}/functions/v1/recipe-import`;
 };
+
+export const getViralRecipesUrl = (): string => {
+  const override = VIRAL_RECIPES.proxyUrl.trim();
+  if (override) return override;
+  const base = SUPABASE_URL.trim().replace(/\/$/, '');
+  if (!base) return '';
+  return `${base}/functions/v1/viral-recipes`;
+};
+
+export const isViralRecipesConfigured = (): boolean =>
+  VIRAL_RECIPES.enabled && (isDemoMode() || getViralRecipesUrl().length > 0);
 
 export const isRecipeImportConfigured = (): boolean =>
   RECIPE_IMPORT.enabled && (isDemoMode() || getRecipeImportUrl().length > 0);
