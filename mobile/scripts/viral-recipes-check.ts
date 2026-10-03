@@ -11,7 +11,7 @@ import { getViralRecipesUrl, isViralRecipesConfigured } from '../config/appConfi
 
 for (const category of VIRAL_RECIPES_CATEGORIES) {
   assert.ok(VIRAL_RECIPES_CATEGORY_LABELS[category], `label for ${category}`);
-  assert.ok(VIRAL_RECIPES_CATEGORY_QUERIES[category]?.length > 2, `query for ${category}`);
+  assert.ok(VIRAL_RECIPES_CATEGORY_QUERIES[category]?.length >= 2, `query for ${category}`);
 }
 
 assert.equal(typeof getViralRecipesUrl(), 'string');

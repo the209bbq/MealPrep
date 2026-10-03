@@ -20,10 +20,11 @@ export const VIRAL_RECIPES_CATEGORY_LABELS: Record<ViralRecipesCategory, string>
   budget: 'Budget',
 };
 
-export const VIRAL_RECIPES_CATEGORY_QUERIES: Record<ViralRecipesCategory, string> = {
-  viral: 'viral recipe',
-  quick: 'easy dinner recipe',
-  budget: 'budget meal recipe',
+/** Mirrors `CATEGORY_SEARCH_QUERIES` in supabase/functions/viral-recipes/youtubeDiscovery.ts */
+export const VIRAL_RECIPES_CATEGORY_QUERIES: Record<ViralRecipesCategory, readonly string[]> = {
+  viral: ['viral dinner recipe', 'tiktok famous dinner recipe'],
+  quick: ['15 minute dinner recipe', 'easy weeknight dinner recipe'],
+  budget: ['cheap dinner recipe', 'budget family dinner recipe'],
 };
 
 export const VIRAL_RECIPES_COPY = {
