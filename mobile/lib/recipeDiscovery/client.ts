@@ -3,6 +3,7 @@ import {
   isDemoMode,
   RECIPE_DISCOVERY,
 } from '../../config/appConfig';
+import { RECIPE_SOURCES } from '../../config/recipeSources';
 import {
   RECIPE_DISCOVERY_CLIENT_CACHE_KEY_PREFIX,
   RECIPE_DISCOVERY_CLIENT_CACHE_TTL_MS,
@@ -141,6 +142,10 @@ async function callProxy<T>(
   body: Record<string, unknown>,
   accessToken: string | null,
 ): Promise<T> {
+  if (!RECIPE_SOURCES.recipeApiEnabled || !RECIPE_DISCOVERY.enabled) {
+    throw new RecipeDiscoveryNotConfiguredError('Online recipe search is turned off.');
+  }
+
   if (isRecipeDiscoveryCircuitOpen()) {
     throw new RecipeDiscoveryQuotaError(RECIPE_DISCOVERY_ONLINE_UNAVAILABLE_NOTE, 'RATE_LIMIT');
   }
@@ -204,6 +209,20 @@ export async function searchDiscoveryRecipes(
   filters: RecipeDiscoverySearchFilters,
   accessToken: string | null,
 ): Promise<{ items: RecipeDiscoveryListItem[]; meta: RecipeApiListResponse['meta'] | null }> {
+  if (!RECIPE_SOURCES.recipeApiEnabled || !RECIPE_DISCOVERY.enabled) {
+    return {
+      items: [],
+      meta: {
+        current_page: 1,
+        last_page: 1,
+        path: 'disabled',
+        per_page: 0,
+        total: 0,
+        language: 'en',
+      },
+    };
+  }
+
   if (isDemoMode()) {
     const items = filterDemoRecipes(filters.search ?? '', {
       cuisine: filters.cuisine,
@@ -256,6 +275,10 @@ export async function fetchDiscoveryRecipeDetail(
   id: number,
   accessToken: string | null,
 ): Promise<RecipeDiscoveryListItem> {
+  if (!RECIPE_SOURCES.recipeApiEnabled || !RECIPE_DISCOVERY.enabled) {
+    throw new RecipeDiscoveryNotConfiguredError('Online recipe search is turned off.');
+  }
+
   if (isDemoMode()) {
     const demo = getDemoRecipeById(id);
     if (!demo) throw new Error('Demo recipe not found');
