@@ -1,4 +1,3 @@
-import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -22,7 +21,6 @@ import {
   RecipeImportRateLimitError,
   RecipeImportUpstreamError,
   confirmYoutubeRecipeImport,
-  extractUrlFromSharedText,
   importRecipeFromLink,
   importRecipeFromPhotos,
   importRecipeFromScreenshots,
@@ -35,13 +33,10 @@ import {
   normalizeImportUrl,
 } from '../../lib/recipeImport/urlClassificationClient';
 import { uploadRecipeImportVideo } from '../../lib/recipeImport/uploadImportVideo';
+import { readImportLinkFromClipboard } from '../../lib/recipeImport/pasteImportLink';
 import { RecipeImportReviewSheet } from './RecipeImportReviewSheet';
 
 type ImportMode = 'link' | 'photo' | 'video';
-
-function extractUrlFromClipboardText(text: string): string | null {
-  return extractUrlFromSharedText(text);
-}
 
 async function pickRecipeImages(max: number): Promise<{ mimeType: string; data: string }[]> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -117,7 +112,7 @@ export function RecipeImportSheet({
   const [error, setError] = useState<string | null>(null);
   const [fallbacks, setFallbacks] = useState<RecipeImportFallbacksDto | null>(null);
   const [review, setReview] = useState<RecipeImportExtractedDto | null>(null);
-  const [clipboardHint, setClipboardHint] = useState(false);
+  const [pasteHint, setPasteHint] = useState(false);
   const autoStartRef = useRef(false);
 
   const normalizedUrl = useMemo(() => normalizeImportUrl(url.trim()) ?? '', [url]);
@@ -130,26 +125,17 @@ export function RecipeImportSheet({
   useEffect(() => {
     if (!visible) {
       autoStartRef.current = false;
-      return;
     }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const clip = await Clipboard.getStringAsync();
-        if (cancelled || !clip?.trim() || url.trim() || initialUrl.trim()) return;
-        const detected = extractUrlFromClipboardText(clip);
-        if (detected) {
-          setUrl(detected);
-          setClipboardHint(true);
-        }
-      } catch {
-        /* clipboard may be denied */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [initialUrl, url, visible]);
+  }, [visible]);
+
+  const pasteLinkFromClipboard = useCallback(async () => {
+    setPasteHint(false);
+    setError(null);
+    const pasted = await readImportLinkFromClipboard();
+    if (!pasted) return;
+    setUrl(pasted);
+    setPasteHint(true);
+  }, []);
 
   const runLinkImport = useCallback(async (urlOverride?: string) => {
     setError(null);
@@ -363,20 +349,30 @@ export function RecipeImportSheet({
 
             {mode === 'link' ? (
               <View className="mt-4">
-                <TextInput
-                  value={url}
-                  onChangeText={(text) => {
-                    setUrl(text);
-                    setClipboardHint(false);
-                    setError(null);
-                  }}
-                  placeholder={RECIPE_IMPORT_COPY.pastePlaceholder}
-                  placeholderTextColor={THEME.muted}
-                  className="min-h-[44px] rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  accessibilityLabel={RECIPE_IMPORT_COPY.pasteLabel}
-                />
+                <View className="flex-row items-center gap-2">
+                  <TextInput
+                    value={url}
+                    onChangeText={(text) => {
+                      setUrl(text);
+                      setPasteHint(false);
+                      setError(null);
+                    }}
+                    placeholder={RECIPE_IMPORT_COPY.pastePlaceholder}
+                    placeholderTextColor={THEME.muted}
+                    className="min-h-[44px] flex-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    accessibilityLabel={RECIPE_IMPORT_COPY.pasteLabel}
+                  />
+                  <Pressable
+                    onPress={() => void pasteLinkFromClipboard()}
+                    className="min-h-[44px] items-center justify-center rounded-xl border border-border bg-card px-3 py-2"
+                    accessibilityRole="button"
+                    accessibilityLabel={RECIPE_IMPORT_COPY.pasteLinkAccessibility}
+                  >
+                    <Text className="text-xs font-bold text-primary">{RECIPE_IMPORT_COPY.pasteLinkCta}</Text>
+                  </Pressable>
+                </View>
                 {manualCaptionMode ? (
                   <View className="mt-2 rounded-xl border border-border bg-card p-3">
                     <Text className="text-xs text-muted">{RECIPE_IMPORT_COPY.manualCaptionHint}</Text>
@@ -391,8 +387,8 @@ export function RecipeImportSheet({
                     />
                   </View>
                 ) : null}
-                {clipboardHint ? (
-                  <Text className="mt-1 text-xs text-muted">{RECIPE_IMPORT_COPY.clipboardDetected}</Text>
+                {pasteHint ? (
+                  <Text className="mt-1 text-xs text-muted">{RECIPE_IMPORT_COPY.pasteAppliedHint}</Text>
                 ) : null}
                 <Pressable
                   onPress={() => void runLinkImport()}
