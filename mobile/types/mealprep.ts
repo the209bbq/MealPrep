@@ -135,6 +135,11 @@ export interface Recipe {
   steps: string[];
   isMaster: boolean;
   createdAt: string;
+  sourceUrl?: string;
+  sourceType?: 'youtube' | 'web';
+  sourceTitle?: string;
+  prepMinutes?: number | null;
+  cookMinutes?: number | null;
   nutritionSource?: string;
   nutritionCitation?: string;
   nutritionSourcedAt?: string;

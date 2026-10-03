@@ -21,9 +21,11 @@ import { useApp } from '../../context/AppContext';
 import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
+import { RecipeImportFromLink } from '../../components/recipes/RecipeImportFromLink';
+import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 
 export default function RecipesScreen() {
-  const params = useLocalSearchParams<{ recipeId?: string }>();
+  const params = useLocalSearchParams<{ recipeId?: string; url?: string; text?: string }>();
   const {
     recipes,
     pantry,
@@ -44,6 +46,13 @@ export default function RecipesScreen() {
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
   const [pickedDetailRow, setPickedDetailRow] = useState<RecipesTabRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const sharedImportUrl = useMemo(() => {
+    const direct = typeof params.url === 'string' ? params.url : '';
+    if (direct.trim()) return direct.trim();
+    const text = typeof params.text === 'string' ? params.text : '';
+    const match = text.match(/https?:\/\/[^\s]+/i);
+    return match ? match[0] : '';
+  }, [params.text, params.url]);
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const pantryEmpty = pantry.length === 0;
@@ -149,16 +158,20 @@ export default function RecipesScreen() {
         title={RECIPES_COPY.cookNowCard.title}
         subtitle={RECIPES_COPY.cookNowCard.subtitle}
       >
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder={RECIPES_COPY.discoveryPanel.searchPlaceholder}
-          placeholderTextColor={THEME.muted}
-          className="mt-2 rounded-xl border border-border bg-card px-4 py-3 text-base text-ink"
-          autoCapitalize="none"
-          autoCorrect={false}
-          accessibilityLabel="Search recipes"
-        />
+        <View className="mt-2 flex-row items-center gap-2">
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={RECIPES_COPY.discoveryPanel.searchPlaceholder}
+            placeholderTextColor={THEME.muted}
+            className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base text-ink"
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="Search recipes"
+          />
+        </View>
+        <Text className="mt-2 text-xs font-semibold text-muted">{RECIPE_IMPORT_COPY.importButton}</Text>
+        <RecipeImportFromLink key={sharedImportUrl || 'default'} initialUrl={sharedImportUrl} />
         <RecipesTabFilterBar
           baseRows={filterBaseRows}
           filters={filters}

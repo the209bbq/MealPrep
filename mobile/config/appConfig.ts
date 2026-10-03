@@ -7,6 +7,7 @@ import type {
 import { APP_ROUTES } from './appRoutes';
 import { SMART_SHOP_STORES } from './smartShop';
 import appBrand from './appBrand.json';
+import { RECIPE_IMPORT } from './recipeImport';
 
 export { MEAL_CALENDAR } from './mealCalendar';
 export { THEME } from './theme';
@@ -134,6 +135,17 @@ export const PHOTO_SCAN = {
   saveTimeoutMs: 15_000,
   saveTimeoutMessage: 'Saving pantry items timed out. Check your connection and try again.',
 } as const;
+
+export const getRecipeImportUrl = (): string => {
+  const override = RECIPE_IMPORT.proxyUrl.trim();
+  if (override) return override;
+  const base = SUPABASE_URL.trim().replace(/\/$/, '');
+  if (!base) return '';
+  return `${base}/functions/v1/recipe-import`;
+};
+
+export const isRecipeImportConfigured = (): boolean =>
+  RECIPE_IMPORT.enabled && (isDemoMode() || getRecipeImportUrl().length > 0);
 
 export const getPantryVisionUrl = (): string => {
   const override = PHOTO_SCAN.proxyUrl.trim();

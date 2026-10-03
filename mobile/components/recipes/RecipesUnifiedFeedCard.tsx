@@ -3,6 +3,8 @@ import { Card } from '../Card';
 import { AddToCalendarButton } from '../mealCalendar/AddToCalendarButton';
 import { RecipePantryMatchBadge } from '../RecipePantryMatch';
 import { RECIPES_COPY } from '../../config/recipesCopy';
+import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
+import { isUserOwnedKitchenRecipe } from '../../lib/recipeImport/mapToAppRecipe';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import { nutritionLabel } from '../../lib/nutrition';
 import {
@@ -41,7 +43,9 @@ export function RecipesUnifiedFeedCard({
         <Pressable onPress={onOpen}>
           <View className="flex-row items-start justify-between">
             <View className="flex-1 pr-2">
-              <Text className="text-xs font-semibold uppercase text-primary">{recipe.tag}</Text>
+              <Text className="text-xs font-semibold uppercase text-primary">
+                {isUserOwnedKitchenRecipe(recipe) ? RECIPE_IMPORT_COPY.yourRecipeBadge : recipe.tag}
+              </Text>
               <Text className="text-base font-bold text-ink">{recipe.name}</Text>
               <Text className="mt-1 text-sm text-muted" numberOfLines={2}>
                 {recipe.description}

@@ -1,0 +1,31 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "name": "Wrapper"
+    },
+    {
+      "@type": "Recipe",
+      "name": "Easy Garlic Bread",
+      "recipeIngredient": [
+        "1 loaf French bread",
+        "4 tablespoons butter",
+        "2 cloves garlic, minced"
+      ],
+      "recipeInstructions": [
+        {
+          "@type": "HowToStep",
+          "text": "Preheat oven to 375°F."
+        },
+        {
+          "@type": "HowToStep",
+          "text": "Mix butter and garlic; spread on bread."
+        }
+      ],
+      "prepTime": "PT10M",
+      "cookTime": "PT12M",
+      "recipeYield": "6 servings"
+    }
+  ]
+}

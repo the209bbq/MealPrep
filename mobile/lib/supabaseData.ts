@@ -79,6 +79,11 @@ type RecipeRow = {
   steps: string[] | null;
   is_master: boolean;
   created_at: string;
+  source_url: string | null;
+  source_type: string | null;
+  source_title: string | null;
+  prep_minutes: number | null;
+  cook_minutes: number | null;
 };
 
 type GroceryRow = {
@@ -198,6 +203,12 @@ export function mapRecipe(row: RecipeRow): Recipe {
     steps: row.steps ?? [],
     isMaster: row.is_master,
     createdAt: row.created_at,
+    sourceUrl: row.source_url ?? undefined,
+    sourceType:
+      row.source_type === 'youtube' || row.source_type === 'web' ? row.source_type : undefined,
+    sourceTitle: row.source_title ?? undefined,
+    prepMinutes: row.prep_minutes,
+    cookMinutes: row.cook_minutes,
     nutritionSource: row.nutrition_source ?? undefined,
     nutritionCitation: row.nutrition_citation ?? undefined,
     nutritionSourcedAt: row.nutrition_sourced_at ?? undefined,
@@ -479,6 +490,45 @@ export async function upsertImportedRecipe(
     nutrition_source: recipe.nutritionSource ?? 'RecipeAPI.io',
     nutrition_citation: recipe.nutritionCitation ?? '',
     nutrition_sourced_at: recipe.nutritionSourcedAt ?? new Date().toISOString(),
+  };
+
+  const { data, error } = await client
+    .from('recipes')
+    .upsert(payload, { onConflict: 'slug' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return mapRecipe(data as RecipeRow);
+}
+
+export async function upsertLinkImportedRecipe(
+  client: SupabaseClient,
+  userId: string,
+  recipe: Recipe,
+): Promise<Recipe> {
+  const payload = {
+    slug: recipe.id,
+    name: recipe.name,
+    description: recipe.description,
+    tag: recipe.tag,
+    servings: recipe.servings,
+    minutes: recipe.minutes,
+    calories: recipe.calories,
+    protein: recipe.protein,
+    carbs: recipe.carbs,
+    fat: recipe.fat,
+    ingredients: recipe.ingredients,
+    steps: recipe.steps,
+    is_master: false,
+    created_by: userId,
+    source_url: recipe.sourceUrl ?? null,
+    source_type: recipe.sourceType ?? null,
+    source_title: recipe.sourceTitle ?? null,
+    prep_minutes: recipe.prepMinutes ?? null,
+    cook_minutes: recipe.cookMinutes ?? null,
+    nutrition_source: recipe.nutritionSource ?? 'Link import',
+    nutrition_citation: recipe.nutritionCitation ?? '',
+    nutrition_sourced_at: recipe.nutritionSourcedAt ?? null,
   };
 
   const { data, error } = await client
