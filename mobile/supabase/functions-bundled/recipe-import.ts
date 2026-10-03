@@ -109,6 +109,13 @@ var YOUTUBE_HOSTS = /* @__PURE__ */ new Set([
 ]);
 var TIKTOK_HOSTS = /* @__PURE__ */ new Set(["tiktok.com", "www.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"]);
 var INSTAGRAM_HOSTS = /* @__PURE__ */ new Set(["instagram.com", "www.instagram.com"]);
+var FACEBOOK_HOSTS = /* @__PURE__ */ new Set([
+  "facebook.com",
+  "www.facebook.com",
+  "m.facebook.com",
+  "fb.watch",
+  "www.fb.watch"
+]);
 function normalizeImportUrl(raw) {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -136,10 +143,13 @@ function classifyRecipeImportUrl(urlString) {
   if (url.pathname.includes("/shorts/")) return "youtube";
   if (TIKTOK_HOSTS.has(host) || host.endsWith(".tiktok.com")) return "tiktok";
   if (INSTAGRAM_HOSTS.has(host) || host.endsWith(".instagram.com")) return "instagram";
+  if (FACEBOOK_HOSTS.has(host) || host.endsWith(".facebook.com") || host === "fb.watch") {
+    return "facebook";
+  }
   return "web";
 }
-function isSocialCaptionSourceType(type) {
-  return type === "tiktok" || type === "instagram";
+function isManualCaptionSourceType(type) {
+  return type === "instagram" || type === "facebook";
 }
 function canonicalYouTubeWatchUrl(urlString) {
   try {
@@ -161,6 +171,127 @@ function canonicalYouTubeWatchUrl(urlString) {
 }
 function urlHashKey(urlString) {
   return urlString.trim().toLowerCase();
+}
+
+// supabase/functions/recipe-import/fallbackChain.ts
+function orderImportFallbackSteps(context) {
+  const steps = [];
+  if (context.youtubeSuggestionAvailable) {
+    steps.push("youtube_confirm");
+  }
+  steps.push("video_upload", "screenshot");
+  if ((context.sourceType === "instagram" || context.sourceType === "facebook") && !context.hasCaption) {
+    steps.push("paste_caption");
+  }
+  return steps;
+}
+
+// supabase/functions/recipe-import/tiktokOembed.ts
+function parseTikTokOembedPayload(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw;
+  const title = typeof obj.title === "string" ? obj.title.trim() : "";
+  if (!title) return null;
+  const authorName = typeof obj.author_name === "string" && obj.author_name.trim() ? obj.author_name.trim() : "creator";
+  const authorUrl = typeof obj.author_url === "string" && obj.author_url.trim() ? obj.author_url.trim() : null;
+  const thumbnailUrl = typeof obj.thumbnail_url === "string" && obj.thumbnail_url.trim() ? obj.thumbnail_url.trim() : null;
+  return { caption: title, authorName, authorUrl, thumbnailUrl };
+}
+async function fetchTikTokOembed(postUrl) {
+  const endpoint = `https://www.tiktok.com/oembed?url=${encodeURIComponent(postUrl)}`;
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(1e4)
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  try {
+    const json = await response.json();
+    return parseTikTokOembedPayload(json);
+  } catch {
+    return null;
+  }
+}
+
+// supabase/functions/recipe-import/dishGuess.ts
+function normalizeCreatorForSearch(name) {
+  return name.replace(/^@+/, "").replace(/\s+/g, " ").trim();
+}
+function guessDishQueryFromCaption(caption) {
+  const lines = caption.split(/\n/).map((line) => line.trim()).filter(Boolean);
+  const first = lines[0] ?? caption.trim();
+  const withoutTags = first.replace(/#\w+/g, "").replace(/\s+/g, " ").trim();
+  const withoutEmoji = withoutTags.replace(
+    /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,
+    ""
+  );
+  const cleaned = withoutEmoji.replace(/[^\w\s'-]/g, " ").replace(/\s+/g, " ").trim();
+  const words = cleaned.split(" ").filter(Boolean);
+  if (words.length <= 8) return cleaned.slice(0, 80);
+  return words.slice(0, 8).join(" ");
+}
+function buildYoutubeSearchQuery(creator, dishGuess) {
+  const parts = [];
+  const creatorNorm = creator ? normalizeCreatorForSearch(creator) : "";
+  if (creatorNorm) parts.push(creatorNorm);
+  if (dishGuess) parts.push(dishGuess);
+  parts.push("recipe");
+  return parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+// supabase/functions/recipe-import/youtubeSearch.ts
+function fuzzyChannelMatch(creatorHint, channelTitle) {
+  const a = normalizeCreatorForSearch(creatorHint).toLowerCase();
+  const b = channelTitle.toLowerCase().replace(/\s+/g, " ");
+  if (!a || !b) return false;
+  if (b.includes(a) || a.includes(b)) return true;
+  const aTokens = a.split(/\s+/).filter((t) => t.length > 2);
+  if (aTokens.length === 0) return false;
+  const matched = aTokens.filter((t) => b.includes(t)).length;
+  return matched >= Math.min(2, aTokens.length);
+}
+async function searchYoutubeRecipeVideo(apiKey, creatorHint, captionOrTitle) {
+  if (!apiKey.trim()) return null;
+  const dish = guessDishQueryFromCaption(captionOrTitle);
+  const q = buildYoutubeSearchQuery(creatorHint, dish);
+  const url = new URL("https://www.googleapis.com/youtube/v3/search");
+  url.searchParams.set("part", "snippet");
+  url.searchParams.set("type", "video");
+  url.searchParams.set("maxResults", "5");
+  url.searchParams.set("q", q);
+  url.searchParams.set("key", apiKey);
+  let response;
+  try {
+    response = await fetch(url.toString(), { signal: AbortSignal.timeout(12e3) });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  const body = await response.json();
+  const items = body.items ?? [];
+  const creator = creatorHint ? normalizeCreatorForSearch(creatorHint) : null;
+  let best = null;
+  for (const item of items) {
+    const videoId = item.id?.videoId;
+    const channelTitle = item.snippet?.channelTitle?.trim() ?? "";
+    const title = item.snippet?.title?.trim() ?? "";
+    if (!videoId || !title) continue;
+    const candidate = {
+      watchUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      videoId,
+      channelTitle,
+      title
+    };
+    if (creator && fuzzyChannelMatch(creator, channelTitle)) {
+      return candidate;
+    }
+    if (!best) best = candidate;
+  }
+  return best;
 }
 
 // supabase/functions/pantry-vision/geminiOrchestration.ts
@@ -296,7 +427,9 @@ var GEMINI_RECIPE_IMPORT_JSON_SCHEMA = {
     steps: { type: "array", items: { type: "string" } },
     is_recipe: { type: "boolean" },
     confidence: { type: "number" },
-    youtube_channel_name: { type: ["string", "null"] }
+    youtube_channel_name: { type: ["string", "null"] },
+    cookbook_author_name: { type: ["string", "null"] },
+    cookbook_title_guess: { type: ["string", "null"] }
   },
   required: ["title", "servings", "ingredients", "steps", "is_recipe", "confidence"]
 };
@@ -344,12 +477,15 @@ function validateGeminiRecipeImportPayload(raw) {
     youtube_channel_name
   };
 }
-function attachImportMetadata(recipe, sourceUrl, sourceType) {
+function attachImportMetadata(recipe, sourceUrl, sourceType, extras) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const base = {
     ...recipe,
     source_url: sourceUrl,
-    source_type: sourceType
+    source_type: sourceType,
+    social_author_name: extras?.socialAuthorName ?? null,
+    social_author_url: extras?.socialAuthorUrl ?? null,
+    author_public_recipe_url: extras?.authorPublicRecipeUrl ?? null
   };
   if (sourceType === "youtube") {
     return {
@@ -358,11 +494,19 @@ function attachImportMetadata(recipe, sourceUrl, sourceType) {
       metadata_refreshed_at: now
     };
   }
-  if (sourceType === "tiktok" || sourceType === "instagram") {
+  if (sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook") {
     return {
       ...base,
       source_title: void 0,
       youtube_channel_name: null
+    };
+  }
+  if (sourceType === "photo" || sourceType === "video") {
+    return {
+      ...base,
+      source_title: void 0,
+      youtube_channel_name: null,
+      source_url: sourceUrl || "photo-scan"
     };
   }
   return base;
@@ -376,6 +520,9 @@ var geminiModelTimeoutMemory = new ModelTimeoutMemory();
 var TEXT_EXTRACTION_PROMPT = "Extract a home-cooking recipe from the page text. Rewrite steps and ingredient lines in your own words (do not copy marketing or blog prose). Use generic ingredient names (no brands). Return clear step-by-step instructions as short strings. If this is not a recipe, set is_recipe false and confidence low.";
 var YOUTUBE_EXTRACTION_PROMPT = "You are helping a meal-planning app. The video is referenced by URL only \u2014 do not download, store, or reproduce the video or audio. Watch the cooking video and extract a recipe with clear step-by-step INSTRUCTIONS and ingredients with quantities and units. Rewrite the dish title, ingredients, and steps in fresh wording (never copy the video title, description, or transcript verbatim). Set youtube_channel_name to the visible YouTube channel/creator name when you can see it, otherwise null. Use generic ingredient names (no brands). If this is not a recipe video, set is_recipe false with a low confidence score.";
 var SOCIAL_CAPTION_PROMPT = "Extract a home-cooking recipe from this social post caption. Rewrite the title, ingredients, and steps in your own words (do not copy the caption verbatim). Use generic ingredient names (no brands). Return clear step-by-step instructions. If this is not a recipe, set is_recipe false and confidence low.";
+var PHOTO_RECIPE_PROMPT = "Extract a home-cooking recipe from these photos (printed cookbook pages, recipe cards, or handwritten cards). Rewrite the title, ingredients, and steps in your own words \u2014 never copy publisher text verbatim. Use generic ingredient names. Return clear step-by-step instructions. If you can read an author or book name, set cookbook_author_name and cookbook_title_guess; otherwise null. If this is not a recipe, set is_recipe false and confidence low.";
+var SCREENSHOT_RECIPE_PROMPT = "Extract a home-cooking recipe from these screenshots of a social post or web page. Rewrite in your own words. Use generic ingredient names and clear steps. If this is not a recipe, set is_recipe false and confidence low.";
+var UPLOADED_VIDEO_PROMPT = "Extract a home-cooking recipe from this cooking video the user saved on their device. Focus on accurate step-by-step INSTRUCTIONS and ingredients with quantities. Rewrite in fresh wording. Use generic ingredient names. If this is not a recipe video, set is_recipe false with low confidence.";
 async function callGeminiJson(apiKey, model, parts, budget) {
   const timeoutMs = budget.perCallTimeoutMs(GEMINI_REQUEST_TIMEOUT_MS);
   if (timeoutMs == null) {
@@ -480,7 +627,7 @@ async function extractRecipeFromYouTubeVideo(apiKey, youtubeUrl, sourceType, sou
   return attachImportMetadata(extracted, sourceUrl, sourceType);
 }
 async function extractRecipeFromPageText(apiKey, pageText, sourceUrl, sourceType = "web") {
-  const prompt = sourceType === "tiktok" || sourceType === "instagram" ? SOCIAL_CAPTION_PROMPT : TEXT_EXTRACTION_PROMPT;
+  const prompt = sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook" ? SOCIAL_CAPTION_PROMPT : TEXT_EXTRACTION_PROMPT;
   const parts = [
     {
       text: `${prompt}
@@ -494,6 +641,23 @@ ${pageText}`
   const extracted = await callGeminiWithFallback(apiKey, parts);
   if (!extracted) return null;
   return attachImportMetadata(extracted, sourceUrl, sourceType);
+}
+async function extractRecipeFromGeminiParts(apiKey, parts, sourceUrl, sourceType, extras) {
+  const extracted = await callGeminiWithFallback(apiKey, parts);
+  if (!extracted) return null;
+  return attachImportMetadata(extracted, sourceUrl, sourceType, extras);
+}
+async function extractRecipeFromPhotos(apiKey, parts, sourceUrl) {
+  const withPrompt = [{ text: PHOTO_RECIPE_PROMPT }, ...parts];
+  return extractRecipeFromGeminiParts(apiKey, withPrompt, sourceUrl, "photo");
+}
+async function extractRecipeFromScreenshots(apiKey, parts, sourceUrl, sourceType) {
+  const withPrompt = [{ text: SCREENSHOT_RECIPE_PROMPT }, ...parts];
+  return extractRecipeFromGeminiParts(apiKey, withPrompt, sourceUrl, sourceType);
+}
+async function extractRecipeFromUploadedVideo(apiKey, parts, sourceUrl) {
+  const withPrompt = [{ text: UPLOADED_VIDEO_PROMPT }, ...parts];
+  return extractRecipeFromGeminiParts(apiKey, withPrompt, sourceUrl, "video");
 }
 
 // supabase/functions/recipe-import/durationParse.ts
@@ -711,17 +875,109 @@ function stripHtmlToText(html, maxChars) {
 \u2026`;
 }
 
+// supabase/functions/recipe-import/importMedia.ts
+var GEMINI_API_BASE2 = "https://generativelanguage.googleapis.com/v1beta";
+var IMPORT_UPLOAD_BUCKET = "recipe-import-uploads";
+var INLINE_VIDEO_MAX_BYTES = 6 * 1024 * 1024;
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+async function downloadUserImportVideo(userId, storagePath) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) return null;
+  const normalized = storagePath.replace(/^\/+/, "");
+  const prefix = `${userId}/`;
+  if (!normalized.startsWith(prefix)) return null;
+  const objectUrl = `${supabaseUrl}/storage/v1/object/${IMPORT_UPLOAD_BUCKET}/${normalized}`;
+  const response = await fetch(objectUrl, {
+    headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey }
+  });
+  if (!response.ok) return null;
+  const mimeType = (response.headers.get("content-type") ?? "video/mp4").split(";")[0].trim();
+  const buffer = new Uint8Array(await response.arrayBuffer());
+  if (buffer.length === 0 || buffer.length > 104857600) return null;
+  return { bytes: buffer, mimeType };
+}
+async function deleteUserImportVideo(storagePath) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) return;
+  const normalized = storagePath.replace(/^\/+/, "");
+  await fetch(`${supabaseUrl}/storage/v1/object/${IMPORT_UPLOAD_BUCKET}/${normalized}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey }
+  });
+}
+async function uploadVideoToGeminiFiles(apiKey, bytes, mimeType) {
+  const start = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: {
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(bytes.length),
+        "X-Goog-Upload-Header-Content-Type": mimeType,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ file: { display_name: "recipe-import-video" } })
+    }
+  );
+  if (!start.ok) return null;
+  const uploadTarget = start.headers.get("X-Goog-Upload-URL");
+  if (!uploadTarget) return null;
+  const upload = await fetch(uploadTarget, {
+    method: "POST",
+    headers: {
+      "Content-Length": String(bytes.length),
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize",
+      "Content-Type": mimeType
+    },
+    body: bytes
+  });
+  if (!upload.ok) return null;
+  const body = await upload.json();
+  const fileName = body.file?.name;
+  const fileUri = body.file?.uri;
+  if (!fileName || !fileUri) return null;
+  return { fileUri, fileName };
+}
+async function deleteGeminiFile(apiKey, fileName) {
+  await fetch(`${GEMINI_API_BASE2}/${fileName}?key=${encodeURIComponent(apiKey)}`, {
+    method: "DELETE"
+  });
+}
+function buildGeminiPartsForVideo(bytes, mimeType, prompt, fileUri) {
+  if (fileUri) {
+    return [{ file_data: { mime_type: mimeType, file_uri: fileUri } }, { text: prompt }];
+  }
+  return [
+    { inline_data: { mime_type: mimeType, data: bytesToBase64(bytes) } },
+    { text: prompt }
+  ];
+}
+function shouldUseGeminiFileApi(byteLength) {
+  return byteLength > INLINE_VIDEO_MAX_BYTES;
+}
+
 // supabase/functions/recipe-import/index.ts
 var corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
 };
 var USER_WINDOW_MS = 6e4;
-var USER_MAX_PER_WINDOW = 8;
+var USER_MAX_PER_WINDOW = 10;
 var CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1e3;
 var WEB_FETCH_TIMEOUT_MS = 12e3;
 var WEB_MAX_BYTES = 15e5;
 var WEB_MAX_TEXT_CHARS = 48e3;
+var MAX_IMPORT_IMAGES = 4;
 var FETCH_USER_AGENT = "MealPlanaticRecipeImport/1.0 (+https://mealplanatic.app; recipe-importer)";
 var userHits = /* @__PURE__ */ new Map();
 function jsonResponse(body, status = 200) {
@@ -768,10 +1024,7 @@ async function readImportCache(urlKey) {
   const hash = await sha256Hex(urlKey);
   const query = `${supabaseUrl}/rest/v1/recipe_import_cache?url_hash=eq.${encodeURIComponent(hash)}&select=payload,expires_at`;
   const response = await fetch(query, {
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`
-    }
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
   });
   if (!response.ok) return null;
   const rows = await response.json();
@@ -862,20 +1115,62 @@ function buildImportCacheKey(normalizedUrl, sourceType, captionText) {
   }
   return urlHashKey(base);
 }
-async function importFromCaption(apiKey, normalizedUrl, sourceType, captionText) {
+function socialAuthorHandle(authorName) {
+  const trimmed = authorName.trim();
+  return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
+}
+async function buildFallbackPayload(sourceType, hasCaption, captionForSearch, creatorHint) {
+  const youtubeKey = Deno.env.get("YOUTUBE_API_KEY") ?? "";
+  const youtubeSuggestion = await searchYoutubeRecipeVideo(
+    youtubeKey,
+    creatorHint,
+    captionForSearch
+  );
+  const steps = orderImportFallbackSteps({
+    sourceType,
+    hasCaption,
+    youtubeSuggestionAvailable: youtubeSuggestion != null
+  });
+  return {
+    steps,
+    youtubeSuggestion,
+    message: "We could not find a complete recipe yet. Try one of these options."
+  };
+}
+function recipeLooksValid(recipe) {
+  return recipe.is_recipe && recipe.confidence >= 0.35 && (recipe.ingredients.length > 0 || recipe.steps.length > 0);
+}
+async function importFromCaption(apiKey, normalizedUrl, sourceType, captionText, socialMeta) {
   const cacheKey = buildImportCacheKey(normalizedUrl, sourceType, captionText);
   const cached = await readImportCache(cacheKey);
-  if (cached) return { recipe: { ...cached, source_url: normalizedUrl }, cached: true };
-  const fromGemini = await extractRecipeFromPageText(apiKey, captionText, normalizedUrl, sourceType);
-  if (!fromGemini) return null;
-  if (!fromGemini.is_recipe || fromGemini.confidence < 0.35) {
+  if (cached) {
     return {
-      notRecipe: true,
-      message: "We could not find a recipe in that caption. Try a fuller caption or another link."
+      recipe: {
+        ...cached,
+        source_url: normalizedUrl,
+        social_author_name: socialMeta?.authorName ?? cached.social_author_name,
+        social_author_url: socialMeta?.authorUrl ?? cached.social_author_url
+      },
+      cached: true
     };
   }
-  await writeImportCache(cacheKey, normalizedUrl, fromGemini);
-  return { recipe: fromGemini, cached: false };
+  const fromGemini = await extractRecipeFromPageText(apiKey, captionText, normalizedUrl, sourceType);
+  if (!fromGemini) return null;
+  if (!recipeLooksValid(fromGemini)) {
+    return {
+      notRecipe: true,
+      message: "We could not find a recipe in that caption.",
+      captionForSearch: captionText,
+      creatorHint: socialMeta?.authorName ?? null
+    };
+  }
+  const withSocial = {
+    ...fromGemini,
+    social_author_name: socialMeta?.authorName ?? null,
+    social_author_url: socialMeta?.authorUrl ?? normalizedUrl
+  };
+  await writeImportCache(cacheKey, normalizedUrl, withSocial);
+  return { recipe: withSocial, cached: false };
 }
 async function importFromUrl(apiKey, normalizedUrl, sourceType) {
   const cacheKey = buildImportCacheKey(normalizedUrl, sourceType);
@@ -885,10 +1180,12 @@ async function importFromUrl(apiKey, normalizedUrl, sourceType) {
     const watchUrl = canonicalYouTubeWatchUrl(normalizedUrl);
     const extracted = await extractRecipeFromYouTubeVideo(apiKey, watchUrl, "youtube", normalizedUrl);
     if (!extracted) return null;
-    if (!extracted.is_recipe || extracted.confidence < 0.35) {
+    if (!recipeLooksValid(extracted)) {
       return {
         notRecipe: true,
-        message: "That video does not look like a recipe. Try a cooking tutorial or a recipe blog link."
+        message: "That video does not look like a recipe.",
+        captionForSearch: extracted.title,
+        creatorHint: extracted.youtube_channel_name ?? null
       };
     }
     await writeImportCache(cacheKey, normalizedUrl, extracted);
@@ -899,7 +1196,7 @@ async function importFromUrl(apiKey, normalizedUrl, sourceType) {
   const jsonLd = findRecipeJsonLdInHtml(html);
   if (jsonLd) {
     const fromLd = recipeJsonLdToExtracted(jsonLd, normalizedUrl);
-    if (fromLd && fromLd.is_recipe && (fromLd.ingredients.length > 0 || fromLd.steps.length > 0)) {
+    if (fromLd && recipeLooksValid(fromLd)) {
       await writeImportCache(cacheKey, normalizedUrl, fromLd);
       return { recipe: fromLd, cached: false };
     }
@@ -907,14 +1204,52 @@ async function importFromUrl(apiKey, normalizedUrl, sourceType) {
   const pageText = stripHtmlToText(html, WEB_MAX_TEXT_CHARS);
   const fromGemini = await extractRecipeFromPageText(apiKey, pageText, normalizedUrl);
   if (!fromGemini) return null;
-  if (!fromGemini.is_recipe || fromGemini.confidence < 0.35) {
+  if (!recipeLooksValid(fromGemini)) {
     return {
       notRecipe: true,
-      message: "We could not find a recipe on that page. Try a direct recipe link."
+      message: "We could not find a recipe on that page.",
+      captionForSearch: pageText.slice(0, 400),
+      creatorHint: null
     };
   }
   await writeImportCache(cacheKey, normalizedUrl, fromGemini);
   return { recipe: fromGemini, cached: false };
+}
+async function importTikTokLink(apiKey, normalizedUrl) {
+  const oembed = await fetchTikTokOembed(normalizedUrl);
+  if (!oembed) {
+    return {
+      notRecipe: true,
+      message: "Could not read that TikTok post. Paste the caption or try a screenshot.",
+      captionForSearch: "",
+      creatorHint: null
+    };
+  }
+  const authorLabel = socialAuthorHandle(oembed.authorName);
+  return importFromCaption(apiKey, normalizedUrl, "tiktok", oembed.caption, {
+    authorName: authorLabel,
+    authorUrl: oembed.authorUrl ?? normalizedUrl
+  });
+}
+function parseImportImages(raw) {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_IMPORT_IMAGES) return null;
+  const allowed = /* @__PURE__ */ new Set(["image/jpeg", "image/png", "image/webp"]);
+  const out = [];
+  for (const entry of raw) {
+    const mime = (entry.mimeType ?? "image/jpeg").toLowerCase().split(";")[0].trim();
+    const dataRaw = entry.data ?? "";
+    const base64 = dataRaw.includes(",") ? dataRaw.split(",").pop() ?? "" : dataRaw;
+    if (!allowed.has(mime) || !base64 || base64.length > 8e6) return null;
+    out.push({ mimeType: mime, base64 });
+  }
+  return out;
+}
+async function maybeAttachAuthorPublicLink(recipe) {
+  const youtubeKey = Deno.env.get("YOUTUBE_API_KEY") ?? "";
+  if (!youtubeKey.trim()) return recipe;
+  const suggestion = await searchYoutubeRecipeVideo(youtubeKey, null, recipe.title);
+  if (!suggestion) return recipe;
+  return { ...recipe, author_public_recipe_url: suggestion.watchUrl };
 }
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -946,6 +1281,136 @@ Deno.serve(async (req) => {
   } catch {
     return jsonResponse({ error: "Invalid JSON body", code: "BAD_REQUEST" }, 400);
   }
+  const action = body.action ?? "link";
+  if (action === "confirm_youtube") {
+    const yt = normalizeImportUrl(body.youtubeUrl ?? "");
+    if (!yt || classifyRecipeImportUrl(yt) !== "youtube") {
+      return jsonResponse({ error: "Invalid YouTube URL", code: "BAD_REQUEST" }, 400);
+    }
+    try {
+      const result = await importFromUrl(apiKey, yt, "youtube");
+      if (!result) {
+        return jsonResponse({ error: "Could not import that YouTube video.", code: "UPSTREAM_ERROR" }, 502);
+      }
+      if ("notRecipe" in result && result.notRecipe) {
+        const fallbacks = await buildFallbackPayload(
+          "youtube",
+          false,
+          result.captionForSearch ?? "",
+          result.creatorHint ?? null
+        );
+        return jsonResponse(
+          { error: result.message, code: "NOT_RECIPE", fallbacks },
+          422
+        );
+      }
+      return jsonResponse({ recipe: result.recipe, cached: result.cached, confirmedYoutube: true });
+    } catch (error) {
+      console.error("recipe-import confirm_youtube error", error);
+      return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    }
+  }
+  if (action === "photo") {
+    const images = parseImportImages(body.images);
+    if (!images) {
+      return jsonResponse({ error: "Add 1\u20134 recipe photos (JPEG/PNG/WebP).", code: "BAD_REQUEST" }, 400);
+    }
+    const cacheKey = urlHashKey(`photo|${userId}|${images.map((i) => i.base64.slice(0, 64)).join("|")}`);
+    try {
+      const imageParts = images.map((img) => ({
+        inline_data: { mime_type: img.mimeType, data: img.base64 }
+      }));
+      let extracted = await extractRecipeFromPhotos(apiKey, imageParts, "photo-scan");
+      if (!extracted || !recipeLooksValid(extracted)) {
+        const fallbacks = await buildFallbackPayload("photo", false, extracted?.title ?? "", null);
+        return jsonResponse(
+          {
+            error: "We could not read a recipe from those photos.",
+            code: "NOT_RECIPE",
+            fallbacks
+          },
+          422
+        );
+      }
+      extracted = await maybeAttachAuthorPublicLink(extracted);
+      await writeImportCache(cacheKey, "photo-scan", extracted);
+      return jsonResponse({ recipe: extracted, cached: false });
+    } catch (error) {
+      console.error("recipe-import photo error", error);
+      return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    }
+  }
+  if (action === "screenshot") {
+    const images = parseImportImages(body.images);
+    if (!images) {
+      return jsonResponse({ error: "Add 1\u20134 screenshots.", code: "BAD_REQUEST" }, 400);
+    }
+    const normalized2 = normalizeImportUrl(body.url ?? "") ?? "screenshot-import";
+    const sourceType2 = classifyRecipeImportUrl(normalized2) ?? "web";
+    try {
+      const imageParts = images.map((img) => ({
+        inline_data: { mime_type: img.mimeType, data: img.base64 }
+      }));
+      const extracted = await extractRecipeFromScreenshots(
+        apiKey,
+        imageParts,
+        normalized2,
+        sourceType2 === "youtube" ? "web" : sourceType2
+      );
+      if (!extracted || !recipeLooksValid(extracted)) {
+        const fallbacks = await buildFallbackPayload(String(sourceType2), Boolean(body.captionText?.trim()), "", null);
+        return jsonResponse({ error: "No recipe found in those screenshots.", code: "NOT_RECIPE", fallbacks }, 422);
+      }
+      return jsonResponse({ recipe: extracted, cached: false });
+    } catch (error) {
+      console.error("recipe-import screenshot error", error);
+      return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    }
+  }
+  if (action === "video") {
+    const storagePath = (body.videoStoragePath ?? "").trim();
+    if (!storagePath) {
+      return jsonResponse({ error: "Missing video upload path.", code: "BAD_REQUEST" }, 400);
+    }
+    let geminiFileName = null;
+    try {
+      const downloaded = await downloadUserImportVideo(userId, storagePath);
+      if (!downloaded) {
+        return jsonResponse({ error: "Could not read your uploaded video.", code: "BAD_REQUEST" }, 400);
+      }
+      let fileUri;
+      if (shouldUseGeminiFileApi(downloaded.bytes.length)) {
+        const uploaded = await uploadVideoToGeminiFiles(apiKey, downloaded.bytes, downloaded.mimeType);
+        if (!uploaded) {
+          return jsonResponse({ error: "Could not process that video.", code: "UPSTREAM_ERROR" }, 502);
+        }
+        fileUri = uploaded.fileUri;
+        geminiFileName = uploaded.fileName;
+      }
+      const parts = buildGeminiPartsForVideo(
+        downloaded.bytes,
+        downloaded.mimeType,
+        "",
+        fileUri
+      );
+      const extracted = await extractRecipeFromUploadedVideo(apiKey, parts, storagePath);
+      if (geminiFileName) {
+        await deleteGeminiFile(apiKey, geminiFileName);
+        geminiFileName = null;
+      }
+      await deleteUserImportVideo(storagePath);
+      if (!extracted || !recipeLooksValid(extracted)) {
+        const fallbacks = await buildFallbackPayload("video", false, extracted?.title ?? "", null);
+        return jsonResponse({ error: "That video does not look like a recipe.", code: "NOT_RECIPE", fallbacks }, 422);
+      }
+      return jsonResponse({ recipe: extracted, cached: false });
+    } catch (error) {
+      if (geminiFileName) await deleteGeminiFile(apiKey, geminiFileName);
+      await deleteUserImportVideo(storagePath);
+      console.error("recipe-import video error", error);
+      return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    }
+  }
   const normalized = normalizeImportUrl(body.url ?? "");
   if (!normalized) {
     return jsonResponse({ error: "Invalid or missing URL", code: "BAD_REQUEST" }, 400);
@@ -954,27 +1419,61 @@ Deno.serve(async (req) => {
   if (!sourceType) {
     return jsonResponse({ error: "Unsupported URL", code: "BAD_REQUEST" }, 400);
   }
-  if (isSocialCaptionSourceType(sourceType)) {
+  if (sourceType === "tiktok") {
+    const caption = (body.captionText ?? "").trim();
+    try {
+      const result = caption ? await importFromCaption(apiKey, normalized, "tiktok", caption, {
+        authorUrl: normalized
+      }) : await importTikTokLink(apiKey, normalized);
+      if (!result) {
+        return jsonResponse({ error: "Could not import that TikTok link.", code: "UPSTREAM_ERROR" }, 502);
+      }
+      if ("notRecipe" in result && result.notRecipe) {
+        const fallbacks = await buildFallbackPayload(
+          "tiktok",
+          Boolean(caption),
+          result.captionForSearch ?? caption,
+          result.creatorHint ?? null
+        );
+        return jsonResponse({ error: result.message, code: "NOT_RECIPE", fallbacks }, 422);
+      }
+      return jsonResponse({ recipe: result.recipe, cached: result.cached });
+    } catch (error) {
+      console.error("recipe-import tiktok error", error);
+      return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
+    }
+  }
+  if (isManualCaptionSourceType(sourceType)) {
     const caption = (body.captionText ?? "").trim();
     if (!caption) {
+      const fallbacks = await buildFallbackPayload(sourceType, false, "", null);
       return jsonResponse(
         {
-          error: "TikTok/Instagram import is coming soon \u2014 paste the caption text instead.",
-          code: "CAPTION_REQUIRED"
+          error: "Paste the post caption or upload a screenshot of the recipe.",
+          code: "FALLBACK_REQUIRED",
+          fallbacks
         },
         422
       );
     }
     try {
-      const result = await importFromCaption(apiKey, normalized, sourceType, caption);
+      const result = await importFromCaption(
+        apiKey,
+        normalized,
+        sourceType,
+        caption
+      );
       if (!result) {
-        return jsonResponse(
-          { error: "Could not import that caption right now. Try again shortly.", code: "UPSTREAM_ERROR" },
-          502
-        );
+        return jsonResponse({ error: "Could not import that caption.", code: "UPSTREAM_ERROR" }, 502);
       }
       if ("notRecipe" in result && result.notRecipe) {
-        return jsonResponse({ error: result.message, code: "NOT_RECIPE" }, 422);
+        const fallbacks = await buildFallbackPayload(
+          sourceType,
+          true,
+          result.captionForSearch ?? caption,
+          result.creatorHint ?? null
+        );
+        return jsonResponse({ error: result.message, code: "NOT_RECIPE", fallbacks }, 422);
       }
       return jsonResponse({ recipe: result.recipe, cached: result.cached });
     } catch (error) {
@@ -982,23 +1481,40 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
     }
   }
+  if ((body.captionText ?? "").trim()) {
+    try {
+      const result = await importFromCaption(
+        apiKey,
+        normalized,
+        sourceType === "youtube" || sourceType === "web" ? "web" : sourceType,
+        (body.captionText ?? "").trim()
+      );
+      if (result && !("notRecipe" in result && result.notRecipe)) {
+        return jsonResponse({ recipe: result.recipe, cached: result.cached });
+      }
+    } catch {
+    }
+  }
   try {
+    if (sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook") {
+      return jsonResponse({ error: "Unsupported link flow", code: "BAD_REQUEST" }, 400);
+    }
     const result = await importFromUrl(apiKey, normalized, sourceType);
     if (!result) {
-      return jsonResponse(
-        { error: "Could not import that link right now. Try again shortly.", code: "UPSTREAM_ERROR" },
-        502
-      );
+      return jsonResponse({ error: "Could not import that link right now.", code: "UPSTREAM_ERROR" }, 502);
     }
     if ("notRecipe" in result && result.notRecipe) {
-      return jsonResponse({ error: result.message, code: "NOT_RECIPE" }, 422);
+      const fallbacks = await buildFallbackPayload(
+        sourceType,
+        false,
+        result.captionForSearch ?? "",
+        result.creatorHint ?? null
+      );
+      return jsonResponse({ error: result.message, code: "NOT_RECIPE", fallbacks }, 422);
     }
     return jsonResponse({ recipe: result.recipe, cached: result.cached });
   } catch (error) {
     console.error("recipe-import error", error);
-    return jsonResponse(
-      { error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" },
-      502
-    );
+    return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
   }
 });
