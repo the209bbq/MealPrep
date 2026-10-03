@@ -1,0 +1,17 @@
+{
+  "@type": "Recipe",
+  "name": "Sectioned Steps Soup",
+  "recipeIngredient": ["2 cups broth", "1 cup noodles"],
+  "recipeInstructions": [
+    {
+      "@type": "HowToSection",
+      "name": "Cook",
+      "itemListElement": [
+        { "@type": "HowToStep", "text": "Bring broth to a boil." },
+        { "@type": "HowToStep", "text": "Add noodles and simmer 8 minutes." }
+      ]
+    }
+  ],
+  "totalTime": "PT20M",
+  "recipeYield": ["4", "6"]
+}

@@ -110,6 +110,8 @@ import {
   resolveDiscoveryGroceryRecipeId,
 } from '../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
+import { mapExtractedImportToRecipe } from '../lib/recipeImport/mapToAppRecipe';
+import type { RecipeImportExtractedDto } from '../lib/recipeImport/types';
 import {
   mealPlanItemsInWeekWindow,
   recipeIdsForScheduledMeals,
@@ -139,6 +141,7 @@ import {
   updateProfilePreferences,
   upsertFeatureFlag,
   upsertImportedRecipe,
+  upsertLinkImportedRecipe,
 } from '../lib/supabaseData';
 import type {
   FeatureFlags,
@@ -316,6 +319,7 @@ interface AppContextValue {
     recipe: Recipe,
     options: { asMaster: boolean; recipeApiId: number },
   ) => Promise<Recipe>;
+  saveLinkImportedRecipe: (extracted: RecipeImportExtractedDto) => Promise<Recipe>;
   addPantryFromScan: (name: string, photoUri: string | null) => void;
   addManualPantryItem: (input: {
     name: string;
@@ -1662,6 +1666,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, isAdmin, isGuest, supabase, userId],
   );
 
+  const saveLinkImportedRecipe = useCallback(
+    async (extracted: RecipeImportExtractedDto): Promise<Recipe> => {
+      const mapped = mapExtractedImportToRecipe(extracted, ownerId);
+      if (demoMode || isGuest) {
+        const saved = { ...mapped, isMaster: false };
+        setRecipes((prev) => {
+          const exists = prev.some((r) => r.id === saved.id);
+          const next = exists ? prev.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...prev];
+          if (demoMode) writeJson(STORAGE_KEYS.recipes, next);
+          else writeGuestRecipes(next);
+          return next;
+        });
+        return saved;
+      }
+      if (!supabase || !userId) {
+        throw new Error('Sign in to save recipes.');
+      }
+      const saved = await upsertLinkImportedRecipe(supabase, userId, mapped);
+      setRecipes((prev) => {
+        const exists = prev.some((r) => r.id === saved.id);
+        return exists ? prev.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...prev];
+      });
+      return saved;
+    },
+    [demoMode, isGuest, ownerId, supabase, userId],
+  );
+
   const toggleMealPlanDiscoveryRecipe = useCallback(
     async (item: RecipeDiscoveryListItem) => {
       const existing = isRecipeOnMealPlan(mealPlan, { recipeApiId: item.id });
@@ -2105,6 +2136,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       seedPantry,
       updateRecipe,
       importDiscoveredRecipe,
+      saveLinkImportedRecipe,
       addPantryFromScan,
       addManualPantryItem,
       updatePantryItemEntry,
@@ -2205,6 +2237,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dismissUndoToast,
       updateRecipe,
       importDiscoveredRecipe,
+      saveLinkImportedRecipe,
       pantryRecipeMatches,
       pantryRecipeRecommendations,
       addMissingRecipeIngredientsToGrocery,

@@ -102,6 +102,12 @@
         Run <strong>AI photo scanning</strong>: images you choose to scan are sent to <strong>Google Gemini</strong> (via
         our Supabase Edge Function) to detect pantry items or read shelf tags.
       </li>
+      <li>
+        When you <strong>import a recipe from a link</strong>, we send that URL (and for some sites, page text, a social
+        caption you paste, or a YouTube video reference processed by URL only — we do not download or store the video)
+        to Google Gemini to extract recipe details for your private collection. YouTube channel names are refreshed about
+        every 30 days.
+      </li>
       <li>Provide nutrition information where available (including USDA-sourced data served through our backend).</li>
       <li>Let you add meals to <strong>Google Calendar</strong> or download <strong>.ics</strong> files — we open a
         calendar link or file; we do not read or modify your Google Calendar account.</li>
