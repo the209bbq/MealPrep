@@ -14,7 +14,7 @@ import {
 } from '../../lib/recipeImport/client';
 import {
   classifyImportUrlForClient,
-  isSocialCaptionImportKind,
+  isManualCaptionImportKind,
   normalizeImportUrl,
 } from '../../lib/recipeImport/urlClassificationClient';
 import type { RecipeImportExtractedDto } from '../../lib/recipeImport/types';
@@ -39,7 +39,7 @@ export function RecipeImportFromLink({ initialUrl = '' }: { initialUrl?: string 
     () => (normalizedUrl ? classifyImportUrlForClient(normalizedUrl) : null),
     [normalizedUrl],
   );
-  const socialCaptionMode = isSocialCaptionImportKind(urlKind);
+  const manualCaptionMode = isManualCaptionImportKind(urlKind);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,8 +68,8 @@ export function RecipeImportFromLink({ initialUrl = '' }: { initialUrl?: string 
       setError(RECIPE_IMPORT.invalidUrlMessage);
       return;
     }
-    if (socialCaptionMode && !captionText.trim()) {
-      setError(RECIPE_IMPORT_COPY.socialCaptionComingSoon);
+    if (manualCaptionMode && !captionText.trim()) {
+      setError(RECIPE_IMPORT_COPY.manualCaptionHint);
       return;
     }
     if (!session && !demoMode) {
@@ -80,7 +80,7 @@ export function RecipeImportFromLink({ initialUrl = '' }: { initialUrl?: string 
     try {
       const token = session?.access_token ?? null;
       const extracted = await importRecipeFromLink(trimmed, token, {
-        captionText: socialCaptionMode ? captionText : undefined,
+        captionText: manualCaptionMode ? captionText : undefined,
       });
       setReview(extracted);
     } catch (err) {
@@ -100,7 +100,7 @@ export function RecipeImportFromLink({ initialUrl = '' }: { initialUrl?: string 
     } finally {
       setLoading(false);
     }
-  }, [captionText, demoMode, session, socialCaptionMode, url]);
+  }, [captionText, demoMode, manualCaptionMode, session, url]);
 
   return (
     <View className="mt-2">
@@ -130,14 +130,14 @@ export function RecipeImportFromLink({ initialUrl = '' }: { initialUrl?: string 
             <ActivityIndicator color={THEME.onPrimary} />
           ) : (
             <Text className="text-xs font-bold text-on-primary">
-              {socialCaptionMode ? RECIPE_IMPORT_COPY.importFromCaptionCta : RECIPE_IMPORT_COPY.importCta}
+              {manualCaptionMode ? RECIPE_IMPORT_COPY.importFromCaptionCta : RECIPE_IMPORT_COPY.importCta}
             </Text>
           )}
         </Pressable>
       </View>
-      {socialCaptionMode ? (
+      {manualCaptionMode ? (
         <View className="mt-2 rounded-xl border border-border bg-card p-3">
-          <Text className="text-xs text-muted">{RECIPE_IMPORT_COPY.socialCaptionComingSoon}</Text>
+          <Text className="text-xs text-muted">{RECIPE_IMPORT_COPY.manualCaptionHint}</Text>
           <Text className="mt-2 text-xs font-semibold text-ink">{RECIPE_IMPORT_COPY.sourceLinkLabel}</Text>
           <Text className="mt-1 text-xs text-muted" numberOfLines={2}>{normalizedUrl}</Text>
           <Text className="mt-3 text-xs font-semibold text-ink">{RECIPE_IMPORT_COPY.socialCaptionLabel}</Text>

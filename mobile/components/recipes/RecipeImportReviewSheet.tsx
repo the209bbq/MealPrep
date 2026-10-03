@@ -6,6 +6,7 @@ import {
   Text,
   TextInput,
   View,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
@@ -15,17 +16,20 @@ interface RecipeImportReviewSheetProps {
   visible: boolean;
   draft: RecipeImportExtractedDto | null;
   onClose: () => void;
-  onSave: (recipe: RecipeImportExtractedDto) => Promise<void>;
+  onSave: (recipe: RecipeImportExtractedDto) => Promise<{ id: string } | void>;
+  onAddMissingToGrocery?: (recipeId: string) => void;
 }
 
 function RecipeImportReviewForm({
   draft,
   onClose,
   onSave,
+  onAddMissingToGrocery,
 }: {
   draft: RecipeImportExtractedDto;
   onClose: () => void;
-  onSave: (recipe: RecipeImportExtractedDto) => Promise<void>;
+  onSave: (recipe: RecipeImportExtractedDto) => Promise<{ id: string } | void>;
+  onAddMissingToGrocery?: (recipeId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [title, setTitle] = useState(draft.title);
@@ -36,6 +40,7 @@ function RecipeImportReviewForm({
       .join('\n'),
   );
   const [saving, setSaving] = useState(false);
+  const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null);
 
   async function handleSave() {
     setSaving(true);
@@ -63,10 +68,42 @@ function RecipeImportReviewForm({
         steps,
         ingredients: ingredients.length > 0 ? ingredients : draft.ingredients,
       };
-      await onSave(next);
+      const saved = await onSave(next);
+      if (next.source_type === 'photo' && onAddMissingToGrocery && saved && 'id' in saved) {
+        setSavedRecipeId(saved.id);
+        return;
+      }
     } finally {
       setSaving(false);
     }
+  }
+
+  if (savedRecipeId && onAddMissingToGrocery) {
+    return (
+      <View className="flex-1 bg-paper" style={{ paddingTop: insets.top }}>
+        <View className="flex-row items-center border-b border-border bg-card px-4 py-3">
+          <Pressable onPress={onClose} accessibilityLabel="Close" className="mr-3 p-1">
+            <Text className="text-base font-bold text-primary">{RECIPE_IMPORT_COPY.cancel}</Text>
+          </Pressable>
+          <Text className="flex-1 text-lg font-bold text-ink">Recipe saved</Text>
+        </View>
+        <View className="flex-1 px-4 pt-6">
+          <Text className="text-sm text-muted">Add ingredients you do not already have in your pantry.</Text>
+          <Pressable
+            onPress={() => {
+              onAddMissingToGrocery(savedRecipeId);
+              onClose();
+            }}
+            className="mt-4 items-center rounded-xl bg-primary py-4"
+          >
+            <Text className="text-base font-bold text-on-primary">{RECIPE_IMPORT_COPY.addMissingGroceryCta}</Text>
+          </Pressable>
+          <Pressable onPress={onClose} className="mt-3 items-center py-3">
+            <Text className="text-sm font-semibold text-muted">Not now</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -79,6 +116,26 @@ function RecipeImportReviewForm({
       </View>
       <ScrollView className="flex-1 px-4 pb-10" keyboardShouldPersistTaps="handled">
         <Text className="mt-3 text-sm text-muted">{RECIPE_IMPORT_COPY.reviewSubtitle}</Text>
+        {draft.social_author_name ? (
+          <Pressable
+            onPress={() => {
+              if (draft.social_author_url) void Linking.openURL(draft.social_author_url);
+            }}
+            className="mt-2 self-start"
+          >
+            <Text className="text-xs font-semibold text-primary">
+              {RECIPE_IMPORT_COPY.socialCredit(draft.social_author_name)}
+            </Text>
+          </Pressable>
+        ) : null}
+        {draft.author_public_recipe_url ? (
+          <Pressable
+            onPress={() => void Linking.openURL(draft.author_public_recipe_url!)}
+            className="mt-2 self-start"
+          >
+            <Text className="text-xs font-semibold text-primary">{RECIPE_IMPORT_COPY.seeAuthorVersion}</Text>
+          </Pressable>
+        ) : null}
         <Text className="mt-4 text-xs font-semibold uppercase text-muted">Title</Text>
         <TextInput
           value={title}
@@ -118,6 +175,7 @@ export function RecipeImportReviewSheet({
   draft,
   onClose,
   onSave,
+  onAddMissingToGrocery,
 }: RecipeImportReviewSheetProps) {
   if (!draft) return null;
 
@@ -128,6 +186,7 @@ export function RecipeImportReviewSheet({
         draft={draft}
         onClose={onClose}
         onSave={onSave}
+        onAddMissingToGrocery={onAddMissingToGrocery}
       />
     </Modal>
   );

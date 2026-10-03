@@ -21,11 +21,11 @@ import { useApp } from '../../context/AppContext';
 import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
-import { RecipeImportFromLink } from '../../components/recipes/RecipeImportFromLink';
+import { RecipeImportSheet } from '../../components/recipes/RecipeImportSheet';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 
 export default function RecipesScreen() {
-  const params = useLocalSearchParams<{ recipeId?: string; url?: string; text?: string }>();
+  const params = useLocalSearchParams<{ recipeId?: string; url?: string; text?: string; import?: string }>();
   const {
     recipes,
     pantry,
@@ -46,6 +46,12 @@ export default function RecipesScreen() {
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
   const [pickedDetailRow, setPickedDetailRow] = useState<RecipesTabRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [importSheetOpen, setImportSheetOpen] = useState(() => {
+    const direct = typeof params.url === 'string' ? params.url.trim() : '';
+    const text = typeof params.text === 'string' ? params.text : '';
+    const match = text.match(/https?:\/\/[^\s]+/i);
+    return Boolean(direct || match?.[0] || params.import === '1');
+  });
   const sharedImportUrl = useMemo(() => {
     const direct = typeof params.url === 'string' ? params.url : '';
     if (direct.trim()) return direct.trim();
@@ -53,6 +59,11 @@ export default function RecipesScreen() {
     const match = text.match(/https?:\/\/[^\s]+/i);
     return match ? match[0] : '';
   }, [params.text, params.url]);
+  const autoStartSharedImport = useMemo(
+    () => Boolean(sharedImportUrl.trim()),
+    [sharedImportUrl],
+  );
+
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const pantryEmpty = pantry.length === 0;
@@ -170,8 +181,20 @@ export default function RecipesScreen() {
             accessibilityLabel="Search recipes"
           />
         </View>
-        <Text className="mt-2 text-xs font-semibold text-muted">{RECIPE_IMPORT_COPY.importButton}</Text>
-        <RecipeImportFromLink key={sharedImportUrl || 'default'} initialUrl={sharedImportUrl} />
+        <Pressable
+          onPress={() => setImportSheetOpen(true)}
+          className="mt-3 min-h-[44px] items-center justify-center rounded-xl border border-border bg-card px-4 py-3"
+          accessibilityRole="button"
+          accessibilityLabel={RECIPE_IMPORT_COPY.importButtonAccessibility}
+        >
+          <Text className="text-sm font-bold text-primary">{RECIPE_IMPORT_COPY.importButton}</Text>
+        </Pressable>
+        <RecipeImportSheet
+          visible={importSheetOpen}
+          onClose={() => setImportSheetOpen(false)}
+          initialUrl={sharedImportUrl}
+          autoStart={autoStartSharedImport}
+        />
         <RecipesTabFilterBar
           baseRows={filterBaseRows}
           filters={filters}

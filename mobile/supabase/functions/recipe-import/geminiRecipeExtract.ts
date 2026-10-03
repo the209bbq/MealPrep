@@ -43,6 +43,23 @@ const SOCIAL_CAPTION_PROMPT =
   'Extract a home-cooking recipe from this social post caption. Rewrite the title, ingredients, and steps in your own words (do not copy the caption verbatim). ' +
   'Use generic ingredient names (no brands). Return clear step-by-step instructions. If this is not a recipe, set is_recipe false and confidence low.';
 
+const PHOTO_RECIPE_PROMPT =
+  'Extract a home-cooking recipe from these photos (printed cookbook pages, recipe cards, or handwritten cards). ' +
+  'Rewrite the title, ingredients, and steps in your own words — never copy publisher text verbatim. ' +
+  'Use generic ingredient names. Return clear step-by-step instructions. ' +
+  'If you can read an author or book name, set cookbook_author_name and cookbook_title_guess; otherwise null. ' +
+  'If this is not a recipe, set is_recipe false and confidence low.';
+
+const SCREENSHOT_RECIPE_PROMPT =
+  'Extract a home-cooking recipe from these screenshots of a social post or web page. ' +
+  'Rewrite in your own words. Use generic ingredient names and clear steps. ' +
+  'If this is not a recipe, set is_recipe false and confidence low.';
+
+const UPLOADED_VIDEO_PROMPT =
+  'Extract a home-cooking recipe from this cooking video the user saved on their device. ' +
+  'Focus on accurate step-by-step INSTRUCTIONS and ingredients with quantities. Rewrite in fresh wording. ' +
+  'Use generic ingredient names. If this is not a recipe video, set is_recipe false with low confidence.';
+
 async function callGeminiJson(
   apiKey: string,
   model: string,
@@ -181,9 +198,10 @@ export async function extractRecipeFromPageText(
   sourceUrl: string,
   sourceType: RecipeImportSourceType = 'web',
 ): Promise<RecipeImportExtracted | null> {
-  const prompt = sourceType === 'tiktok' || sourceType === 'instagram'
-    ? SOCIAL_CAPTION_PROMPT
-    : TEXT_EXTRACTION_PROMPT;
+  const prompt =
+    sourceType === 'tiktok' || sourceType === 'instagram' || sourceType === 'facebook'
+      ? SOCIAL_CAPTION_PROMPT
+      : TEXT_EXTRACTION_PROMPT;
   const parts = [
     {
       text: `${prompt}\n\nSource URL: ${sourceUrl}\n\nText:\n${pageText}`,
@@ -192,4 +210,44 @@ export async function extractRecipeFromPageText(
   const extracted = await callGeminiWithFallback(apiKey, parts);
   if (!extracted) return null;
   return attachImportMetadata(extracted, sourceUrl, sourceType);
+}
+
+export async function extractRecipeFromGeminiParts(
+  apiKey: string,
+  parts: Record<string, unknown>[],
+  sourceUrl: string,
+  sourceType: RecipeImportSourceType,
+  extras?: Parameters<typeof attachImportMetadata>[3],
+): Promise<RecipeImportExtracted | null> {
+  const extracted = await callGeminiWithFallback(apiKey, parts);
+  if (!extracted) return null;
+  return attachImportMetadata(extracted, sourceUrl, sourceType, extras);
+}
+
+export async function extractRecipeFromPhotos(
+  apiKey: string,
+  parts: Record<string, unknown>[],
+  sourceUrl: string,
+): Promise<RecipeImportExtracted | null> {
+  const withPrompt = [{ text: PHOTO_RECIPE_PROMPT }, ...parts];
+  return extractRecipeFromGeminiParts(apiKey, withPrompt, sourceUrl, 'photo');
+}
+
+export async function extractRecipeFromScreenshots(
+  apiKey: string,
+  parts: Record<string, unknown>[],
+  sourceUrl: string,
+  sourceType: RecipeImportSourceType,
+): Promise<RecipeImportExtracted | null> {
+  const withPrompt = [{ text: SCREENSHOT_RECIPE_PROMPT }, ...parts];
+  return extractRecipeFromGeminiParts(apiKey, withPrompt, sourceUrl, sourceType);
+}
+
+export async function extractRecipeFromUploadedVideo(
+  apiKey: string,
+  parts: Record<string, unknown>[],
+  sourceUrl: string,
+): Promise<RecipeImportExtracted | null> {
+  const withPrompt = [{ text: UPLOADED_VIDEO_PROMPT }, ...parts];
+  return extractRecipeFromGeminiParts(apiKey, withPrompt, sourceUrl, 'video');
 }

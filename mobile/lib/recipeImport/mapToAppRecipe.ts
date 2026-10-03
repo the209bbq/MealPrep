@@ -19,6 +19,15 @@ export function linkImportRecipeSlug(userId: string, sourceUrl: string): string 
   return `link-import-${userPart}-${hash}`;
 }
 
+export function photoImportRecipeSlug(userId: string, title: string): string {
+  const base = `${title.trim().toLowerCase()}-${Date.now()}`;
+  const hash = base
+    .split('')
+    .reduce((acc, ch) => ((acc * 31 + ch.charCodeAt(0)) >>> 0), 0)
+    .toString(36);
+  return `photo-import-${userId.slice(0, 8)}-${hash}`;
+}
+
 export function mapExtractedImportToRecipe(
   extracted: RecipeImportExtractedDto,
   userId: string,
@@ -40,18 +49,29 @@ export function mapExtractedImportToRecipe(
     web: 'Imported · Web',
     tiktok: 'Imported · TikTok',
     instagram: 'Imported · Instagram',
+    facebook: 'Imported · Facebook',
+    photo: 'Imported · Photo',
+    video: 'Imported · Video',
   };
   const descriptionBySource: Record<RecipeImportExtractedDto['source_type'], string> = {
     youtube: 'Imported from a YouTube cooking video and saved in your own words.',
     web: 'Imported from a recipe page and saved in your own words.',
-    tiktok: 'Imported from a TikTok caption and saved in your own words.',
+    tiktok: 'Imported from a TikTok post and saved in your own words.',
     instagram: 'Imported from an Instagram caption and saved in your own words.',
+    facebook: 'Imported from a Facebook post and saved in your own words.',
+    photo: 'Imported from your recipe photos and saved in your own words.',
+    video: 'Imported from your saved cooking video and saved in your own words.',
   };
 
   const persistYoutubeMeta = extracted.source_type === 'youtube';
+  const socialHandle = extracted.social_author_name?.trim();
+  const slugSource =
+    extracted.source_type === 'photo'
+      ? photoImportRecipeSlug(userId, extracted.title)
+      : linkImportRecipeSlug(userId, extracted.source_url);
 
   return {
-    id: linkImportRecipeSlug(userId, extracted.source_url),
+    id: slugSource,
     name: extracted.title,
     tag: tagBySource[extracted.source_type],
     description: descriptionBySource[extracted.source_type],
@@ -65,9 +85,9 @@ export function mapExtractedImportToRecipe(
     steps: extracted.steps,
     isMaster: false,
     createdAt: new Date().toISOString(),
-    sourceUrl: extracted.source_url,
+    sourceUrl: extracted.social_author_url ?? extracted.source_url,
     sourceType: extracted.source_type,
-    sourceTitle: persistYoutubeMeta ? undefined : extracted.source_title,
+    sourceTitle: persistYoutubeMeta ? undefined : socialHandle ?? extracted.source_title,
     sourceChannelName: persistYoutubeMeta ? extracted.youtube_channel_name ?? undefined : undefined,
     sourceMetadataRefreshedAt: persistYoutubeMeta ? extracted.metadata_refreshed_at : undefined,
     prepMinutes: extracted.prep_minutes,

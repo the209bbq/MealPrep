@@ -22,6 +22,10 @@ export interface RecipeImportExtracted {
   source_title?: string;
   youtube_channel_name?: string | null;
   metadata_refreshed_at?: string;
+  social_author_name?: string | null;
+  social_author_url?: string | null;
+  /** Optional credited link to author's public recipe (never copied). */
+  author_public_recipe_url?: string | null;
 }
 
 export const GEMINI_RECIPE_IMPORT_JSON_SCHEMA: Record<string, unknown> = {
@@ -48,6 +52,8 @@ export const GEMINI_RECIPE_IMPORT_JSON_SCHEMA: Record<string, unknown> = {
     is_recipe: { type: 'boolean' },
     confidence: { type: 'number' },
     youtube_channel_name: { type: ['string', 'null'] },
+    cookbook_author_name: { type: ['string', 'null'] },
+    cookbook_title_guess: { type: ['string', 'null'] },
   },
   required: ['title', 'servings', 'ingredients', 'steps', 'is_recipe', 'confidence'],
 };
@@ -125,12 +131,20 @@ export function attachImportMetadata(
   recipe: RecipeImportExtracted,
   sourceUrl: string,
   sourceType: RecipeImportSourceType,
+  extras?: {
+    socialAuthorName?: string | null;
+    socialAuthorUrl?: string | null;
+    authorPublicRecipeUrl?: string | null;
+  },
 ): RecipeImportExtracted {
   const now = new Date().toISOString();
   const base: RecipeImportExtracted = {
     ...recipe,
     source_url: sourceUrl,
     source_type: sourceType,
+    social_author_name: extras?.socialAuthorName ?? null,
+    social_author_url: extras?.socialAuthorUrl ?? null,
+    author_public_recipe_url: extras?.authorPublicRecipeUrl ?? null,
   };
   if (sourceType === 'youtube') {
     return {
@@ -139,12 +153,43 @@ export function attachImportMetadata(
       metadata_refreshed_at: now,
     };
   }
-  if (sourceType === 'tiktok' || sourceType === 'instagram') {
+  if (
+    sourceType === 'tiktok' ||
+    sourceType === 'instagram' ||
+    sourceType === 'facebook'
+  ) {
     return {
       ...base,
       source_title: undefined,
       youtube_channel_name: null,
     };
   }
+  if (sourceType === 'photo' || sourceType === 'video') {
+    return {
+      ...base,
+      source_title: undefined,
+      youtube_channel_name: null,
+      source_url: sourceUrl || 'photo-scan',
+    };
+  }
   return base;
+}
+
+export function readCookbookAuthorHints(raw: unknown): {
+  authorName: string | null;
+  titleGuess: string | null;
+} {
+  if (!raw || typeof raw !== 'object') {
+    return { authorName: null, titleGuess: null };
+  }
+  const obj = raw as Record<string, unknown>;
+  const authorName =
+    typeof obj.cookbook_author_name === 'string' && obj.cookbook_author_name.trim()
+      ? obj.cookbook_author_name.trim()
+      : null;
+  const titleGuess =
+    typeof obj.cookbook_title_guess === 'string' && obj.cookbook_title_guess.trim()
+      ? obj.cookbook_title_guess.trim()
+      : null;
+  return { authorName, titleGuess };
 }

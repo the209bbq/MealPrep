@@ -136,7 +136,7 @@ export interface Recipe {
   isMaster: boolean;
   createdAt: string;
   sourceUrl?: string;
-  sourceType?: 'youtube' | 'web' | 'tiktok' | 'instagram';
+  sourceType?: 'youtube' | 'web' | 'tiktok' | 'instagram' | 'facebook' | 'photo' | 'video';
   sourceTitle?: string;
   sourceChannelName?: string;
   sourceMetadataRefreshedAt?: string;
