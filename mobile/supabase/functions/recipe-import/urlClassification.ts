@@ -1,6 +1,13 @@
 import { validatePublicHttpFetchUrl } from './ssrfGuard.ts';
 
-export type RecipeImportSourceType = 'youtube' | 'web' | 'tiktok' | 'instagram';
+export type RecipeImportSourceType =
+  | 'youtube'
+  | 'web'
+  | 'tiktok'
+  | 'instagram'
+  | 'facebook'
+  | 'photo'
+  | 'video';
 
 const YOUTUBE_HOSTS = new Set([
   'youtube.com',
@@ -13,6 +20,14 @@ const YOUTUBE_HOSTS = new Set([
 const TIKTOK_HOSTS = new Set(['tiktok.com', 'www.tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com']);
 
 const INSTAGRAM_HOSTS = new Set(['instagram.com', 'www.instagram.com']);
+
+const FACEBOOK_HOSTS = new Set([
+  'facebook.com',
+  'www.facebook.com',
+  'm.facebook.com',
+  'fb.watch',
+  'www.fb.watch',
+]);
 
 export function normalizeImportUrl(raw: string): string | null {
   const trimmed = raw.trim();
@@ -42,11 +57,20 @@ export function classifyRecipeImportUrl(urlString: string): RecipeImportSourceTy
   if (url.pathname.includes('/shorts/')) return 'youtube';
   if (TIKTOK_HOSTS.has(host) || host.endsWith('.tiktok.com')) return 'tiktok';
   if (INSTAGRAM_HOSTS.has(host) || host.endsWith('.instagram.com')) return 'instagram';
+  if (FACEBOOK_HOSTS.has(host) || host.endsWith('.facebook.com') || host === 'fb.watch') {
+    return 'facebook';
+  }
   return 'web';
 }
 
+/** Meta / IG: user must paste caption or upload screenshot (no server-side caption fetch). */
+export function isManualCaptionSourceType(type: RecipeImportSourceType): boolean {
+  return type === 'instagram' || type === 'facebook';
+}
+
+/** Legacy alias — TikTok now uses oEmbed; IG/FB still manual caption. */
 export function isSocialCaptionSourceType(type: RecipeImportSourceType): boolean {
-  return type === 'tiktok' || type === 'instagram';
+  return type === 'tiktok' || isManualCaptionSourceType(type);
 }
 
 export function canonicalYouTubeWatchUrl(urlString: string): string {

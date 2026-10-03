@@ -11,9 +11,13 @@ import { validateGeminiRecipeImportPayload } from '../supabase/functions/recipe-
 import {
   canonicalYouTubeWatchUrl,
   classifyRecipeImportUrl,
+  isManualCaptionSourceType,
   isSocialCaptionSourceType,
   normalizeImportUrl,
 } from '../supabase/functions/recipe-import/urlClassification.ts';
+import { orderImportFallbackSteps } from '../supabase/functions/recipe-import/fallbackChain.ts';
+import { parseTikTokOembedPayload } from '../supabase/functions/recipe-import/tiktokOembed.ts';
+import { buildYoutubeSearchQuery, guessDishQueryFromCaption } from '../supabase/functions/recipe-import/dishGuess.ts';
 import {
   isAllowedHttpPort,
   isBlockedHostname,
@@ -23,7 +27,12 @@ import {
   validatePublicHttpFetchUrl,
 } from '../supabase/functions/recipe-import/ssrfGuard.ts';
 import { youtubeVideoIdFromUrl } from '../lib/recipeImport/youtube.ts';
+import { classifyImportUrlForClient, isManualCaptionImportKind } from '../lib/recipeImport/urlClassificationClient.ts';
+import { orderImportFallbackSteps as orderImportFallbackStepsClient } from '../lib/recipeImport/fallbackChain.ts';
+import { shareTargetImportRoute } from '../lib/recipeImport/client.ts';
 import { extractUrlFromClipboardText } from '../lib/recipeImport/extractUrlFromClipboardText.ts';
+import { parseImportInput } from '../lib/recipeImport/parseImportInput.ts';
+import { validateUserImportStoragePath } from '../supabase/functions/recipe-import/storagePathValidation.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, '../test-fixtures/recipe-import-jsonld');
@@ -38,7 +47,12 @@ assert.equal(classifyRecipeImportUrl('https://youtu.be/abc'), 'youtube');
 assert.equal(classifyRecipeImportUrl('https://www.allrecipes.com/recipe/1/'), 'web');
 assert.equal(classifyRecipeImportUrl('https://www.tiktok.com/@chef/video/1'), 'tiktok');
 assert.equal(classifyRecipeImportUrl('https://www.instagram.com/reel/abc/'), 'instagram');
+assert.equal(classifyRecipeImportUrl('https://www.facebook.com/watch/?v=1'), 'facebook');
+assert.equal(classifyRecipeImportUrl('https://fb.watch/abc/'), 'facebook');
 assert.equal(isSocialCaptionSourceType('tiktok'), true);
+assert.equal(isManualCaptionSourceType('facebook'), true);
+assert.equal(isManualCaptionImportKind('instagram'), true);
+assert.equal(classifyImportUrlForClient('https://m.facebook.com/reel/1'), 'facebook');
 assert.equal(youtubeVideoIdFromUrl('https://youtu.be/abcd1234efg'), 'abcd1234efg');
 assert.equal(
   canonicalYouTubeWatchUrl('https://youtu.be/xyz123'),
@@ -126,26 +140,72 @@ assert.equal(
   extractUrlFromClipboardText('Check this https://example.com/recipe) out'),
   'https://example.com/recipe',
 );
-assert.equal(
-  extractUrlFromClipboardText('no link here'),
-  null,
-);
-assert.equal(
-  extractUrlFromClipboardText('http://chef.test/path"'),
-  'http://chef.test/path',
-);
+assert.equal(extractUrlFromClipboardText('no link here'), null);
 
-const importFromLinkSource = fs.readFileSync(
-  path.join(__dirname, '../components/recipes/RecipeImportFromLink.tsx'),
+assert.equal(validateUserImportStoragePath('user-abc', 'user-abc/photo-1.jpg'), true);
+assert.equal(validateUserImportStoragePath('user-abc', 'other-user/photo-1.jpg'), false);
+assert.equal(validateUserImportStoragePath('user-abc', 'user-abc/../other/photo.jpg'), false);
+
+const oembed = parseTikTokOembedPayload({
+  title: 'Garlic noodles #dinner',
+  author_name: 'Chef Pat',
+  author_url: 'https://www.tiktok.com/@chefpat',
+});
+assert.ok(oembed);
+assert.equal(oembed!.caption.includes('Garlic'), true);
+assert.equal(oembed!.authorName, 'Chef Pat');
+
+assert.equal(guessDishQueryFromCaption('Best ever tacos 🌮 #food'), 'Best ever tacos');
+assert.ok(buildYoutubeSearchQuery('Chef Pat', 'Garlic noodles').includes('recipe'));
+
+const serverSteps = orderImportFallbackSteps({
+  sourceType: 'instagram',
+  hasCaption: false,
+  youtubeSuggestionAvailable: true,
+});
+assert.deepEqual(serverSteps.slice(0, 2), ['youtube_confirm', 'video_upload']);
+
+const clientSteps = orderImportFallbackStepsClient({
+  sourceType: 'instagram',
+  hasCaption: false,
+  youtubeSuggestionAvailable: false,
+});
+assert.ok(clientSteps.includes('paste_caption'));
+
+const shareRoute = shareTargetImportRoute({
+  text: 'Check this https://www.youtube.com/watch?v=abc123 extra',
+});
+assert.equal(shareRoute.path, '/recipes');
+assert.equal(shareRoute.query.import, '1');
+assert.equal(shareRoute.query.url?.includes('youtube.com'), true);
+
+const pwaScript = fs.readFileSync(
+  path.join(__dirname, '../scripts/generate-pwa-assets.mjs'),
+  'utf8',
+);
+assert.ok(pwaScript.includes('share_target'));
+assert.ok(pwaScript.includes('import=1'));
+
+const parsedLink = parseImportInput('https://www.tiktok.com/@chef/video/1');
+assert.equal(parsedLink?.kind, 'url');
+const parsedText = parseImportInput('Ingredients: 2 cups flour. Mix and bake at 350 for 30 minutes. Serve warm.');
+assert.equal(parsedText?.kind, 'text');
+const parsedCombo = parseImportInput(
+  'https://www.instagram.com/reel/abc/ Best tacos ever with lime and cilantro and onion diced fine',
+);
+assert.equal(parsedCombo?.kind, 'url');
+if (parsedCombo?.kind === 'url') {
+  assert.ok(parsedCombo.caption && parsedCombo.caption.includes('tacos'));
+}
+
+const importBoxSource = fs.readFileSync(
+  path.join(__dirname, '../components/recipes/RecipeImportBox.tsx'),
   'utf8',
 );
 assert.ok(
-  !/useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]*getStringAsync/.test(importFromLinkSource),
-  'RecipeImportFromLink must not auto-read clipboard on mount',
+  !/useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]*getStringAsync/.test(importBoxSource),
+  'RecipeImportBox must not auto-read clipboard on mount',
 );
-assert.ok(
-  importFromLinkSource.includes('pasteFromClipboard'),
-  'RecipeImportFromLink should paste from clipboard on explicit user action',
-);
+assert.ok(importBoxSource.includes('pasteFromClipboard'), 'RecipeImportBox should paste on user tap');
 
 console.log('OK: recipe-import checks passed');

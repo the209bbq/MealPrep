@@ -1,9 +1,14 @@
 import { getRecipeImportUrl, isDemoMode } from '../../config/appConfig';
 import { RECIPE_IMPORT } from '../../config/recipeImport';
 import { withTimeout } from '../withTimeout';
+import { parseImportInput } from './parseImportInput';
+import { extractUrlFromClipboardText } from './extractUrlFromClipboardText';
 import type {
   RecipeImportErrorEnvelope,
   RecipeImportExtractedDto,
+  RecipeImportFallbacksDto,
+  RecipeImportImagePayload,
+  RecipeImportRequestAction,
   RecipeImportSuccessResponse,
 } from './types';
 
@@ -21,10 +26,26 @@ export class RecipeImportRateLimitError extends Error {
 
 export class RecipeImportNotRecipeError extends Error {
   code = 'NOT_RECIPE';
+  fallbacks?: RecipeImportFallbacksDto;
+}
+
+export class RecipeImportFallbackRequiredError extends Error {
+  code = 'FALLBACK_REQUIRED';
+  fallbacks?: RecipeImportFallbacksDto;
 }
 
 export class RecipeImportUpstreamError extends Error {
   code = 'UPSTREAM_ERROR';
+}
+
+export class RecipeImportCaptionRequiredError extends Error {
+  code = 'CAPTION_REQUIRED';
+}
+
+export interface RecipeImportCallResult {
+  recipe: RecipeImportExtractedDto;
+  cached?: boolean;
+  confirmedYoutube?: boolean;
 }
 
 async function parseError(response: Response, text: string): Promise<never> {
@@ -44,11 +65,18 @@ async function parseError(response: Response, text: string): Promise<never> {
   if (response.status === 429 || json.code === 'RATE_LIMIT') {
     throw new RecipeImportRateLimitError(message);
   }
+  if (response.status === 422 && json.code === 'FALLBACK_REQUIRED') {
+    const err = new RecipeImportFallbackRequiredError(message);
+    err.fallbacks = json.fallbacks;
+    throw err;
+  }
   if (response.status === 422 && json.code === 'CAPTION_REQUIRED') {
     throw new RecipeImportCaptionRequiredError(message);
   }
   if (response.status === 422 || json.code === 'NOT_RECIPE') {
-    throw new RecipeImportNotRecipeError(message);
+    const err = new RecipeImportNotRecipeError(message);
+    err.fallbacks = json.fallbacks;
+    throw err;
   }
   throw new RecipeImportUpstreamError(message);
 }
@@ -75,17 +103,13 @@ const DEMO_IMPORT: RecipeImportExtractedDto = {
   source_type: 'web',
 };
 
-export class RecipeImportCaptionRequiredError extends Error {
-  code = 'CAPTION_REQUIRED';
-}
-
-export async function importRecipeFromLink(
-  url: string,
+async function callRecipeImport(
   accessToken: string | null,
-  options?: { captionText?: string },
-): Promise<RecipeImportExtractedDto> {
+  body: Record<string, unknown>,
+): Promise<RecipeImportCallResult> {
   if (isDemoMode()) {
-    return { ...DEMO_IMPORT, source_url: url.trim() || DEMO_IMPORT.source_url };
+    const url = typeof body.url === 'string' ? body.url : DEMO_IMPORT.source_url;
+    return { recipe: { ...DEMO_IMPORT, source_url: url.trim() || DEMO_IMPORT.source_url } };
   }
 
   const endpoint = getRecipeImportUrl();
@@ -104,10 +128,7 @@ export async function importRecipeFromLink(
         Authorization: `Bearer ${accessToken}`,
         apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
       },
-      body: JSON.stringify({
-        url,
-        captionText: options?.captionText?.trim() || undefined,
-      }),
+      body: JSON.stringify(body),
     }),
     RECIPE_IMPORT.requestTimeoutMs,
     'Recipe import timed out',
@@ -122,5 +143,127 @@ export async function importRecipeFromLink(
   if (!json.recipe?.title) {
     throw new RecipeImportUpstreamError(RECIPE_IMPORT.importFailedMessage);
   }
-  return json.recipe;
+  return {
+    recipe: json.recipe,
+    cached: json.cached,
+    confirmedYoutube: json.confirmedYoutube,
+  };
+}
+
+export async function importRecipeFromText(
+  text: string,
+  accessToken: string | null,
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'text',
+    text: text.trim(),
+  });
+  return result.recipe;
+}
+
+export async function importRecipeSmartInput(
+  raw: string,
+  accessToken: string | null,
+): Promise<RecipeImportExtractedDto> {
+  const parsed = parseImportInput(raw);
+  if (!parsed) {
+    throw new RecipeImportUpstreamError(RECIPE_IMPORT.invalidUrlMessage);
+  }
+  if (parsed.kind === 'text') {
+    return importRecipeFromText(parsed.text, accessToken);
+  }
+  const result = await callRecipeImport(accessToken, {
+    action: 'link',
+    url: parsed.url,
+    captionText: parsed.caption,
+  });
+  return result.recipe;
+}
+
+export async function importRecipeFromLink(
+  url: string,
+  accessToken: string | null,
+  options?: { captionText?: string },
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'link' satisfies RecipeImportRequestAction,
+    url,
+    captionText: options?.captionText?.trim() || undefined,
+  });
+  return result.recipe;
+}
+
+export async function confirmYoutubeRecipeImport(
+  youtubeUrl: string,
+  accessToken: string | null,
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'confirm_youtube',
+    youtubeUrl,
+  });
+  return result.recipe;
+}
+
+export async function importRecipeFromPhotos(
+  accessToken: string | null,
+  options: { photoStoragePaths: string[] },
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'photo',
+    photoStoragePaths: options.photoStoragePaths,
+  });
+  return result.recipe;
+}
+
+export async function importRecipeFromPhotosInline(
+  images: RecipeImportImagePayload[],
+  accessToken: string | null,
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'photo',
+    images,
+  });
+  return result.recipe;
+}
+
+export async function importRecipeFromScreenshots(
+  accessToken: string | null,
+  options?: { url?: string; captionText?: string; photoStoragePaths?: string[]; images?: RecipeImportImagePayload[] },
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'screenshot',
+    photoStoragePaths: options?.photoStoragePaths,
+    images: options?.images,
+    url: options?.url,
+    captionText: options?.captionText,
+  });
+  return result.recipe;
+}
+
+export async function importRecipeFromUploadedVideoPath(
+  videoStoragePath: string,
+  accessToken: string | null,
+): Promise<RecipeImportExtractedDto> {
+  const result = await callRecipeImport(accessToken, {
+    action: 'video',
+    videoStoragePath,
+  });
+  return result.recipe;
+}
+
+export function extractUrlFromSharedText(text: string): string | null {
+  return extractUrlFromClipboardText(text);
+}
+
+export function shareTargetImportRoute(params: {
+  url?: string;
+  text?: string;
+}): { path: '/recipes'; query: Record<string, string> } {
+  const direct = params.url?.trim() ?? '';
+  const fromText = params.text ? extractUrlFromSharedText(params.text) : null;
+  const url = direct || fromText || '';
+  const query: Record<string, string> = { import: '1' };
+  if (url) query.url = url;
+  else if (params.text?.trim()) query.text = params.text.trim();
+  return { path: '/recipes', query };
 }

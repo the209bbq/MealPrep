@@ -1,5 +1,5 @@
 /**
- * Recipe import from link (YouTube / web) — client config and copy.
+ * Recipe import — client config and copy.
  */
 
 export const RECIPE_IMPORT = {
@@ -7,22 +7,35 @@ export const RECIPE_IMPORT = {
   /** Client fetch timeout; edge function budget is ~90s. */
   requestTimeoutMs: 95_000,
   proxyUrl: process.env.EXPO_PUBLIC_RECIPE_IMPORT_URL ?? '',
+  maxPhotos: 4,
+  maxVideoBytes: 104_857_600,
+  videoMimeTypes: ['video/mp4', 'video/quicktime', 'video/webm'] as const,
   rateLimitMessage: 'Too many imports — wait a minute and try again.',
   notConfiguredMessage:
     'Recipe import is not available on this app yet. Ask an admin to finish setup.',
-  invalidUrlMessage: 'Paste a link to a recipe page or cooking video.',
+  invalidUrlMessage: 'Paste a link or a few lines of recipe text.',
   notRecipeMessage: 'We could not find a recipe at that link. Try a different URL.',
   importFailedMessage: 'Could not import that recipe right now. Check your connection and try again.',
   importBusyMessage: 'Import is busy right now. Try again in a moment.',
+  uploadBucket: 'recipe-import-uploads',
 } as const;
 
 export const RECIPE_IMPORT_COPY = {
-  importButton: 'Import from link',
-  importButtonAccessibility: 'Import recipe from a link',
-  pastePlaceholder: 'Paste recipe or video link',
-  pasteLabel: 'Recipe link',
+  importButton: 'Import',
+  importButtonAccessibility: 'Import a recipe',
+  importBoxPlaceholder: 'Paste a link or recipe text',
+  importBoxLabel: 'Import recipe',
+  pasteLinkCta: 'Paste',
+  pasteLinkAccessibility: 'Paste from clipboard',
+  pasteFromClipboardCta: 'Paste',
+  pasteFromClipboardAccessibility: 'Paste recipe link from clipboard',
+  pasteAppliedHint: 'Pasted',
+  cameraAccessibility: 'Add a photo or video of the recipe',
   importCta: 'Import',
   importing: 'Reading recipe…',
+  needMoreHint: 'Couldn’t find the recipe — add a photo or video?',
+  addPhotoCta: 'Add photo',
+  addVideoCta: 'Add video',
   reviewTitle: 'Review before saving',
   reviewSubtitle: 'Edit anything that looks off, then save to your collection.',
   saveCta: 'Save recipe',
@@ -30,19 +43,28 @@ export const RECIPE_IMPORT_COPY = {
   cancel: 'Cancel',
   guestSignInMessage: 'Sign in to save imported recipes to your account.',
   guestSignInCta: 'Sign in',
-  pasteFromClipboardCta: 'Paste',
-  pasteFromClipboardAccessibility: 'Paste recipe link from clipboard',
   yourRecipeBadge: 'Your recipe',
   viewOriginal: 'View original',
   watchOnYouTube: 'Watch on YouTube',
   youtubeCredit: (channel: string) => `Recipe video by ${channel}`,
   youtubeCreditUnknown: 'Recipe video on YouTube',
-  socialCaptionComingSoon:
-    'TikTok/Instagram import is coming soon — paste the caption text instead',
+  socialCredit: (handle: string) => `Recipe from ${handle}`,
+  seeAuthorVersion: 'See the author’s version',
+  manualCaptionHint:
+    'Instagram and Facebook block automatic captions — paste the caption or add a screenshot.',
   socialCaptionLabel: 'Caption text',
   socialCaptionPlaceholder: 'Paste the recipe caption from the post…',
   importFromCaptionCta: 'Import from caption',
   sourceLinkLabel: 'Source link',
   stepsTitle: 'Instructions',
   noSteps: 'No steps were found — check the original link.',
+  fallbackTitle: 'Try another way',
+  youtubeFound: (channel: string) => `Found this on YouTube from ${channel}`,
+  youtubeConfirmCta: 'Use this video',
+  uploadVideoCta: 'Upload saved video',
+  screenshotCta: 'Upload screenshot',
+  pickPhotosCta: 'Choose photos',
+  takePhotoCta: 'Take photo',
+  addMissingGroceryCta: 'Add missing to grocery list',
+  photoScanHint: '1–4 pages — printed or handwritten recipe cards.',
 } as const;

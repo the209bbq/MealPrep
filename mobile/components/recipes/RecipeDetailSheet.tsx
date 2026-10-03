@@ -151,13 +151,30 @@ export function RecipeDetailSheet({
                   </Pressable>
                 </>
               ) : kitchenRecipe.sourceUrl ? (
-                <Pressable
-                  onPress={() => void Linking.openURL(kitchenRecipe.sourceUrl!)}
-                  className="mt-2 self-start"
-                  accessibilityRole="link"
-                >
-                  <Text className="text-sm font-semibold text-primary">{RECIPE_IMPORT_COPY.viewOriginal}</Text>
-                </Pressable>
+                <>
+                  {kitchenRecipe.sourceTitle &&
+                  (kitchenRecipe.sourceType === 'tiktok' ||
+                    kitchenRecipe.sourceType === 'instagram' ||
+                    kitchenRecipe.sourceType === 'facebook') ? (
+                    <Pressable
+                      onPress={() => void Linking.openURL(kitchenRecipe.sourceUrl!)}
+                      className="mt-2 self-start"
+                      accessibilityRole="link"
+                    >
+                      <Text className="text-sm font-semibold text-primary">
+                        {RECIPE_IMPORT_COPY.socialCredit(kitchenRecipe.sourceTitle)}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      onPress={() => void Linking.openURL(kitchenRecipe.sourceUrl!)}
+                      className="mt-2 self-start"
+                      accessibilityRole="link"
+                    >
+                      <Text className="text-sm font-semibold text-primary">{RECIPE_IMPORT_COPY.viewOriginal}</Text>
+                    </Pressable>
+                  )}
+                </>
               ) : null}
             </>
           ) : (

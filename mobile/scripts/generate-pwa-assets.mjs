@@ -82,7 +82,7 @@ function writeManifest() {
     theme_color: THEME.primaryDark,
     background_color: THEME.paper,
     share_target: {
-      action: webPath('/recipes'),
+      action: webPath('/recipes?import=1'),
       method: 'GET',
       enctype: 'application/x-www-form-urlencoded',
       params: {
@@ -90,6 +90,12 @@ function writeManifest() {
         text: 'text',
         url: 'url',
       },
+      files: [
+        {
+          name: 'media',
+          accept: ['video/mp4', 'video/quicktime', 'video/webm', 'image/jpeg', 'image/png', 'image/webp'],
+        },
+      ],
     },
     icons: [
       { src: webPath('/icons/icon-192.png'), sizes: '192x192', type: 'image/png', purpose: 'any' },
