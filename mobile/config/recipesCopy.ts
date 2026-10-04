@@ -134,6 +134,14 @@ export const RECIPES_COPY = {
     servingsAndTime: (servings: number, minutes: number) =>
       `${Math.max(1, servings)} servings · ${Math.max(1, minutes)} min`,
     stepLabel: (index: number) => `Step ${index + 1}`,
+    costEstimateMeta: (skippedCount: number) =>
+      skippedCount === 0
+        ? 'Estimate'
+        : skippedCount === 1
+          ? 'Estimate · 1 item not priced'
+          : `Estimate · ${skippedCount} items not priced`,
+    costDefaultServingsNote: 'Assumes 4 servings (not listed on recipe)',
+    costBreakdownTotal: (servings: number) => `Total (${servings} servings)`,
   },
 } as const;
 
