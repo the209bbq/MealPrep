@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useApp } from '../../context/AppContext';
+import { recipeConflictsWithDietPrefs, recipeDietTagFromIngredientLines } from '../../lib/diet/conflicts';
+import { recipeDietSummaryForPrefs } from '../../lib/diet/summaryLine';
 import {
   Modal,
   Pressable,
@@ -35,6 +38,7 @@ function RecipeImportReviewForm({
   onAddMissingToGrocery?: (recipeId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { userDietPrefs } = useApp();
   const [title, setTitle] = useState(draft.title);
   const [stepsText, setStepsText] = useState(draft.steps.join('\n'));
   const [ingredientsText, setIngredientsText] = useState(
@@ -47,6 +51,18 @@ function RecipeImportReviewForm({
   );
   const [saving, setSaving] = useState(false);
   const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null);
+
+  const importDietWarning = useMemo(() => {
+    const lines = ingredientsText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return null;
+    const tag = recipeDietTagFromIngredientLines(lines, userDietPrefs);
+    if (!recipeConflictsWithDietPrefs(userDietPrefs, tag, lines)) return null;
+    const summary = recipeDietSummaryForPrefs(userDietPrefs, tag, lines);
+    return summary ?? 'This recipe may not match your diet settings.';
+  }, [ingredientsText, userDietPrefs]);
 
   async function handleSave() {
     setSaving(true);
@@ -122,6 +138,12 @@ function RecipeImportReviewForm({
       </View>
       <ScrollView className="flex-1 px-4 pb-10" keyboardShouldPersistTaps="handled">
         <Text className="mt-3 text-sm text-muted">{RECIPE_IMPORT_COPY.reviewSubtitle}</Text>
+        {importDietWarning ? (
+          <View className="mt-3 rounded-xl border border-danger/40 bg-danger/10 px-3 py-2">
+            <Text className="text-sm font-semibold text-danger">{importDietWarning}</Text>
+            <Text className="mt-1 text-xs text-muted">Check labels — estimate only.</Text>
+          </View>
+        ) : null}
         <RecipeSourceCreditLine {...sourceCreditFromImportDto(draft)} />
         {draft.author_public_recipe_url ? (
           <Pressable

@@ -7,6 +7,8 @@ import {
   resolveDiscoveryRecipeImageUrl,
   resolveKitchenRecipeImageUrl,
 } from '../../lib/recipes/recipeImageUrl';
+import { DietAllergenBadge } from '../diet/DietAllergenBadge';
+import { ingredientLinesFromRecipesTabRow } from '../../lib/diet/ingredientLines';
 import { RecipeThumbnail } from './RecipeThumbnail';
 import { RecipeSaveButton } from './RecipeSaveButton';
 
@@ -35,6 +37,7 @@ function RecipesUnifiedFeedCardInner({
   );
   const shopLine = useMemo(() => recipeListShopLine(row.match), [row.match]);
   const readyToCook = row.match.missingCount === 0;
+  const ingredientLines = useMemo(() => ingredientLinesFromRecipesTabRow(row), [row]);
 
   return (
     <Pressable
@@ -50,6 +53,7 @@ function RecipesUnifiedFeedCardInner({
           height={RECIPE_IMAGE.listHeight}
           lazy
         />
+        <DietAllergenBadge ingredientLines={ingredientLines} />
         {onToggleSave ? (
           <View className="absolute right-2 top-2">
             <RecipeSaveButton saved={Boolean(saved)} onToggle={onToggleSave} size={20} />

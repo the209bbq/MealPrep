@@ -13,6 +13,8 @@ import { sanitizeHttpUrl } from '../../lib/recipeImport/safeHttpUrl';
 import type { RecipePantryMatch } from '../../lib/recipeMatch';
 import type { Recipe } from '../../types/mealprep';
 import type { ViralRecipeLinkItem } from '../../lib/viralRecipes/types';
+import { RecipeDietNotice } from '../diet/RecipeDietNotice';
+import { ingredientLinesFromRecipe } from '../../lib/diet/ingredientLines';
 import { RecipeSaveButton } from './RecipeSaveButton';
 
 type DetailSection = 'ingredients' | 'steps';
@@ -233,6 +235,10 @@ export function VideoRecipeDetailView({
 
           {!showLoading && !importError ? (
             <PantryStatusLine missingCount={missingCount} minutes={recipe.minutes} servings={recipe.servings} />
+          ) : null}
+
+          {!showLoading && !importError && recipe.ingredients.length > 0 ? (
+            <RecipeDietNotice ingredientLines={ingredientLinesFromRecipe(recipe)} />
           ) : null}
 
           {showLoading ? <LoadingSkeleton /> : null}

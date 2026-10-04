@@ -20,6 +20,8 @@ import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
 import { InstallAppBanner } from '../InstallAppBanner';
 import type { UserRole } from '../../types/mealprep';
+import { DietAllergiesSection } from '../diet/DietAllergiesSection';
+import type { UserDietPrefs } from '../../lib/diet/types';
 import { AccountPlanSection } from './AccountPlanSection';
 import { ProfileAvatar } from './ProfileAvatar';
 import { pickProfilePhotoFromLibrary } from './pickProfilePhoto';
@@ -45,12 +47,15 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
     uploadProfilePhoto,
     removeProfilePhoto,
     authError,
+    userDietPrefs,
+    saveUserDietPrefs,
   } = useApp();
 
   const [name, setName] = useState(profile.name);
   const [zip, setZip] = useState(profile.homeZip ?? '');
   const [householdSize, setHouseholdSize] = useState(String(profile.householdSize));
   const [dietaryNotes, setDietaryNotes] = useState(profile.dietaryNotes);
+  const [dietPrefs, setDietPrefs] = useState<UserDietPrefs>(userDietPrefs);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -68,6 +73,7 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
         householdSize: size,
         dietaryNotes,
       });
+      await saveUserDietPrefs(dietPrefs);
       setStatus('Saved.');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Could not save.');
@@ -189,6 +195,7 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                   multiline
                   className="mt-1 min-h-[72px] rounded-xl border border-border bg-paper px-3 py-2 text-ink"
                 />
+                <DietAllergiesSection value={dietPrefs} onChange={setDietPrefs} />
                 <Pressable
                   disabled={busy}
                   onPress={() => void persistFields()}

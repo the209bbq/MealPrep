@@ -30,6 +30,8 @@ import type { Recipe } from '../../types/mealprep';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 import { RecipeSaveButton } from './RecipeSaveButton';
 import type { ViralRecipeLinkItem } from '../../lib/viralRecipes/types';
+import { RecipeDietNotice } from '../diet/RecipeDietNotice';
+import { ingredientLinesFromRecipe } from '../../lib/diet/ingredientLines';
 import { isVideoRecipeDetailContext, VideoRecipeDetailView } from './VideoRecipeDetailView';
 
 export interface RecipeDetailSheetProps {
@@ -227,6 +229,8 @@ function ClassicRecipeDetailBody({
           <Text className="mt-1 text-xs text-muted">
             {RECIPES_COPY.recipeDetail.servingsAndTime(kitchenRecipe.servings, minutes)}
           </Text>
+
+          <RecipeDietNotice ingredientLines={ingredientLinesFromRecipe(kitchenRecipe)} />
 
           <View className="mt-3 flex-row flex-wrap items-center gap-2">
             {!isMealDbCatalog ? (
