@@ -233,7 +233,10 @@ async function readFeedVideos(
 
   if (mode === 'popular') {
     rows = rows.filter(
-      (row) => !isLowQualityFeedVideo(row.title, row.description_snippet ?? ''),
+      (row) =>
+        !isLowQualityFeedVideo(row.title, row.description_snippet ?? '', {
+          isShort: row.is_short,
+        }),
     );
     const relativeViewScore = (row: VideoRow): number => {
       const channelAvg = creatorsMap.get(row.channel_id)?.avg_views ?? 0;
@@ -276,7 +279,15 @@ async function handlePublicAction(
   const hideOverrides = await loadCreatorVideoOverrides(admin);
 
   if (body.action === 'creators') {
+    const { data: channelRows, error: channelVideoError } = await admin
+      .from('creator_videos')
+      .select('channel_id');
+    if (channelVideoError) throw channelVideoError;
+    const channelsWithVideos = new Set(
+      ((channelRows ?? []) as Array<{ channel_id: string }>).map((row) => row.channel_id),
+    );
     const creators = [...creatorsMap.values()]
+      .filter((row) => channelsWithVideos.has(row.youtube_channel_id))
       .sort(compareCreatorsByFitAndSubscribers)
       .map(creatorToDto);
     return jsonResponse({ creators });

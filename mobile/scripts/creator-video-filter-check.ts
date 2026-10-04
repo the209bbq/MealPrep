@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   isRecipeLikeVideo,
   matchesQuickFeed,
@@ -32,6 +34,8 @@ const JUNK_TITLES = [
   "What Does 'Confit' Mean?",
   'How to Pick a Ripe Mango',
   "Answering the Internet's Most Asked Chicken Questions",
+  'The Easiest Way to Peel Potatoes',
+  'I tested viral TikTok recipes — do they actually work?',
 ];
 
 const KEEP_TITLES = [
@@ -49,6 +53,16 @@ const KEEP_TITLES = [
   'No Ice Cream Machine Needed Vanilla Ice Cream',
   'Best Steak Tacos',
   'For More Tender Fish, Poach in Oil',
+  'Weeknight Chicken Bolognese',
+  'Cheeseburger Meat Pie',
+  'The Perfect Chocolate Cake Recipe',
+  'Restaurant-Quality Lasagna on a Budget',
+  'Croque Monsieur',
+  '5 Lazy Back-to-School Dinners',
+  'Easy one pan dinner',
+  '15 Freezer Dinners for $75',
+  'Aglio e Olio',
+  'The $8 Pork Roast',
 ];
 
 for (const title of JUNK_TITLES) {
@@ -82,8 +96,45 @@ assert.equal(
   'subscriber boilerplate in description should not exclude',
 );
 
+assert.equal(
+  isRecipeLikeVideo(
+    'Sunday Pot Roast Recipe',
+    'Merch: https://example.com/shop?utm_content=merch-shop-promo',
+  ),
+  true,
+  'merch links in description must not exclude recipe titles',
+);
+
+const fixturePath = path.join(
+  process.cwd(),
+  'supabase/functions/creator-videos/fixtures/manual-hide-videos.json',
+);
+assert.ok(fs.existsSync(fixturePath), 'manual-hide fixture should exist');
+const manualHides = JSON.parse(fs.readFileSync(fixturePath, 'utf8')) as Array<{
+  title: string;
+  category: string;
+}>;
+assert.ok(manualHides.length >= 200, 'fixture should include ~212 manual hides');
+
+let manualCaught = 0;
+const manualMissed: string[] = [];
+for (const row of manualHides) {
+  if (!isRecipeLikeVideo(row.title, '')) {
+    manualCaught += 1;
+  } else {
+    manualMissed.push(row.title);
+  }
+}
+const catchRate = manualCaught / manualHides.length;
+assert.ok(
+  catchRate >= 0.85,
+  `manual hide catch rate ${(catchRate * 100).toFixed(1)}% below 85% (${manualMissed.slice(0, 8).join(' | ')})`,
+);
+
+console.log(
+  `creator-video-filter-check: ok (manual hides ${(catchRate * 100).toFixed(1)}% caught, ${manualMissed.length} missed)`,
+);
+
 assert.equal(matchesQuickFeed('Random chicken video', '', 120, true), false);
 assert.equal(matchesQuickFeed('15 minute garlic pasta', '', 600, false), true);
 assert.equal(matchesQuickFeed('Quick sheet pan salmon', '', 3600, false), true);
-
-console.log('creator-video-filter-check: ok');

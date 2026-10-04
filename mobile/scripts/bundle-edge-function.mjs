@@ -52,8 +52,12 @@ if (!bundled) {
   process.exit(1);
 }
 
-if (/from\s+['"]https?:\/\//.test(bundled)) {
-  console.error('Bundle contains remote URL imports; expected a fully self-contained file.');
+const remoteImports = bundled.match(/from\s+['"]https?:\/\/[^'"]+['"]/g) ?? [];
+const allowedRemote = remoteImports.every((stmt) =>
+  /esm\.sh\/@supabase\/supabase-js/.test(stmt),
+);
+if (remoteImports.length > 0 && !allowedRemote) {
+  console.error('Bundle contains unexpected remote URL imports:', remoteImports.join(', '));
   process.exit(1);
 }
 

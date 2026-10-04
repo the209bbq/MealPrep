@@ -257,20 +257,19 @@ export async function refreshCreatorVideos(
     const detail = stats.get(item.videoId);
     const snippetDesc = detail?.snippet?.description?.trim() ?? item.description;
     const title = detail?.snippet?.title?.trim() ?? item.title;
+    const durationSeconds = parseIsoDurationSeconds(detail?.contentDetails?.duration);
+    const isShort = durationSeconds != null && durationSeconds > 0 && durationSeconds <= 60;
     if (
       !shouldPersistVideoOnRefresh(
         item.videoId,
         title,
         snippetDesc,
         overrides,
-        isRecipeLikeVideo,
+        (videoTitle, description) => isRecipeLikeVideo(videoTitle, description, { isShort }),
       )
     ) {
       continue;
     }
-
-    const durationSeconds = parseIsoDurationSeconds(detail?.contentDetails?.duration);
-    const isShort = durationSeconds != null && durationSeconds > 0 && durationSeconds <= 60;
     const viewCount = Number.parseInt(detail?.statistics?.viewCount ?? '0', 10) || 0;
     const likeCount = Number.parseInt(detail?.statistics?.likeCount ?? '0', 10) || 0;
 
