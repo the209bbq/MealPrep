@@ -6,6 +6,7 @@ import {
   findPantryItemsForIngredient,
   totalPantryQuantityInUnit,
 } from './recipeMatch/pantryStock';
+import { isGroceryOriginPinned, preferGroceryOrigin, withGroceryOrigin } from './grocery/origin';
 import { normalizeIngredientName } from './recipeMatch/normalize';
 
 /** Store aisle order for grouped grocery UI. */
@@ -21,17 +22,7 @@ export const GROCERY_AISLE_ORDER: PantryCategory[] = [
 ];
 
 export function isManualGroceryItem(item: GroceryListItem): boolean {
-  return item.ingredientId.startsWith('manual-');
-}
-
-/** Rows the user added explicitly (manual entry or “add missing” while recipe is not on the meal plan). */
-export function isUserPinnedGroceryItem(
-  item: GroceryListItem,
-  plannedRecipeIds: readonly string[],
-): boolean {
-  if (isManualGroceryItem(item)) return true;
-  if (item.sourceRecipeIds.length === 0) return true;
-  return item.sourceRecipeIds.some((recipeId) => !plannedRecipeIds.includes(recipeId));
+  return item.origin === 'manual' || item.ingredientId.startsWith('manual-');
 }
 
 export function groupGroceryByAisle(items: GroceryListItem[]): { category: PantryCategory; label: string; items: GroceryListItem[] }[] {
@@ -121,7 +112,7 @@ export function buildGroceryList(
 
   const checked = new Map(previous.map((item) => [normalizeIngredientName(item.name) + '::' + item.unit.trim().toLowerCase(), item.checked]));
 
-  const pinnedItems = previous.filter((item) => isUserPinnedGroceryItem(item, selectedRecipeIds));
+  const pinnedItems = previous.filter((item) => isGroceryOriginPinned(item.origin));
 
   const list: GroceryListItem[] = [];
   for (const [key, value] of needed) {
@@ -162,6 +153,7 @@ export function buildGroceryList(
       sourceRecipeIds: value.recipeIds.filter(
         (recipeId) => !isGroceryDismissed(dismissals, recipeId, value.name, value.unit),
       ),
+      origin: 'plan',
     });
   }
 
@@ -190,6 +182,7 @@ export function mergeManualGroceryLines(
         ...existing,
         quantity: roundQty(existing.quantity + manual.quantity),
         checked: existing.checked || manual.checked,
+        origin: preferGroceryOrigin(existing.origin, manual.origin),
       };
       continue;
     }
@@ -218,5 +211,6 @@ export function createManualGroceryItem(input: {
     unit: input.unit.trim() || 'each',
     checked: false,
     sourceRecipeIds: [],
+    origin: 'manual',
   };
 }

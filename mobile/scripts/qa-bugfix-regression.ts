@@ -4,7 +4,9 @@
  */
 
 import assert from 'node:assert/strict';
-import { buildGroceryList, createManualGroceryItem, isUserPinnedGroceryItem } from '../lib/grocery';
+import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
+import { isGroceryOriginPinned } from '../lib/grocery/origin';
+import { isAllowedOsmGroceryElement } from '../lib/stores/groceryFilter';
 import { mergeGroceryWithMissing } from '../lib/recipeMatch/groceryFromMissing';
 import { formatQuantity } from '../lib/formatQuantity';
 import { groceryItemToPantryItem } from '../lib/pantry/mergePantryStock';
@@ -47,7 +49,23 @@ const missingAdded = mergeGroceryWithMissing(
 );
 const rebuilt = buildGroceryList([], [], [], {}, missingAdded.items);
 assert.equal(rebuilt.length, 1, 'pinned missing item survives empty meal-plan rebuild');
-assert.ok(isUserPinnedGroceryItem(rebuilt[0], []), 'missing row is pinned');
+assert.equal(rebuilt[0].origin, 'add_missing');
+assert.ok(isGroceryOriginPinned(rebuilt[0].origin), 'missing row is pinned');
+
+const stalePlanRow = {
+  id: 'uuid-plan',
+  ingredientId: 'chicken',
+  name: 'Chicken',
+  category: 'meats' as const,
+  quantity: 1,
+  unit: 'lb',
+  checked: false,
+  sourceRecipeIds: [recipe.id],
+  origin: 'plan' as const,
+};
+const afterUnplan = buildGroceryList([], [], [], {}, [...missingAdded.items, stalePlanRow]);
+assert.equal(afterUnplan.length, 1, 'plan rows pruned when meal not on plan');
+assert.equal(afterUnplan[0].origin, 'add_missing');
 
 const manual = createManualGroceryItem({ name: 'Tape', quantity: 1, unit: 'each' });
 const mixed = [...missingAdded.items, manual];
@@ -190,6 +208,11 @@ assert.equal(
   false,
   'error state suppresses generic no-stores copy',
 );
+
+assert.equal(isAllowedOsmGroceryElement({ name: '7-Eleven', shop: 'convenience' }), false);
+assert.equal(isAllowedOsmGroceryElement({ name: 'Chevron', shop: 'convenience' }), false);
+assert.equal(isAllowedOsmGroceryElement({ name: 'Save Mart', shop: 'supermarket' }), true);
+assert.equal(isAllowedOsmGroceryElement({ name: 'Dollar General Market', shop: 'supermarket' }), true);
 
 void runH3BrowseTest().then(() => {
   console.log('qa-bugfix-regression: ok');

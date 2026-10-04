@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeGroceryOrigin } from './grocery/origin';
 import { isPersistedRowUuid } from './pantry/persistIds';
 import { FEATURE_FLAG_DEFAULTS, PHOTO_SCAN } from '../config/appConfig';
 import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
@@ -101,6 +102,7 @@ type GroceryRow = {
   unit: string;
   checked: boolean;
   source_recipe_ids: string[] | null;
+  origin?: string | null;
 };
 
 type FlagRow = { key: string; enabled: boolean };
@@ -242,6 +244,7 @@ export function mapGrocery(row: GroceryRow): GroceryListItem {
     unit: row.unit,
     checked: row.checked,
     sourceRecipeIds: row.source_recipe_ids ?? [],
+    origin: normalizeGroceryOrigin(row.origin, row.ingredient_id),
   };
 }
 
@@ -617,6 +620,7 @@ type GroceryWritePayload = {
   unit: string;
   checked: boolean;
   source_recipe_ids: string[];
+  origin: string;
 };
 
 function groceryWritePayload(userId: string, item: GroceryListItem): GroceryWritePayload {
@@ -629,6 +633,7 @@ function groceryWritePayload(userId: string, item: GroceryListItem): GroceryWrit
     unit: item.unit,
     checked: item.checked,
     source_recipe_ids: item.sourceRecipeIds,
+    origin: item.origin,
   };
 }
 

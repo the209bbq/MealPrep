@@ -1,6 +1,7 @@
 import type { GroceryListItem, PantryCategory, PantryItem, RecipeIngredient } from '../../types/mealprep';
 import { pantryCategoryForImportedIngredient } from '../recipeDiscovery/mapToAppRecipe';
 import { createManualGroceryItem } from '../grocery';
+import { preferGroceryOrigin, withGroceryOrigin } from '../grocery/origin';
 import { convertQuantity, unitsAreConvertible } from '../units/conversion';
 import { isGroceryDismissed } from '../grocery/dismissals';
 import { normalizeIngredientName } from './normalize';
@@ -75,16 +76,22 @@ export function groceryItemsFromMissingIngredients(
     const category = categoryForMissingIngredient(ingredient, pantry);
     const id = `groc-${ingredient.ingredientId}::${ingredient.unit}`;
 
-    added.push({
-      id,
-      ingredientId: ingredient.ingredientId,
-      name: ingredient.name,
-      category,
-      quantity: roundQty(ingredient.quantity),
-      unit: ingredient.unit,
-      checked: false,
-      sourceRecipeIds: [recipeId],
-    });
+    added.push(
+      withGroceryOrigin(
+        {
+          id,
+          ingredientId: ingredient.ingredientId,
+          name: ingredient.name,
+          category,
+          quantity: roundQty(ingredient.quantity),
+          unit: ingredient.unit,
+          checked: false,
+          sourceRecipeIds: [recipeId],
+          origin: 'add_missing',
+        },
+        'add_missing',
+      ),
+    );
   }
 
   return added;
@@ -114,21 +121,26 @@ export function mergeGroceryWithMissing(
         sourceRecipeIds: existing.sourceRecipeIds.includes(recipeId)
           ? existing.sourceRecipeIds
           : [...existing.sourceRecipeIds, recipeId],
+        origin: preferGroceryOrigin(existing.origin, 'add_missing'),
       };
       continue;
     }
 
     const category = categoryForMissingIngredient(ingredient, pantry);
-    const item: GroceryListItem = {
-      id: `groc-${ingredient.ingredientId}::${ingredient.unit}`,
-      ingredientId: ingredient.ingredientId,
-      name: ingredient.name,
-      category,
-      quantity: roundQty(ingredient.quantity),
-      unit: ingredient.unit,
-      checked: false,
-      sourceRecipeIds: [recipeId],
-    };
+    const item: GroceryListItem = withGroceryOrigin(
+      {
+        id: `groc-${ingredient.ingredientId}::${ingredient.unit}`,
+        ingredientId: ingredient.ingredientId,
+        name: ingredient.name,
+        category,
+        quantity: roundQty(ingredient.quantity),
+        unit: ingredient.unit,
+        checked: false,
+        sourceRecipeIds: [recipeId],
+        origin: 'add_missing',
+      },
+      'add_missing',
+    );
     merged.push(item);
     added.push(item);
   }
@@ -169,6 +181,7 @@ export function groceryItemForIngredientName(input: {
     ...manual,
     sourceRecipeIds: [input.recipeId],
     ingredientId: slugFromName(input.name),
+    origin: 'add_missing',
   };
 }
 

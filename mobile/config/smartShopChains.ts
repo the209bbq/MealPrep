@@ -128,6 +128,13 @@ export const GROCERY_CHAINS: readonly GroceryChainConfig[] = [
     delivery: { instacartSlug: 'smart-and-final', instacartAvailable: true, doordashAvailable: true },
   },
   {
+    key: 'dollar_general_market',
+    displayName: 'Dollar General Market',
+    matchPatterns: ['dollar general market'],
+    distanceBoostMiles: 0.2,
+    delivery: { instacartAvailable: false, doordashAvailable: true },
+  },
+  {
     key: 'el_super',
     displayName: 'El Super',
     matchPatterns: ['el super', 'mi pueblo', 'cardenas', 'cardenas markets'],
