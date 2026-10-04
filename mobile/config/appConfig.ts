@@ -9,6 +9,7 @@ import { SMART_SHOP_STORES } from './smartShop';
 import appBrand from './appBrand.json';
 import { RECIPE_IMPORT } from './recipeImport';
 import { RECIPE_SOURCES } from './recipeSources';
+import { CREATOR_RECIPES } from './creatorRecipes';
 import { VIRAL_RECIPES } from './viralRecipes';
 
 export { MEAL_CALENDAR } from './mealCalendar';
@@ -156,6 +157,17 @@ export const getViralRecipesUrl = (): string => {
 
 export const isViralRecipesConfigured = (): boolean =>
   VIRAL_RECIPES.enabled && (isDemoMode() || getViralRecipesUrl().length > 0);
+
+export const getCreatorVideosUrl = (): string => {
+  const override = CREATOR_RECIPES.proxyUrl.trim();
+  if (override) return override;
+  const base = SUPABASE_URL.trim().replace(/\/$/, '');
+  if (!base) return '';
+  return `${base}/functions/v1/creator-videos`;
+};
+
+export const isCreatorRecipesConfigured = (): boolean =>
+  CREATOR_RECIPES.enabled && (isDemoMode() || getCreatorVideosUrl().length > 0);
 
 export const isRecipeImportConfigured = (): boolean =>
   RECIPE_IMPORT.enabled && (isDemoMode() || getRecipeImportUrl().length > 0);

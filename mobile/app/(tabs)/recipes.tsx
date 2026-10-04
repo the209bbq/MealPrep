@@ -3,13 +3,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
+import { CreatorAvatarsRow } from '../../components/recipes/CreatorAvatarsRow';
+import { CreatorRecipesFeedCard } from '../../components/recipes/CreatorRecipesFeedCard';
+import { CreatorRecipesFeedModeDropdown } from '../../components/recipes/CreatorRecipesFeedModeDropdown';
 import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedFeedCard';
-import { ViralRecipesFeedCard } from '../../components/recipes/ViralRecipesFeedCard';
-import { ViralRecipesFeedModeDropdown } from '../../components/recipes/ViralRecipesFeedModeDropdown';
 import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { RECIPES_COPY } from '../../config/recipesCopy';
-import { THEME, isViralRecipesConfigured } from '../../config/appConfig';
+import { THEME, isCreatorRecipesConfigured } from '../../config/appConfig';
 import {
   applyRecipesTabFilters,
   discoveryRecipeServingOverrideId,
@@ -17,25 +18,29 @@ import {
   recipesTabPeopleTargetServings,
   type RecipesTabRow,
 } from '../../config/recipesTabFilters';
+import {
+  CREATOR_RECIPES_COPY,
+  isClassicRecipesFeedMode,
+  isCreatorBrowseMode,
+  isMyRecipesFeedMode,
+  type CreatorRecipesBrowseMode,
+  type CreatorRecipesFeedMode,
+} from '../../config/creatorRecipes';
 import { useRecipesTabFilters } from '../../hooks/useRecipesTabFilters';
-import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
-import { useViralRecipes } from '../../hooks/useViralRecipes';
+import { useCreatorChannelVideos, useCreatorFeed, useCreatorList } from '../../hooks/useCreatorRecipes';
+import { useUnifiedRecipeSearch } from '../../hooks/useUnifiedRecipeSearch';
 import { useViralRecipeOpen } from '../../hooks/useViralRecipeOpen';
 import { useApp } from '../../context/AppContext';
 import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
-import { buildMyRecipesFeedRows, buildViralFeedCardModels } from '../../lib/recipes/viralFeedRows';
+import { buildCreatorFeedCardModels } from '../../lib/recipes/creatorFeedRows';
+import { buildMyRecipesFeedRows } from '../../lib/recipes/viralFeedRows';
 import { RECIPE_SOURCES } from '../../config/recipeSources';
-import {
-  isClassicRecipesFeedMode,
-  isViralRecipesCategory,
-  VIRAL_RECIPES_COPY,
-  type ViralRecipesFeedMode,
-} from '../../config/viralRecipes';
 import { MEALDB_COPY } from '../../config/mealdb';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
+import type { CreatorListItem } from '../../lib/creatorVideos/types';
 
 export default function RecipesScreen() {
   const params = useLocalSearchParams<{ recipeId?: string; url?: string; text?: string; import?: string }>();
@@ -57,28 +62,44 @@ export default function RecipesScreen() {
     toggleMealPlanKitchenRecipe,
     onboarding,
     feedKitchenRecipes,
-    refreshLibraryRecipes,
-    libraryRecipesLoading,
   } = useApp();
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
   const [pickedDetailRow, setPickedDetailRow] = useState<RecipesTabRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [feedMode, setFeedMode] = useState<ViralRecipesFeedMode>('viral');
-  const viralFeedEnabled = RECIPE_SOURCES.viralRecipesPrimaryFeed && isViralRecipesConfigured();
-  const viralCategory = isViralRecipesCategory(feedMode) ? feedMode : 'viral';
-  const showClassicRecipesFeed = viralFeedEnabled && isClassicRecipesFeedMode(feedMode);
-  const { items: viralItems, loading: viralLoading, error: viralError } = useViralRecipes(
+  const [feedMode, setFeedMode] = useState<CreatorRecipesFeedMode>('popular');
+  const [selectedCreator, setSelectedCreator] = useState<CreatorListItem | null>(null);
+  const creatorFeedEnabled =
+    RECIPE_SOURCES.creatorRecipesPrimaryFeed && isCreatorRecipesConfigured();
+  const browseMode: CreatorRecipesBrowseMode = isCreatorBrowseMode(feedMode) ? feedMode : 'popular';
+  const showClassicRecipesFeed = creatorFeedEnabled && isClassicRecipesFeedMode(feedMode);
+  const showMyRecipesFeed = creatorFeedEnabled && isMyRecipesFeedMode(feedMode);
+
+  const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
+    enabled: creatorFeedEnabled && !searchQuery.trim() && !selectedCreator,
+  });
+
+  const { videos: feedVideos, loading: feedLoading, error: feedError } = useCreatorFeed(
     session,
-    viralCategory,
-    { enabled: viralFeedEnabled && isViralRecipesCategory(feedMode) },
+    browseMode,
+    { enabled: creatorFeedEnabled && isCreatorBrowseMode(feedMode) && !searchQuery.trim() && !selectedCreator },
   );
+
+  const {
+    creator: channelCreator,
+    videos: channelVideos,
+    loading: channelLoading,
+    error: channelError,
+  } = useCreatorChannelVideos(session, selectedCreator?.youtubeChannelId ?? null, {
+    enabled: creatorFeedEnabled && Boolean(selectedCreator) && !searchQuery.trim(),
+  });
+
   const {
     rows: mealDbRows,
     loading: mealDbLoading,
     error: mealDbError,
     refreshMealDb,
-  } = useMealDbRecipes(pantry, { enabled: showClassicRecipesFeed });
+  } = useMealDbRecipes(pantry, { enabled: showClassicRecipesFeed && !searchQuery.trim() });
 
   const {
     viralOpenState,
@@ -110,19 +131,6 @@ export default function RecipesScreen() {
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const pantryEmpty = pantry.length === 0;
-  const {
-    suggestions: discoverySuggestions,
-    loading: discoveryLoading,
-    error: discoveryError,
-    refreshDiscovery,
-  } = usePantryDiscoverySuggestions(pantry, session, {
-    enabled: RECIPE_SOURCES.recipeApiEnabled,
-  });
-
-  function openDetail(row: RecipesTabRow) {
-    setPickedDetailRow(row);
-    onboarding.notifyTutorialStepComplete('recipes');
-  }
 
   const kitchenRecipes = useMemo(() => feedKitchenRecipes, [feedKitchenRecipes]);
 
@@ -136,28 +144,15 @@ export default function RecipesScreen() {
   );
 
   const filterBaseRows = useMemo((): RecipesTabRow[] => {
-    if (viralFeedEnabled && feedMode === 'my_recipes') {
+    if (creatorFeedEnabled && showMyRecipesFeed) {
       return myRecipesBaseRows;
     }
-    const kitchenOnly = buildRecipesTabCatalogRows({
+    return buildRecipesTabCatalogRows({
       kitchenRecipes,
       pantryMatches: pantryRecipeMatches,
       discoverySuggestions: [],
     });
-    if (discoverySuggestions.length === 0) return kitchenOnly;
-    return buildRecipesTabCatalogRows({
-      kitchenRecipes,
-      pantryMatches: pantryRecipeMatches,
-      discoverySuggestions,
-    });
-  }, [
-    discoverySuggestions,
-    feedMode,
-    kitchenRecipes,
-    myRecipesBaseRows,
-    pantryRecipeMatches,
-    viralFeedEnabled,
-  ]);
+  }, [creatorFeedEnabled, kitchenRecipes, myRecipesBaseRows, pantryRecipeMatches, showMyRecipesFeed]);
 
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
@@ -165,39 +160,42 @@ export default function RecipesScreen() {
   }, [filterBaseRows, filters, searchQuery, feedDiversitySeed]);
 
   const classicRecipeRows = useMemo(() => {
-    if (!showClassicRecipesFeed) return [];
-    const haystack = searchQuery.trim().toLowerCase();
-    if (!haystack) return mealDbRows;
-    return mealDbRows.filter((row) => row.recipe.name.toLowerCase().includes(haystack));
+    if (!showClassicRecipesFeed || searchQuery.trim()) return [];
+    return mealDbRows;
   }, [mealDbRows, searchQuery, showClassicRecipesFeed]);
 
-  const viralCardModels = useMemo(() => {
-    if (!viralFeedEnabled || feedMode === 'my_recipes' || showClassicRecipesFeed) return [];
-    const haystack = searchQuery.trim().toLowerCase();
-    const filtered = haystack
-      ? viralItems.filter((item) => item.title.toLowerCase().includes(haystack))
-      : viralItems;
-    return buildViralFeedCardModels(filtered, kitchenRecipes, pantryRecipeMatches);
+  const browseVideoModels = useMemo(() => {
+    if (!creatorFeedEnabled || searchQuery.trim()) return [];
+    const videos = selectedCreator ? channelVideos : feedVideos;
+    return buildCreatorFeedCardModels(videos, kitchenRecipes, pantryRecipeMatches);
   }, [
-    feedMode,
+    channelVideos,
+    creatorFeedEnabled,
+    feedVideos,
     kitchenRecipes,
     pantryRecipeMatches,
     searchQuery,
-    showClassicRecipesFeed,
-    viralFeedEnabled,
-    viralItems,
+    selectedCreator,
   ]);
+
+  const { results: searchResults, loading: searchLoading, error: searchError } =
+    useUnifiedRecipeSearch({
+      query: searchQuery,
+      pantry,
+      session,
+      kitchenRecipes,
+      pantryMatches: pantryRecipeMatches,
+    });
+
+  function openDetail(row: RecipesTabRow) {
+    setPickedDetailRow(row);
+    onboarding.notifyTutorialStepComplete('recipes');
+  }
 
   function showDifferentIdeas() {
     setFeedDiversitySeed((value) => value + 1);
     if (showClassicRecipesFeed) {
       refreshMealDb();
-      return;
-    }
-    if (RECIPE_SOURCES.recipeApiEnabled) {
-      refreshDiscovery();
-    } else {
-      refreshLibraryRecipes();
     }
   }
 
@@ -228,11 +226,8 @@ export default function RecipesScreen() {
     for (const recipe of kitchenRecipes) {
       updates[recipe.id] = peopleTargetServings;
     }
-    for (const { recipe } of discoverySuggestions) {
-      updates[discoveryRecipeServingOverrideId(recipe.id)] = peopleTargetServings;
-    }
     applyServingOverridesBatch(updates);
-  }, [applyServingOverridesBatch, discoverySuggestions, kitchenRecipes, peopleTargetServings]);
+  }, [applyServingOverridesBatch, kitchenRecipes, peopleTargetServings]);
 
   const detailServings = useMemo(() => {
     if (!detailRow) return 4;
@@ -252,8 +247,8 @@ export default function RecipesScreen() {
     setServingOverride(discoveryRecipeServingOverrideId(detailRow.recipe.id), next);
   }
 
-  const showMyRecipesFeed = viralFeedEnabled && feedMode === 'my_recipes';
-  const showLegacyKitchenFeed = !viralFeedEnabled;
+  const showLegacyKitchenFeed = !creatorFeedEnabled;
+  const searching = searchQuery.trim().length >= 2;
 
   const hasUnfilteredResults = showMyRecipesFeed
     ? myRecipesBaseRows.length > 0
@@ -261,33 +256,33 @@ export default function RecipesScreen() {
       ? mealDbRows.length > 0
       : showLegacyKitchenFeed
         ? filterBaseRows.length > 0
-        : viralCardModels.length > 0;
+        : selectedCreator
+          ? channelVideos.length > 0
+          : browseVideoModels.length > 0 || creators.length > 0;
+
   const showFilterEmpty =
     showMyRecipesFeed &&
     recipesTabNarrowingFiltersActive(filters) &&
     hasUnfilteredResults &&
     filteredRows.length === 0 &&
-    !searchQuery.trim();
+    !searching;
+
+  const listLoading =
+    (searching && searchLoading) ||
+    (showClassicRecipesFeed && mealDbLoading) ||
+    (creatorFeedEnabled &&
+      !searching &&
+      (selectedCreator ? channelLoading : isCreatorBrowseMode(feedMode) ? feedLoading : false));
 
   const showCatalogEmpty =
     !showFilterEmpty &&
-    !discoveryLoading &&
-    !viralLoading &&
-    !mealDbLoading &&
+    !listLoading &&
     !hasUnfilteredResults &&
-    !searchQuery.trim();
+    !searching &&
+    creatorFeedEnabled;
 
   const showSearchEmpty =
-    !discoveryLoading &&
-    !viralLoading &&
-    !mealDbLoading &&
-    hasUnfilteredResults &&
-    (showMyRecipesFeed
-      ? filteredRows.length === 0
-      : showClassicRecipesFeed
-        ? classicRecipeRows.length === 0
-        : viralCardModels.length === 0) &&
-    Boolean(searchQuery.trim());
+    searching && !searchLoading && searchResults.length === 0;
 
   const showSignInOnImportError =
     Boolean(viralOpenState?.importError) &&
@@ -295,28 +290,47 @@ export default function RecipesScreen() {
     !session &&
     !demoMode;
 
+  const activeCreator = selectedCreator ?? channelCreator;
+
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8">
       <Card
         className="mt-4"
-        title={viralFeedEnabled ? VIRAL_RECIPES_COPY.feedTitle : RECIPES_COPY.cookNowCard.title}
+        title={creatorFeedEnabled ? CREATOR_RECIPES_COPY.feedTitle : RECIPES_COPY.cookNowCard.title}
         subtitle={
-          viralFeedEnabled ? VIRAL_RECIPES_COPY.feedSubtitle : RECIPES_COPY.cookNowCard.subtitle
+          creatorFeedEnabled ? CREATOR_RECIPES_COPY.feedSubtitle : RECIPES_COPY.cookNowCard.subtitle
         }
       >
+        {selectedCreator ? (
+          <Pressable
+            onPress={() => setSelectedCreator(null)}
+            className="mb-2 min-h-[36px] justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Back to all creators"
+          >
+            <Text className="text-sm font-semibold text-primary">← All creators</Text>
+          </Pressable>
+        ) : null}
+        {activeCreator && selectedCreator ? (
+          <Text className="mb-2 text-sm font-semibold text-ink">{activeCreator.displayName}</Text>
+        ) : null}
         <View className="mt-2 flex-row items-center gap-2">
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder={RECIPES_COPY.discoveryPanel.searchPlaceholder}
+            placeholder={
+              creatorFeedEnabled
+                ? CREATOR_RECIPES_COPY.searchPlaceholder
+                : RECIPES_COPY.discoveryPanel.searchPlaceholder
+            }
             placeholderTextColor={THEME.muted}
             className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base text-ink"
             autoCapitalize="none"
             autoCorrect={false}
             accessibilityLabel="Search recipes"
           />
-          {viralFeedEnabled ? (
-            <ViralRecipesFeedModeDropdown value={feedMode} onChange={setFeedMode} />
+          {creatorFeedEnabled && !searching ? (
+            <CreatorRecipesFeedModeDropdown value={feedMode} onChange={setFeedMode} />
           ) : null}
         </View>
         <RecipeImportFromShareParams
@@ -335,72 +349,106 @@ export default function RecipesScreen() {
         {pantryEmpty ? (
           <Text className="mt-2 text-xs text-muted">{RECIPES_COPY.cookNowCard.emptyPantryBrowseHint}</Text>
         ) : null}
-        {(showMyRecipesFeed || showLegacyKitchenFeed) && !viralFeedEnabled ? (
+        {showLegacyKitchenFeed ? (
           <Pressable
             onPress={showDifferentIdeas}
-            disabled={discoveryLoading || libraryRecipesLoading}
+            disabled={mealDbLoading}
             className="mt-2 min-h-[40px] items-center justify-center rounded-lg px-3 py-2"
             accessibilityRole="button"
             accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
           >
             <Text className="text-sm font-semibold text-primary">
-              {discoveryLoading || libraryRecipesLoading
+              {mealDbLoading
                 ? RECIPES_COPY.discoveryPanel.searching
                 : RECIPES_COPY.cookNowCard.showDifferentIdeas}
             </Text>
           </Pressable>
         ) : null}
+        {creatorFeedEnabled && !searching && !selectedCreator ? (
+          <CreatorAvatarsRow creators={creators} onSelect={setSelectedCreator} />
+        ) : null}
+        {creatorsLoading && creatorFeedEnabled && !searching && !selectedCreator ? (
+          <View className="mt-3 flex-row items-center gap-2">
+            <ActivityIndicator color={THEME.primary} size="small" />
+            <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loadingCreators}</Text>
+          </View>
+        ) : null}
+        {!creatorsLoading && creatorsError ? (
+          <Text className="mt-2 text-xs text-muted">{creatorsError}</Text>
+        ) : null}
+        {!creatorsLoading &&
+        creatorFeedEnabled &&
+        !searching &&
+        !selectedCreator &&
+        creators.length === 0 ? (
+          <Text className="mt-2 text-xs text-muted">{CREATOR_RECIPES_COPY.emptyCreators}</Text>
+        ) : null}
       </Card>
 
-      {discoveryLoading ? (
+      {listLoading ? (
         <View className="mt-4 flex-row items-center gap-2">
           <ActivityIndicator color={THEME.primary} />
-          <Text className="text-sm text-muted">{RECIPES_COPY.moreIdeasCard.loading}</Text>
+          <Text className="text-sm text-muted">
+            {searching ? RECIPES_COPY.discoveryPanel.searching : CREATOR_RECIPES_COPY.loading}
+          </Text>
         </View>
-      ) : null}
-      {!discoveryLoading && discoveryError ? (
-        <Text className="mt-3 text-sm text-muted">{discoveryError}</Text>
       ) : null}
 
-      {viralFeedEnabled && isViralRecipesCategory(feedMode) && viralLoading ? (
-        <View className="mt-4 flex-row items-center gap-2">
-          <ActivityIndicator color={THEME.primary} />
-          <Text className="text-sm text-muted">{VIRAL_RECIPES_COPY.loading}</Text>
-        </View>
+      {searchError ? <Text className="mt-3 text-sm text-muted">{searchError}</Text> : null}
+      {feedError && !searching ? <Text className="mt-3 text-sm text-muted">{feedError}</Text> : null}
+      {channelError && selectedCreator ? (
+        <Text className="mt-3 text-sm text-muted">{channelError}</Text>
       ) : null}
-      {viralFeedEnabled && isViralRecipesCategory(feedMode) && !viralLoading && viralError ? (
-        <Text className="mt-3 text-sm text-muted">{viralError}</Text>
-      ) : null}
-
-      {showClassicRecipesFeed && mealDbLoading ? (
-        <View className="mt-4 flex-row items-center gap-2">
-          <ActivityIndicator color={THEME.primary} />
-          <Text className="text-sm text-muted">{MEALDB_COPY.loading}</Text>
-        </View>
-      ) : null}
-      {showClassicRecipesFeed && !mealDbLoading && mealDbError ? (
+      {showClassicRecipesFeed && mealDbError ? (
         <Text className="mt-3 text-sm text-muted">{mealDbError}</Text>
       ) : null}
 
       {showCatalogEmpty ? <RecipesEmptyState pantryEmpty={false} /> : null}
       {showFilterEmpty ? <RecipesTabFiltersEmptyState onClearAll={clearAllFilters} /> : null}
       {showSearchEmpty ? (
-        <Text className="mt-4 text-sm text-muted">{RECIPES_COPY.discoveryPanel.noFilterResults}</Text>
+        <Text className="mt-4 text-sm text-muted">{CREATOR_RECIPES_COPY.emptySearch}</Text>
       ) : null}
 
-      {showClassicRecipesFeed
+      {searching
+        ? searchResults.map((result) =>
+            result.kind === 'classic' ? (
+              <RecipesUnifiedFeedCard
+                key={`classic-${result.row.recipe.id}`}
+                row={result.row}
+                sourceTag={CREATOR_RECIPES_COPY.sourceClassic}
+                onOpen={() => openDetail(result.row)}
+              />
+            ) : (
+              <CreatorRecipesFeedCard
+                key={result.model.videoId}
+                model={result.model}
+                onOpen={() => {
+                  openViralItem(result.model.item);
+                  onboarding.notifyTutorialStepComplete('recipes');
+                }}
+              />
+            ),
+          )
+        : null}
+
+      {showClassicRecipesFeed && !searching
         ? classicRecipeRows.map((row) => (
             <RecipesUnifiedFeedCard
               key={row.recipe.id}
               row={row}
+              sourceTag={MEALDB_COPY.feedModeLabel}
               onOpen={() => openDetail(row)}
             />
           ))
         : null}
 
-      {viralFeedEnabled && isViralRecipesCategory(feedMode)
-        ? viralCardModels.map((model) => (
-            <ViralRecipesFeedCard
+      {creatorFeedEnabled &&
+      isCreatorBrowseMode(feedMode) &&
+      !searching &&
+      !showClassicRecipesFeed &&
+      !showMyRecipesFeed
+        ? browseVideoModels.map((model) => (
+            <CreatorRecipesFeedCard
               key={model.videoId}
               model={model}
               onOpen={() => {
@@ -410,6 +458,17 @@ export default function RecipesScreen() {
             />
           ))
         : null}
+
+      {creatorFeedEnabled &&
+      !searching &&
+      !showClassicRecipesFeed &&
+      !showMyRecipesFeed &&
+      isCreatorBrowseMode(feedMode) &&
+      !selectedCreator &&
+      browseVideoModels.length === 0 &&
+      !feedLoading ? (
+        <Text className="mt-4 text-sm text-muted">{CREATOR_RECIPES_COPY.emptyVideos}</Text>
+      ) : null}
 
       {showMyRecipesFeed || showLegacyKitchenFeed
         ? filteredRows.map((row) => (
