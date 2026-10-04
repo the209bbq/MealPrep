@@ -34,6 +34,7 @@ import type { ViralRecipeLinkItem } from '../../lib/viralRecipes/types';
 import { RecipeDietNotice } from '../diet/RecipeDietNotice';
 import { ingredientLinesFromRecipe } from '../../lib/diet/ingredientLines';
 import { isVideoRecipeDetailContext, VideoRecipeDetailView } from './VideoRecipeDetailView';
+import { RecipeCostPerServingForRecipe } from './RecipeCostPerServingForRecipe';
 
 export interface RecipeDetailSheetProps {
   visible: boolean;
@@ -262,6 +263,8 @@ function ClassicRecipeDetailBody({
           <Text className="mt-1 text-xs text-muted">
             {RECIPES_COPY.recipeDetail.servingsAndTime(kitchenRecipe.servings, minutes)}
           </Text>
+
+          <RecipeCostPerServingForRecipe recipe={kitchenRecipe} />
 
           <RecipeDietNotice ingredientLines={ingredientLinesFromRecipe(kitchenRecipe)} />
 

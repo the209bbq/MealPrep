@@ -16,6 +16,7 @@ import { RecipeDietNotice } from '../diet/RecipeDietNotice';
 import { ingredientLinesForKitchenRecipe } from '../../lib/diet/ingredientLines';
 import { RecipeSaveButton } from './RecipeSaveButton';
 import { RecipeSaveCta } from './RecipeSaveCta';
+import { RecipeCostPerServingForRecipe } from './RecipeCostPerServingForRecipe';
 
 type DetailSection = 'ingredients' | 'steps';
 
@@ -243,6 +244,8 @@ export function VideoRecipeDetailView({
           {!showLoading && !importError ? (
             <PantryStatusLine missingCount={missingCount} minutes={recipe.minutes} servings={recipe.servings} />
           ) : null}
+
+          {!showLoading && !importError ? <RecipeCostPerServingForRecipe recipe={recipe} /> : null}
 
           {!showLoading && !importError ? (
             <RecipeDietNotice

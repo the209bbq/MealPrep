@@ -29,6 +29,7 @@ import { scheduleTargetFromDiscoveryRecipe } from '../../lib/mealCalendar/schedu
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 import { RecipeDietNotice } from '../../components/diet/RecipeDietNotice';
 import { ingredientLinesFromDiscovery } from '../../lib/diet/ingredientLines';
+import { RecipeCostPerServingForRecipe } from '../../components/recipes/RecipeCostPerServingForRecipe';
 export default function DiscoverRecipeDetailScreen() {
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const recipeId = Number.parseInt(String(idParam), 10);
@@ -76,6 +77,19 @@ export default function DiscoverRecipeDetailScreen() {
     () => (recipe ? scoreDiscoveryRecipeAgainstPantry(recipe, pantry) : null),
     [recipe, pantry],
   );
+
+  const recipeForCost = useMemo(() => {
+    if (!recipe) return null;
+    return {
+      servings: recipe.servings,
+      ingredients: recipe.ingredients.map((ing) => ({
+        ingredientId: `disc-${ing.id}`,
+        name: ing.optional ? `${ing.name} (optional)` : ing.name,
+        quantity: ing.quantity,
+        unit: ing.unit,
+      })),
+    };
+  }, [recipe]);
 
   useEffect(() => {
     if (invalidRecipeId) return;
@@ -161,6 +175,7 @@ export default function DiscoverRecipeDetailScreen() {
             {recipe.carbs != null ? ` · ${recipe.carbs}g carbs` : ''}
             {recipe.fat != null ? ` · ${recipe.fat}g fat` : ''}
           </Text>
+          {recipeForCost ? <RecipeCostPerServingForRecipe recipe={recipeForCost} /> : null}
           {pantryMatch ? <RecipePantryMatchBadge match={pantryMatch} /> : null}
           <RecipeDietNotice ingredientLines={ingredientLinesFromDiscovery(recipe)} />
 
