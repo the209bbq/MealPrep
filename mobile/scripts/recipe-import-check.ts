@@ -226,7 +226,22 @@ assert.ok(
   !/useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]*getStringAsync/.test(importBoxSource),
   'RecipeImportBox must not auto-read clipboard on mount',
 );
-assert.ok(importBoxSource.includes('pasteFromClipboard'), 'RecipeImportBox should paste on user tap');
+assert.ok(
+  !importBoxSource.includes('getStringAsync') && !importBoxSource.includes('pasteImportLink'),
+  'RecipeImportBox must not read the clipboard',
+);
+assert.ok(
+  importBoxSource.includes('pickRecipeImportPhotoFromCamera'),
+  'RecipeImportBox should open camera / photo picker for cookbook import',
+);
+assert.ok(
+  !importBoxSource.includes('Alert.alert'),
+  'RecipeImportBox must not use Alert.alert (broken on web/PWA)',
+);
+assert.ok(
+  importBoxSource.includes('importBoxHint'),
+  'RecipeImportBox should show import hint copy',
+);
 
 const ytOembed = parseYouTubeOembedPayload({
   author_name: 'Chef Channel',
