@@ -66,7 +66,6 @@ export default function RecipesScreen() {
     toggleMealPlanDiscoveryRecipe,
     isOnMealPlan,
     toggleMealPlanKitchenRecipe,
-    onboarding,
     feedKitchenRecipes,
     isGuest,
     userDietPrefs,
@@ -202,7 +201,6 @@ export default function RecipesScreen() {
 
   function openDetail(row: RecipesTabRow) {
     setPickedDetailRow(row);
-    onboarding.notifyTutorialStepComplete('recipes');
   }
 
   function showDifferentIdeas() {
@@ -327,7 +325,6 @@ export default function RecipesScreen() {
       const item = record ? savedCreatorItemFromRecord(record) : null;
       if (item) {
         openViralItem(item);
-        onboarding.notifyTutorialStepComplete('recipes');
         return;
       }
     }
@@ -498,7 +495,6 @@ export default function RecipesScreen() {
                 }
                 onOpen={() => {
                   openViralItem(result.model.item);
-                  onboarding.notifyTutorialStepComplete('recipes');
                 }}
               />
             ),
@@ -537,7 +533,6 @@ export default function RecipesScreen() {
               onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
               onOpen={() => {
                 openViralItem(model.item);
-                onboarding.notifyTutorialStepComplete('recipes');
               }}
             />
           ))

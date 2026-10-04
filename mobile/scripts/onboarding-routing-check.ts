@@ -1,5 +1,5 @@
 /**
- * Lightweight checks for welcome → tutorial routing (no router runtime).
+ * Lightweight checks for core app routes (no router runtime).
  */
 import assert from 'node:assert/strict';
 import { AUTH_EMAIL_REDIRECT_PATH, APP_ROUTES } from '../config/appRoutes.ts';

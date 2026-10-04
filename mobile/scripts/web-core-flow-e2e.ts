@@ -346,9 +346,6 @@ async function seedE2eStorage(context: BrowserContext): Promise<void> {
       return;
     }
     sessionStorage.setItem('mealprep.e2e.seeded', '1');
-    localStorage.setItem('mealprep.onboarding.welcomeDismissed', 'true');
-    localStorage.setItem('mealprep.onboarding.tourCompleted', 'true');
-    localStorage.setItem('mealprep.onboarding.tourQueued', 'false');
     localStorage.setItem('mealprep.pantry', JSON.stringify([]));
     localStorage.setItem('mealprep.grocery', JSON.stringify([]));
     localStorage.setItem('mealprep.guest.pantry', JSON.stringify([]));

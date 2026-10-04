@@ -1,8 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { useOnboarding } from '../hooks/useOnboarding';
 import { useHydrated } from '../hooks/useHydrated';
 import { useHydrationGatedPersist } from '../hooks/useHydrationGatedPersist';
-import type { HandsOnTutorialStepId } from '../lib/onboarding/tutorialProgress';
 import type { Session } from '@supabase/supabase-js';
 import {
   APP_NAME,
@@ -375,7 +373,6 @@ interface AppContextValue {
   libraryRecipesLoading: boolean;
   addMissingRecipeIngredientsToGrocery: (recipeId: string, matchOverride?: RecipePantryMatch) => void;
   addMissingDiscoveryRecipeIngredientsToGrocery: (item: RecipeDiscoveryListItem) => void;
-  onboarding: ReturnType<typeof useOnboarding>;
   accountUi: {
     sheet: 'closed' | 'auth' | 'account';
     showPostSignupSetup: boolean;
@@ -476,10 +473,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => recipesForRecipesFeed(recipes, libraryRecipes),
     [libraryRecipes, recipes],
   );
-
-  const onboarding = useOnboarding({ session, authReady });
-  const notifyTutorialStepCompleteRef = useRef<(stepId: HandsOnTutorialStepId) => void>(() => {});
-  notifyTutorialStepCompleteRef.current = onboarding.notifyTutorialStepComplete;
 
   const plannedRecipeIds = useMemo(
     () => activeMealPlanRecipeIds(mealPlan, feedKitchenRecipes, ownerId),
@@ -1470,7 +1463,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         leftoverOfId: null,
         linkedLeftoverId: null,
       });
-      notifyTutorialStepCompleteRef.current('recipes');
     },
     [addMealPlanEntry, mealPlan, recipes, removeMealPlanItem],
   );
@@ -1597,7 +1589,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         return next;
       });
-      notifyTutorialStepCompleteRef.current('grocery');
     },
     [demoMode, isGuest, supabase, userId],
   );
@@ -1826,7 +1817,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         leftoverOfId: null,
         linkedLeftoverId: null,
       });
-      notifyTutorialStepCompleteRef.current('recipes');
     },
     [
       addMealPlanEntry,
@@ -1947,7 +1937,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       if (demoMode || isGuest) {
         setPantry((prev) => [item, ...prev]);
-        notifyTutorialStepCompleteRef.current('scan');
         return;
       }
       if (!supabase || !userId) {
@@ -1955,7 +1944,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       const saved = await insertPantryItem(supabase, userId, item);
       setPantry((prev) => [saved, ...prev]);
-      notifyTutorialStepCompleteRef.current('scan');
     },
     [demoMode, isGuest, supabase, userId],
   );
@@ -2088,7 +2076,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      notifyTutorialStepCompleteRef.current('scan');
 
       setUndoToast({
         message: PANTRY_SCAN_UI_COPY.addedToPantry(toSave.length),
@@ -2260,7 +2247,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       libraryRecipesLoading,
       addMissingRecipeIngredientsToGrocery,
       addMissingDiscoveryRecipeIngredientsToGrocery,
-      onboarding,
       accountUi: {
         sheet: accountSheet,
         showPostSignupSetup,
@@ -2359,7 +2345,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addMissingDiscoveryRecipeIngredientsToGrocery,
       previewPantryResort,
       resortPantryItemsInDefaultLocation,
-      onboarding,
       notifyMealScheduled,
       scheduleMealFromRecipe,
       shopForWeekScheduledMeals,

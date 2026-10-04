@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '../../lib/icons/Ionicons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
 import {
@@ -72,7 +72,7 @@ import {
   shouldDeferPhotoScanForProfile,
 } from '../../lib/plans/photoScanAccess';
 import { uploadScanPhoto } from '../../lib/scanPhotos/client';
-import { TabEmptyState } from '../../components/onboarding/TabEmptyState';
+import { TabEmptyState } from '../../components/TabEmptyState';
 import { ViewScanPhotoButton } from '../../components/ViewScanPhotoButton';
 import { PANTRY_CATEGORIES, type PantryCategory, type PantryItem } from '../../types/mealprep';
 
@@ -92,7 +92,6 @@ function readStoredPantryLocationFilter(): PantryStorageLocation | 'all' {
 }
 
 export default function PantryScreen() {
-  const params = useLocalSearchParams<{ tutorialScan?: string; tutorialManual?: string }>();
   const {
     pantry,
     recipes,
@@ -622,23 +621,6 @@ export default function PantryScreen() {
     setEditItem(null);
     setAddOpen(true);
   }
-
-  const tutorialLaunchRef = useRef<'scan' | 'manual' | null>(null);
-  useEffect(() => {
-    const wantsScan = params.tutorialScan === '1';
-    const wantsManual = params.tutorialManual === '1';
-    const key = wantsScan ? 'scan' : wantsManual ? 'manual' : null;
-    if (!key || tutorialLaunchRef.current === key) return;
-    tutorialLaunchRef.current = key;
-    queueMicrotask(() => {
-      if (key === 'manual') {
-        openAddModal();
-        return;
-      }
-      const source = Platform.OS === 'web' ? 'library' : 'camera';
-      void handleNativeScan(source);
-    });
-  }, [params.tutorialManual, params.tutorialScan]); // eslint-disable-line react-hooks/exhaustive-deps -- tutorial one-shot
 
   function openEditModal(item: PantryItem) {
     setEditItem(item);

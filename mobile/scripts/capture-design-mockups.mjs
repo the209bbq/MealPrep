@@ -90,15 +90,7 @@ try {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport });
 
-  async function seedOnboarding() {
-    await page.evaluate(() => {
-      localStorage.setItem('mealprep.onboarding.welcomeDismissed', JSON.stringify(true));
-      localStorage.setItem('mealprep.onboarding.tourCompleted', JSON.stringify(true));
-    });
-  }
-
   await page.goto(base, { waitUntil: 'domcontentloaded' });
-  await seedOnboarding();
 
   await page.goto(`${base}/preview/video-recipe-detail?state=loaded`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1200);
