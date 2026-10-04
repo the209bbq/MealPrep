@@ -1,6 +1,6 @@
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { VIRAL_RECIPES_COPY } from '../../config/viralRecipes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddToCalendarButton } from '../mealCalendar/AddToCalendarButton';
@@ -34,10 +34,7 @@ export interface RecipeDetailSheetProps {
   visible: boolean;
   row: RecipesTabRow | null;
   match: RecipePantryMatch | null | undefined;
-  servings: number;
-  batchCalculatorEnabled: boolean;
   onClose: () => void;
-  onChangeServings: (next: number) => void;
   onAddMissingKitchen: (recipeId: string, matchOverride?: RecipePantryMatch) => void;
   onAddMissingDiscovery: (recipe: RecipeDiscoveryListItem) => void;
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
@@ -121,10 +118,7 @@ export function RecipeDetailSheet({
   visible,
   row,
   match,
-  servings,
-  batchCalculatorEnabled,
   onClose,
-  onChangeServings,
   onAddMissingKitchen,
   onAddMissingDiscovery,
   isOnMealPlan,
@@ -145,9 +139,6 @@ export function RecipeDetailSheet({
     if (row.kind === 'kitchen') return kitchenRecipeFromRow(row);
     return stubKitchenFromDiscovery(row);
   }, [row]);
-
-  const scale =
-    kitchenRecipe && kitchenRecipe.servings > 0 ? servings / kitchenRecipe.servings : 1;
 
   if (!row || !kitchenRecipe) return null;
 
@@ -227,7 +218,7 @@ export function RecipeDetailSheet({
             ) : null}
 
             <Text className="mt-1 text-xs text-muted">
-              {RECIPES_COPY.recipeDetail.servingsAndTime(servings, minutes)}
+              {RECIPES_COPY.recipeDetail.servingsAndTime(kitchenRecipe.servings, minutes)}
             </Text>
 
             <View className="mt-3 flex-row flex-wrap items-center gap-2">
@@ -296,32 +287,6 @@ export function RecipeDetailSheet({
 
             {section === 'ingredients' ? (
               <View className="mt-3">
-                {batchCalculatorEnabled && kitchenRecipe.ingredients.length > 0 ? (
-                  <View className="mb-3 flex-row items-center gap-2">
-                    <Text className="text-xs font-semibold text-muted">Servings</Text>
-                    <Pressable
-                      onPress={() => onChangeServings(Math.max(1, servings - 1))}
-                      className="rounded-md border border-border px-2.5 py-1"
-                    >
-                      <Text className="font-bold text-ink">−</Text>
-                    </Pressable>
-                    <TextInput
-                      keyboardType="number-pad"
-                      value={String(servings)}
-                      onChangeText={(text) => {
-                        const n = Number.parseInt(text, 10);
-                        if (!Number.isNaN(n)) onChangeServings(Math.max(1, n));
-                      }}
-                      className="min-w-[48px] rounded-md border border-border bg-card px-2 py-1 text-center text-sm font-bold text-ink"
-                    />
-                    <Pressable
-                      onPress={() => onChangeServings(servings + 1)}
-                      className="rounded-md border border-border px-2.5 py-1"
-                    >
-                      <Text className="font-bold text-ink">+</Text>
-                    </Pressable>
-                  </View>
-                ) : null}
                 {importing ? (
                   <Text className="text-sm text-muted">{VIRAL_RECIPES_COPY.detailImporting}</Text>
                 ) : kitchenRecipe.ingredients.length === 0 ? (
@@ -330,11 +295,7 @@ export function RecipeDetailSheet({
                   kitchenRecipe.ingredients.map((ing) => (
                     <Text key={ing.ingredientId} className="mt-2 text-sm leading-6 text-ink">
                       · {ing.name}
-                      {batchCalculatorEnabled
-                        ? `: ${(ing.quantity * scale).toFixed(1)} ${ing.unit}`
-                        : ing.quantity > 0
-                          ? ` — ${ing.quantity} ${ing.unit}`
-                          : ''}
+                      {ing.quantity > 0 ? ` — ${ing.quantity} ${ing.unit}` : ''}
                     </Text>
                   ))
                 )}

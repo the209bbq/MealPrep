@@ -13,7 +13,6 @@ import { RECIPES_COPY } from '../../config/recipesCopy';
 import { THEME, isCreatorRecipesConfigured } from '../../config/appConfig';
 import {
   applyRecipesTabFilters,
-  discoveryRecipeServingOverrideId,
   recipesTabNarrowingFiltersActive,
   recipesTabPeopleTargetServings,
   type RecipesTabRow,
@@ -53,7 +52,6 @@ export default function RecipesScreen() {
     openAuthSheet,
     saveLinkImportedRecipe,
     servingOverrides,
-    setServingOverride,
     applyServingOverridesBatch,
     featureFlags,
     pantryRecipeMatches,
@@ -228,24 +226,6 @@ export default function RecipesScreen() {
     }
     applyServingOverridesBatch(updates);
   }, [applyServingOverridesBatch, kitchenRecipes, peopleTargetServings]);
-
-  const detailServings = useMemo(() => {
-    if (!detailRow) return 4;
-    if (detailRow.kind === 'kitchen') {
-      const recipe = detailRow.recipe;
-      return servingOverrides[recipe.id] ?? recipe.servings;
-    }
-    return servingOverrides[discoveryRecipeServingOverrideId(detailRow.recipe.id)] ?? detailRow.recipe.servings;
-  }, [detailRow, servingOverrides]);
-
-  function setDetailServings(next: number) {
-    if (!detailRow) return;
-    if (detailRow.kind === 'kitchen') {
-      setServingOverride(detailRow.recipe.id, next);
-      return;
-    }
-    setServingOverride(discoveryRecipeServingOverrideId(detailRow.recipe.id), next);
-  }
 
   const showLegacyKitchenFeed = !creatorFeedEnabled;
   const searching = searchQuery.trim().length >= 2;
@@ -578,8 +558,6 @@ export default function RecipesScreen() {
         visible={detailRow != null}
         row={detailRow}
         match={detailMatch}
-        servings={detailServings}
-        batchCalculatorEnabled={Boolean(featureFlags.batchCalculator)}
         importing={viralOpenState?.importing ?? false}
         importError={viralOpenState?.importError}
         onRetryImport={
@@ -591,7 +569,6 @@ export default function RecipesScreen() {
           setPickedDetailRow(null);
           if (routeRecipeId) router.replace('/recipes');
         }}
-        onChangeServings={setDetailServings}
         onAddMissingKitchen={addMissingRecipeIngredientsToGrocery}
         onAddMissingDiscovery={addMissingDiscoveryRecipeIngredientsToGrocery}
         isOnMealPlan={isOnMealPlan}

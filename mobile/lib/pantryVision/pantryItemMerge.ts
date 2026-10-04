@@ -90,7 +90,7 @@ export function pantryRowsSeemCompleteForSinglePass(
   return avg >= minAvgConfidence;
 }
 
-/** Run add-missing (verify) pass unless the wall-clock budget cannot fit another Gemini call. */
-export function shouldRunPantryVerifySecondPass(budgetExhausted: boolean): boolean {
-  return !budgetExhausted;
+/** One Gemini vision call per photo (free-tier budget). */
+export function shouldRunPantryVerifySecondPass(_budgetExhausted: boolean): boolean {
+  return false;
 }
