@@ -26,7 +26,14 @@ import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog'
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
 import { buildMyRecipesFeedRows, buildViralFeedCardModels } from '../../lib/recipes/viralFeedRows';
 import { RECIPE_SOURCES } from '../../config/recipeSources';
-import { isViralRecipesCategory, VIRAL_RECIPES_COPY, type ViralRecipesFeedMode } from '../../config/viralRecipes';
+import {
+  isClassicRecipesFeedMode,
+  isViralRecipesCategory,
+  VIRAL_RECIPES_COPY,
+  type ViralRecipesFeedMode,
+} from '../../config/viralRecipes';
+import { MEALDB_COPY } from '../../config/mealdb';
+import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 
@@ -60,10 +67,18 @@ export default function RecipesScreen() {
   const [feedMode, setFeedMode] = useState<ViralRecipesFeedMode>('viral');
   const viralFeedEnabled = RECIPE_SOURCES.viralRecipesPrimaryFeed && isViralRecipesConfigured();
   const viralCategory = isViralRecipesCategory(feedMode) ? feedMode : 'viral';
+  const showClassicRecipesFeed = viralFeedEnabled && isClassicRecipesFeedMode(feedMode);
   const { items: viralItems, loading: viralLoading, error: viralError } = useViralRecipes(
     session,
     viralCategory,
+    { enabled: viralFeedEnabled && isViralRecipesCategory(feedMode) },
   );
+  const {
+    rows: mealDbRows,
+    loading: mealDbLoading,
+    error: mealDbError,
+    refreshMealDb,
+  } = useMealDbRecipes(pantry, { enabled: showClassicRecipesFeed });
 
   const {
     viralOpenState,
@@ -149,17 +164,36 @@ export default function RecipesScreen() {
     return buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
   }, [filterBaseRows, filters, searchQuery, feedDiversitySeed]);
 
+  const classicRecipeRows = useMemo(() => {
+    if (!showClassicRecipesFeed) return [];
+    const haystack = searchQuery.trim().toLowerCase();
+    if (!haystack) return mealDbRows;
+    return mealDbRows.filter((row) => row.recipe.name.toLowerCase().includes(haystack));
+  }, [mealDbRows, searchQuery, showClassicRecipesFeed]);
+
   const viralCardModels = useMemo(() => {
-    if (!viralFeedEnabled || feedMode === 'my_recipes') return [];
+    if (!viralFeedEnabled || feedMode === 'my_recipes' || showClassicRecipesFeed) return [];
     const haystack = searchQuery.trim().toLowerCase();
     const filtered = haystack
       ? viralItems.filter((item) => item.title.toLowerCase().includes(haystack))
       : viralItems;
     return buildViralFeedCardModels(filtered, kitchenRecipes, pantryRecipeMatches);
-  }, [feedMode, kitchenRecipes, pantryRecipeMatches, searchQuery, viralFeedEnabled, viralItems]);
+  }, [
+    feedMode,
+    kitchenRecipes,
+    pantryRecipeMatches,
+    searchQuery,
+    showClassicRecipesFeed,
+    viralFeedEnabled,
+    viralItems,
+  ]);
 
   function showDifferentIdeas() {
     setFeedDiversitySeed((value) => value + 1);
+    if (showClassicRecipesFeed) {
+      refreshMealDb();
+      return;
+    }
     if (RECIPE_SOURCES.recipeApiEnabled) {
       refreshDiscovery();
     } else {
@@ -223,9 +257,11 @@ export default function RecipesScreen() {
 
   const hasUnfilteredResults = showMyRecipesFeed
     ? myRecipesBaseRows.length > 0
-    : showLegacyKitchenFeed
-      ? filterBaseRows.length > 0
-      : viralCardModels.length > 0;
+    : showClassicRecipesFeed
+      ? mealDbRows.length > 0
+      : showLegacyKitchenFeed
+        ? filterBaseRows.length > 0
+        : viralCardModels.length > 0;
   const showFilterEmpty =
     showMyRecipesFeed &&
     recipesTabNarrowingFiltersActive(filters) &&
@@ -237,14 +273,20 @@ export default function RecipesScreen() {
     !showFilterEmpty &&
     !discoveryLoading &&
     !viralLoading &&
+    !mealDbLoading &&
     !hasUnfilteredResults &&
     !searchQuery.trim();
 
   const showSearchEmpty =
     !discoveryLoading &&
     !viralLoading &&
+    !mealDbLoading &&
     hasUnfilteredResults &&
-    (showMyRecipesFeed ? filteredRows.length === 0 : viralCardModels.length === 0) &&
+    (showMyRecipesFeed
+      ? filteredRows.length === 0
+      : showClassicRecipesFeed
+        ? classicRecipeRows.length === 0
+        : viralCardModels.length === 0) &&
     Boolean(searchQuery.trim());
 
   const showSignInOnImportError =
@@ -320,14 +362,24 @@ export default function RecipesScreen() {
         <Text className="mt-3 text-sm text-muted">{discoveryError}</Text>
       ) : null}
 
-      {viralFeedEnabled && feedMode !== 'my_recipes' && viralLoading ? (
+      {viralFeedEnabled && isViralRecipesCategory(feedMode) && viralLoading ? (
         <View className="mt-4 flex-row items-center gap-2">
           <ActivityIndicator color={THEME.primary} />
           <Text className="text-sm text-muted">{VIRAL_RECIPES_COPY.loading}</Text>
         </View>
       ) : null}
-      {viralFeedEnabled && feedMode !== 'my_recipes' && !viralLoading && viralError ? (
+      {viralFeedEnabled && isViralRecipesCategory(feedMode) && !viralLoading && viralError ? (
         <Text className="mt-3 text-sm text-muted">{viralError}</Text>
+      ) : null}
+
+      {showClassicRecipesFeed && mealDbLoading ? (
+        <View className="mt-4 flex-row items-center gap-2">
+          <ActivityIndicator color={THEME.primary} />
+          <Text className="text-sm text-muted">{MEALDB_COPY.loading}</Text>
+        </View>
+      ) : null}
+      {showClassicRecipesFeed && !mealDbLoading && mealDbError ? (
+        <Text className="mt-3 text-sm text-muted">{mealDbError}</Text>
       ) : null}
 
       {showCatalogEmpty ? <RecipesEmptyState pantryEmpty={false} /> : null}
@@ -336,7 +388,17 @@ export default function RecipesScreen() {
         <Text className="mt-4 text-sm text-muted">{RECIPES_COPY.discoveryPanel.noFilterResults}</Text>
       ) : null}
 
-      {viralFeedEnabled && feedMode !== 'my_recipes'
+      {showClassicRecipesFeed
+        ? classicRecipeRows.map((row) => (
+            <RecipesUnifiedFeedCard
+              key={row.recipe.id}
+              row={row}
+              onOpen={() => openDetail(row)}
+            />
+          ))
+        : null}
+
+      {viralFeedEnabled && isViralRecipesCategory(feedMode)
         ? viralCardModels.map((model) => (
             <ViralRecipesFeedCard
               key={model.videoId}

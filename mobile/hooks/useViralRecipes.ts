@@ -9,11 +9,16 @@ import {
 } from '../lib/viralRecipes/client';
 import type { ViralRecipeLinkItem } from '../lib/viralRecipes/types';
 
-export function useViralRecipes(session: Session | null, category: ViralRecipesCategory) {
+export function useViralRecipes(
+  session: Session | null,
+  category: ViralRecipesCategory,
+  options?: { enabled?: boolean },
+) {
   const [items, setItems] = useState<ViralRecipeLinkItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const enabled = isViralRecipesConfigured();
+  const configured = isViralRecipesConfigured();
+  const enabled = configured && (options?.enabled ?? true);
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -46,5 +51,5 @@ export function useViralRecipes(session: Session | null, category: ViralRecipesC
     void load();
   }, [load]);
 
-  return { items, loading, error, enabled, refresh: load };
+  return { items, loading, error, enabled: configured, refresh: load };
 }

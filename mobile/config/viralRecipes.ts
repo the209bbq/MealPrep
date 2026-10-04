@@ -2,16 +2,22 @@
  * Viral recipe shelf — YouTube link-out cards (metadata only; save uses private recipe-import).
  */
 
+import { MEALDB_COPY } from './mealdb';
+
 export const VIRAL_RECIPES_CATEGORIES = ['viral', 'quick', 'budget'] as const;
 
 export type ViralRecipesCategory = (typeof VIRAL_RECIPES_CATEGORIES)[number];
 
-export const VIRAL_RECIPES_FEED_MODES = [...VIRAL_RECIPES_CATEGORIES, 'my_recipes'] as const;
+export const VIRAL_RECIPES_FEED_MODES = [...VIRAL_RECIPES_CATEGORIES, 'classic_recipes', 'my_recipes'] as const;
 
 export type ViralRecipesFeedMode = (typeof VIRAL_RECIPES_FEED_MODES)[number];
 
 export function isViralRecipesCategory(mode: ViralRecipesFeedMode): mode is ViralRecipesCategory {
-  return mode !== 'my_recipes';
+  return mode !== 'my_recipes' && mode !== 'classic_recipes';
+}
+
+export function isClassicRecipesFeedMode(mode: ViralRecipesFeedMode): boolean {
+  return mode === 'classic_recipes';
 }
 
 export const VIRAL_RECIPES = {
@@ -32,6 +38,7 @@ export const VIRAL_RECIPES_FEED_MODE_LABELS: Record<ViralRecipesFeedMode, string
   viral: 'Viral',
   quick: 'Quick',
   budget: 'Budget',
+  classic_recipes: MEALDB_COPY.feedModeLabel,
   my_recipes: 'My recipes',
 };
 
