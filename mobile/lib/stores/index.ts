@@ -1,40 +1,33 @@
+import { STORE_SEARCH } from '../../config/storeSearch';
 import { mapsDirectionsUrl, SMART_SHOP_COPY, SMART_SHOP_STORES } from '../../config/smartShop';
 import { geocodeUsZip } from './nominatim';
 import { fetchOverpassStores, readCachedOverpassStores } from './overpass';
+import { chooseRegionalStaticFallback } from './regionalFallback';
 import { loadSavedStoresFallback } from './savedStoresFallback';
-import { loadRegionalStaticGroceryStores } from './regionalStaticStores';
 import { resolveSearchOriginFast, resolveSearchOriginWithGeocode } from './resolveOrigin';
 import { applyOriginDistancesAndSort } from './storeDistance';
+import { nearbyStoreSearchRadiusMeters } from './storeSearchRadius';
+import { readCachedNearbyStores } from './storeSearchCache';
+import { fetchNearbyStoresFromSupabase } from './supabaseNearbyStores';
 import type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
 
 export type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
 export { geocodeUsZip, geocodeUsZipOrNull } from './nominatim';
 export { mapsDirectionsUrl };
 export { resolveSearchOriginFast, readCachedOverpassStores };
+export { chooseRegionalStaticFallback, isWithinOakdaleRegionalFallback } from './regionalFallback';
+export { nearbyStoreSearchRadiusMeters } from './storeSearchRadius';
+export { nearbyStoresCacheGeohash } from './geohash';
+export { lookupZctaCentroid, loadZctaCentroids } from './zctaCentroids';
 
 function zipGeocodeMessage(reason: string): string {
   switch (reason) {
-    case 'rate_limited':
-      return 'ZIP lookup is rate-limited. Try “Use my location” or wait a minute.';
     case 'not_found':
       return 'Could not find that ZIP code. Check and try again.';
     case 'invalid_zip':
       return 'Enter a valid 5-digit US ZIP code.';
     default:
-      return 'ZIP lookup failed. Try “Use my location”.';
-  }
-}
-
-function overpassWarning(reason: string): string | undefined {
-  switch (reason) {
-    case 'rate_limited':
-      return SMART_SHOP_COPY.osmRateLimited;
-    case 'network':
-      return SMART_SHOP_COPY.osmNetwork;
-    case 'empty':
-      return SMART_SHOP_COPY.osmEmpty;
-    default:
-      return undefined;
+      return 'ZIP lookup failed. Try another ZIP.';
   }
 }
 
@@ -48,13 +41,16 @@ export type InstantGroceryStorePreview = {
   source: 'cache' | 'saved';
 };
 
-/** Cached or saved stores for stale-while-revalidate (no network). */
+/** Cached stores for stale-while-revalidate (no network). */
 export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): InstantGroceryStorePreview | null {
   const origin = resolveSearchOriginFast(params);
   if (!origin) return null;
 
-  const radiusMiles = params.radiusMiles ?? SMART_SHOP_STORES.defaultRadiusMiles;
-  const cached = readCachedOverpassStores(origin, radiusMiles);
+  const radiusM = nearbyStoreSearchRadiusMeters({
+    isGpsOrigin: params.isGpsOrigin,
+    radiusMultiplier: params.radiusMultiplier,
+  });
+  const cached = readCachedNearbyStores(origin, radiusM);
   if (cached?.length) {
     return {
       origin,
@@ -66,15 +62,40 @@ export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): Ins
     };
   }
 
+  if (STORE_SEARCH.overpassEnabled) {
+    const radiusMiles = params.radiusMiles ?? SMART_SHOP_STORES.defaultRadiusMiles;
+    const overpassCached = readCachedOverpassStores(origin, radiusMiles);
+    if (overpassCached?.length) {
+      return {
+        origin,
+        source: 'cache',
+        stores: applyOriginDistancesAndSort(
+          overpassCached.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+          origin,
+        ),
+      };
+    }
+  }
+
   const saved = loadSavedStoresFallback(params.zip);
-  const regional = loadRegionalStaticGroceryStores();
-  const fallback = saved.length > 0 ? saved : regional;
-  if (fallback.length > 0) {
+  if (saved.length > 0) {
     return {
       origin,
-      source: saved.length > 0 ? 'saved' : 'cache',
+      source: 'saved',
       stores: applyOriginDistancesAndSort(
-        fallback.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+        saved.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+        origin,
+      ),
+    };
+  }
+
+  const regional = chooseRegionalStaticFallback(origin);
+  if (regional.length > 0) {
+    return {
+      origin,
+      source: 'cache',
+      stores: applyOriginDistancesAndSort(
+        regional.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
         origin,
       ),
     };
@@ -83,30 +104,17 @@ export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): Ins
   return null;
 }
 
-function applyOsmResult(
-  overpass: Awaited<ReturnType<typeof fetchOverpassStores>>,
+function applyCatalogFallback(
+  origin: ResolvedGeo,
   params: NearbyStoreSearchParams,
-): { osmStores: StoreRecord[]; osmWarning?: string } {
-  let osmStores: StoreRecord[] = overpass.ok ? overpass.stores : [];
-  let osmWarning: string | undefined;
+  catalogStores: StoreRecord[],
+): StoreRecord[] {
+  if (catalogStores.length > 0) return catalogStores;
 
-  if (overpass.ok && overpass.fromStaleCache) {
-    osmWarning = SMART_SHOP_COPY.osmNetworkRetry;
-  } else if (!overpass.ok) {
-    osmWarning = overpassWarning(overpass.reason);
-  }
+  const saved = loadSavedStoresFallback(params.zip);
+  if (saved.length > 0) return saved;
 
-  if (osmStores.length === 0) {
-    const saved = loadSavedStoresFallback(params.zip);
-    const regional = loadRegionalStaticGroceryStores();
-    const fallback = saved.length > 0 ? saved : regional;
-    if (fallback.length > 0) {
-      osmStores = fallback;
-      osmWarning = SMART_SHOP_COPY.osmNetworkRetry;
-    }
-  }
-
-  return { osmStores, osmWarning };
+  return chooseRegionalStaticFallback(origin);
 }
 
 export async function searchNearbyGroceryStores(params: NearbyStoreSearchParams): Promise<{
@@ -114,19 +122,69 @@ export async function searchNearbyGroceryStores(params: NearbyStoreSearchParams)
   stores: StoreRecord[];
   osmWarning?: string;
   storeSearchFailed?: boolean;
+  canWidenSearch?: boolean;
 }> {
   const origin = await resolveSearchOrigin(params);
-  const overpass = await fetchOverpassStores(origin, params);
-  const { osmStores, osmWarning } = applyOsmResult(overpass, params);
+  const radiusM = nearbyStoreSearchRadiusMeters({
+    isGpsOrigin: params.isGpsOrigin,
+    radiusMultiplier: params.radiusMultiplier,
+  });
 
-  const storeSearchFailed = !overpass.ok && osmStores.length === 0;
+  let catalogStores: StoreRecord[] = [];
+  let catalogWarning: string | undefined;
+  let catalogFailed = false;
+
+  const supabase = await fetchNearbyStoresFromSupabase(origin, {
+    radiusM,
+    limit: STORE_SEARCH.nearbyRpcLimit,
+  });
+
+  if (supabase.ok) {
+    catalogStores = supabase.stores;
+    if (supabase.fromCache) {
+      catalogWarning = SMART_SHOP_COPY.osmNetworkRetry;
+    }
+  } else if (supabase.reason === 'unconfigured' || supabase.reason === 'error') {
+    catalogFailed = true;
+    catalogWarning = SMART_SHOP_COPY.osmNetwork;
+  } else if (supabase.reason === 'empty') {
+    catalogFailed = false;
+  }
+
+  if (catalogStores.length === 0 && STORE_SEARCH.overpassEnabled) {
+    const overpass = await fetchOverpassStores(origin, params);
+    if (overpass.ok) {
+      catalogStores = overpass.stores;
+      if (overpass.fromStaleCache) catalogWarning = SMART_SHOP_COPY.osmNetworkRetry;
+      catalogFailed = false;
+    } else if (!catalogWarning) {
+      catalogWarning =
+        overpass.reason === 'rate_limited'
+          ? SMART_SHOP_COPY.osmRateLimited
+          : overpass.reason === 'empty'
+            ? SMART_SHOP_COPY.osmEmpty
+            : SMART_SHOP_COPY.osmNetwork;
+      catalogFailed = true;
+    }
+  }
+
+  const merged = applyCatalogFallback(origin, params, catalogStores);
+  const hadCatalog = catalogStores.length > 0;
+  const storeSearchFailed = merged.length === 0 && catalogFailed;
+  const canWidenSearch =
+    !hadCatalog && merged.length === 0 && (params.radiusMultiplier ?? 1) === 1;
+
+  if (!hadCatalog && merged.length > 0) {
+    catalogWarning = SMART_SHOP_COPY.osmNetworkRetry;
+  }
 
   return {
     origin,
-    osmWarning,
+    osmWarning: catalogWarning,
     storeSearchFailed,
+    canWidenSearch,
     stores: applyOriginDistancesAndSort(
-      osmStores.map((s) => ({
+      merged.map((s) => ({
         ...s,
         url: mapsDirectionsUrl(s),
       })),

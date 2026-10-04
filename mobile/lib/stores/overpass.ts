@@ -1,3 +1,4 @@
+import { STORE_SEARCH } from '../../config/storeSearch';
 import { haversineMiles, milesToMeters, SMART_SHOP_STORES } from '../../config/smartShop';
 import { readCache, writeCache } from './cache';
 import {
@@ -104,6 +105,9 @@ export async function fetchOverpassStores(
   params: NearbyStoreSearchParams,
   options?: FetchOverpassStoresOptions,
 ): Promise<OverpassFetchResult> {
+  if (!STORE_SEARCH.overpassEnabled) {
+    return { ok: false, reason: 'network' };
+  }
   const radiusMiles = params.radiusMiles ?? SMART_SHOP_STORES.defaultRadiusMiles;
   const radiusMeters = Math.round(milesToMeters(radiusMiles));
   const cacheKey = overpassCacheKey(origin, radiusMiles);

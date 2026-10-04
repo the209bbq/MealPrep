@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { STORES_TAB_DEFAULT_ZIP } from '../../config/storesTab';
-import { SMART_SHOP } from '../../config/appConfig';
+import { Platform } from 'react-native';
+import { STORES_TAB_COPY, STORES_TAB_DEFAULT_ZIP } from '../../config/storesTab';
 import { useHydrated } from '../../hooks/useHydrated';
 import type { UserProfile } from '../../types/mealprep';
 import { nearbyStoresInstantPreview, searchNearbyStores, type StoreLocation } from '../deals';
 import { geocodeUsZip } from './nominatim';
 import { sortStoresByDistanceMiles, withDistancesFromOrigin } from './storeDistance';
 import { resolveSearchOriginFast } from './resolveOrigin';
-import { isValidUsZip, normalizeUsZipInput, requestDeviceLocation } from '../smartShop/location';
+import { loadZctaCentroids } from './zctaCentroids';
+import { isValidUsZip, normalizeUsZipInput } from '../smartShop/location';
 import {
   persistHomeLocation,
   readInitialCoords,
@@ -15,7 +16,12 @@ import {
 } from '../smartShop/profileLocation';
 import { readCachedZipPlaceLabel, resolveZipPlaceLabel } from './zipPlaceLabel';
 import { readSavedZip } from '../smartShop/storage';
-import { SMART_SHOP_COPY } from '../../config/smartShop';
+import { requestStoresDeviceLocation } from './requestStoresLocation';
+import {
+  markStoresGeolocationDenied,
+  queryStoresGeolocationPermission,
+  readStoresGeolocationDenied,
+} from './storesGeolocation';
 
 function effectiveZip(profile: UserProfile, zipInput: string): string {
   if (isValidUsZip(zipInput)) return zipInput.trim().slice(0, 5);
@@ -36,11 +42,26 @@ export function useNearbyStoresList(profile: UserProfile) {
   const [updatingStores, setUpdatingStores] = useState(false);
   const [storeSearchFailed, setStoreSearchFailed] = useState(false);
   const [storeSearchWarning, setStoreSearchWarning] = useState<string | null>(null);
+  const [canWidenSearch, setCanWidenSearch] = useState(false);
+  const [radiusMultiplier, setRadiusMultiplier] = useState<1 | 2>(1);
   const [locationHint, setLocationHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [zipPlaceLabel, setZipPlaceLabel] = useState<string | null>(null);
+  const [geoPermission, setGeoPermission] = useState<'granted' | 'denied' | 'prompt' | null>(null);
   const loadStoresGeneration = useRef(0);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void loadZctaCentroids();
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || Platform.OS !== 'web') return;
+    void queryStoresGeolocationPermission().then((state) => {
+      if (state) setGeoPermission(state);
+    });
+  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -50,10 +71,29 @@ export function useNearbyStoresList(profile: UserProfile) {
 
   const searchZip = useMemo(() => effectiveZip(profile, zip), [profile, zip]);
 
+  const hasSavedGps = useMemo(() => Boolean(readInitialCoords(profile)), [profile.homeLat, profile.homeLng, profile.id]);
+
+  const showLocationPrePrompt = useMemo(() => {
+    if (!hydrated || hasSavedGps) return false;
+    if (readStoresGeolocationDenied() || geoPermission === 'denied') return true;
+    if (Platform.OS === 'web' && geoPermission === 'prompt') return true;
+    return false;
+  }, [geoPermission, hasSavedGps, hydrated]);
+
+  const locationDeniedHelp = useMemo(() => {
+    if (readStoresGeolocationDenied() || geoPermission === 'denied') {
+      return STORES_TAB_COPY.locationDeniedHelp;
+    }
+    return null;
+  }, [geoPermission]);
+
   const locationSummary = useMemo(() => {
-    if (originLabel && originLabel !== 'your location') return originLabel;
+    if (originLabel === STORES_TAB_COPY.nearYourLocation) return STORES_TAB_COPY.nearYourLocation;
+    if (originLabel && originLabel !== STORES_TAB_COPY.nearYourLocation) return originLabel;
     const cached = readCachedZipPlaceLabel(searchZip);
-    return zipPlaceLabel ?? cached ?? searchZip;
+    const place = zipPlaceLabel ?? cached;
+    if (place && place !== searchZip) return `${place} (${searchZip})`;
+    return searchZip;
   }, [originLabel, searchZip, zipPlaceLabel]);
 
   useEffect(() => {
@@ -87,17 +127,20 @@ export function useNearbyStoresList(profile: UserProfile) {
   }, [query, sortedStores]);
 
   const loadStores = useCallback(
-    async (coords?: { lat: number; lng: number }) => {
+    async (coords?: { lat: number; lng: number }, options?: { radiusMultiplier?: 1 | 2 }) => {
       const generation = ++loadStoresGeneration.current;
       setError(null);
       setStoreSearchFailed(false);
 
+      const isGpsOrigin = Boolean(coords);
+      const mult = options?.radiusMultiplier ?? radiusMultiplier;
       const zipCode = coords ? undefined : searchZip;
       const searchParams = {
         lat: coords?.lat,
         lng: coords?.lng,
         zip: zipCode,
-        radiusMiles: SMART_SHOP.defaultRadiusMiles,
+        isGpsOrigin,
+        radiusMultiplier: mult,
       };
 
       const instant = nearbyStoresInstantPreview(searchParams);
@@ -112,13 +155,19 @@ export function useNearbyStoresList(profile: UserProfile) {
       }
 
       try {
-        const { stores, originLabel: label, storeSearchWarning: warning, storeSearchFailed: failed } =
-          await searchNearbyStores(searchParams);
+        const {
+          stores,
+          originLabel: label,
+          storeSearchWarning: warning,
+          storeSearchFailed: failed,
+          canWidenSearch: widen,
+        } = await searchNearbyStores(searchParams);
         if (generation !== loadStoresGeneration.current) return;
         setNearbyStores(stores);
         setOriginLabel(label);
         setStoreSearchWarning(warning ?? null);
         setStoreSearchFailed(Boolean(failed));
+        setCanWidenSearch(Boolean(widen));
       } catch (err) {
         if (generation !== loadStoresGeneration.current) return;
         setError(err instanceof Error ? err.message : 'Could not load stores');
@@ -130,7 +179,7 @@ export function useNearbyStoresList(profile: UserProfile) {
         }
       }
     },
-    [searchZip],
+    [radiusMultiplier, searchZip],
   );
 
   useEffect(() => {
@@ -149,19 +198,36 @@ export function useNearbyStoresList(profile: UserProfile) {
 
   const handleUseLocation = useCallback(async () => {
     setLocationHint(null);
-    const resolved = await requestDeviceLocation();
+    if (Platform.OS === 'web') {
+      const perm = await queryStoresGeolocationPermission();
+      if (perm) setGeoPermission(perm);
+      if (perm === 'denied' || readStoresGeolocationDenied()) {
+        markStoresGeolocationDenied();
+        setGeoPermission('denied');
+        return;
+      }
+    }
+
+    const resolved = await requestStoresDeviceLocation();
     if (!resolved) {
-      setLocationHint(SMART_SHOP_COPY.locationUnavailable);
+      if (Platform.OS === 'web') {
+        markStoresGeolocationDenied();
+        setGeoPermission('denied');
+      }
+      const fallbackZip = isValidUsZip(searchZip) ? searchZip : STORES_TAB_DEFAULT_ZIP;
+      setZip(fallbackZip);
+      await finishLocationSetup(undefined);
       return;
     }
+
     await persistHomeLocation({
       lat: resolved.lat,
       lng: resolved.lng,
       zip: isValidUsZip(zip) ? zip : undefined,
     });
-    setLocationHint(`Using ${resolved.source === 'gps' ? 'device' : 'saved'} location`);
+    setLocationHint('Using your location');
     await finishLocationSetup({ lat: resolved.lat, lng: resolved.lng });
-  }, [finishLocationSetup, zip]);
+  }, [finishLocationSetup, searchZip, zip]);
 
   const handleSaveZip = useCallback(async () => {
     if (!isValidUsZip(zip)) {
@@ -174,16 +240,21 @@ export function useNearbyStoresList(profile: UserProfile) {
       setError('Could not look up that ZIP. Try again.');
       return false;
     }
-    const geocoded = { lat: geocodeResult.point.lat, lng: geocodeResult.point.lng };
-    await persistHomeLocation({ zip: trimmed, lat: geocoded.lat, lng: geocoded.lng });
+    await persistHomeLocation({ zip: trimmed });
     setZip(trimmed);
     setError(null);
-    await finishLocationSetup(geocoded);
+    await finishLocationSetup(undefined);
     return true;
   }, [finishLocationSetup, zip]);
 
   const retryStoreSearch = useCallback(() => {
     void loadStores(readInitialCoords(profile));
+  }, [loadStores, profile]);
+
+  const widenStoreSearch = useCallback(() => {
+    setRadiusMultiplier(2);
+    const coords = readInitialCoords(profile);
+    void loadStores(coords ?? undefined, { radiusMultiplier: 2 });
   }, [loadStores, profile]);
 
   return {
@@ -196,14 +267,18 @@ export function useNearbyStoresList(profile: UserProfile) {
     updatingStores,
     storeSearchFailed,
     storeSearchWarning,
+    canWidenSearch,
     locationSummary,
     locationModalOpen,
     setLocationModalOpen,
     locationHint,
+    showLocationPrePrompt,
+    locationDeniedHelp,
     error,
     setError,
     handleUseLocation,
     handleSaveZip,
     retryStoreSearch,
+    widenStoreSearch,
   };
 }

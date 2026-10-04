@@ -33,6 +33,10 @@ export interface NearbyStoreSearchParams {
   lng?: number;
   zip?: string;
   radiusMiles?: number;
+  /** True when search origin is device/saved GPS (tighter radius). */
+  isGpsOrigin?: boolean;
+  /** 1 = default; 2 = one-time wider search. */
+  radiusMultiplier?: 1 | 2;
 }
 
 export interface ResolvedGeo {

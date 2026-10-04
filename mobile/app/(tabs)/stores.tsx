@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { SmartShopLocationLine } from '../../components/smartShop/SmartShopLocationLine';
 import { SmartShopLocationModal } from '../../components/smartShop/SmartShopLocationModal';
 import { StoreDetailSheet } from '../../components/stores/StoreDetailSheet';
+import { StoresLocationPrePrompt } from '../../components/stores/StoresLocationPrePrompt';
 import { StoresNearbyList } from '../../components/stores/StoresNearbyList';
 import { STORES_TAB_COPY } from '../../config/storesTab';
 import { THEME } from '../../config/appConfig';
@@ -38,6 +39,18 @@ export default function StoresScreen() {
 
       <ScrollView className="flex-1 px-4 pb-8" keyboardShouldPersistTaps="handled">
         <Text className="mt-4 text-2xl font-bold text-ink">{STORES_TAB_COPY.title}</Text>
+
+        {stores.showLocationPrePrompt ? (
+          <StoresLocationPrePrompt
+            onUseLocation={() => void stores.handleUseLocation()}
+            onEnterZip={() => stores.setLocationModalOpen(true)}
+            locationDeniedHelp={stores.locationDeniedHelp}
+            showZipField={Boolean(stores.locationDeniedHelp)}
+            zip={stores.zip}
+            onZipChange={stores.setZip}
+            onSaveZip={() => void stores.handleSaveZip()}
+          />
+        ) : null}
 
         <View className="mt-3 flex-row items-center rounded-2xl border border-border bg-card px-3">
           <Ionicons name="search" size={20} color={THEME.muted} />
@@ -84,7 +97,17 @@ export default function StoresScreen() {
         ) : null}
 
         {storesTabShowsNoStoresNearby(listPhase) ? (
-          <Text className="mt-6 text-sm text-muted">{STORES_TAB_COPY.noStores}</Text>
+          <View className="mt-6">
+            <Text className="text-sm text-muted">{STORES_TAB_COPY.noStores}</Text>
+            {stores.canWidenSearch ? (
+              <Pressable
+                onPress={stores.widenStoreSearch}
+                className="mt-3 self-start rounded-xl border border-border bg-card px-4 py-2"
+              >
+                <Text className="text-xs font-bold text-ink">{STORES_TAB_COPY.widenSearch}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
 
         {!storesTabShowsLoading(listPhase) || stores.filteredStores.length > 0 ? (
@@ -94,6 +117,8 @@ export default function StoresScreen() {
         {stores.error && !storesTabShowsLoadError(listPhase) ? (
           <Text className="mt-3 text-sm text-danger">{stores.error}</Text>
         ) : null}
+
+        <Text className="mt-8 text-center text-[10px] leading-4 text-muted">{STORES_TAB_COPY.attribution}</Text>
       </ScrollView>
 
       <SmartShopLocationModal

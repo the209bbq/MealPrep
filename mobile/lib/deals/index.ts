@@ -49,12 +49,15 @@ export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
   originLabel: string;
   storeSearchWarning?: string;
   storeSearchFailed?: boolean;
+  canWidenSearch?: boolean;
 }> {
-  const { origin, stores, osmWarning, storeSearchFailed } = await searchNearbyGroceryStores({
+  const { origin, stores, osmWarning, storeSearchFailed, canWidenSearch } = await searchNearbyGroceryStores({
     lat: params.lat,
     lng: params.lng,
     zip: params.zip,
     radiusMiles: params.radiusMiles ?? SMART_SHOP.defaultRadiusMiles,
+    isGpsOrigin: params.isGpsOrigin,
+    radiusMultiplier: params.radiusMultiplier,
   });
 
   let merged: StoreRecord[] = stores;
@@ -84,6 +87,7 @@ export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
     originLabel: origin.label,
     storeSearchWarning: warning,
     storeSearchFailed,
+    canWidenSearch,
     stores: withDistance.map(storeRecordToLocation),
   };
 }
