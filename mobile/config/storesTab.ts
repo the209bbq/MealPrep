@@ -29,6 +29,7 @@ export const STORES_TAB_COPY = {
   detailDirections: 'Directions',
   detailCall: 'Call',
   detailStorePage: 'Store page',
+  detailViewOnGoogleMaps: 'View on Google Maps',
   detailWeeklyAd: 'Weekly ad',
   detailWeeklyAdThirdParty: 'Weekly ad (third-party)',
   detailGetDelivered: 'Get it delivered',

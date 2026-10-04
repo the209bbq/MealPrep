@@ -74,14 +74,18 @@ const osmOnly: StoreLocation = {
   chain: 'Riverbank Market',
   website: 'https://example-grocery.test/store',
 };
-assert(resolveStorePageUrl(osmOnly) === 'https://example-grocery.test/store', 'OSM website wins when chain unknown');
+const mapsUrl = resolveStorePageUrl(osmOnly);
+assert(mapsUrl.startsWith('https://www.google.com/maps/search/'), 'non-chain opens Maps, not Overture website');
+assert(!mapsUrl.includes('example-grocery'), 'dead OSM website ignored');
 
 const noWebsite: StoreLocation = {
   ...osmOnly,
   website: undefined,
 };
-const mapsUrl = resolveStorePageUrl(noWebsite);
-assert(mapsUrl.startsWith('https://www.google.com/maps/search/'), 'maps fallback');
+assert(
+  resolveStorePageUrl(noWebsite).startsWith('https://www.google.com/maps/search/'),
+  'maps fallback without website',
+);
 
 const winco: StoreLocation = {
   ...oakdaleSaveMart,
@@ -127,7 +131,7 @@ const safeway: StoreLocation = {
   zip: '95361',
 };
 const safewayPage = resolveStorePageUrl(safeway);
-assert(safewayPage.includes('safeway.com/find-store'), 'safeway store locator url');
+assert(safewayPage.includes('safeway.com/store-locator'), 'safeway store locator url');
 
 assert(
   storesTabShowsLoadError({
