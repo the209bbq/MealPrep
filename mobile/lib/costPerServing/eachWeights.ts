@@ -68,6 +68,8 @@ export const GRAMS_PER_CUP_BY_ID: Readonly<Record<string, number>> = {
   frozen_peas: 134,
   frozen_corn: 152,
   frozen_spinach: 190,
+  frozen_berries: 140,
+  frozen_fries: 85,
   cheddar: 113,
   mozzarella: 112,
   parmesan: 100,

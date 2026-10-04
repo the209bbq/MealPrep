@@ -4,6 +4,9 @@
  */
 
 import { calculateRecipeCostPerServing, formatUsd } from '../lib/costPerServing';
+import { sampleRecipeAmountForEntry } from '../lib/costPerServing/basePriceAuditSample';
+import { BASE_PRICE_TABLE } from '../lib/costPerServing/basePrices';
+import { proratedPackageCost } from '../lib/costPerServing/amountToPackage';
 import { normalizeIngredientAmount } from '../lib/costPerServing/parseIngredientAmount';
 import type { Recipe } from '../types/mealprep';
 
@@ -81,6 +84,38 @@ const largeOnion = calculateRecipeCostPerServing(
   ctx,
 );
 assert(largeOnion.pricedCount === 1, 'large onion should price');
+
+for (const row of [
+  { name: 'eggs', quantity: 2, unit: '' },
+  { name: 'eggs', quantity: 2, unit: 'large' },
+  { name: 'large eggs', quantity: 2, unit: '' },
+]) {
+  const eggs = calculateRecipeCostPerServing(
+    {
+      servings: 4,
+      ingredients: [{ ingredientId: 'e', name: row.name, quantity: row.quantity, unit: row.unit }],
+    },
+    ctx,
+  );
+  assert(eggs.pricedCount === 1, `should price ${row.name} (${row.quantity} ${row.unit})`);
+}
+
+const auditFailures: string[] = [];
+for (const entry of BASE_PRICE_TABLE) {
+  const sample = sampleRecipeAmountForEntry(entry);
+  const cost = proratedPackageCost({
+    quantity: sample.quantity,
+    unit: sample.unit,
+    packageAmount: entry.packageAmount,
+    packageUnit: entry.packageUnit,
+    packagePrice: entry.packagePrice,
+    baseEntry: entry,
+  });
+  if (cost == null || cost <= 0) {
+    auditFailures.push(`${entry.id} (${sample.quantity} ${sample.unit})`);
+  }
+}
+assert(auditFailures.length === 0, `base price audit failed: ${auditFailures.join(', ')}`);
 
 const chickenBowl = calculateRecipeCostPerServing(
   {

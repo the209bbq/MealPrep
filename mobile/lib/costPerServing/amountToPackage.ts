@@ -1,5 +1,6 @@
 import { amountToOunces, parsePackageSizeFromText, type ProductPackageSize } from '../deals/packagePricing';
 import { gramsEachForEntry, gramsPerCupForEntry } from './eachWeights';
+import { countPackageUsedFraction, isRecipeCountUnit, canonicalCountUnit } from './countUnits';
 import { volumeToMl, volumeUsedFraction, isVolumeUnit, canonicalVolumeUnit } from './volumeUnits';
 import type { BasePriceEntry } from './types';
 
@@ -14,27 +15,6 @@ function normalizeMassUnit(unit: string): string {
   if (u === 'ounce' || u === 'ounces' || u === 'oz') return 'oz';
   if (u === 'pound' || u === 'pounds' || u === 'lbs' || u === 'lb') return 'lb';
   return u;
-}
-
-function isCountUnit(unit: string): boolean {
-  const u = unit.trim().toLowerCase();
-  return (
-    u === 'each' ||
-    u === 'ea' ||
-    u === 'ct' ||
-    u === 'count' ||
-    u === 'whole' ||
-    u === 'piece' ||
-    u === 'pc' ||
-    u === 'can' ||
-    u === 'jar' ||
-    u === 'head' ||
-    u === 'bunch' ||
-    u === 'stick' ||
-    u === 'slice' ||
-    u === 'clove' ||
-    u === 'package'
-  );
 }
 
 function massToGrams(quantity: number, unit: string): number | null {
@@ -54,6 +34,14 @@ function packageMassGrams(packageSize: ProductPackageSize): number | null {
   return null;
 }
 
+function canonicalNeedUnit(unit: string): string {
+  const trimmed = unit.trim();
+  if (!trimmed) return 'each';
+  if (isRecipeCountUnit(trimmed)) return canonicalCountUnit(trimmed);
+  if (isVolumeUnit(trimmed)) return canonicalVolumeUnit(trimmed);
+  return trimmed.toLowerCase();
+}
+
 function usedAmountInPackageUnits(input: {
   quantity: number;
   unit: string;
@@ -65,16 +53,16 @@ function usedAmountInPackageUnits(input: {
   const { quantity, unit, packageSize, gramsPerCup, gramsEach, sizeScale = 1 } = input;
   if (!Number.isFinite(quantity) || quantity <= 0) return null;
 
-  const needU = unit.trim() ? canonicalVolumeUnit(unit) : 'each';
-  const pkgU = canonicalVolumeUnit(packageSize.unit);
+  const needU = canonicalNeedUnit(unit);
+  const pkgU = canonicalNeedUnit(packageSize.unit);
 
-  if (needU === 'dozen') {
-    const eachCount = quantity * 12;
-    if (packageSize.unit === 'dozen') return eachCount / (packageSize.amount * 12);
-    if (isCountUnit('each') && isCountUnit(packageSize.unit)) {
-      return eachCount / packageSize.amount;
-    }
-  }
+  const countFrac = countPackageUsedFraction({
+    quantity,
+    unit: needU,
+    packageAmount: packageSize.amount,
+    packageUnit: pkgU,
+  });
+  if (countFrac != null) return countFrac;
 
   const volFrac = volumeUsedFraction(quantity, needU, packageSize.amount, packageSize.unit);
   if (volFrac != null) return volFrac;
@@ -92,20 +80,10 @@ function usedAmountInPackageUnits(input: {
     }
   }
 
-  if (isCountUnit(needU) && gramsEach != null && gramsEach > 0) {
+  if (isRecipeCountUnit(needU) && gramsEach != null && gramsEach > 0) {
     const needGrams = quantity * gramsEach * sizeScale;
     const pkgGrams = packageMassGrams(packageSize);
     if (pkgGrams != null && pkgGrams > 0) return needGrams / pkgGrams;
-  }
-
-  if (needU === 'clove' && (packageSize.unit === 'each' || packageSize.unit === 'head')) {
-    const CLOVES_PER_HEAD = 10;
-    return quantity / (packageSize.amount * CLOVES_PER_HEAD);
-  }
-
-  if (isCountUnit(needU) && isCountUnit(packageSize.unit)) {
-    if (packageSize.unit === 'dozen') return quantity / (packageSize.amount * 12);
-    return quantity / packageSize.amount;
   }
 
   const needOz = amountToOunces(quantity, needU);
