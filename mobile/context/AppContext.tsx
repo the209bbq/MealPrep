@@ -50,6 +50,15 @@ import { clearAvatarPhoto, uploadAvatarImage } from '../lib/avatars/uploadAvatar
 import type { PreparedAvatarImage } from '../lib/avatars/types';
 import { MEAL_CALENDAR } from '../config/mealCalendar';
 import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
+import { filterPantryMatchesForDietPrefs } from '../lib/diet/filterRows';
+import {
+  DEFAULT_USER_DIET_PREFS,
+  readLocalUserDietPrefs,
+  writeLocalUserDietPrefs,
+} from '../lib/diet/prefs';
+import { ingredientLinesFromRecipe } from '../lib/diet/ingredientLines';
+import type { UserDietPrefs } from '../lib/diet/types';
+import { fetchUserDietPrefs, upsertUserDietPrefs } from '../lib/supabaseDietPrefs';
 import {
   applyPantryDeductions,
   buildPantryDeductionLines,
@@ -316,6 +325,8 @@ interface AppContextValue {
   addMissingForPlannedMealsToGrocery: () => void;
   userPreferences: UserPreferences;
   setUserPreference: <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => void;
+  userDietPrefs: UserDietPrefs;
+  saveUserDietPrefs: (prefs: UserDietPrefs) => Promise<void>;
   undoToast: UndoToastState | null;
   dismissUndoToast: () => void;
   setServingOverride: (recipeId: string, servings: number) => void;
@@ -353,6 +364,8 @@ interface AppContextValue {
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
   pantryRecipeMatches: PantryMatchIndex;
+  /** Pantry-ranked kitchen recipes after diet/allergy hiding rules. */
+  pantryRecipeMatchesRankedFiltered: RecipePantryMatch[];
   pantryRecipeRecommendations: RecipePantryMatch[];
   /** Published MealPlanatic library recipes (Supabase). */
   libraryRecipes: Recipe[];
@@ -409,10 +422,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [servingOverrides, setServingOverrides] = useState<Record<string, number>>({});
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(USER_PREFERENCE_DEFAULTS);
+  const [userDietPrefs, setUserDietPrefs] = useState<UserDietPrefs>(DEFAULT_USER_DIET_PREFS);
   const [guestKitchenHydrated, setGuestKitchenHydrated] = useState(() => demoMode);
 
   useEffect(() => {
     if (!hydrated) return;
+    setUserDietPrefs(readLocalUserDietPrefs());
     setUserPreferences({
       ...USER_PREFERENCE_DEFAULTS,
       ...readJson(STORAGE_KEYS.userPreferences, USER_PREFERENCE_DEFAULTS),
@@ -483,6 +498,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         autoAddMissingToGrocery: bundle.profile!.preferences.autoAddMissingToGrocery,
       }));
       hydrateLocationFromProfile(bundle.profile);
+    }
+
+    try {
+      const remoteDietPrefs = await fetchUserDietPrefs(supabase, userId);
+      if (remoteDietPrefs) {
+        setUserDietPrefs(remoteDietPrefs);
+        writeLocalUserDietPrefs(remoteDietPrefs);
+      }
+    } catch {
+      // Table may not exist until migration is applied.
     }
 
     let nextPantry = normalizePantryItemList(bundle.pantry);
@@ -579,6 +604,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (userId) markPostSignupSetupDone(userId);
     setShowPostSignupSetup(false);
   }, [userId]);
+
+  const saveUserDietPrefs = useCallback(
+    async (prefs: UserDietPrefs) => {
+      setUserDietPrefs(prefs);
+      writeLocalUserDietPrefs(prefs);
+      if (demoMode || !supabase || !userId) return;
+      try {
+        const saved = await upsertUserDietPrefs(supabase, userId, prefs);
+        setUserDietPrefs(saved);
+        writeLocalUserDietPrefs(saved);
+      } catch {
+        // Best-effort until migration is applied.
+      }
+    },
+    [demoMode, supabase, userId],
+  );
 
   const saveProfileSetup = useCallback(
     async (patch: {
@@ -842,13 +883,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return buildPantryMatchIndex(kitchenRecipes, pantry);
   }, [feedKitchenRecipes, pantry, profile.householdSize, servingOverrides]);
 
+  const recipeIngredientLinesById = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const recipe of feedKitchenRecipes) {
+      map.set(recipe.id, ingredientLinesFromRecipe(recipe));
+    }
+    return map;
+  }, [feedKitchenRecipes]);
+
+  const pantryRecipeMatchesRankedFiltered = useMemo(
+    () =>
+      filterPantryMatchesForDietPrefs(
+        pantryRecipeMatches.ranked,
+        userDietPrefs,
+        recipeIngredientLinesById,
+      ),
+    [pantryRecipeMatches.ranked, recipeIngredientLinesById, userDietPrefs],
+  );
+
   const pantryRecipeRecommendations = useMemo(() => {
     if (pantry.length === 0) return [];
-    return filterRankedMatches(pantryRecipeMatches.ranked, 'all', KITCHEN_LIST_DEFAULT_MIN_PERCENT, {
-      minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
-      pantryItemCount: pantry.length,
-    }).slice(0, RECIPE_MATCHING.homeRecommendationsLimit);
-  }, [pantry.length, pantryRecipeMatches.ranked]);
+    const ranked = filterRankedMatches(
+      pantryRecipeMatchesRankedFiltered,
+      'all',
+      KITCHEN_LIST_DEFAULT_MIN_PERCENT,
+      {
+        minMatchedCount: DEFAULT_MIN_MATCHED_INGREDIENTS,
+        pantryItemCount: pantry.length,
+      },
+    ).slice(0, RECIPE_MATCHING.homeRecommendationsLimit);
+    return ranked;
+  }, [pantry.length, pantryRecipeMatchesRankedFiltered]);
 
   const setDemoRole = useCallback((next: UserRole) => {
     setRole(next);
@@ -2161,6 +2226,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addMissingForPlannedMealsToGrocery,
       userPreferences,
       setUserPreference,
+      userDietPrefs,
+      saveUserDietPrefs,
       undoToast,
       dismissUndoToast,
       setServingOverride,
@@ -2185,6 +2252,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setFeatureFlag,
       refreshGrocery,
       pantryRecipeMatches,
+      pantryRecipeMatchesRankedFiltered,
       pantryRecipeRecommendations,
       libraryRecipes,
       feedKitchenRecipes,
@@ -2273,12 +2341,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addMissingForPlannedMealsToGrocery,
       userPreferences,
       setUserPreference,
+      userDietPrefs,
+      saveUserDietPrefs,
       undoToast,
       dismissUndoToast,
       updateRecipe,
       importDiscoveredRecipe,
       saveLinkImportedRecipe,
       pantryRecipeMatches,
+      pantryRecipeMatchesRankedFiltered,
       pantryRecipeRecommendations,
       libraryRecipes,
       feedKitchenRecipes,
