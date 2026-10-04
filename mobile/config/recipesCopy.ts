@@ -134,6 +134,22 @@ export const RECIPES_COPY = {
     servingsAndTime: (servings: number, minutes: number) =>
       `${Math.max(1, servings)} servings · ${Math.max(1, minutes)} min`,
     stepLabel: (index: number) => `Step ${index + 1}`,
+    costPerServingAbout: (formatted: string) => `About ${formatted} per serving`,
+    costEstimateMeta: (unpricedCount: number, assumedDefaultServings: boolean) => {
+      const parts = ['Estimate'];
+      if (unpricedCount > 0) {
+        parts.push(
+          unpricedCount === 1 ? '1 item not priced' : `${unpricedCount} items not priced`,
+        );
+      }
+      if (assumedDefaultServings) {
+        parts.push('4 servings assumed');
+      }
+      return parts.join(' · ');
+    },
+    costPerServingAccessibility: (costPerServing: number, unpricedCount: number) =>
+      `Estimated cost about $${costPerServing.toFixed(2)} per serving. ${unpricedCount} ingredients not priced.`,
+    costBreakdownTotal: (servings: number) => `Total (${servings} servings)`,
   },
 } as const;
 
