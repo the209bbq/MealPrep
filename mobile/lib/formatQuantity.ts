@@ -1,16 +1,14 @@
 const WHOLE_TOLERANCE = 0.04;
 const PINCH_THRESHOLD = 1 / 16;
 
+/** Common recipe fractions (nearest-distance snapping for display). */
 const COOKING_FRACTIONS: ReadonlyArray<{ value: number; char: string }> = [
   { value: 1 / 8, char: '⅛' },
   { value: 1 / 4, char: '¼' },
   { value: 1 / 3, char: '⅓' },
-  { value: 3 / 8, char: '⅜' },
   { value: 1 / 2, char: '½' },
-  { value: 5 / 8, char: '⅝' },
   { value: 2 / 3, char: '⅔' },
   { value: 3 / 4, char: '¾' },
-  { value: 7 / 8, char: '⅞' },
 ];
 
 const CURRENCY_SYMBOLS = '$£€¥₹¢';
@@ -78,11 +76,6 @@ function formatQuantityAsFraction(value: number): string {
 
   if (remainder <= WHOLE_TOLERANCE) {
     return String(whole);
-  }
-
-  if (whole === 0 && remainder < 1 / 8) {
-    if (remainder < PINCH_THRESHOLD) return 'pinch';
-    return '⅛';
   }
 
   const fracChar = nearestFractionChar(remainder);

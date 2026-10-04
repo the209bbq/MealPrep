@@ -30,9 +30,9 @@ export const SMART_SHOP_STORES = {
   /** @deprecated Use overpassApiUrls — kept for scripts. */
   overpassApiUrl: 'https://overpass-api.de/api/interpreter',
   /** Per-mirror POST timeout while racing Overpass endpoints. */
-  overpassRequestTimeoutMs: 8_000,
+  overpassRequestTimeoutMs: 4_000,
   /** Overall cap for the parallel mirror race (ms). */
-  overpassOverallTimeoutMs: 12_000,
+  overpassOverallTimeoutMs: 6_000,
   /** Overpass QL `[timeout:…]` server-side limit (seconds). */
   overpassQueryTimeoutSec: 10,
   /** In-memory cache TTL for geocode / Overpass (ms). */

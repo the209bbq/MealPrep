@@ -169,6 +169,7 @@ const checkedRecipeItem: GroceryListItem = {
   unit: 'each',
   checked: true,
   sourceRecipeIds: [recipe.id],
+  origin: 'plan',
 };
 const dismissalKeys = groceryDismissalKeysForItem(checkedRecipeItem);
 addGroceryDismissals(owner, dismissalKeys);
@@ -215,6 +216,7 @@ const mergedManual = mergeManualGroceryLines(
       unit: 'each',
       checked: false,
       sourceRecipeIds: ['r1'],
+      origin: 'plan',
     },
   ],
   [createManualGroceryItem({ name: 'limes', quantity: 1, unit: 'each' })],
@@ -240,6 +242,7 @@ const line: GroceryListItem = {
   unit: 'each',
   checked: true,
   sourceRecipeIds: [],
+  origin: 'plan',
 };
 let afterCheck = applyGroceryCheckRestock(startPantry, line, ledger);
 assert(afterCheck.length === 1, 'check adds pantry row once');

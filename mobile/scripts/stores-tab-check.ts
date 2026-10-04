@@ -20,6 +20,10 @@ import {
   resolveWeeklyAdLink,
   storeDeliveryUrl,
 } from '../lib/stores/storeLinks';
+import {
+  storesTabShowsLoadError,
+  storesTabShowsNoSearchResults,
+} from '../lib/stores/storesTabEmptyState';
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -113,5 +117,33 @@ const wincoPage = resolveStorePageUrl(winco);
 assert(wincoPage.includes('wincofoods.com/store-locator'), 'winco store locator');
 
 assert(VERIFIED_WEEKLY_AD_CHAIN_KEYS.length >= 15, 'weekly ad keys documented');
+
+const safeway: StoreLocation = {
+  ...oakdaleSaveMart,
+  chain: 'Safeway',
+  name: 'Safeway',
+  addressLine: '1441 E F St',
+  city: 'Oakdale',
+  zip: '95361',
+};
+const safewayPage = resolveStorePageUrl(safeway);
+assert(safewayPage.includes('safeway.com/find-store'), 'safeway store locator url');
+
+assert(
+  storesTabShowsLoadError({
+    loadingStores: false,
+    storeSearchFailed: true,
+    filteredCount: 0,
+    hasSearchQuery: false,
+  }),
+);
+assert(
+  storesTabShowsNoSearchResults({
+    loadingStores: false,
+    storeSearchFailed: false,
+    filteredCount: 0,
+    hasSearchQuery: true,
+  }),
+);
 
 console.log('stores-tab-check: ok');

@@ -38,6 +38,7 @@ import {
   filterRecipesTabRowsForDietPrefs,
 } from '../../lib/diet/filterRows';
 import { buildCreatorFeedCardModels } from '../../lib/recipes/creatorFeedRows';
+import { findKitchenRecipeBySourceUrl } from '../../lib/recipes/recipeSourceUrl';
 import { useSavedRecipes, type SavedRecipeToggleOutcome } from '../../hooks/useSavedRecipes';
 import { MyRecipesSheet } from '../../components/recipes/MyRecipesSheet';
 import { savedCreatorItemFromRecord } from '../../lib/savedRecipes/resolveRows';
@@ -76,10 +77,28 @@ export default function RecipesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [feedMode, setFeedMode] = useState<CreatorRecipesFeedMode>('popular');
   const [selectedCreator, setSelectedCreator] = useState<CreatorListItem | null>(null);
+
+  const handleFeedModeChange = useCallback((mode: CreatorRecipesFeedMode) => {
+    setFeedMode(mode);
+    if (isClassicRecipesFeedMode(mode)) {
+      setSelectedCreator(null);
+    }
+  }, []);
+
+  const handleSelectCreator = useCallback(
+    (creator: CreatorListItem) => {
+      if (isClassicRecipesFeedMode(feedMode)) {
+        setFeedMode('popular');
+      }
+      setSelectedCreator(creator);
+    },
+    [feedMode],
+  );
   const creatorFeedEnabled =
     RECIPE_SOURCES.creatorRecipesPrimaryFeed && isCreatorRecipesConfigured();
   const browseMode: CreatorRecipesBrowseMode = isCreatorBrowseMode(feedMode) ? feedMode : 'popular';
-  const showClassicRecipesFeed = creatorFeedEnabled && isClassicRecipesFeedMode(feedMode);
+  const showClassicRecipesFeed =
+    creatorFeedEnabled && isClassicRecipesFeedMode(feedMode) && !selectedCreator;
   const [myRecipesOpen, setMyRecipesOpen] = useState(false);
 
   const handleSavedRecipeToggleOutcome = useCallback(
@@ -238,11 +257,15 @@ export default function RecipesScreen() {
   const detailMatch = useMemo(() => {
     if (!detailRow) return undefined;
     if (viralOpenState && detailRow.kind === 'kitchen') {
+      const imported = findKitchenRecipeBySourceUrl(feedKitchenRecipes, viralOpenState.item.watchUrl);
+      if (imported) {
+        return pantryRecipeMatches.byRecipeId.get(imported.id) ?? detailRow.match;
+      }
       const fresh = pantryRecipeMatches.byRecipeId.get(detailRow.recipe.id);
       if (fresh) return fresh;
     }
     return detailRow.match;
-  }, [detailRow, pantryRecipeMatches.byRecipeId, viralOpenState]);
+  }, [detailRow, feedKitchenRecipes, pantryRecipeMatches.byRecipeId, viralOpenState]);
 
   const showLegacyKitchenFeed = !creatorFeedEnabled;
   const searching = searchQuery.trim().length >= 2;
@@ -396,7 +419,7 @@ export default function RecipesScreen() {
             </Pressable>
           ) : null}
           {creatorFeedEnabled && !searching ? (
-            <CreatorRecipesFeedModeDropdown value={feedMode} onChange={setFeedMode} />
+            <CreatorRecipesFeedModeDropdown value={feedMode} onChange={handleFeedModeChange} />
           ) : null}
         </View>
         <RecipeImportFromShareParams
@@ -431,7 +454,7 @@ export default function RecipesScreen() {
           </Pressable>
         ) : null}
         {creatorFeedEnabled && !searching && !selectedCreator ? (
-          <CreatorAvatarsRow creators={creators} onSelect={setSelectedCreator} />
+          <CreatorAvatarsRow creators={creators} onSelect={handleSelectCreator} />
         ) : null}
         {creatorsLoading && creatorFeedEnabled && !searching && !selectedCreator ? (
           <View className="mt-3 flex-row items-center gap-2">
@@ -547,9 +570,9 @@ export default function RecipesScreen() {
         : null}
 
       {creatorFeedEnabled &&
-      isCreatorBrowseMode(feedMode) &&
       !searching &&
-      !showClassicRecipesFeed
+      !showClassicRecipesFeed &&
+      (selectedCreator || isCreatorBrowseMode(feedMode))
         ? browseVideoModels.map((model) => (
             <CreatorRecipesFeedCard
               key={model.videoId}

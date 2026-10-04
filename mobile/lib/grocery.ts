@@ -6,6 +6,7 @@ import {
   findPantryItemsForIngredient,
   totalPantryQuantityInUnit,
 } from './recipeMatch/pantryStock';
+import { isGroceryOriginPinned, preferGroceryOrigin } from './grocery/origin';
 import { normalizeIngredientName } from './recipeMatch/normalize';
 
 /** Store aisle order for grouped grocery UI. */
@@ -21,7 +22,7 @@ export const GROCERY_AISLE_ORDER: PantryCategory[] = [
 ];
 
 export function isManualGroceryItem(item: GroceryListItem): boolean {
-  return item.ingredientId.startsWith('manual-');
+  return item.origin === 'manual' || item.ingredientId.startsWith('manual-');
 }
 
 export function groupGroceryByAisle(items: GroceryListItem[]): { category: PantryCategory; label: string; items: GroceryListItem[] }[] {
@@ -78,7 +79,7 @@ export function buildGroceryList(
   pantry: PantryItem[],
   servingOverrides: Record<string, number>,
   previous: GroceryListItem[],
-  options?: BuildGroceryListOptions & { householdSize?: number },
+  options?: BuildGroceryListOptions,
 ): GroceryListItem[] {
   const dismissals = options?.groceryDismissals ?? new Set<string>();
   const needed = new Map<
@@ -88,10 +89,7 @@ export function buildGroceryList(
 
   for (const recipe of recipes) {
     if (!selectedRecipeIds.includes(recipe.id)) continue;
-    const householdSize = options?.householdSize;
-    const servings =
-      servingOverrides[recipe.id] ??
-      (householdSize != null && householdSize > 0 ? householdSize : recipe.servings);
+    const servings = servingOverrides[recipe.id] ?? recipe.servings;
     const scale = recipe.servings > 0 ? servings / recipe.servings : 1;
     for (const ingredient of recipe.ingredients) {
       const key = `${normalizeIngredientName(ingredient.name)}::${ingredient.unit.trim().toLowerCase()}`;
@@ -114,7 +112,7 @@ export function buildGroceryList(
 
   const checked = new Map(previous.map((item) => [normalizeIngredientName(item.name) + '::' + item.unit.trim().toLowerCase(), item.checked]));
 
-  const manualItems = previous.filter((item) => isManualGroceryItem(item));
+  const pinnedItems = previous.filter((item) => isGroceryOriginPinned(item.origin));
 
   const list: GroceryListItem[] = [];
   for (const [key, value] of needed) {
@@ -155,11 +153,12 @@ export function buildGroceryList(
       sourceRecipeIds: value.recipeIds.filter(
         (recipeId) => !isGroceryDismissed(dismissals, recipeId, value.name, value.unit),
       ),
+      origin: 'plan',
     });
   }
 
   const recipeItems = list.sort((a, b) => a.name.localeCompare(b.name));
-  return mergeManualGroceryLines(recipeItems, manualItems);
+  return mergeManualGroceryLines(recipeItems, pinnedItems);
 }
 
 function groceryLineKey(item: Pick<GroceryListItem, 'name' | 'unit'>): string {
@@ -183,6 +182,7 @@ export function mergeManualGroceryLines(
         ...existing,
         quantity: roundQty(existing.quantity + manual.quantity),
         checked: existing.checked || manual.checked,
+        origin: preferGroceryOrigin(existing.origin, manual.origin),
       };
       continue;
     }
@@ -211,5 +211,6 @@ export function createManualGroceryItem(input: {
     unit: input.unit.trim() || 'each',
     checked: false,
     sourceRecipeIds: [],
+    origin: 'manual',
   };
 }

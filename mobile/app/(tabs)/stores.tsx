@@ -10,14 +10,24 @@ import { THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 import type { StoreLocation } from '../../lib/deals/types';
 import { useNearbyStoresList } from '../../lib/stores/useNearbyStoresList';
+import {
+  storesTabShowsLoadError,
+  storesTabShowsLoading,
+  storesTabShowsNoSearchResults,
+  storesTabShowsNoStoresNearby,
+} from '../../lib/stores/storesTabEmptyState';
 
 export default function StoresScreen() {
   const { profile } = useApp();
   const stores = useNearbyStoresList(profile);
   const [selectedStore, setSelectedStore] = useState<StoreLocation | null>(null);
 
-  const showEmpty =
-    !stores.loadingStores && !stores.storeSearchFailed && stores.filteredStores.length === 0 && !stores.query.trim();
+  const listPhase = {
+    loadingStores: stores.loadingStores,
+    storeSearchFailed: stores.storeSearchFailed,
+    filteredCount: stores.filteredStores.length,
+    hasSearchQuery: Boolean(stores.query.trim()),
+  };
 
   return (
     <View className="flex-1 bg-paper">
@@ -46,18 +56,18 @@ export default function StoresScreen() {
         {stores.updatingStores ? (
           <Text className="mt-2 text-xs text-muted">{STORES_TAB_COPY.updating}</Text>
         ) : null}
-        {stores.storeSearchWarning ? (
+        {stores.storeSearchWarning && stores.filteredStores.length > 0 ? (
           <Text className="mt-2 text-xs text-muted">{stores.storeSearchWarning}</Text>
         ) : null}
 
-        {stores.loadingStores && stores.filteredStores.length === 0 ? (
+        {storesTabShowsLoading(listPhase) ? (
           <View className="mt-8 items-center">
             <ActivityIndicator color={THEME.primary} />
             <Text className="mt-3 text-sm text-muted">{STORES_TAB_COPY.loading}</Text>
           </View>
         ) : null}
 
-        {stores.storeSearchFailed && stores.filteredStores.length === 0 ? (
+        {storesTabShowsLoadError(listPhase) ? (
           <View className="mt-6 rounded-2xl border border-border bg-card px-4 py-4">
             <Text className="text-sm text-muted">{STORES_TAB_COPY.loadFailed}</Text>
             <Pressable
@@ -69,13 +79,21 @@ export default function StoresScreen() {
           </View>
         ) : null}
 
-        {showEmpty ? <Text className="mt-6 text-sm text-muted">{STORES_TAB_COPY.noStores}</Text> : null}
+        {storesTabShowsNoSearchResults(listPhase) ? (
+          <Text className="mt-6 text-sm text-muted">{STORES_TAB_COPY.emptySearch}</Text>
+        ) : null}
 
-        {!stores.loadingStores || stores.filteredStores.length > 0 ? (
+        {storesTabShowsNoStoresNearby(listPhase) ? (
+          <Text className="mt-6 text-sm text-muted">{STORES_TAB_COPY.noStores}</Text>
+        ) : null}
+
+        {!storesTabShowsLoading(listPhase) || stores.filteredStores.length > 0 ? (
           <StoresNearbyList stores={stores.filteredStores} onSelectStore={setSelectedStore} />
         ) : null}
 
-        {stores.error ? <Text className="mt-3 text-sm text-danger">{stores.error}</Text> : null}
+        {stores.error && !storesTabShowsLoadError(listPhase) ? (
+          <Text className="mt-3 text-sm text-danger">{stores.error}</Text>
+        ) : null}
       </ScrollView>
 
       <SmartShopLocationModal

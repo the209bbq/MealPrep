@@ -163,7 +163,11 @@ export function useViralRecipeOpen(options: {
     if (!openState || openState.importing) return;
     const synced = resolveRowForItem(openState.item);
     if (!synced) return;
-    if (synced.recipe.id !== openState.row.recipe.id || synced.match.missingCount !== openState.row.match.missingCount) {
+    const recipeChanged = synced.recipe.id !== openState.row.recipe.id;
+    const matchChanged =
+      synced.match.missingCount !== openState.row.match.missingCount ||
+      synced.match.totalIngredients !== openState.row.match.totalIngredients;
+    if (recipeChanged || matchChanged) {
       setOpenState((prev) =>
         prev?.item.videoId === openState.item.videoId
           ? { ...prev, row: synced, importError: null }

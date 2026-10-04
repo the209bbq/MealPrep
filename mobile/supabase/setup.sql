@@ -66,6 +66,7 @@ create table if not exists public.grocery_list_items (
   unit text not null,
   checked boolean not null default false,
   source_recipe_ids jsonb not null default '[]'::jsonb,
+  origin text not null default 'plan' check (origin in ('plan', 'add_missing', 'manual')),
   updated_at timestamptz not null default now()
 );
 

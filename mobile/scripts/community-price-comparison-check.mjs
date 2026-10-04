@@ -5,13 +5,13 @@ import { resolvePriceValidity, defaultRegularValidUntil } from '../lib/community
 import { communityLineTotalForItem } from '../lib/communityDeals/communityLineTotal.ts';
 import { mergeCommunityDealsIntoSearchResult } from '../lib/communityDeals/mergeIntoDeals.ts';
 import { assembleDealsResult } from '../lib/deals/buildShopResult.ts';
-import { isPastLocalDate } from '../lib/communityDeals/localDate.ts';
+import { isPastLocalDate, parseLocalDateOnly } from '../lib/communityDeals/localDate.ts';
 
 assert.equal(COMMUNITY_DEALS.regularPriceValidDays, 30);
 
 const regular = resolvePriceValidity({});
 assert.equal(regular.priceKind, 'regular');
-const regularUntil = new Date(regular.validUntil);
+const regularUntil = parseLocalDateOnly(regular.validUntil);
 const expectedUntil = new Date();
 expectedUntil.setDate(expectedUntil.getDate() + 30);
 assert.equal(regularUntil.toDateString(), expectedUntil.toDateString());

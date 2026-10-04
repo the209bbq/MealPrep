@@ -159,6 +159,8 @@ export interface Recipe {
   imageUrl?: string | null;
 }
 
+export type GroceryItemOrigin = 'plan' | 'add_missing' | 'manual';
+
 export interface GroceryListItem {
   id: string;
   ingredientId: string;
@@ -168,6 +170,8 @@ export interface GroceryListItem {
   unit: string;
   checked: boolean;
   sourceRecipeIds: string[];
+  /** How the row was added; only `plan` rows are pruned on meal-plan rebuild. */
+  origin: GroceryItemOrigin;
 }
 
 export const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;

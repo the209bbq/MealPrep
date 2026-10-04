@@ -47,7 +47,9 @@ assert(instantCache?.length === 1, 'cached stores should be readable before any 
 
 const query = buildOverpassGroceryQuery(origin.lat, origin.lng, 16093, 10);
 assert(query.includes('[timeout:10]'), 'overpass query should use server timeout 10');
-assert(!query.includes('wholesale'), 'overpass query should omit wholesale shops');
+assert(query.includes('wholesale'), 'overpass query should include wholesale clubs (Costco, etc.)');
+assert(query.includes('greengrocer'), 'overpass query should include specialty grocery shops');
+assert(!query.includes('convenience'), 'overpass query should not fetch convenience stores');
 assert(query.includes('Q483551'), 'overpass query should include Walmart wikidata');
 assert(query.includes('Q1046951'), 'overpass query should include Target wikidata');
 assert(query.includes('department_store|general'), 'overpass query should include big-box shop tags');

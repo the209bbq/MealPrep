@@ -13,7 +13,7 @@ import type { RecipePantryMatch } from '../../lib/recipeMatch';
 import type { Recipe } from '../../types/mealprep';
 import type { ViralRecipeLinkItem } from '../../lib/viralRecipes/types';
 import { RecipeDietNotice } from '../diet/RecipeDietNotice';
-import { ingredientLinesFromRecipe } from '../../lib/diet/ingredientLines';
+import { ingredientLinesForKitchenRecipe } from '../../lib/diet/ingredientLines';
 import { RecipeSaveButton } from './RecipeSaveButton';
 import { RecipeSaveCta } from './RecipeSaveCta';
 
@@ -244,8 +244,10 @@ export function VideoRecipeDetailView({
             <PantryStatusLine missingCount={missingCount} minutes={recipe.minutes} servings={recipe.servings} />
           ) : null}
 
-          {!showLoading && !importError && recipe.ingredients.length > 0 ? (
-            <RecipeDietNotice ingredientLines={ingredientLinesFromRecipe(recipe)} />
+          {!showLoading && !importError ? (
+            <RecipeDietNotice
+              ingredientLines={ingredientLinesForKitchenRecipe(recipe, viralItem?.title ?? recipe.name)}
+            />
           ) : null}
 
           {showLoading ? <LoadingSkeleton /> : null}

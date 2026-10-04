@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeGroceryOrigin } from './grocery/origin';
+import { isPersistedRowUuid } from './pantry/persistIds';
 import { FEATURE_FLAG_DEFAULTS, PHOTO_SCAN } from '../config/appConfig';
 import { USER_PREFERENCE_DEFAULTS } from '../config/userPreferences';
 import { formatSupabaseError, isMissingSchemaError } from './supabaseErrors';
@@ -100,6 +102,7 @@ type GroceryRow = {
   unit: string;
   checked: boolean;
   source_recipe_ids: string[] | null;
+  origin?: string | null;
 };
 
 type FlagRow = { key: string; enabled: boolean };
@@ -241,6 +244,7 @@ export function mapGrocery(row: GroceryRow): GroceryListItem {
     unit: row.unit,
     checked: row.checked,
     sourceRecipeIds: row.source_recipe_ids ?? [],
+    origin: normalizeGroceryOrigin(row.origin, row.ingredient_id),
   };
 }
 
@@ -336,7 +340,7 @@ export async function fetchLiveBundle(client: SupabaseClient, userId: string) {
 }
 
 function pantryInsertRow(userId: string, item: PantryItem) {
-  return {
+  const row: Record<string, unknown> = {
     user_id: userId,
     ingredient_id: item.ingredientId,
     name: item.name,
@@ -348,6 +352,10 @@ function pantryInsertRow(userId: string, item: PantryItem) {
     scan_photo_path: item.scanPhotoPath?.trim() || null,
     expires_on: item.expiresOn,
   };
+  if (isPersistedRowUuid(item.id)) {
+    row.id = item.id;
+  }
+  return row;
 }
 
 export async function insertPantryItem(
@@ -427,15 +435,16 @@ export async function deletePantryItemsByIds(
   userId: string,
   ids: string[],
 ): Promise<void> {
-  if (ids.length === 0) return;
+  const persistedIds = ids.filter((id) => isPersistedRowUuid(id));
+  if (persistedIds.length === 0) return;
   const { data: rows, error: selectError } = await client
     .from('pantry_items')
     .select('scan_photo_path')
     .eq('user_id', userId)
-    .in('id', ids);
+    .in('id', persistedIds);
   if (selectError) throw selectError;
 
-  const { error } = await client.from('pantry_items').delete().eq('user_id', userId).in('id', ids);
+  const { error } = await client.from('pantry_items').delete().eq('user_id', userId).in('id', persistedIds);
   if (error) throw error;
 
   const paths = new Set(
@@ -611,6 +620,7 @@ type GroceryWritePayload = {
   unit: string;
   checked: boolean;
   source_recipe_ids: string[];
+  origin: string;
 };
 
 function groceryWritePayload(userId: string, item: GroceryListItem): GroceryWritePayload {
@@ -623,6 +633,7 @@ function groceryWritePayload(userId: string, item: GroceryListItem): GroceryWrit
     unit: item.unit,
     checked: item.checked,
     source_recipe_ids: item.sourceRecipeIds,
+    origin: item.origin,
   };
 }
 

@@ -2,12 +2,8 @@ import { MEALDB } from '../../config/mealdb';
 import { compareRecipePantryMatches, scoreRecipeAgainstPantry } from '../recipeMatch';
 import type { PantryItem, Recipe } from '../../types/mealprep';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
-import {
-  mealDbFilterByIngredient,
-  mealDbLookupMeals,
-  mealDbRandomMeal,
-  mealDbSearchByName,
-} from './client';
+import { mealDbFilterByIngredient, mealDbLookupMeals } from './client';
+import { mealDbIdsForEmptyPantryBrowse } from './catalogBrowse';
 import { mealDbMealToAppRecipe } from './normalize';
 import { mealDbPantryProteinFilters } from './pantryProteins';
 
@@ -24,10 +20,7 @@ async function collectMealIdsForPantry(pantry: PantryItem[]): Promise<string[]> 
       idSets.push(await mealDbFilterByIngredient(filter));
     }
   } else {
-    const random = await mealDbRandomMeal();
-    if (random) return [random.idMeal];
-    const browse = await mealDbSearchByName('chicken');
-    return browse;
+    return mealDbIdsForEmptyPantryBrowse();
   }
   const counts = new Map<string, number>();
   for (const ids of idSets) {

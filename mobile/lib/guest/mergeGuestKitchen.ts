@@ -4,6 +4,7 @@ import {
   normalizeIngredientName,
 } from '../recipeMatch/ingredientNormalize';
 import { groceryDedupeKey } from '../recipeMatch/groceryFromMissing';
+import { preferGroceryOrigin } from '../grocery/origin';
 import type { GroceryListItem, MealPlanItem, PantryItem } from '../../types/mealprep';
 
 function roundQty(value: number): number {
@@ -79,6 +80,7 @@ function mergeGroceryRows(existing: GroceryListItem, incoming: GroceryListItem):
     quantity,
     checked: existing.checked && incoming.checked,
     sourceRecipeIds,
+    origin: preferGroceryOrigin(existing.origin, incoming.origin),
   };
 }
 

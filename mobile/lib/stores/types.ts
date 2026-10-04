@@ -24,6 +24,8 @@ export interface StoreRecord {
   openNow?: boolean;
   /** When set, show a non-numeric pricing teaser (no invented prices). */
   pricingTeaser?: 'coming_soon';
+  /** Original OSM `shop` tag when sourced from Overpass (static fallback filtering). */
+  osmShop?: string;
 }
 
 export interface NearbyStoreSearchParams {

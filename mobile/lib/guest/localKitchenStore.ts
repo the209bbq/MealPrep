@@ -1,5 +1,6 @@
 import { GUEST_KITCHEN_STORAGE_KEYS } from '../../config/guestMode';
 import { normalizePantryItemList } from '../../config/pantryStorage';
+import { normalizeGroceryList } from '../grocery/origin';
 import { readJson, removeStorageKey, writeJson } from '../storage';
 import type { GroceryListItem, MealPlanItem, PantryItem, Recipe } from '../../types/mealprep';
 
@@ -20,7 +21,7 @@ export function writeGuestPantry(items: PantryItem[]): void {
 }
 
 export function readGuestGrocery(): GroceryListItem[] {
-  return readJson<GroceryListItem[]>(GUEST_KITCHEN_STORAGE_KEYS.grocery, []);
+  return normalizeGroceryList(readJson<GroceryListItem[]>(GUEST_KITCHEN_STORAGE_KEYS.grocery, []));
 }
 
 export function writeGuestGrocery(items: GroceryListItem[]): void {

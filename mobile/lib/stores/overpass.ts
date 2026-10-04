@@ -10,23 +10,9 @@ import {
 } from './groceryFilter';
 import { readPersistentCache, readPersistentCacheStale, writePersistentCache } from './osmPersistentCache';
 import { raceOverpassMirrors } from './overpassFetch';
+import { enrichStoreAddressFields, parseOsmAddressTags } from './osmStoreAddress';
 import { storeRecordExtrasFromOsmTags } from './storeLinks';
 import type { NearbyStoreSearchParams, StoreRecord } from './types';
-
-function parseAddress(tags: Record<string, string>): {
-  addressLine: string;
-  city: string;
-  state: string;
-  zip: string;
-} {
-  const housenumber = tags['addr:housenumber'] ?? '';
-  const street = tags['addr:street'] ?? tags['addr:place'] ?? '';
-  const addressLine = [housenumber, street].filter(Boolean).join(' ').trim() || tags['addr:full'] || '';
-  const city = tags['addr:city'] ?? tags['addr:town'] ?? tags['addr:village'] ?? '';
-  const state = tags['addr:state'] ?? '';
-  const zip = tags['addr:postcode'] ?? '';
-  return { addressLine, city, state, zip };
-}
 
 type OverpassElement = {
   type: string;
@@ -81,7 +67,7 @@ function elementsToStores(
     const haystack = haystackFromTags(tags);
     const known = resolveGroceryChainFromHaystack(haystack);
     const chain = known?.displayName ?? tags.brand ?? tags.operator ?? name;
-    const addr = parseAddress(tags);
+    const addr = enrichStoreAddressFields(parseOsmAddressTags(tags), lat, lng);
     const id = `osm-${el.type}-${el.id}`;
     const distanceMiles = haversineMiles(origin, { lat, lng });
 
@@ -98,6 +84,7 @@ function elementsToStores(
       distanceMiles: Math.round(distanceMiles * 100) / 100,
       source: 'osm',
       pricingSource: 'none',
+      osmShop: tags.shop?.trim() || undefined,
       url: undefined,
       ...storeRecordExtrasFromOsmTags(tags),
     });

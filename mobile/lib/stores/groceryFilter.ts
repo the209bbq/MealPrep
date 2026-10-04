@@ -35,23 +35,88 @@ export function isWholesaleClubHaystack(haystack: string): boolean {
   return Boolean(chain?.wholesaleClub);
 }
 
+const DISALLOWED_OSM_SHOPS = new Set([
+  'convenience',
+  'kiosk',
+  'alcohol',
+  'tobacco',
+  'gas',
+  'car_repair',
+  'car',
+  'newsagent',
+  'ticket',
+  'variety_store',
+]);
+
+const CORE_GROCERY_SHOPS = new Set([
+  'supermarket',
+  'grocery',
+  'greengrocer',
+  'butcher',
+  'deli',
+  'health_food',
+  'international',
+  'asian',
+  'korean',
+  'japanese',
+  'chinese',
+  'mexican',
+  'indian',
+  'vietnamese',
+  'mediterranean',
+  'halal',
+  'kosher',
+]);
+
 function matchesExcludePattern(haystack: string): boolean {
-  return SMART_SHOP_STORES.nameExcludePatterns.some((p) => haystack.includes(p.toLowerCase()));
+  const lower = haystack.toLowerCase();
+  if (lower.includes('dollar general market')) return false;
+  if (
+    /\b(cigarette|cigarettes|tobacco|smoke shop|beer wine|wine & gas|wine & spirits|liquor|vape|extramile|extra mile|amar beer)\b/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(quick stop|quik stop|speedway|love'?s|flyers|mine-mart|fast & easy mart|five star food|wine vinegar)\b/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  if (/\brocket\b/i.test(lower)) return true;
+  return SMART_SHOP_STORES.nameExcludePatterns.some((p) => lower.includes(p.toLowerCase()));
+}
+
+/** “… Food Mart” convenience names — only if OSM shop is supermarket or grocery. */
+export function foodMartAllowedForShopTags(tags: Record<string, string>): boolean {
+  const haystack = haystackFromTags(tags);
+  if (!/\bfood mart\b/i.test(haystack)) return true;
+  const shop = (tags.shop ?? '').trim().toLowerCase();
+  return shop === 'supermarket' || shop === 'grocery';
 }
 
 export function isAllowedOsmGroceryElement(tags: Record<string, string>): boolean {
-  const shop = tags.shop ?? '';
+  const shop = (tags.shop ?? '').toLowerCase();
   const haystack = haystackFromTags(tags);
 
   if (!tags.name?.trim()) return false;
+  if (tags.amenity === 'fuel' || shop === 'fuel' || tags.amenity === 'gas_station') return false;
+  if (DISALLOWED_OSM_SHOPS.has(shop)) return false;
   if (matchesExcludePattern(haystack)) return false;
+  if (!foodMartAllowedForShopTags(tags)) return false;
 
-  if (shop === 'supermarket' || shop === 'grocery') {
+  if (CORE_GROCERY_SHOPS.has(shop)) {
     return true;
   }
 
   if (shop === 'wholesale') {
     return isWholesaleClubHaystack(haystack);
+  }
+
+  if (shop === 'alcohol' || shop === 'seafood' || shop === 'cheese') {
+    return false;
   }
 
   if (!SMART_SHOP_STORES.includeSpecialtyShops && SPECIALTY_SHOP_TAGS.some((t) => shop === t)) {
@@ -60,6 +125,10 @@ export function isAllowedOsmGroceryElement(tags: Record<string, string>): boolea
 
   if (shop === 'department_store' || shop === 'general') {
     return osmTagsMatchAnyRetailerGrocery(tags);
+  }
+
+  if (resolveGroceryChainFromHaystack(haystack)) {
+    return shop !== 'convenience' && !DISALLOWED_OSM_SHOPS.has(shop);
   }
 
   return false;
@@ -130,6 +199,8 @@ export function sortStoreLocationsForDisplay<T extends SortableStoreLocation>(
 
 export function buildOverpassGroceryQuery(lat: number, lng: number, radiusMeters: number, maxResults: number): string {
   const around = `around:${radiusMeters},${lat},${lng}`;
+  const groceryShop =
+    'supermarket|grocery|greengrocer|butcher|deli|health_food|international|asian|korean|japanese|chinese|mexican|indian';
   const bigBoxShop = 'department_store|general';
   const wikidataUnion = RETAILER_OSM_WIKIDATA_IDS.map(
     (qid) => `
@@ -143,10 +214,10 @@ node["shop"~"${bigBoxShop}"]["name"~"Walmart Supercenter|Walmart Neighborhood|Wa
 way["shop"~"${bigBoxShop}"]["name"~"Walmart Supercenter|Walmart Neighborhood|Walmart|Target",i](${around});`;
   return `[out:json][timeout:${SMART_SHOP_STORES.overpassQueryTimeoutSec}];
 (
-node["shop"="supermarket"](${around});
-node["shop"="grocery"](${around});
-way["shop"="supermarket"](${around});
-way["shop"="grocery"](${around});
+node["shop"~"${groceryShop}"](${around});
+way["shop"~"${groceryShop}"](${around});
+node["shop"="wholesale"](${around});
+way["shop"="wholesale"](${around});
 ${wikidataUnion}
 ${brandNameUnion}
 );
