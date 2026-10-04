@@ -4,6 +4,8 @@ import { RECIPE_IMAGE } from '../../config/recipeImages';
 import { CREATOR_RECIPES_COPY } from '../../config/creatorRecipes';
 import { recipeListShopLine } from '../../lib/recipes/recipeListShopLine';
 import type { CreatorFeedCardModel } from '../../lib/recipes/creatorFeedRows';
+import { DietAllergenBadge } from '../diet/DietAllergenBadge';
+import { ingredientLinesFromCreatorModel } from '../../lib/diet/ingredientLines';
 import { RecipeThumbnail } from './RecipeThumbnail';
 import { RecipeSaveButton } from './RecipeSaveButton';
 
@@ -25,6 +27,7 @@ function CreatorRecipesFeedCardInner({
   const imageUri = importedRecipe?.imageUrl ?? item.thumbnailUrl;
   const readyToCook = match != null && match.missingCount === 0;
   const shopLine = match != null ? recipeListShopLine(match) : null;
+  const ingredientLines = ingredientLinesFromCreatorModel(model);
 
   return (
     <Pressable
@@ -40,6 +43,7 @@ function CreatorRecipesFeedCardInner({
           height={RECIPE_IMAGE.listHeight}
           lazy
         />
+        <DietAllergenBadge ingredientLines={ingredientLines} />
         {onToggleSave ? (
           <View className="absolute right-2 top-2">
             <RecipeSaveButton saved={Boolean(saved)} onToggle={onToggleSave} size={20} />

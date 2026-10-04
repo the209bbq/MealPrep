@@ -15,7 +15,7 @@ export default function HomeScreen() {
     isGuest,
     pantry,
     grocery,
-    pantryRecipeMatches,
+    pantryRecipeMatchesRankedFiltered,
     closeMealMadeReview,
     toggleMealMadePantryUse,
     confirmMealMade,
@@ -33,10 +33,10 @@ export default function HomeScreen() {
       resolveHomeNextStep({
         pantryItemCount: pantry.length,
         openGroceryCount,
-        rankedMatches: pantryRecipeMatches.ranked,
+        rankedMatches: pantryRecipeMatchesRankedFiltered,
         guestMode: isGuest,
       }),
-    [isGuest, openGroceryCount, pantry.length, pantryRecipeMatches.ranked],
+    [isGuest, openGroceryCount, pantry.length, pantryRecipeMatchesRankedFiltered],
   );
 
   function handleNextStep() {

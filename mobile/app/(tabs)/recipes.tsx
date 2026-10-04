@@ -33,6 +33,11 @@ import { useViralRecipeOpen } from '../../hooks/useViralRecipeOpen';
 import { useApp } from '../../context/AppContext';
 import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
+import {
+  filterCreatorFeedModelsForDietPrefs,
+  filterRecipeSearchResultsForDietPrefs,
+  filterRecipesTabRowsForDietPrefs,
+} from '../../lib/diet/filterRows';
 import { buildCreatorFeedCardModels } from '../../lib/recipes/creatorFeedRows';
 import { useSavedRecipes } from '../../hooks/useSavedRecipes';
 import { MyRecipesSheet } from '../../components/recipes/MyRecipesSheet';
@@ -64,6 +69,7 @@ export default function RecipesScreen() {
     onboarding,
     feedKitchenRecipes,
     isGuest,
+    userDietPrefs,
   } = useApp();
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
@@ -155,18 +161,20 @@ export default function RecipesScreen() {
 
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
-    return buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
-  }, [filterBaseRows, filters, searchQuery, feedDiversitySeed]);
+    const fed = buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
+    return filterRecipesTabRowsForDietPrefs(fed, userDietPrefs);
+  }, [filterBaseRows, filters, searchQuery, feedDiversitySeed, userDietPrefs]);
 
   const classicRecipeRows = useMemo(() => {
     if (!showClassicRecipesFeed || searchQuery.trim()) return [];
-    return mealDbRows;
-  }, [mealDbRows, searchQuery, showClassicRecipesFeed]);
+    return filterRecipesTabRowsForDietPrefs(mealDbRows, userDietPrefs);
+  }, [mealDbRows, searchQuery, showClassicRecipesFeed, userDietPrefs]);
 
   const browseVideoModels = useMemo(() => {
     if (!creatorFeedEnabled || searchQuery.trim()) return [];
     const videos = selectedCreator ? channelVideos : feedVideos;
-    return buildCreatorFeedCardModels(videos, kitchenRecipes, pantryRecipeMatches);
+    const models = buildCreatorFeedCardModels(videos, kitchenRecipes, pantryRecipeMatches);
+    return filterCreatorFeedModelsForDietPrefs(models, userDietPrefs);
   }, [
     channelVideos,
     creatorFeedEnabled,
@@ -175,6 +183,7 @@ export default function RecipesScreen() {
     pantryRecipeMatches,
     searchQuery,
     selectedCreator,
+    userDietPrefs,
   ]);
 
   const { results: searchResults, loading: searchLoading, error: searchError } =
@@ -185,6 +194,11 @@ export default function RecipesScreen() {
       kitchenRecipes,
       pantryMatches: pantryRecipeMatches,
     });
+
+  const searchResultsFiltered = useMemo(
+    () => filterRecipeSearchResultsForDietPrefs(searchResults, userDietPrefs),
+    [searchResults, userDietPrefs],
+  );
 
   function openDetail(row: RecipesTabRow) {
     setPickedDetailRow(row);
@@ -261,7 +275,7 @@ export default function RecipesScreen() {
     creatorFeedEnabled;
 
   const showSearchEmpty =
-    searching && !searchLoading && searchResults.length === 0;
+    searching && !searchLoading && searchResultsFiltered.length === 0;
 
   const showSignInOnImportError =
     Boolean(viralOpenState?.importError) &&
@@ -450,7 +464,7 @@ export default function RecipesScreen() {
       ) : null}
 
       {searching
-        ? searchResults.map((result) =>
+        ? searchResultsFiltered.map((result) =>
             result.kind === 'classic' ? (
               <RecipesUnifiedFeedCard
                 key={`classic-${result.row.recipe.id}`}

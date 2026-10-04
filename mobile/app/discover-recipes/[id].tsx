@@ -27,6 +27,8 @@ import { recipeApiToAppRecipe } from '../../lib/recipeDiscovery/mapToAppRecipe';
 import { isRecipeApiInLibrary } from '../../lib/recipeDiscovery/slugs';
 import { scheduleTargetFromDiscoveryRecipe } from '../../lib/mealCalendar/scheduleTarget';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
+import { RecipeDietNotice } from '../../components/diet/RecipeDietNotice';
+import { ingredientLinesFromDiscovery } from '../../lib/diet/ingredientLines';
 export default function DiscoverRecipeDetailScreen() {
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const recipeId = Number.parseInt(String(idParam), 10);
@@ -162,6 +164,7 @@ export default function DiscoverRecipeDetailScreen() {
             {recipe.fat != null ? ` · ${recipe.fat}g fat` : ''}
           </Text>
           {pantryMatch ? <RecipePantryMatchBadge match={pantryMatch} /> : null}
+          <RecipeDietNotice ingredientLines={ingredientLinesFromDiscovery(recipe)} />
 
           <Card title="Ingredients" className="mt-4">
             {recipe.ingredients.map((ing) => (

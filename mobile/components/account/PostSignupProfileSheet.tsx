@@ -5,6 +5,9 @@ import { ACCOUNT_SHEET_COPY, HOUSEHOLD_SIZE_LIMITS } from '../../config/account'
 import { useApp } from '../../context/AppContext';
 import { readSavedZip } from '../../lib/smartShop/storage';
 import { localZipPlaceLabel } from '../../lib/stores/localZipTable';
+import { DietAllergiesSection } from '../diet/DietAllergiesSection';
+import { DIET_PREF_COPY } from '../../config/diet';
+import type { UserDietPrefs } from '../../lib/diet/types';
 import { ProfileAvatar } from './ProfileAvatar';
 import { pickProfilePhotoFromLibrary } from './pickProfilePhoto';
 
@@ -15,7 +18,9 @@ type PostSignupProfileSheetProps = {
 
 function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
   const insets = useSafeAreaInsets();
-  const { profile, saveProfileSetup, uploadProfilePhoto, profileReady } = useApp();
+  const { profile, saveProfileSetup, uploadProfilePhoto, profileReady, userDietPrefs, saveUserDietPrefs } =
+    useApp();
+  const [dietPrefs, setDietPrefs] = useState<UserDietPrefs>(userDietPrefs);
   const [name, setName] = useState(profile.name);
   const [zip, setZip] = useState(profile.homeZip?.trim() || readSavedZip());
   const [householdSize, setHouseholdSize] = useState(String(profile.householdSize || 2));
@@ -49,6 +54,7 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
         Math.max(HOUSEHOLD_SIZE_LIMITS.min, Number.parseInt(householdSize, 10) || 2),
       );
       await saveProfileSetup({ name: name.trim(), homeZip: zip.trim(), householdSize: size });
+      await saveUserDietPrefs(dietPrefs);
       if (andClose) onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save profile.');
@@ -102,6 +108,8 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
         className="mt-2 rounded-xl border border-border bg-card px-3 py-2 text-ink"
       />
 
+      <DietAllergiesSection value={dietPrefs} onChange={setDietPrefs} compact />
+
       {error ? <Text className="mt-3 text-sm text-danger">{error}</Text> : null}
 
       <Pressable
@@ -114,7 +122,9 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
         </Text>
       </Pressable>
       <Pressable disabled={busy} onPress={onDone} className="mt-3 py-3">
-        <Text className="text-center text-base font-bold text-muted">{ACCOUNT_SHEET_COPY.postSignupSkip}</Text>
+        <Text className="text-center text-base font-bold text-muted">
+          {ACCOUNT_SHEET_COPY.postSignupSkip} · {DIET_PREF_COPY.skipAtSignup}
+        </Text>
       </Pressable>
     </ScrollView>
   );

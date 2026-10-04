@@ -47,6 +47,7 @@ export function MealWeekCalendarCard() {
     profile,
     demoMode,
     pantryRecipeMatches,
+    pantryRecipeMatchesRankedFiltered,
     scheduleMealFromRecipe,
     updateMealPlanSchedule,
     removeMealPlanItem,
@@ -199,7 +200,7 @@ export function MealWeekCalendarCard() {
         isoDate={pickerDate ?? today}
         defaultSlot={pickerDefaultSlot}
         recipes={recipes}
-        pantryMatches={pantryRecipeMatches}
+        pantryMatches={{ ...pantryRecipeMatches, ranked: pantryRecipeMatchesRankedFiltered }}
         onClose={() => setPickerDate(null)}
         onPick={(input) =>
           void scheduleMealFromRecipe({
