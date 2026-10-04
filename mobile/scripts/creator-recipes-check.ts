@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   CREATOR_RECIPES_FEED_MODES,
   CREATOR_RECIPES_FEED_MODE_LABELS,
+  CREATOR_RECIPES_FEED_MODE_SHORT_LABELS,
   isClassicRecipesFeedMode,
   isCreatorBrowseMode,
 } from '../config/creatorRecipes';
@@ -18,6 +19,8 @@ assert.equal(RECIPE_SOURCES.creatorRecipesPrimaryFeed, true);
 assert.equal(RECIPE_SOURCES.viralRecipesPrimaryFeed, false);
 assert.equal(CREATOR_RECIPES_FEED_MODES.includes('popular'), true);
 assert.equal(CREATOR_RECIPES_FEED_MODE_LABELS.classic_recipes, 'Classic recipes');
+assert.equal(CREATOR_RECIPES_FEED_MODE_SHORT_LABELS.classic_recipes, 'Classic');
+assert.equal(CREATOR_RECIPES_FEED_MODE_SHORT_LABELS.popular, 'Popular');
 assert.equal(isCreatorBrowseMode('quick'), true);
 assert.equal(isClassicRecipesFeedMode('classic_recipes'), true);
 assert.equal(CREATOR_RECIPES_FEED_MODES.includes('my_recipes' as never), false);

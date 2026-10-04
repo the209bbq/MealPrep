@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
 import { CreatorAvatarsRow } from '../../components/recipes/CreatorAvatarsRow';
@@ -332,7 +333,7 @@ export default function RecipesScreen() {
         {activeCreator && selectedCreator ? (
           <Text className="mb-2 text-sm font-semibold text-ink">{activeCreator.displayName}</Text>
         ) : null}
-        <View className="mt-2 flex-row items-center gap-2">
+        <View className="mt-2 min-w-0 flex-row items-center gap-1.5">
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -342,7 +343,8 @@ export default function RecipesScreen() {
                 : RECIPES_COPY.discoveryPanel.searchPlaceholder
             }
             placeholderTextColor={THEME.muted}
-            className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base text-ink"
+            className="min-w-0 flex-1 rounded-xl border border-border bg-card px-3 py-2.5 text-base text-ink"
+            style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
             autoCapitalize="none"
             autoCorrect={false}
             accessibilityLabel="Search recipes"
@@ -352,9 +354,10 @@ export default function RecipesScreen() {
               onPress={() => setMyRecipesOpen(true)}
               accessibilityRole="button"
               accessibilityLabel={SAVED_RECIPES_COPY.myRecipesButton}
-              className="rounded-lg border border-border bg-card px-2.5 py-2"
+              hitSlop={6}
+              className="shrink-0 items-center justify-center rounded-lg border border-border bg-card p-2"
             >
-              <Text className="text-[11px] font-semibold text-ink">{SAVED_RECIPES_COPY.myRecipesButton}</Text>
+              <Ionicons name="bookmark-outline" size={20} color={THEME.ink} />
             </Pressable>
           ) : null}
           {creatorFeedEnabled && !searching ? (
