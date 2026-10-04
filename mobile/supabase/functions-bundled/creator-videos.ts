@@ -31,79 +31,6 @@ function shouldPersistVideoOnRefresh(videoId, title, description, overrides, isR
   return isRecipeLike(title, description);
 }
 
-// supabase/functions/creator-videos/fitOrder.ts
-function creatorFitSortRank(fit) {
-  const normalized = (fit ?? "").toLowerCase();
-  if (normalized.includes("high")) return 1;
-  if (normalized.includes("medium")) return 2;
-  return 3;
-}
-function creatorFitMixWeight(fit) {
-  const rank = creatorFitSortRank(fit);
-  if (rank === 1) return 3;
-  if (rank === 2) return 2;
-  return 1;
-}
-function compareCreatorsByFitAndSubscribers(a, b) {
-  const fitDiff = creatorFitSortRank(a.fit) - creatorFitSortRank(b.fit);
-  if (fitDiff !== 0) return fitDiff;
-  return b.subscriber_count - a.subscriber_count;
-}
-
-// supabase/functions/creator-videos/feedMix.ts
-var DEFAULT_TOP_WINDOW = 12;
-var DEFAULT_MAX_PER_CREATOR = 2;
-function channelWeight(channelId, weights) {
-  return weights?.get(channelId) ?? 1;
-}
-function pickScore(row, weights, viewScore) {
-  const fitBoost = channelWeight(row.channel_id, weights) * 1e12;
-  const views = viewScore ? viewScore(row) : row.view_count;
-  return fitBoost + views;
-}
-function mixCreatorFeed(rows, options) {
-  const topWindow = options?.topWindow ?? DEFAULT_TOP_WINDOW;
-  const maxPerCreator = options?.maxPerCreator ?? DEFAULT_MAX_PER_CREATOR;
-  const weights = options?.channelFitWeight;
-  const viewScore = options?.viewScore;
-  if (rows.length <= 1) return [...rows];
-  const pool = [...rows].sort(
-    (a, b) => pickScore(b, weights, viewScore) - pickScore(a, weights, viewScore)
-  );
-  const head = [];
-  const counts = /* @__PURE__ */ new Map();
-  while (head.length < topWindow && pool.length > 0) {
-    let pickIndex = -1;
-    let pickScoreValue = -Infinity;
-    for (let i = 0; i < pool.length; i += 1) {
-      const candidate = pool[i];
-      const channelId = candidate.channel_id;
-      const count = counts.get(channelId) ?? 0;
-      if (count >= maxPerCreator) continue;
-      const score = pickScore(candidate, weights, viewScore);
-      if (score > pickScoreValue) {
-        pickScoreValue = score;
-        pickIndex = i;
-      }
-    }
-    if (pickIndex < 0) break;
-    const [picked] = pool.splice(pickIndex, 1);
-    counts.set(picked.channel_id, (counts.get(picked.channel_id) ?? 0) + 1);
-    head.push(picked);
-  }
-  const tail = pool.sort(
-    (a, b) => pickScore(b, weights, viewScore) - pickScore(a, weights, viewScore)
-  );
-  return [...head, ...tail];
-}
-function buildChannelFitWeightMap(creators) {
-  const map = /* @__PURE__ */ new Map();
-  for (const creator of creators) {
-    map.set(creator.youtube_channel_id, creatorFitMixWeight(creator.fit));
-  }
-  return map;
-}
-
 // supabase/functions/creator-videos/recipeVideoFilter.ts
 var NON_RECIPE_TITLE = new RegExp(
   "\\b(vlog|mukbang|prank|q\\s*&\\s*a|qa|haul|unboxing|giveaway|merch|podcast|react|reaction|shorts compilation|behind the scenes|bts|what i eat in a day|wieiad|grocery haul|room tour|day in my life|asmr eating)\\b",
@@ -265,6 +192,107 @@ function parseIsoDurationSeconds(iso) {
   const minutes = Number.parseInt(match[2] ?? "0", 10);
   const seconds = Number.parseInt(match[3] ?? "0", 10);
   return hours * 3600 + minutes * 60 + seconds;
+}
+
+// supabase/functions/creator-videos/creatorListVisibility.ts
+var POSTGREST_PAGE_SIZE = 1e3;
+function isVisibleInCreatorFeed(row, hideOverrides) {
+  if (hideOverrides.get(row.video_id) === "hide") return false;
+  return !isLowQualityFeedVideo(row.title, row.description_snippet ?? "", {
+    isShort: row.is_short
+  });
+}
+async function loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides) {
+  const channelIds = /* @__PURE__ */ new Set();
+  let offset = 0;
+  while (true) {
+    const from = offset;
+    const to = offset + POSTGREST_PAGE_SIZE - 1;
+    const { data, error } = await admin.from("creator_videos").select("video_id, channel_id, title, description_snippet, is_short").order("video_id", { ascending: true }).range(from, to);
+    if (error) throw error;
+    const page = data ?? [];
+    for (const row of page) {
+      if (isVisibleInCreatorFeed(row, hideOverrides)) {
+        channelIds.add(row.channel_id);
+      }
+    }
+    if (page.length < POSTGREST_PAGE_SIZE) break;
+    offset += POSTGREST_PAGE_SIZE;
+  }
+  return channelIds;
+}
+
+// supabase/functions/creator-videos/fitOrder.ts
+function creatorFitSortRank(fit) {
+  const normalized = (fit ?? "").toLowerCase();
+  if (normalized.includes("high")) return 1;
+  if (normalized.includes("medium")) return 2;
+  return 3;
+}
+function creatorFitMixWeight(fit) {
+  const rank = creatorFitSortRank(fit);
+  if (rank === 1) return 3;
+  if (rank === 2) return 2;
+  return 1;
+}
+function compareCreatorsByFitAndSubscribers(a, b) {
+  const fitDiff = creatorFitSortRank(a.fit) - creatorFitSortRank(b.fit);
+  if (fitDiff !== 0) return fitDiff;
+  return b.subscriber_count - a.subscriber_count;
+}
+
+// supabase/functions/creator-videos/feedMix.ts
+var DEFAULT_TOP_WINDOW = 12;
+var DEFAULT_MAX_PER_CREATOR = 2;
+function channelWeight(channelId, weights) {
+  return weights?.get(channelId) ?? 1;
+}
+function pickScore(row, weights, viewScore) {
+  const fitBoost = channelWeight(row.channel_id, weights) * 1e12;
+  const views = viewScore ? viewScore(row) : row.view_count;
+  return fitBoost + views;
+}
+function mixCreatorFeed(rows, options) {
+  const topWindow = options?.topWindow ?? DEFAULT_TOP_WINDOW;
+  const maxPerCreator = options?.maxPerCreator ?? DEFAULT_MAX_PER_CREATOR;
+  const weights = options?.channelFitWeight;
+  const viewScore = options?.viewScore;
+  if (rows.length <= 1) return [...rows];
+  const pool = [...rows].sort(
+    (a, b) => pickScore(b, weights, viewScore) - pickScore(a, weights, viewScore)
+  );
+  const head = [];
+  const counts = /* @__PURE__ */ new Map();
+  while (head.length < topWindow && pool.length > 0) {
+    let pickIndex = -1;
+    let pickScoreValue = -Infinity;
+    for (let i = 0; i < pool.length; i += 1) {
+      const candidate = pool[i];
+      const channelId = candidate.channel_id;
+      const count = counts.get(channelId) ?? 0;
+      if (count >= maxPerCreator) continue;
+      const score = pickScore(candidate, weights, viewScore);
+      if (score > pickScoreValue) {
+        pickScoreValue = score;
+        pickIndex = i;
+      }
+    }
+    if (pickIndex < 0) break;
+    const [picked] = pool.splice(pickIndex, 1);
+    counts.set(picked.channel_id, (counts.get(picked.channel_id) ?? 0) + 1);
+    head.push(picked);
+  }
+  const tail = pool.sort(
+    (a, b) => pickScore(b, weights, viewScore) - pickScore(a, weights, viewScore)
+  );
+  return [...head, ...tail];
+}
+function buildChannelFitWeightMap(creators) {
+  const map = /* @__PURE__ */ new Map();
+  for (const creator of creators) {
+    map.set(creator.youtube_channel_id, creatorFitMixWeight(creator.fit));
+  }
+  return map;
 }
 
 // supabase/functions/creator-videos/videoSanitizer.ts
@@ -732,11 +760,7 @@ async function handlePublicAction(admin, body, limitKey) {
   const creatorsMap = await loadCreatorsMap(admin);
   const hideOverrides = await loadCreatorVideoOverrides(admin);
   if (body.action === "creators") {
-    const { data: channelRows, error: channelVideoError } = await admin.from("creator_videos").select("channel_id");
-    if (channelVideoError) throw channelVideoError;
-    const channelsWithVideos = new Set(
-      (channelRows ?? []).map((row) => row.channel_id)
-    );
+    const channelsWithVideos = await loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides);
     const creators = [...creatorsMap.values()].filter((row) => channelsWithVideos.has(row.youtube_channel_id)).sort(compareCreatorsByFitAndSubscribers).map(creatorToDto);
     return jsonResponse({ creators });
   }

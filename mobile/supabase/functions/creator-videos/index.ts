@@ -6,6 +6,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { applyHideOverrides, loadCreatorVideoOverrides } from './creatorVideoOverrides.ts';
+import { loadChannelIdsWithVisibleFeedVideos } from './creatorListVisibility.ts';
 import { buildChannelFitWeightMap, mixCreatorFeed } from './feedMix.ts';
 import { compareCreatorsByFitAndSubscribers } from './fitOrder.ts';
 import {
@@ -279,13 +280,7 @@ async function handlePublicAction(
   const hideOverrides = await loadCreatorVideoOverrides(admin);
 
   if (body.action === 'creators') {
-    const { data: channelRows, error: channelVideoError } = await admin
-      .from('creator_videos')
-      .select('channel_id');
-    if (channelVideoError) throw channelVideoError;
-    const channelsWithVideos = new Set(
-      ((channelRows ?? []) as Array<{ channel_id: string }>).map((row) => row.channel_id),
-    );
+    const channelsWithVideos = await loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides);
     const creators = [...creatorsMap.values()]
       .filter((row) => channelsWithVideos.has(row.youtube_channel_id))
       .sort(compareCreatorsByFitAndSubscribers)
