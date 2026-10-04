@@ -54,10 +54,23 @@ import { extractUrlFromClipboardText } from '../lib/recipeImport/extractUrlFromC
 import { parseImportInput } from '../lib/recipeImport/parseImportInput.ts';
 import { RECIPE_IMPORT } from '../config/recipeImport.ts';
 import { validateUserImportStoragePath } from '../supabase/functions/recipe-import/storagePathValidation.ts';
+import {
+  applyRedditCreditToImport,
+  buildRedditCreditLabel,
+  findRedditUrlInText,
+  isRedditImportUrl,
+  parseAuthorFromRecipeText,
+  parseSubredditFromRedditUrl,
+  resolveRedditImportContext,
+  stripRedditUrlsFromText,
+} from '../lib/recipeImport/redditClient.ts';
+import {
+  parseRuleBasedRecipeFromText,
+  recipeSignalsInText,
+} from '../supabase/functions/recipe-import/textRecipeParse.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, '../test-fixtures/recipe-import-jsonld');
-
 assert.equal(parseIso8601DurationToMinutes('PT15M'), 15);
 assert.equal(parseIso8601DurationToMinutes('PT1H30M'), 90);
 assert.equal(parseRecipeYieldToServings('6 servings'), 6);
@@ -70,6 +83,54 @@ assert.equal(classifyRecipeImportUrl('https://www.tiktok.com/@chef/video/1'), 't
 assert.equal(classifyRecipeImportUrl('https://www.instagram.com/reel/abc/'), 'instagram');
 assert.equal(classifyRecipeImportUrl('https://www.facebook.com/watch/?v=1'), 'facebook');
 assert.equal(classifyRecipeImportUrl('https://fb.watch/abc/'), 'facebook');
+assert.equal(
+  classifyRecipeImportUrl('https://www.reddit.com/r/recipes/comments/abc123/title/'),
+  'reddit',
+);
+assert.equal(classifyRecipeImportUrl('https://old.reddit.com/r/recipes/comments/abc123/t/'), 'reddit');
+assert.equal(classifyRecipeImportUrl('https://redd.it/abc123'), 'reddit');
+assert.equal(classifyImportUrlForClient('https://www.reddit.com/r/recipes/s/AbCdEf'), 'reddit');
+assert.equal(isRedditImportUrl('https://www.reddit.com/r/recipes/comments/abc123/title/'), true);
+assert.equal(
+  findRedditUrlInText('Check https://www.reddit.com/r/recipes/comments/abc123/t/ for soup'),
+  'https://www.reddit.com/r/recipes/comments/abc123/t/',
+);
+assert.equal(parseSubredditFromRedditUrl('https://www.reddit.com/r/recipes/comments/abc123/t/'), 'recipes');
+assert.equal(parseAuthorFromRecipeText('Posted by u/chef_user — great thread'), 'chef_user');
+assert.equal(buildRedditCreditLabel('recipes', 'chef_user'), 'Recipe from u/chef_user · r/recipes');
+assert.equal(buildRedditCreditLabel('Cooking', null), 'From r/Cooking');
+const redditRecipeBody = `Ingredients:
+- 2 cups flour
+- 1 cup sugar
+- 1/2 cup butter
+
+Instructions:
+1. Mix dry ingredients.
+2. Bake at 350F for 25 minutes.`;
+assert.equal(recipeSignalsInText(redditRecipeBody), true);
+assert.ok(parseRuleBasedRecipeFromText('Sheet cake', redditRecipeBody));
+const redditCtx = resolveRedditImportContext(
+  `https://www.reddit.com/r/recipes/comments/abc123/cake/\n\n${redditRecipeBody}`,
+  null,
+)!;
+assert.equal(redditCtx.subreddit, 'recipes');
+const credited = applyRedditCreditToImport(
+  {
+    title: 'Cake',
+    servings: 4,
+    prep_minutes: null,
+    cook_minutes: null,
+    ingredients: [],
+    steps: [],
+    is_recipe: true,
+    confidence: 1,
+    source_url: 'text-import',
+    source_type: 'web',
+  },
+  redditCtx,
+);
+assert.equal(credited.source_type, 'reddit');
+assert.equal(stripRedditUrlsFromText('https://redd.it/abc ' + redditRecipeBody).includes('Ingredients'), true);
 assert.equal(isSocialCaptionSourceType('tiktok'), true);
 assert.equal(isManualCaptionSourceType('facebook'), true);
 assert.equal(isManualCaptionImportKind('instagram'), true);
@@ -356,6 +417,24 @@ assert.equal(
   youtubeThumbnailUrlFromWatchUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')?.includes('hqdefault.jpg'),
   true,
 );
+const redditCredit = sourceCreditFromImportDto({
+  title: 'Soup',
+  servings: 4,
+  prep_minutes: null,
+  cook_minutes: null,
+  ingredients: [],
+  steps: [],
+  is_recipe: true,
+  confidence: 1,
+  source_url: 'https://www.reddit.com/r/recipes/comments/abc123/soup/',
+  source_type: 'reddit',
+  social_author_name: 'Recipe from u/chef · r/recipes',
+  social_author_url: 'https://www.reddit.com/user/chef',
+});
+assert.equal(redditCredit.plainCreatorCredit, true);
+assert.equal(redditCredit.creatorName, 'Recipe from u/chef · r/recipes');
+assert.equal(redditCredit.viewOriginalLabel, 'View original post');
+
 assert.match(kitchenRecipeFeedMetaLine({
   id: 'x',
   name: 'Soup',

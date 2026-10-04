@@ -30,6 +30,10 @@ export const RECIPE_IMPORT_COPY = {
   importBoxLabel: 'Import recipe',
   importBoxHint:
     'Paste a video link or recipe text — or tap 📷 to snap a cookbook, magazine, or recipe card.',
+  redditPasteTip:
+    "Reddit doesn't let apps read posts. Copy the recipe text or screenshot it, then paste it here or tap 📷.",
+  removeSourceCta: 'Remove source',
+  removeSourceAccessibility: 'Remove recipe source link and credit',
   cameraAccessibility: 'Snap or choose a recipe photo',
   importCta: 'Import',
   importing: 'Reading recipe…',
@@ -45,7 +49,9 @@ export const RECIPE_IMPORT_COPY = {
   guestSignInCta: 'Sign in',
   yourRecipeBadge: 'Your recipe',
   viewOriginal: 'Watch original video',
+  viewOriginalPost: 'View original post',
   viewOriginalAccessibility: 'Watch original recipe video',
+  viewOriginalPostAccessibility: 'View original Reddit post',
   byCreator: (name: string) => `By ${name}`,
   creatorLinkAccessibility: (name: string) => `Open ${name} profile or channel`,
   creditSeparator: ' · ',

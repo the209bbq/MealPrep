@@ -140,16 +140,24 @@ async function callGeminiJson(
   }
 }
 
+export interface GeminiExtractOptions {
+  /** Use only the primary Gemini model — at most one generateContent call (no fallbacks). */
+  singleModelAttempt?: boolean;
+}
+
 async function callGeminiWithFallback(
   apiKey: string,
   parts: Record<string, unknown>[],
+  options?: GeminiExtractOptions,
 ): Promise<RecipeImportExtracted | null> {
   const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
-  const candidates = orderModelsForAttempt(
+  const allCandidates = orderModelsForAttempt(
     Deno.env.get('GEMINI_MODEL') ?? undefined,
     Deno.env.get('GEMINI_FALLBACK_MODELS') ?? undefined,
     geminiModelTimeoutMemory,
   );
+  const candidates = options?.singleModelAttempt ? allCandidates.slice(0, 1) : allCandidates;
+  const maxHttpRetries = options?.singleModelAttempt ? 1 : GEMINI_HTTP_RETRIES_PER_MODEL;
 
   for (const model of candidates) {
     if (budget.isExhausted()) break;
@@ -165,9 +173,7 @@ async function callGeminiWithFallback(
         geminiModelTimeoutMemory.record(model);
         break;
       }
-      if (
-        shouldRetrySameModelAfterError(result.error, httpRetries, GEMINI_HTTP_RETRIES_PER_MODEL)
-      ) {
+      if (shouldRetrySameModelAfterError(result.error, httpRetries, maxHttpRetries)) {
         httpRetries += 1;
         continue;
       }
@@ -197,6 +203,7 @@ export async function extractRecipeFromPageText(
   pageText: string,
   sourceUrl: string,
   sourceType: RecipeImportSourceType = 'web',
+  options?: GeminiExtractOptions,
 ): Promise<RecipeImportExtracted | null> {
   const prompt =
     sourceType === 'tiktok' || sourceType === 'instagram' || sourceType === 'facebook'
@@ -207,7 +214,7 @@ export async function extractRecipeFromPageText(
       text: `${prompt}\n\nSource URL: ${sourceUrl}\n\nText:\n${pageText}`,
     },
   ];
-  const extracted = await callGeminiWithFallback(apiKey, parts);
+  const extracted = await callGeminiWithFallback(apiKey, parts, options);
   if (!extracted) return null;
   return attachImportMetadata(extracted, sourceUrl, sourceType);
 }

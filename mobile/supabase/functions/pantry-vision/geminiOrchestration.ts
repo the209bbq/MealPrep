@@ -12,7 +12,6 @@ export const DEFAULT_GEMINI_FALLBACK_MODELS = [
   'gemini-3.6-flash',
   'gemini-3.5-flash',
   'gemini-2.5-flash',
-  'gemini-2.0-flash',
 ] as const;
 
 /** Per upstream HTTP call (each Gemini generateContent). Override via `GEMINI_REQUEST_TIMEOUT_MS` secret. */

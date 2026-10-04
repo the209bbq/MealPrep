@@ -1,4 +1,5 @@
 import type { Recipe } from '../../types/mealprep';
+import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { RecipeImportExtractedDto } from './types';
 import { sanitizeHttpUrl } from './safeHttpUrl';
 
@@ -6,6 +7,10 @@ export interface RecipeSourceCredit {
   creatorName?: string;
   creatorUrl?: string;
   originalUrl?: string;
+  /** When set, show creator line without a leading "By". */
+  plainCreatorCredit?: boolean;
+  viewOriginalLabel?: string;
+  viewOriginalAccessibility?: string;
 }
 
 function safeLink(url: string | null | undefined): string | undefined {
@@ -19,6 +24,18 @@ export function sourceCreditFromImportDto(draft: RecipeImportExtractedDto): Reci
     const creatorUrl = safeLink(draft.youtube_channel_url) ?? safeLink(draft.social_author_url);
     return { creatorName, creatorUrl, originalUrl };
   }
+  if (draft.source_type === 'reddit') {
+    const creatorName = draft.social_author_name?.trim();
+    const creatorUrl = safeLink(draft.social_author_url);
+    return {
+      creatorName,
+      creatorUrl,
+      originalUrl,
+      plainCreatorCredit: true,
+      viewOriginalLabel: RECIPE_IMPORT_COPY.viewOriginalPost,
+      viewOriginalAccessibility: RECIPE_IMPORT_COPY.viewOriginalPostAccessibility,
+    };
+  }
   const creatorName = draft.social_author_name?.trim();
   const creatorUrl = safeLink(draft.social_author_url);
   return { creatorName, creatorUrl, originalUrl };
@@ -31,6 +48,16 @@ export function sourceCreditFromRecipe(recipe: Recipe): RecipeSourceCredit {
       creatorName: recipe.sourceChannelName?.trim(),
       creatorUrl: safeLink(recipe.sourceChannelUrl),
       originalUrl,
+    };
+  }
+  if (recipe.sourceType === 'reddit') {
+    return {
+      creatorName: recipe.sourceTitle?.trim(),
+      creatorUrl: safeLink(recipe.sourceAuthorUrl),
+      originalUrl,
+      plainCreatorCredit: true,
+      viewOriginalLabel: RECIPE_IMPORT_COPY.viewOriginalPost,
+      viewOriginalAccessibility: RECIPE_IMPORT_COPY.viewOriginalPostAccessibility,
     };
   }
   if (

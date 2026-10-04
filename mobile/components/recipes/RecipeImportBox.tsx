@@ -17,6 +17,7 @@ import {
   RecipeImportNotConfiguredError,
   RecipeImportNotRecipeError,
   RecipeImportRateLimitError,
+  RecipeImportRedditTipError,
   RecipeImportUpstreamError,
   confirmYoutubeRecipeImport,
   importRecipeFromPhotos,
@@ -24,6 +25,13 @@ import {
   importRecipeFromUploadedVideoPath,
   importRecipeSmartInput,
 } from '../../lib/recipeImport/client';
+import {
+  applyRedditCreditToImport,
+  findRedditUrlInText,
+  resolveRedditImportContext,
+  stripRedditUrlsFromText,
+} from '../../lib/recipeImport/redditClient';
+import { MIN_TEXT_IMPORT_CHARS } from '../../lib/recipeImport/parseImportInput';
 import {
   pickRecipeImportPhotoFromCamera,
   pickRecipeImportPhotosFromLibrary,
@@ -79,6 +87,8 @@ export function RecipeImportBox({
   const [error, setError] = useState<string | null>(null);
   const [fallbacks, setFallbacks] = useState<RecipeImportFallbacksDto | null>(null);
   const [review, setReview] = useState<RecipeImportExtractedDto | null>(null);
+  const [rememberedRedditPostUrl, setRememberedRedditPostUrl] = useState<string | null>(null);
+  const [redditTip, setRedditTip] = useState<string | null>(null);
   const autoRunRef = useRef(false);
 
   const handleImportError = useCallback((err: unknown) => {
@@ -103,6 +113,7 @@ export function RecipeImportBox({
   const runSmartImport = useCallback(async (rawOverride?: string) => {
     setError(null);
     setFallbacks(null);
+    setRedditTip(null);
     const raw = (rawOverride ?? input).trim();
     if (!raw) {
       setError(RECIPE_IMPORT.invalidUrlMessage);
@@ -115,15 +126,41 @@ export function RecipeImportBox({
     setLoading(true);
     try {
       const token = session?.access_token ?? null;
-      const extracted = await importRecipeSmartInput(raw, token);
+      const redditInInput = findRedditUrlInText(raw);
+      if (redditInInput) setRememberedRedditPostUrl(redditInInput);
+      const extracted = await importRecipeSmartInput(raw, token, {
+        rememberedRedditPostUrl,
+      });
       setReview(extracted);
-      setInput('');
+      const stillRedditOnly =
+        Boolean(redditInInput) && stripRedditUrlsFromText(raw).length < MIN_TEXT_IMPORT_CHARS;
+      if (!stillRedditOnly) {
+        setInput('');
+        setRememberedRedditPostUrl(null);
+      }
     } catch (err) {
+      if (err instanceof RecipeImportRedditTipError) {
+        const url = findRedditUrlInText(raw) ?? rememberedRedditPostUrl;
+        if (url) setRememberedRedditPostUrl(url);
+        setRedditTip(err.message);
+        setError(null);
+        setFallbacks(null);
+        return;
+      }
       handleImportError(err);
     } finally {
       setLoading(false);
     }
-  }, [demoMode, handleImportError, input, session]);
+  }, [demoMode, handleImportError, input, rememberedRedditPostUrl, session]);
+
+  const applyRedditSessionCredit = useCallback(
+    (extracted: RecipeImportExtractedDto) => {
+      const ctx = resolveRedditImportContext(input, rememberedRedditPostUrl);
+      if (!ctx) return extracted;
+      return applyRedditCreditToImport(extracted, ctx);
+    },
+    [input, rememberedRedditPostUrl],
+  );
 
   useEffect(() => {
     if (!autoRun || autoRunRef.current || !initialText.trim()) return;
@@ -165,9 +202,17 @@ export function RecipeImportBox({
         return;
       }
       const token = session?.access_token ?? null;
-      const extracted = await importRecipeFromPhotos(token, { photoStoragePaths: paths });
-      setReview(extracted);
+      const redditCtx = resolveRedditImportContext(input, rememberedRedditPostUrl);
+      const extracted = await importRecipeFromPhotos(token, {
+        photoStoragePaths: paths,
+        privateImport: Boolean(redditCtx),
+      });
+      setReview(applyRedditSessionCredit(extracted));
       setFallbacks(null);
+      if (redditCtx) {
+        setRememberedRedditPostUrl(null);
+        setRedditTip(null);
+      }
     } catch (err) {
       handleImportError(err);
     } finally {
@@ -194,9 +239,17 @@ export function RecipeImportBox({
         return;
       }
       const token = session?.access_token ?? null;
-      const extracted = await importRecipeFromPhotos(token, { photoStoragePaths: paths });
-      setReview(extracted);
+      const redditCtx = resolveRedditImportContext(input, rememberedRedditPostUrl);
+      const extracted = await importRecipeFromPhotos(token, {
+        photoStoragePaths: paths,
+        privateImport: Boolean(redditCtx),
+      });
+      setReview(applyRedditSessionCredit(extracted));
       setFallbacks(null);
+      if (redditCtx) {
+        setRememberedRedditPostUrl(null);
+        setRedditTip(null);
+      }
     } catch (err) {
       handleImportError(err);
     } finally {
@@ -287,6 +340,8 @@ export function RecipeImportBox({
               setInput(text);
               setError(null);
               setFallbacks(null);
+              const redditUrl = findRedditUrlInText(text);
+              if (redditUrl) setRememberedRedditPostUrl(redditUrl);
             }}
             placeholder={RECIPE_IMPORT_COPY.importBoxPlaceholder}
             placeholderTextColor={THEME.muted}
@@ -320,7 +375,8 @@ export function RecipeImportBox({
             <Text className="text-sm font-bold text-on-primary">{RECIPE_IMPORT_COPY.importCta}</Text>
           )}
         </Pressable>
-        {!loading && !error && !fallbacks ? (
+        {redditTip ? <Text className="mt-2 text-xs text-muted">{redditTip}</Text> : null}
+        {!loading && !error && !fallbacks && !redditTip ? (
           <Text className="mt-1 text-xs text-muted">{RECIPE_IMPORT_COPY.importBoxHint}</Text>
         ) : null}
         {loading ? (

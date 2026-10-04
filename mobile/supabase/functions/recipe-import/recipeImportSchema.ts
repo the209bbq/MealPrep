@@ -159,7 +159,8 @@ export function attachImportMetadata(
   if (
     sourceType === 'tiktok' ||
     sourceType === 'instagram' ||
-    sourceType === 'facebook'
+    sourceType === 'facebook' ||
+    sourceType === 'reddit'
   ) {
     return {
       ...base,

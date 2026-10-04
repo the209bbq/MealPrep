@@ -9,7 +9,7 @@ export type ParsedImportInput =
   | { kind: 'url'; url: string; caption?: string }
   | { kind: 'text'; text: string };
 
-const MIN_TEXT_IMPORT_CHARS = 24;
+export const MIN_TEXT_IMPORT_CHARS = 24;
 
 function stripUrlFromText(full: string, url: string): string {
   return full.replace(url, '').replace(/\s+/g, ' ').trim();

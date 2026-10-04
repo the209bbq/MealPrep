@@ -100,6 +100,19 @@ function resolveRedirectLocation(current, locationHeader) {
 }
 
 // supabase/functions/recipe-import/urlClassification.ts
+var REDDIT_HOSTS = /* @__PURE__ */ new Set([
+  "reddit.com",
+  "www.reddit.com",
+  "old.reddit.com",
+  "m.reddit.com",
+  "redd.it",
+  "www.redd.it"
+]);
+function isRedditImportHostname(host) {
+  const h = host.toLowerCase().replace(/\.$/, "");
+  if (REDDIT_HOSTS.has(h)) return true;
+  return h.endsWith(".reddit.com");
+}
 var YOUTUBE_HOSTS = /* @__PURE__ */ new Set([
   "youtube.com",
   "www.youtube.com",
@@ -146,6 +159,7 @@ function classifyRecipeImportUrl(urlString) {
   if (FACEBOOK_HOSTS.has(host) || host.endsWith(".facebook.com") || host === "fb.watch") {
     return "facebook";
   }
+  if (isRedditImportHostname(host)) return "reddit";
   return "web";
 }
 function isManualCaptionSourceType(type) {
@@ -337,8 +351,7 @@ var DEFAULT_GEMINI_FALLBACK_MODELS = [
   "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash"
+  "gemini-2.5-flash"
 ];
 var DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 38e3;
 var GEMINI_REQUEST_TIMEOUT_MS = DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;
@@ -530,7 +543,7 @@ function attachImportMetadata(recipe, sourceUrl, sourceType, extras) {
       metadata_refreshed_at: now
     };
   }
-  if (sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook") {
+  if (sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook" || sourceType === "reddit") {
     return {
       ...base,
       source_title: void 0,
@@ -623,13 +636,15 @@ async function callGeminiJson(apiKey, model, parts, budget) {
     };
   }
 }
-async function callGeminiWithFallback(apiKey, parts) {
+async function callGeminiWithFallback(apiKey, parts, options) {
   const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
-  const candidates = orderModelsForAttempt(
+  const allCandidates = orderModelsForAttempt(
     Deno.env.get("GEMINI_MODEL") ?? void 0,
     Deno.env.get("GEMINI_FALLBACK_MODELS") ?? void 0,
     geminiModelTimeoutMemory
   );
+  const candidates = options?.singleModelAttempt ? allCandidates.slice(0, 1) : allCandidates;
+  const maxHttpRetries = options?.singleModelAttempt ? 1 : GEMINI_HTTP_RETRIES_PER_MODEL;
   for (const model of candidates) {
     if (budget.isExhausted()) break;
     let httpRetries = 0;
@@ -644,7 +659,7 @@ async function callGeminiWithFallback(apiKey, parts) {
         geminiModelTimeoutMemory.record(model);
         break;
       }
-      if (shouldRetrySameModelAfterError(result.error, httpRetries, GEMINI_HTTP_RETRIES_PER_MODEL)) {
+      if (shouldRetrySameModelAfterError(result.error, httpRetries, maxHttpRetries)) {
         httpRetries += 1;
         continue;
       }
@@ -662,7 +677,7 @@ async function extractRecipeFromYouTubeVideo(apiKey, youtubeUrl, sourceType, sou
   if (!extracted) return null;
   return attachImportMetadata(extracted, sourceUrl, sourceType);
 }
-async function extractRecipeFromPageText(apiKey, pageText, sourceUrl, sourceType = "web") {
+async function extractRecipeFromPageText(apiKey, pageText, sourceUrl, sourceType = "web", options) {
   const prompt = sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook" ? SOCIAL_CAPTION_PROMPT : TEXT_EXTRACTION_PROMPT;
   const parts = [
     {
@@ -674,7 +689,7 @@ Text:
 ${pageText}`
     }
   ];
-  const extracted = await callGeminiWithFallback(apiKey, parts);
+  const extracted = await callGeminiWithFallback(apiKey, parts, options);
   if (!extracted) return null;
   return attachImportMetadata(extracted, sourceUrl, sourceType);
 }
@@ -1230,7 +1245,7 @@ function recipeMissingCreatorFields(recipe, sourceType) {
   if (sourceType === "youtube") {
     return !recipe.youtube_channel_name?.trim() || !recipe.youtube_channel_url?.trim();
   }
-  if (sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook" || sourceType === "web") {
+  if (sourceType === "tiktok" || sourceType === "instagram" || sourceType === "facebook" || sourceType === "reddit" || sourceType === "web") {
     return !recipe.social_author_name?.trim();
   }
   return false;
@@ -1346,6 +1361,131 @@ function imageUrlForCachedImport(recipe, sourceType, normalizedUrl) {
   return null;
 }
 
+// supabase/functions/recipe-import/textRecipeParse.ts
+var INGREDIENT_HEADINGS = /^(#{1,3}\s*)?(ingredients?|what you(?:'ll| will) need|shopping list)\s*:?\s*$/i;
+var STEP_HEADINGS = /^(#{1,3}\s*)?(instructions?|directions?|method|steps?|how to make|preparation)\s*:?\s*$/i;
+var BULLET_LINE = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/;
+var QUANTITY_INGREDIENT = /^([\d¼½¾⅓⅔⅛⅜⅝⅞./\s]+)?\s*([a-zA-Z]+(?:\.|\/[a-zA-Z]+)?)?\s+(.+)$/;
+function decodeHtmlEntities(text) {
+  return text.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+function normalizeRecipeText(raw) {
+  return decodeHtmlEntities(raw).replace(/\r\n/g, "\n").replace(/\u00a0/g, " ").trim();
+}
+function parseIngredientLine2(line) {
+  const cleaned = line.replace(/\*\*/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").trim();
+  if (!cleaned || cleaned.length < 2) return null;
+  const qtyMatch = cleaned.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞./\s-]+)\s+(\S+)\s+(.+)$/);
+  if (qtyMatch) {
+    const qtyRaw = qtyMatch[1].trim();
+    const unit = qtyMatch[2].trim();
+    const name = qtyMatch[3].trim();
+    const quantity = parseQuantityToken(qtyRaw);
+    if (name.length > 0) {
+      return { name, quantity, unit };
+    }
+  }
+  const loose = cleaned.match(QUANTITY_INGREDIENT);
+  if (loose && loose[3]) {
+    const quantity = parseQuantityToken((loose[1] ?? "1").trim());
+    const unit = (loose[2] ?? "each").trim();
+    const name = loose[3].trim();
+    if (name.length > 1) {
+      return { name, quantity, unit: unit || "each" };
+    }
+  }
+  return { name: cleaned, quantity: 1, unit: "each" };
+}
+function parseQuantityToken(raw) {
+  const map = {
+    "\xBC": 0.25,
+    "\xBD": 0.5,
+    "\xBE": 0.75,
+    "\u2153": 1 / 3,
+    "\u2154": 2 / 3,
+    "\u215B": 0.125
+  };
+  let text = raw.trim();
+  for (const [sym, val] of Object.entries(map)) {
+    text = text.replace(sym, ` ${val} `);
+  }
+  if (text.includes("/")) {
+    const parts = text.split(/\s+/).filter(Boolean);
+    let sum = 0;
+    for (const part of parts) {
+      if (part.includes("/")) {
+        const [a, b] = part.split("/").map((x) => Number.parseFloat(x));
+        if (Number.isFinite(a) && Number.isFinite(b) && b !== 0) sum += a / b;
+      } else {
+        const n2 = Number.parseFloat(part);
+        if (Number.isFinite(n2)) sum += n2;
+      }
+    }
+    if (sum > 0) return sum;
+  }
+  const n = Number.parseFloat(text);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+function splitSections(lines) {
+  const ingredients = [];
+  const steps = [];
+  let mode = "none";
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (INGREDIENT_HEADINGS.test(trimmed)) {
+      mode = "ingredients";
+      continue;
+    }
+    if (STEP_HEADINGS.test(trimmed)) {
+      mode = "steps";
+      continue;
+    }
+    const bullet = BULLET_LINE.exec(trimmed);
+    const content = bullet ? bullet[1].trim() : trimmed;
+    if (mode === "ingredients") {
+      ingredients.push(content);
+    } else if (mode === "steps") {
+      steps.push(content);
+    } else if (bullet) {
+      if (steps.length > 0 || ingredients.length >= 3) {
+        steps.push(content);
+      } else {
+        ingredients.push(content);
+      }
+    } else if (/^\d+[.)]\s/.test(trimmed)) {
+      steps.push(content);
+    }
+  }
+  return { ingredients, steps };
+}
+function parseRuleBasedRecipeFromText(title, body) {
+  const recipeTitle = title.trim();
+  const normalizedBody = normalizeRecipeText(body);
+  if (!recipeTitle || !normalizedBody) return null;
+  const lines = normalizedBody.split("\n");
+  const { ingredients: ingLines, steps: stepLines } = splitSections(lines);
+  const ingredients = [];
+  for (const line of ingLines) {
+    const parsed = parseIngredientLine2(line);
+    if (parsed) ingredients.push(parsed);
+  }
+  const steps = stepLines.map((s) => s.replace(/^\d+[.)]\s*/, "").trim()).filter((s) => s.length > 2);
+  if (ingredients.length < 2 || steps.length < 1) {
+    return null;
+  }
+  const servingsMatch = normalizedBody.match(/(?:servings?|serves?)\s*:?\s*(\d+)/i);
+  const servings = servingsMatch ? Math.max(1, Number.parseInt(servingsMatch[1], 10)) : 4;
+  return {
+    title: recipeTitle,
+    servings,
+    ingredients,
+    steps,
+    is_recipe: true,
+    confidence: 0.72
+  };
+}
+
 // supabase/functions/recipe-import/index.ts
 var corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1413,10 +1553,19 @@ async function readImportCache(urlKey) {
   if (new Date(row.expires_at).getTime() < Date.now()) return null;
   return row.payload;
 }
+function shouldSkipSharedImportCache(body, normalizedUrl) {
+  if (body.private_import === true) return true;
+  const blob = `${body.text ?? ""}${body.captionText ?? ""}`.toLowerCase();
+  if (blob.includes("reddit.com") || blob.includes("redd.it")) return true;
+  if (normalizedUrl && classifyRecipeImportUrl(normalizedUrl) === "reddit") return true;
+  return false;
+}
 async function writeImportCache(urlKey, sourceUrl, payload) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) return;
+  const cacheBlob = `${urlKey}|${sourceUrl}|${payload.source_url ?? ""}`.toLowerCase();
+  if (cacheBlob.includes("reddit.com") || cacheBlob.includes("redd.it")) return;
   const hash = await sha256Hex(urlKey);
   const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
   await fetch(`${supabaseUrl}/rest/v1/recipe_import_cache`, {
@@ -1686,11 +1835,34 @@ async function maybeAttachAuthorPublicLink(recipe) {
   return { ...recipe, author_public_recipe_url: suggestion.watchUrl };
 }
 var MIN_TEXT_IMPORT_CHARS = 24;
-async function importFromPlainText(apiKey, text) {
+function guessTitleFromImportText(text) {
+  const line = text.split("\n").map((row) => row.trim()).find((row) => row.length > 2 && !/^ingredients?\b/i.test(row) && !/^instructions?\b/i.test(row));
+  return line?.slice(0, 120) ?? "Imported recipe";
+}
+async function importFromPlainText(apiKey, text, options) {
   const cacheKey = urlHashKey(`text|${text.slice(0, 4e3)}`);
-  const cached = await readImportCache(cacheKey);
-  if (cached) return { recipe: { ...cached, source_url: "text-import" }, cached: true };
-  const fromGemini = await extractRecipeFromPageText(apiKey, text, "text-import", "web");
+  const skipCache = options?.skipSharedCache === true;
+  if (!skipCache) {
+    const cached = await readImportCache(cacheKey);
+    if (cached) return { recipe: { ...cached, source_url: "text-import" }, cached: true };
+  }
+  const ruleParsed = parseRuleBasedRecipeFromText(guessTitleFromImportText(text), text);
+  if (ruleParsed) {
+    const fromRules = {
+      ...ruleParsed,
+      prep_minutes: null,
+      cook_minutes: null,
+      source_url: "text-import",
+      source_type: "web"
+    };
+    if (recipeLooksValid(fromRules)) {
+      if (!skipCache) await writeImportCache(cacheKey, "text-import", fromRules);
+      return { recipe: fromRules, cached: false };
+    }
+  }
+  const fromGemini = await extractRecipeFromPageText(apiKey, text, "text-import", "web", {
+    singleModelAttempt: skipCache
+  });
   if (!fromGemini) return null;
   if (!recipeLooksValid(fromGemini)) {
     return {
@@ -1700,7 +1872,7 @@ async function importFromPlainText(apiKey, text) {
       creatorHint: null
     };
   }
-  await writeImportCache(cacheKey, "text-import", fromGemini);
+  if (!skipCache) await writeImportCache(cacheKey, "text-import", fromGemini);
   return { recipe: fromGemini, cached: false };
 }
 async function respondNotRecipeWithAutoYoutube(apiKey, sourceType, hasCaption, notRecipe) {
@@ -1793,8 +1965,9 @@ Deno.serve(async (req) => {
     if (text.length < MIN_TEXT_IMPORT_CHARS) {
       return jsonResponse({ error: "Paste a longer recipe or caption to import.", code: "BAD_REQUEST" }, 400);
     }
+    const skipSharedCache = shouldSkipSharedImportCache(body);
     try {
-      const result = await importFromPlainText(apiKey, text);
+      const result = await importFromPlainText(apiKey, text, { skipSharedCache });
       if (!result) {
         return jsonResponse({ error: "Could not import that text right now.", code: "UPSTREAM_ERROR" }, 502);
       }
@@ -1845,7 +2018,10 @@ Deno.serve(async (req) => {
         );
       }
       extracted = await maybeAttachAuthorPublicLink(extracted);
-      await writeImportCache(cacheKey, "photo-scan", extracted);
+      const skipPhotoCache = shouldSkipSharedImportCache(body);
+      if (!skipPhotoCache) {
+        await writeImportCache(cacheKey, "photo-scan", extracted);
+      }
       return jsonResponse({ recipe: extracted, cached: false });
     } catch (error) {
       console.error("recipe-import photo error", error);
@@ -1949,8 +2125,9 @@ Deno.serve(async (req) => {
   if (!normalized) {
     const fallbackText = (body.text ?? body.captionText ?? "").trim();
     if (fallbackText.length >= MIN_TEXT_IMPORT_CHARS) {
+      const skipSharedCache = shouldSkipSharedImportCache(body);
       try {
-        const result = await importFromPlainText(apiKey, fallbackText);
+        const result = await importFromPlainText(apiKey, fallbackText, { skipSharedCache });
         if (!result) {
           return jsonResponse({ error: "Could not import that text right now.", code: "UPSTREAM_ERROR" }, 502);
         }
@@ -1968,6 +2145,15 @@ Deno.serve(async (req) => {
   const sourceType = classifyRecipeImportUrl(normalized);
   if (!sourceType) {
     return jsonResponse({ error: "Unsupported URL", code: "BAD_REQUEST" }, 400);
+  }
+  if (sourceType === "reddit") {
+    return jsonResponse(
+      {
+        error: "Reddit links cannot be imported automatically. Copy the recipe text or use a photo instead.",
+        code: "REDDIT_CLIENT_ONLY"
+      },
+      422
+    );
   }
   if (sourceType === "tiktok") {
     const caption = (body.captionText ?? "").trim();

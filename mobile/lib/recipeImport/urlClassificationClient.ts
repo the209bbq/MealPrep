@@ -7,7 +7,8 @@ export type RecipeImportUrlKind =
   | 'web'
   | 'tiktok'
   | 'instagram'
-  | 'facebook';
+  | 'facebook'
+  | 'reddit';
 
 export function normalizeImportUrl(raw: string): string | null {
   const trimmed = raw.trim();
@@ -43,6 +44,20 @@ const FACEBOOK_HOSTS = new Set([
   'www.fb.watch',
 ]);
 
+const REDDIT_HOSTS = new Set([
+  'reddit.com',
+  'www.reddit.com',
+  'old.reddit.com',
+  'm.reddit.com',
+  'redd.it',
+  'www.redd.it',
+]);
+
+function isRedditHost(host: string): boolean {
+  if (REDDIT_HOSTS.has(host)) return true;
+  return host.endsWith('.reddit.com');
+}
+
 export function classifyImportUrlForClient(urlString: string): RecipeImportUrlKind | null {
   let url: URL;
   try {
@@ -59,6 +74,7 @@ export function classifyImportUrlForClient(urlString: string): RecipeImportUrlKi
   if (FACEBOOK_HOSTS.has(host) || host.endsWith('.facebook.com') || host === 'fb.watch') {
     return 'facebook';
   }
+  if (isRedditHost(host)) return 'reddit';
   return 'web';
 }
 

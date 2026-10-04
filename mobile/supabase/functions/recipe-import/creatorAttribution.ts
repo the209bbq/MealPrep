@@ -11,7 +11,13 @@ export function recipeMissingCreatorFields(
   if (sourceType === 'youtube') {
     return !recipe.youtube_channel_name?.trim() || !recipe.youtube_channel_url?.trim();
   }
-  if (sourceType === 'tiktok' || sourceType === 'instagram' || sourceType === 'facebook' || sourceType === 'web') {
+  if (
+    sourceType === 'tiktok' ||
+    sourceType === 'instagram' ||
+    sourceType === 'facebook' ||
+    sourceType === 'reddit' ||
+    sourceType === 'web'
+  ) {
     return !recipe.social_author_name?.trim();
   }
   return false;

@@ -6,6 +6,9 @@ export interface RecipeSourceCreditLineProps {
   creatorName?: string | null;
   creatorUrl?: string | null;
   originalUrl?: string | null;
+  plainCreatorCredit?: boolean;
+  viewOriginalLabel?: string;
+  viewOriginalAccessibility?: string;
   className?: string;
 }
 
@@ -13,6 +16,9 @@ export function RecipeSourceCreditLine({
   creatorName,
   creatorUrl,
   originalUrl,
+  plainCreatorCredit = false,
+  viewOriginalLabel = RECIPE_IMPORT_COPY.viewOriginal,
+  viewOriginalAccessibility = RECIPE_IMPORT_COPY.viewOriginalAccessibility,
   className = 'mt-2',
 }: RecipeSourceCreditLineProps) {
   const name = creatorName?.trim();
@@ -35,11 +41,13 @@ export function RecipeSourceCreditLine({
             accessibilityLabel={RECIPE_IMPORT_COPY.creatorLinkAccessibility(name)}
             hitSlop={4}
           >
-            <Text className="text-xs font-semibold text-primary">{RECIPE_IMPORT_COPY.byCreator(name)}</Text>
+            <Text className="text-xs font-semibold text-primary">
+              {plainCreatorCredit ? name : RECIPE_IMPORT_COPY.byCreator(name)}
+            </Text>
           </Pressable>
         ) : (
           <Text className="text-xs font-semibold text-muted" accessibilityRole="text">
-            {RECIPE_IMPORT_COPY.byCreator(name)}
+            {plainCreatorCredit ? name : RECIPE_IMPORT_COPY.byCreator(name)}
           </Text>
         )
       ) : null}
@@ -52,10 +60,10 @@ export function RecipeSourceCreditLine({
         <Pressable
           onPress={() => open(safeOriginal)}
           accessibilityRole="link"
-          accessibilityLabel={RECIPE_IMPORT_COPY.viewOriginalAccessibility}
+          accessibilityLabel={viewOriginalAccessibility}
           hitSlop={4}
         >
-          <Text className="text-sm font-semibold text-primary">{RECIPE_IMPORT_COPY.viewOriginal}</Text>
+          <Text className="text-sm font-semibold text-primary">{viewOriginalLabel}</Text>
         </Pressable>
       ) : null}
     </View>

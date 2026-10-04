@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { RecipeImportExtractedDto } from '../../lib/recipeImport/types';
 import { formatIngredientAmount } from '../../lib/formatQuantity';
+import { importDtoWithoutSourceAttribution } from '../../lib/recipeImport/clearRecipeSource';
 import { sourceCreditFromImportDto } from '../../lib/recipeImport/sourceCredit';
 import { RecipeSourceCreditLine } from './RecipeSourceCreditLine';
 
@@ -51,6 +52,8 @@ function RecipeImportReviewForm({
   );
   const [saving, setSaving] = useState(false);
   const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null);
+  const [sourceRemoved, setSourceRemoved] = useState(false);
+  const effectiveDraft = sourceRemoved ? importDtoWithoutSourceAttribution(draft) : draft;
 
   const importDietWarning = useMemo(() => {
     const lines = ingredientsText
@@ -85,7 +88,7 @@ function RecipeImportReviewForm({
         });
 
       const next: RecipeImportExtractedDto = {
-        ...draft,
+        ...effectiveDraft,
         title: title.trim() || draft.title,
         steps,
         ingredients: ingredients.length > 0 ? ingredients : draft.ingredients,
@@ -144,7 +147,21 @@ function RecipeImportReviewForm({
             <Text className="mt-1 text-xs text-muted">Check labels — estimate only.</Text>
           </View>
         ) : null}
-        <RecipeSourceCreditLine {...sourceCreditFromImportDto(draft)} />
+        {!sourceRemoved && (effectiveDraft.source_type === 'reddit' || effectiveDraft.social_author_name) ? (
+          <>
+            <RecipeSourceCreditLine {...sourceCreditFromImportDto(effectiveDraft)} />
+            {effectiveDraft.source_type === 'reddit' ? (
+              <Pressable
+                onPress={() => setSourceRemoved(true)}
+                className="mt-1 self-start"
+                accessibilityRole="button"
+                accessibilityLabel={RECIPE_IMPORT_COPY.removeSourceAccessibility}
+              >
+                <Text className="text-xs font-semibold text-muted">{RECIPE_IMPORT_COPY.removeSourceCta}</Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : null}
         {draft.author_public_recipe_url ? (
           <Pressable
             onPress={() => void Linking.openURL(draft.author_public_recipe_url!)}
