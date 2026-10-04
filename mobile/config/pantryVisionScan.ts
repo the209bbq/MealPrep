@@ -13,4 +13,4 @@ export function shouldRunPantryVerifySecondPass(budgetExhausted: boolean): boole
 }
 
 /** Edge function in-memory scan cache version — bump when output shape or logic changes materially. */
-export const PANTRY_VISION_CACHE_VERSION = 'v5';
+export const PANTRY_VISION_CACHE_VERSION = 'v6';

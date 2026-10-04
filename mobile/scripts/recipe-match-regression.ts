@@ -92,6 +92,10 @@ assert(ingredientMatchScore('cheddar', 'mozzarella') < 0.72, 'cheddar must not m
 assert(ingredientMatchScore('diced tomatoes', 'tomato paste') < 0.72, 'diced tomatoes vs tomato paste');
 assert(ingredientMatchScore('diced tomatoes', 'tomato soup') < 0.72, 'diced tomatoes vs tomato soup');
 assert(ingredientMatchScore('diced tomatoes', 'ketchup') < 0.72, 'diced tomatoes vs ketchup');
+assert(
+  ingredientMatchScore('tomatoes', 'condensed tomato soup') < 0.72,
+  'condensed tomato soup must not satisfy tomatoes',
+);
 
 // --- specific pantry still satisfies generic recipe (form tokens kept) ---
 assert(ingredientMatchScore('tomatoes', 'diced tomatoes') >= 0.72, 'diced tomatoes satisfies tomatoes');
