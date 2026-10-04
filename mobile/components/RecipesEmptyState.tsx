@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { HydrationSafeIonicon } from './HydrationSafeIonicon';
-import { ONBOARDING_COPY } from '../config/onboarding';
 import { RECIPES_COPY } from '../config/recipesCopy';
 import { THEME } from '../config/appConfig';
 import { TabEmptyState } from './onboarding/TabEmptyState';
@@ -26,7 +25,7 @@ export function RecipesEmptyState({ pantryEmpty }: RecipesEmptyStateProps) {
         onPress={() => router.push('/pantry')}
         className="mt-5 min-h-[48px] items-center justify-center rounded-2xl border border-border bg-paper px-5 py-3"
       >
-        <Text className="text-sm font-bold text-ink">{ONBOARDING_COPY.emptyStates.pantry.ctaLabel}</Text>
+        <Text className="text-sm font-bold text-ink">{RECIPES_COPY.pantryEmptyCard.scanCta}</Text>
       </Pressable>
     </View>
   );
