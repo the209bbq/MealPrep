@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
 import textwrap
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional
+from typing import Optional
 
 import duckdb
 import requests
@@ -19,34 +21,95 @@ import requests
 S3_BUCKET = "s3://overturemaps-us-west-2"
 USER_AGENT = "MealPlanatic-stores-ingest/1.0 (https://github.com/the209bbq/MealPrep)"
 
+# Overture taxonomy.primary values (checked against release 2026-09-23.1).
 GROCERY_CATEGORIES = {
     "grocery_store",
     "supermarket",
     "health_food_store",
-    "international_grocery",
-    "specialty_grocery",
-    "ethnic_grocery",
-    "butcher",
-    "produce",
+    "organic_grocery_store",
+    "international_grocery_store",
+    "asian_grocery_store",
+    "mexican_grocery_store",
+    "indian_grocery_store",
+    "korean_grocery_store",
+    "japanese_grocery_store",
+    "kosher_grocery_store",
+    "ethical_grocery_store",
+    "imported_food_store",
+    "butcher_shop",
+    "produce_store",
     "greengrocer",
-    "warehouse_club",
+    "seafood_market",
 }
 
-BIGBOX_NAME_PATTERNS = [
-    re.compile(r"walmart supercenter", re.I),
-    re.compile(r"\btarget\b", re.I),
-    re.compile(r"\bcostco\b", re.I),
-    re.compile(r"sam'?s club", re.I),
-    re.compile(r"\bwinco\b", re.I),
-    re.compile(r"dollar general market", re.I),
-]
-
-NAME_EXCLUDE = re.compile(
-    r"\b(cigarette|cigarettes|tobacco|smoke shop|beer wine|wine & gas|wine & spirits|liquor|vape|"
-    r"extramile|extra mile|amar beer|quick stop|quik stop|speedway|love'?s|flyers|mine-mart|"
-    r"fast & easy mart|five star food|wine vinegar|rocket|convenience|gas station|fuel)\b",
+# Known grocery chains / big-box grocers. Overture often mis-tags these
+# (e.g. Grocery Outlet -> discount_store, Raley's -> cafe, Save Mart -> convenience_store),
+# so a near-exact name match is accepted from any category when the category is in CHAIN_OK_CATEGORIES.
+CHAIN_NAME_RE = re.compile(
+    r"^(walmart( supercenter| neighborhood market)?|target|super target|costco( wholesale)?|sam'?s club|"
+    r"winco( foods)?|dollar general market|grocery outlet( bargain market)?|raley'?s|bel air|nob hill foods|"
+    r"save mart( supermarkets)?|foodmaxx|lucky supermarkets|safeway|vons|pavilions|albertsons|ralphs|"
+    r"food 4 less|foods co|smart ?& ?final( extra!?)?|sprouts( farmers market)?|trader joe'?s|"
+    r"whole foods( market)?|aldi|stater bros\.?( markets)?|kroger|fred meyer|king soopers|fry'?s( food)?|"
+    r"smith'?s( food (and|&) drug)?|qfc|h-e-b|heb|publix|meijer|hy-vee|wegmans|giant( eagle)?|"
+    r"food lion|harris teeter|piggly wiggly|ingles|winn-dixie|shoprite|stop & shop|hannaford|"
+    r"price chopper|market basket|jewel-osco|acme( markets)?|tops( markets)?|weis( markets)?|"
+    r"save-a-lot|save a lot|lidl|natural grocers|cardenas( markets)?|vallarta( supermarkets)?|"
+    r"northgate( gonzalez)?( market)?|el super|99 ranch market|h mart|food city|brookshire'?s|"
+    r"united supermarkets|winco foods|grocery outlet)"
+    r"( supermarket| market| store)?( #?\d+)?$",
     re.I,
 )
+
+# A chain-name match is only trusted when Overture's category is still store-like
+# (drops pharmacy counters, money centers, fuel, offices, restaurants, "TOPS" weight-loss clubs, etc.).
+CHAIN_OK_CATEGORIES = {
+    "",
+    "department_store",
+    "discount_store",
+    "shopping",
+    "shopping_mall",
+    "superstore",
+    "specialty_foods_store",
+    "wholesale_grocer",
+    "warehouse_club_store",
+    "farmers_market",
+    "food_and_beverage_store",
+    "market",
+    "public_market",
+    "drugstore",
+    "convenience_store",
+    "cafe",
+    "bakery",
+    "beer_wine_spirits_store",
+    "delicatessen",
+}
+
+NAME_EXCLUDE = re.compile(
+    r"\b(cigarette|cigarettes|tobacco|smoke shop|beer wine|wine & gas|wine & spirits|liquors?|vape|"
+    r"7-eleven|7 eleven|circle k|am ?pm|arco|valero|chevron|shell|76|exxon|mobil|sinclair|"
+    r"mini ?mart|minimart|food ?mart|gas|gasoline|quickeroo|stop n go|airgas|"
+    r"extramile|extra mile|amar beer|quick stop|quik stop|speedway|love'?s|flyers|mine-mart|"
+    r"fast & easy mart|five star food|wine vinegar|rocket|convenience|gas station|fuel|pharmacy)\b",
+    re.I,
+)
+
+RESTAURANT_RE = re.compile(
+    r"\b(restaurant|restaurante|taqueria|cafe|caf\u00e9|grill|birrieria|pizzeria)\b",
+    re.I,
+)
+GROCERY_WORD_RE = re.compile(
+    r"\b(market|marketplace|mercado|grocer|grocery|groceries|supermarket|supermercado|carniceria|meats?|"
+    r"foods|halal|deli|store|raley'?s)\b",
+    re.I,
+)
+
+SUPPLEMENT_SHOP_RE = re.compile(
+    r"\b(nutrishop|nutrition(?:\s+store|\s+shop)?|gnc|vitamin shoppe|vitamins?|supplements?)\b",
+    re.I,
+)
+
+WALMART_PICKUP_RE = re.compile(r"walmart grocery pickup", re.I)
 
 DISALLOWED_CATEGORIES = {
     "convenience_store",
@@ -54,7 +117,65 @@ DISALLOWED_CATEGORIES = {
     "liquor_store",
     "tobacco_shop",
     "vape_shop",
+    "vitamin_and_supplements_store",
+    "health_and_beauty_store",
 }
+
+US_STATE_NAME_TO_CODE: dict[str, str] = {
+    "alabama": "AL",
+    "alaska": "AK",
+    "arizona": "AZ",
+    "arkansas": "AR",
+    "california": "CA",
+    "colorado": "CO",
+    "connecticut": "CT",
+    "delaware": "DE",
+    "district of columbia": "DC",
+    "florida": "FL",
+    "georgia": "GA",
+    "hawaii": "HI",
+    "idaho": "ID",
+    "illinois": "IL",
+    "indiana": "IN",
+    "iowa": "IA",
+    "kansas": "KS",
+    "kentucky": "KY",
+    "louisiana": "LA",
+    "maine": "ME",
+    "maryland": "MD",
+    "massachusetts": "MA",
+    "michigan": "MI",
+    "minnesota": "MN",
+    "mississippi": "MS",
+    "missouri": "MO",
+    "montana": "MT",
+    "nebraska": "NE",
+    "nevada": "NV",
+    "new hampshire": "NH",
+    "new jersey": "NJ",
+    "new mexico": "NM",
+    "new york": "NY",
+    "north carolina": "NC",
+    "north dakota": "ND",
+    "ohio": "OH",
+    "oklahoma": "OK",
+    "oregon": "OR",
+    "pennsylvania": "PA",
+    "rhode island": "RI",
+    "south carolina": "SC",
+    "south dakota": "SD",
+    "tennessee": "TN",
+    "texas": "TX",
+    "utah": "UT",
+    "vermont": "VT",
+    "virginia": "VA",
+    "washington": "WA",
+    "west virginia": "WV",
+    "wisconsin": "WI",
+    "wyoming": "WY",
+}
+
+US_STATE_CODE_TO_NAME: dict[str, str] = {v: k.upper() for k, v in US_STATE_NAME_TO_CODE.items()}
 
 
 def latest_overture_release() -> str:
@@ -81,10 +202,46 @@ def places_glob(release: str) -> str:
     return f"{S3_BUCKET}/release/{release}/theme=places/type=place/*"
 
 
+def normalize_us_state(region: Optional[str]) -> str:
+    if not region:
+        return ""
+    raw = region.strip()
+    if not raw:
+        return ""
+    key = re.sub(r"\s+", " ", raw.lower())
+    if key in US_STATE_NAME_TO_CODE:
+        return US_STATE_NAME_TO_CODE[key]
+    if len(raw) == 2 and raw.isalpha():
+        # Reject Title-case truncations from old ingest (e.g. "De" from Delaware, "Ca" from California).
+        if raw[0].isupper() and raw[1].islower():
+            return ""
+        code = raw.upper()
+        return code if code in US_STATE_CODE_TO_NAME else ""
+    return ""
+
+
+def state_sql_filter(state: Optional[str]) -> str:
+    if not state:
+        return ""
+    code = state.strip().upper()
+    if len(code) != 2 or not code.isalpha():
+        raise SystemExit("--state must be a 2-letter USPS code (e.g. CA)")
+    full = US_STATE_CODE_TO_NAME.get(code, "").upper()
+    if full:
+        return f"AND upper(trim(addresses[1].region)) IN ('{code}', '{full}')"
+    return f"AND upper(trim(addresses[1].region)) = '{code}'"
+
+
 def name_allowed(name: str) -> bool:
     if not name or not name.strip():
         return False
+    if WALMART_PICKUP_RE.search(name):
+        return False
     if NAME_EXCLUDE.search(name):
+        return False
+    if SUPPLEMENT_SHOP_RE.search(name) and not GROCERY_WORD_RE.search(name):
+        return False
+    if RESTAURANT_RE.search(name) and not GROCERY_WORD_RE.search(name):
         return False
     if re.search(r"\bfood mart\b", name, re.I):
         return False
@@ -93,17 +250,26 @@ def name_allowed(name: str) -> bool:
 
 def category_allowed(category: str, name: str) -> bool:
     cat = (category or "").strip().lower()
+    trimmed = name.strip()
+    if CHAIN_NAME_RE.match(trimmed) and cat in CHAIN_OK_CATEGORIES:
+        return True
     if cat in DISALLOWED_CATEGORIES:
         return False
+    if cat == "convenience_store":
+        return False
     if cat in GROCERY_CATEGORIES:
-        return True
-    if any(p.search(name) for p in BIGBOX_NAME_PATTERNS):
         return True
     return False
 
 
 def normalize_name(name: str) -> str:
     return re.sub(r"\s+", " ", name.strip().lower())
+
+
+def rough_distance_m(a: StoreRow, b: StoreRow) -> float:
+    dlat = (a.lat - b.lat) * 111_320
+    dlng = (a.lng - b.lng) * 111_320 * max(0.3, abs(math.cos(a.lat * math.pi / 180)))
+    return (dlat * dlat + dlng * dlng) ** 0.5
 
 
 @dataclass
@@ -144,16 +310,24 @@ def fetch_overture_rows(release: str, state: Optional[str]) -> list[StoreRow]:
     con.execute("INSTALL httpfs; LOAD httpfs;")
     con.execute("INSTALL spatial; LOAD spatial;")
     glob = places_glob(release)
-    state_filter = ""
-    if state:
-        state_filter = f"AND upper(addresses[1].region) = '{state.upper()}'"
+    state_filter = state_sql_filter(state)
 
     cat_list = ", ".join(f"'{c}'" for c in sorted(GROCERY_CATEGORIES))
+    chain_prefix = (
+        "walmart|target|costco|sam.?s club|winco|dollar general market|grocery outlet|raley|bel air|"
+        "nob hill|save mart|foodmaxx|lucky|safeway|vons|pavilions|albertsons|ralphs|food 4 less|foods co|"
+        "smart ?& ?final|sprouts|trader joe|whole foods|aldi|stater bros|kroger|fred meyer|king soopers|"
+        "fry.?s|smith.?s|qfc|h-e-b|heb|publix|meijer|hy-vee|wegmans|giant|food lion|harris teeter|"
+        "piggly wiggly|ingles|winn-dixie|shoprite|stop & shop|hannaford|price chopper|market basket|"
+        "jewel-osco|acme|tops|weis|save-a-lot|save a lot|lidl|natural grocers|cardenas|vallarta|"
+        "northgate|el super|99 ranch|h mart|food city|brookshire|united supermarkets|super target"
+    )
     category_sql_filter = f"""
       AND (
         lower(COALESCE(taxonomy.primary, basic_category, '')) IN ({cat_list})
-        OR regexp_matches(lower(names.primary), 'walmart supercenter|\\\\btarget\\\\b|costco|sam''s club|winco|dollar general market')
+        OR regexp_matches(lower(names.primary), '^({chain_prefix})')
       )
+      AND COALESCE(operating_status, '') <> 'permanently_closed'
     """
 
     query = f"""
@@ -181,14 +355,14 @@ def fetch_overture_rows(release: str, state: Optional[str]) -> list[StoreRow]:
     raw = con.execute(query).fetchall()
     out: list[StoreRow] = []
     for row in raw:
-        oid, name, brand, category, address_line, city, st, zip_code, lat, lng, phone, website, confidence = row
+        oid, name, brand, category, address_line, city, st, zip_code, lat, lng, phone, website, _confidence = row
         name_s = str(name or "").strip()
         if not name_allowed(name_s):
             continue
         if not category_allowed(str(category or ""), name_s):
             continue
         zip_s = str(zip_code or "").strip()[:10]
-        st_s = str(st or "").strip()[:2]
+        st_s = normalize_us_state(str(st) if st is not None else None)
         out.append(
             StoreRow(
                 id=f"ovt-{oid}",
@@ -210,22 +384,36 @@ def fetch_overture_rows(release: str, state: Optional[str]) -> list[StoreRow]:
     return out
 
 
+def drop_walmart_pickup_near_store(rows: list[StoreRow], radius_m: float = 250.0) -> list[StoreRow]:
+    """Drop Walmart Grocery Pickup rows when a Walmart supercenter/neighborhood market is nearby."""
+    walmarts = [
+        r
+        for r in rows
+        if re.match(r"^walmart(\s|$)", r.name, re.I) and not WALMART_PICKUP_RE.search(r.name)
+    ]
+    kept: list[StoreRow] = []
+    for row in rows:
+        if WALMART_PICKUP_RE.search(row.name):
+            if any(rough_distance_m(row, w) <= radius_m for w in walmarts):
+                continue
+            continue
+        kept.append(row)
+    return kept
+
+
 def dedupe_nearby(rows: list[StoreRow], radius_m: float = 150.0) -> list[StoreRow]:
     kept: list[StoreRow] = []
+    by_name: dict[str, list[StoreRow]] = {}
     for row in rows:
         key = normalize_name(row.name)
         dup = False
-        for k in kept:
-            if normalize_name(k.name) != key:
-                continue
-            # rough meters via euclidean on small distances
-            dlat = (row.lat - k.lat) * 111_320
-            dlng = (row.lng - k.lng) * 111_320 * max(0.3, abs(__import__("math").cos(row.lat * 3.14159 / 180)))
-            if (dlat * dlat + dlng * dlng) ** 0.5 <= radius_m:
+        for k in by_name.get(key, []):
+            if rough_distance_m(row, k) <= radius_m:
                 dup = True
                 break
         if not dup:
             kept.append(row)
+            by_name.setdefault(key, []).append(row)
     return kept
 
 
@@ -307,7 +495,13 @@ def upsert_supabase_api(rows: list[StoreRow], project_ref: str, token: str, batc
               updated_at = now();
             """
         ).strip()
-        resp = requests.post(url, headers=headers, json={"query": query}, timeout=120)
+        for attempt in range(8):
+            resp = requests.post(url, headers=headers, json={"query": query}, timeout=120)
+            if resp.status_code not in (429, 502, 503, 504):
+                break
+            wait = float(resp.headers.get("Retry-After") or min(120, 10 * 2**attempt))
+            print(f"HTTP {resp.status_code}; retrying in {wait:.0f}s", file=sys.stderr)
+            time.sleep(wait)
         if resp.status_code >= 400:
             raise RuntimeError(f"Supabase API error {resp.status_code}: {resp.text[:500]}")
         print(f"Upserted {i + len(chunk)} / {len(rows)}", file=sys.stderr)
@@ -318,18 +512,15 @@ def main() -> None:
     parser.add_argument("--release", help="Overture release id (default: latest on S3)")
     parser.add_argument("--state", help="US state code filter, e.g. CA")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--merge-osm", action="store_true", help="Optional OSM merge (not implemented in v1)")
     parser.add_argument("--mode", choices=["postgres", "supabase-api"], default="supabase-api")
     parser.add_argument("--project-ref", default=os.environ.get("SUPABASE_PROJECT_REF"))
     parser.add_argument("--batch-size", type=int, default=1000)
     args = parser.parse_args()
 
-    if args.merge_osm:
-        print("Note: --merge-osm skipped in v1 (Overture-only).", file=sys.stderr)
-
     release = args.release or latest_overture_release()
     print(f"Overture release: {release}", file=sys.stderr)
     rows = fetch_overture_rows(release, args.state)
+    rows = drop_walmart_pickup_near_store(rows)
     rows = dedupe_nearby(rows)
     est = estimate_size_bytes(rows)
     print(f"Rows after filter/dedupe: {len(rows)}")

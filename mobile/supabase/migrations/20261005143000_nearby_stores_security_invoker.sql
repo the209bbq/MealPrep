@@ -1,37 +1,4 @@
--- US grocery store catalog for Stores tab (PostGIS nearby search).
--- Data loaded via mobile/scripts/stores-ingest/ (Overture Places).
-
-create extension if not exists postgis with schema extensions;
-
-create table if not exists public.stores (
-  id text primary key,
-  name text not null,
-  brand text,
-  category text,
-  address_line text not null default '',
-  city text not null default '',
-  state text not null default '',
-  zip text not null default '',
-  lat double precision not null,
-  lng double precision not null,
-  geom extensions.geography (point, 4326) not null,
-  phone text,
-  website text,
-  opening_hours text,
-  sources text[] not null default '{}',
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists stores_geom_gist_idx on public.stores using gist (geom);
-
-alter table public.stores enable row level security;
-
-drop policy if exists stores_public_read on public.stores;
-create policy stores_public_read on public.stores
-  for select
-  using (true);
-
-comment on table public.stores is 'Grocery / big-box store locations (Overture + optional OSM ingest).';
+-- Recreate nearby_stores as SECURITY INVOKER (table is public-read via RLS).
 
 create or replace function public.nearby_stores (
   p_lat double precision,
