@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { Card } from '../../components/Card';
@@ -39,7 +39,7 @@ import {
   filterRecipesTabRowsForDietPrefs,
 } from '../../lib/diet/filterRows';
 import { buildCreatorFeedCardModels } from '../../lib/recipes/creatorFeedRows';
-import { useSavedRecipes } from '../../hooks/useSavedRecipes';
+import { useSavedRecipes, type SavedRecipeToggleOutcome } from '../../hooks/useSavedRecipes';
 import { MyRecipesSheet } from '../../components/recipes/MyRecipesSheet';
 import { savedCreatorItemFromRecord } from '../../lib/savedRecipes/resolveRows';
 import { RECIPE_SOURCES } from '../../config/recipeSources';
@@ -70,6 +70,9 @@ export default function RecipesScreen() {
     feedKitchenRecipes,
     isGuest,
     userDietPrefs,
+    notifySavedToMyRecipes,
+    notifyRemovedFromMyRecipes,
+    notifyMyRecipesSaveFailed,
   } = useApp();
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
@@ -83,6 +86,19 @@ export default function RecipesScreen() {
   const showClassicRecipesFeed = creatorFeedEnabled && isClassicRecipesFeedMode(feedMode);
   const [myRecipesOpen, setMyRecipesOpen] = useState(false);
 
+  const handleSavedRecipeToggleOutcome = useCallback(
+    (outcome: SavedRecipeToggleOutcome) => {
+      if (outcome.status === 'saved') {
+        notifySavedToMyRecipes(() => setMyRecipesOpen(true));
+      } else if (outcome.status === 'removed') {
+        notifyRemovedFromMyRecipes(outcome.undo);
+      } else if (outcome.status === 'error') {
+        notifyMyRecipesSaveFailed();
+      }
+    },
+    [notifyMyRecipesSaveFailed, notifyRemovedFromMyRecipes, notifySavedToMyRecipes],
+  );
+
   const savedRecipes = useSavedRecipes({
     session,
     demoMode,
@@ -90,6 +106,7 @@ export default function RecipesScreen() {
     kitchenRecipes: feedKitchenRecipes,
     pantry,
     pantryMatches: pantryRecipeMatches,
+    onToggleOutcome: handleSavedRecipeToggleOutcome,
   });
 
   const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
@@ -304,6 +321,17 @@ export default function RecipesScreen() {
     return savedRecipes.isKitchenSaved(detailRow.recipe);
   }, [detailRow, feedKitchenRecipes, savedRecipes, viralOpenState]);
 
+  const detailSaveDisabled = useMemo(() => {
+    if (!detailRow || detailRow.kind !== 'kitchen') return false;
+    if (detailRow.recipe.id.startsWith('viral-preview-') && viralOpenState) {
+      const imported = feedKitchenRecipes.find(
+        (recipe) => recipe.sourceUrl && recipe.sourceUrl === viralOpenState.item.watchUrl,
+      );
+      return savedRecipes.isCreatorSavePending(viralOpenState.item.videoId, imported ?? null);
+    }
+    return savedRecipes.isKitchenSavePending(detailRow.recipe);
+  }, [detailRow, feedKitchenRecipes, savedRecipes, viralOpenState]);
+
   function toggleDetailRecipeSave() {
     if (!detailRow || detailRow.kind !== 'kitchen') return;
     if (detailRow.recipe.id.startsWith('viral-preview-') && viralOpenState) {
@@ -481,6 +509,11 @@ export default function RecipesScreen() {
                       }
                     : undefined
                 }
+                saveDisabled={
+                  result.row.kind === 'kitchen'
+                    ? savedRecipes.isKitchenSavePending(result.row.recipe)
+                    : false
+                }
                 onOpen={() => openDetail(result.row)}
               />
             ) : (
@@ -494,6 +527,10 @@ export default function RecipesScreen() {
                 onToggleSave={() =>
                   savedRecipes.toggleCreatorVideo(result.model.video, result.model.importedRecipe)
                 }
+                saveDisabled={savedRecipes.isCreatorSavePending(
+                  result.model.videoId,
+                  result.model.importedRecipe,
+                )}
                 onOpen={() => {
                   openViralItem(result.model.item);
                 }}
@@ -517,6 +554,7 @@ export default function RecipesScreen() {
                     }
                   : undefined
               }
+              saveDisabled={row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false}
               onOpen={() => openDetail(row)}
             />
           ))
@@ -532,6 +570,7 @@ export default function RecipesScreen() {
               model={model}
               saved={savedRecipes.isCreatorSaved(model.videoId, model.importedRecipe)}
               onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
+              saveDisabled={savedRecipes.isCreatorSavePending(model.videoId, model.importedRecipe)}
               onOpen={() => {
                 openViralItem(model.item);
               }}
@@ -563,6 +602,7 @@ export default function RecipesScreen() {
                     }
                   : undefined
               }
+              saveDisabled={row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false}
               onOpen={() => openDetail(row)}
             />
           ))
@@ -601,6 +641,7 @@ export default function RecipesScreen() {
         onClearRecipeSource={(recipeId) => void clearImportedRecipeSource(recipeId)}
         recipeSaved={detailRecipeSaved}
         onToggleSaveRecipe={detailRow?.kind === 'kitchen' ? toggleDetailRecipeSave : undefined}
+        saveDisabled={detailSaveDisabled}
       />
     </ScrollView>
   );

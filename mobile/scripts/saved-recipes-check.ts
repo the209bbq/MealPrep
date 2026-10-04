@@ -4,6 +4,7 @@ import path from 'node:path';
 import { CREATOR_RECIPES_FEED_MODES } from '../config/creatorRecipes';
 import { VIRAL_RECIPES_FEED_MODES } from '../config/viralRecipes';
 import { savedRefKeyCreator, savedRefKeyKitchen, savedRefKeyMealDb } from '../lib/savedRecipes/keys';
+import { applySavedToggle, isRefKeySaved } from '../lib/savedRecipes/optimistic';
 import { savedRecordFromKitchenRecipe, savedRecordFromViralItem } from '../lib/savedRecipes/payloads';
 import { buildSavedRecipeFeedRows } from '../lib/savedRecipes/resolveRows';
 import { buildPantryMatchIndex } from '../lib/recipeMatch';
@@ -62,5 +63,16 @@ const matches = buildPantryMatchIndex([recipe], []);
 const rows = buildSavedRecipeFeedRows([record], [recipe], [], matches);
 assert.equal(rows.length, 1);
 assert.equal(rows[0]?.recipe.name, 'Teriyaki Chicken');
+
+assert.equal(isRefKeySaved([], record.refKey), false);
+const afterSave = applySavedToggle([], record.refKey, record);
+assert.equal(isRefKeySaved(afterSave, record.refKey), true);
+assert.equal(afterSave.length, 1);
+const afterUnsave = applySavedToggle(afterSave, record.refKey, null);
+assert.equal(isRefKeySaved(afterUnsave, record.refKey), false);
+assert.equal(afterUnsave.length, 0);
+const replaced = applySavedToggle(afterSave, record.refKey, { ...record, title: 'Updated title' });
+assert.equal(replaced.length, 1);
+assert.equal(replaced[0]?.title, 'Updated title');
 
 console.log('saved-recipes-check: ok');

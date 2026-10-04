@@ -6,6 +6,7 @@ import {
   removeGuestSavedRecipe,
   upsertGuestSavedRecipe,
 } from '../lib/savedRecipes/localStore';
+import { applySavedToggle } from '../lib/savedRecipes/optimistic';
 import {
   savedRecordFromCreatorVideo,
   savedRecordFromKitchenRecipe,
@@ -14,6 +15,7 @@ import {
 } from '../lib/savedRecipes/payloads';
 import type { ViralRecipeLinkItem } from '../lib/viralRecipes/types';
 import { savedRefKeyCreator, savedRefKeyKitchen, savedRefKeyMealDb } from '../lib/savedRecipes/keys';
+import { refKeyForCreatorVideo, refKeyForKitchenRecipe } from '../lib/savedRecipes/refKey';
 import { mealDbIdFromKitchenRecipe } from '../lib/savedRecipes/preview';
 import {
   buildSavedRecipeFeedRows,
@@ -30,6 +32,12 @@ import type { PantryItem, Recipe } from '../types/mealprep';
 import type { SavedRecipeRecord } from '../lib/savedRecipes/types';
 import { isMealDbRecipeId } from '../lib/mealdb/normalize';
 
+export type SavedRecipeToggleOutcome =
+  | { status: 'saved' }
+  | { status: 'removed'; undo: () => void }
+  | { status: 'error' }
+  | { status: 'skipped' };
+
 export function useSavedRecipes(options: {
   session: Session | null;
   demoMode: boolean;
@@ -37,13 +45,18 @@ export function useSavedRecipes(options: {
   kitchenRecipes: readonly Recipe[];
   pantry: PantryItem[];
   pantryMatches: PantryMatchIndex;
+  onToggleOutcome?: (outcome: SavedRecipeToggleOutcome) => void;
 }) {
-  const { session, demoMode, isGuest, kitchenRecipes, pantry, pantryMatches } = options;
+  const { session, demoMode, isGuest, kitchenRecipes, pantry, pantryMatches, onToggleOutcome } =
+    options;
   const userId = session?.user?.id ?? null;
   const supabase = getSupabase();
   const [records, setRecords] = useState<SavedRecipeRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [pendingRefKeys, setPendingRefKeys] = useState<Set<string>>(() => new Set());
   const savedKeys = useMemo(() => new Set(records.map((row) => row.refKey)), [records]);
+  const onToggleOutcomeRef = useRef(onToggleOutcome);
+  onToggleOutcomeRef.current = onToggleOutcome;
 
   const load = useCallback(async () => {
     if (demoMode) {
@@ -71,41 +84,105 @@ export function useSavedRecipes(options: {
   }, [load]);
 
   const persistRef = useRef(0);
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
+  const toggleRefKeyRef = useRef<
+    (refKey: string, nextRecord: SavedRecipeRecord | null) => Promise<void>
+  >(async () => {});
+
+  const setPending = useCallback((refKey: string, pending: boolean) => {
+    setPendingRefKeys((prev) => {
+      const next = new Set(prev);
+      if (pending) next.add(refKey);
+      else next.delete(refKey);
+      return next;
+    });
+  }, []);
+
+  const emitOutcome = useCallback((outcome: SavedRecipeToggleOutcome) => {
+    onToggleOutcomeRef.current?.(outcome);
+  }, []);
 
   const toggleRefKey = useCallback(
     async (refKey: string, nextRecord: SavedRecipeRecord | null) => {
-      persistRef.current += 1;
-      const token = persistRef.current;
+      if (pendingRefKeys.has(refKey)) {
+        emitOutcome({ status: 'skipped' });
+        return;
+      }
 
-      if (demoMode) return;
+      if (demoMode) {
+        emitOutcome({ status: 'skipped' });
+        return;
+      }
+
+      const priorRecords = recordsRef.current;
+      const removedRecord = nextRecord
+        ? null
+        : priorRecords.find((row) => row.refKey === refKey) ?? null;
+
+      setPending(refKey, true);
+
+      const finish = (outcome: SavedRecipeToggleOutcome) => {
+        setPending(refKey, false);
+        emitOutcome(outcome);
+      };
 
       if (isGuest || !userId || !supabase) {
-        if (nextRecord) {
-          setRecords(upsertGuestSavedRecipe(nextRecord));
-        } else {
-          setRecords(removeGuestSavedRecipe(refKey));
+        try {
+          if (nextRecord) {
+            setRecords(upsertGuestSavedRecipe(nextRecord));
+            finish({
+              status: 'saved',
+            });
+          } else {
+            setRecords(removeGuestSavedRecipe(refKey));
+            finish({
+              status: 'removed',
+              undo: () => {
+                if (removedRecord) void toggleRefKeyRef.current(refKey, removedRecord);
+              },
+            });
+          }
+        } catch {
+          finish({ status: 'error' });
         }
         return;
       }
 
-      const optimistic = nextRecord
-        ? [nextRecord, ...records.filter((row) => row.refKey !== refKey)]
-        : records.filter((row) => row.refKey !== refKey);
+      const optimistic = applySavedToggle(priorRecords, refKey, nextRecord);
       setRecords(optimistic);
+
+      persistRef.current += 1;
+      const token = persistRef.current;
 
       try {
         if (nextRecord) {
           await upsertUserSavedRecipe(supabase, userId, nextRecord);
+          finish({ status: 'saved' });
         } else {
           await deleteUserSavedRecipe(supabase, userId, refKey);
+          finish({
+            status: 'removed',
+            undo: () => {
+              if (removedRecord) void toggleRefKeyRef.current(refKey, removedRecord);
+            },
+          });
         }
       } catch {
         if (token === persistRef.current) {
-          void load();
+          setRecords(priorRecords);
         }
+        finish({ status: 'error' });
       }
     },
-    [demoMode, isGuest, load, records, supabase, userId],
+    [demoMode, emitOutcome, isGuest, pendingRefKeys, setPending, supabase, userId],
+  );
+
+  toggleRefKeyRef.current = toggleRefKey;
+
+  const isPendingRefKey = useCallback(
+    (refKey: string) => pendingRefKeys.has(refKey),
+    [pendingRefKeys],
   );
 
   const isSavedRef = useCallback((refKey: string) => savedKeys.has(refKey), [savedKeys]);
@@ -127,11 +204,23 @@ export function useSavedRecipes(options: {
     [isKitchenSaved, savedKeys],
   );
 
+  const isKitchenSavePending = useCallback(
+    (recipe: Recipe) => isPendingRefKey(refKeyForKitchenRecipe(recipe)),
+    [isPendingRefKey],
+  );
+
+  const isCreatorSavePending = useCallback(
+    (videoId: string, importedRecipe: Recipe | null) =>
+      isPendingRefKey(refKeyForCreatorVideo(videoId, importedRecipe)),
+    [isPendingRefKey],
+  );
+
   const toggleKitchenRecipe = useCallback(
     (recipe: Recipe) => {
-      const record = isMealDbRecipeId(recipe.id) || recipe.sourceType === 'themealdb'
-        ? savedRecordFromMealDbRecipe(recipe)
-        : savedRecordFromKitchenRecipe(recipe);
+      const record =
+        isMealDbRecipeId(recipe.id) || recipe.sourceType === 'themealdb'
+          ? savedRecordFromMealDbRecipe(recipe)
+          : savedRecordFromKitchenRecipe(recipe);
       const saved = isSavedRef(record.refKey);
       void toggleRefKey(record.refKey, saved ? null : record);
     },
@@ -181,6 +270,9 @@ export function useSavedRecipes(options: {
     isSavedRef,
     isKitchenSaved,
     isCreatorSaved,
+    isPendingRefKey,
+    isKitchenSavePending,
+    isCreatorSavePending,
     toggleKitchenRecipe,
     toggleCreatorVideo,
     toggleViralItem,

@@ -29,6 +29,7 @@ import { formatIngredientText, formatQuantityWithUnit } from '../../lib/formatQu
 import type { Recipe } from '../../types/mealprep';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 import { RecipeSaveButton } from './RecipeSaveButton';
+import { RecipeSaveCta } from './RecipeSaveCta';
 import type { ViralRecipeLinkItem } from '../../lib/viralRecipes/types';
 import { RecipeDietNotice } from '../diet/RecipeDietNotice';
 import { ingredientLinesFromRecipe } from '../../lib/diet/ingredientLines';
@@ -50,6 +51,7 @@ export interface RecipeDetailSheetProps {
   onSignInForImport?: () => void;
   recipeSaved?: boolean;
   onToggleSaveRecipe?: () => void;
+  saveDisabled?: boolean;
   onClearRecipeSource?: (recipeId: string) => void;
   viralItem?: ViralRecipeLinkItem | null;
   creatorAvatarUrl?: string | null;
@@ -137,6 +139,7 @@ function ClassicRecipeDetailBody({
   onSignInForImport,
   recipeSaved,
   onToggleSaveRecipe,
+  saveDisabled = false,
   onClearRecipeSource,
 }: {
   row: RecipesTabRow;
@@ -155,6 +158,7 @@ function ClassicRecipeDetailBody({
   onSignInForImport?: () => void;
   recipeSaved?: boolean;
   onToggleSaveRecipe?: () => void;
+  saveDisabled?: boolean;
   onClearRecipeSource?: (recipeId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -193,13 +197,22 @@ function ClassicRecipeDetailBody({
           Recipe
         </Text>
         {onToggleSaveRecipe ? (
-          <RecipeSaveButton saved={Boolean(recipeSaved)} onToggle={onToggleSaveRecipe} size={20} />
+          <RecipeSaveButton
+            saved={Boolean(recipeSaved)}
+            onToggle={onToggleSaveRecipe}
+            size={20}
+            disabled={saveDisabled}
+          />
         ) : (
           <View className="w-10" />
         )}
       </View>
 
-      <ScrollView className="flex-1 pb-10" keyboardShouldPersistTaps="handled">
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: onToggleSaveRecipe ? 120 + insets.bottom : 40 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <RecipeThumbnail
           uri={heroUri}
           accessibilityLabel={`Photo for ${kitchenRecipe.name}`}
@@ -347,6 +360,19 @@ function ClassicRecipeDetailBody({
           )}
         </View>
       </ScrollView>
+
+      {onToggleSaveRecipe ? (
+        <View
+          className="absolute bottom-0 left-0 right-0 border-t border-border bg-card px-4 pt-3"
+          style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+        >
+          <RecipeSaveCta
+            saved={Boolean(recipeSaved)}
+            onToggle={onToggleSaveRecipe}
+            disabled={saveDisabled}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -367,6 +393,7 @@ export function RecipeDetailSheet({
   onSignInForImport,
   recipeSaved,
   onToggleSaveRecipe,
+  saveDisabled = false,
   onClearRecipeSource,
   viralItem = null,
   creatorAvatarUrl = null,
@@ -401,6 +428,7 @@ export function RecipeDetailSheet({
           onSignInForImport={onSignInForImport}
           recipeSaved={recipeSaved}
           onToggleSaveRecipe={onToggleSaveRecipe}
+          saveDisabled={saveDisabled}
           onAddMissing={() => {
             if (row.kind === 'kitchen') onAddMissingKitchen(row.recipe.id, match ?? undefined);
             else onAddMissingDiscovery(row.recipe);
@@ -424,6 +452,7 @@ export function RecipeDetailSheet({
           onSignInForImport={onSignInForImport}
           recipeSaved={recipeSaved}
           onToggleSaveRecipe={onToggleSaveRecipe}
+          saveDisabled={saveDisabled}
           onClearRecipeSource={onClearRecipeSource}
         />
       )}

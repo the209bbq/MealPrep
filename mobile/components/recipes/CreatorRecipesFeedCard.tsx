@@ -14,6 +14,7 @@ interface CreatorRecipesFeedCardProps {
   onOpen: () => void;
   saved?: boolean;
   onToggleSave?: () => void;
+  saveDisabled?: boolean;
 }
 
 function CreatorRecipesFeedCardInner({
@@ -21,6 +22,7 @@ function CreatorRecipesFeedCardInner({
   onOpen,
   saved,
   onToggleSave,
+  saveDisabled = false,
 }: CreatorRecipesFeedCardProps) {
   const { item, match, importedRecipe, sourceLabel } = model;
   const name = importedRecipe?.name ?? item.title;
@@ -46,7 +48,12 @@ function CreatorRecipesFeedCardInner({
         <DietAllergenBadge ingredientLines={ingredientLines} />
         {onToggleSave ? (
           <View className="absolute right-2 top-2">
-            <RecipeSaveButton saved={Boolean(saved)} onToggle={onToggleSave} size={20} />
+            <RecipeSaveButton
+              saved={Boolean(saved)}
+              onToggle={onToggleSave}
+              size={20}
+              disabled={saveDisabled}
+            />
           </View>
         ) : null}
       </View>

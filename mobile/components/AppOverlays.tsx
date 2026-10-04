@@ -17,6 +17,7 @@ export function AppOverlays() {
           onDismiss={dismissUndoToast}
           actionLabel={undoToast.actionLabel}
           onAction={undoToast.onAction}
+          showUndo={undoToast.showUndo}
         />
       ) : null}
     </View>
