@@ -1,6 +1,7 @@
 import { SMART_SHOP } from '../../config/appConfig';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { mergeKrogerLocations } from '../stores/krogerMerge';
+import { applyOriginDistancesAndSort } from '../stores/storeDistance';
 import { previewNearbyGroceryStores, searchNearbyGroceryStores, type StoreRecord } from '../stores';
 import { assembleDealsResult, remapKrogerDealsToStores, storeRecordToLocation } from './buildShopResult';
 import { KROGER_NOT_CONFIGURED_NOTE, isKrogerProxyAvailable } from './krogerAvailability';
@@ -77,11 +78,13 @@ export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
     }
   }
 
+  const withDistance = applyOriginDistancesAndSort(merged, origin);
+
   return {
     originLabel: origin.label,
     storeSearchWarning: warning,
     storeSearchFailed,
-    stores: merged.map(storeRecordToLocation),
+    stores: withDistance.map(storeRecordToLocation),
   };
 }
 
