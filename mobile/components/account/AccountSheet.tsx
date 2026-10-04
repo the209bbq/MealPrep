@@ -19,7 +19,6 @@ import { ROLE_LABELS, THEME } from '../../config/appConfig';
 import { USER_PREFERENCE_LABELS } from '../../config/userPreferences';
 import { useApp } from '../../context/AppContext';
 import { InstallAppBanner } from '../InstallAppBanner';
-import { TourReplayCard } from '../onboarding/TourReplayCard';
 import type { UserRole } from '../../types/mealprep';
 import { AccountPlanSection } from './AccountPlanSection';
 import { ProfileAvatar } from './ProfileAvatar';
@@ -42,7 +41,6 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
     setDemoRole,
     userPreferences,
     setUserPreference,
-    onboarding,
     saveProfileSetup,
     uploadProfilePhoto,
     removeProfilePhoto,
@@ -200,8 +198,6 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                 </Pressable>
               </View>
             ) : null}
-
-            <TourReplayCard onReplay={onboarding.requestTourReplay} className="mt-4" />
 
             <View className="mt-4 rounded-2xl border border-border bg-card px-4 py-3">
               <Text className="text-sm font-bold text-ink">Kitchen preferences</Text>

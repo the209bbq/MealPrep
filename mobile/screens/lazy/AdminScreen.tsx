@@ -4,7 +4,6 @@ import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-nati
 import { AdminScanCorrectionsCard } from '../../components/admin/AdminScanCorrectionsCard';
 import { Card } from '../../components/Card';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
-import { TourReplayCard } from '../../components/onboarding/TourReplayCard';
 import { FEATURE_FLAG_LABELS, ROLE_LABELS, THEME, isDemoMode } from '../../config/appConfig';
 import { APP_ROUTES } from '../../config/appRoutes';
 import { PLAN_LABELS, USER_PLANS, type UserPlan } from '../../config/plans';
@@ -33,7 +32,6 @@ export default function AdminScreen() {
     setUserPreference,
     seedPantry,
     analytics,
-    onboarding,
     session,
   } = useApp();
 
@@ -81,8 +79,6 @@ export default function AdminScreen() {
           <Text className="text-center font-bold text-slate">Load sample pantry items</Text>
         </Pressable>
       </Card>
-
-      <TourReplayCard onReplay={onboarding.requestTourReplay} />
 
       {!demoMode ? <AdminUserPlanCard /> : null}
 

@@ -41,7 +41,6 @@ export default function DiscoverRecipeDetailScreen() {
     toggleMealPlanDiscoveryRecipe,
     isOnMealPlan,
     addMissingDiscoveryRecipeIngredientsToGrocery,
-    onboarding,
   } = useApp();
   const accessToken = getRecipeDiscoveryAccessToken(session);
 
@@ -84,7 +83,6 @@ export default function DiscoverRecipeDetailScreen() {
         const detail = await fetchDiscoveryRecipeDetail(recipeId, accessToken);
         if (cancelled) return;
         setLoadState({ key: requestKey, recipe: detail, error: null, done: true });
-        onboarding.notifyTutorialStepComplete('recipes');
       } catch (err) {
         if (cancelled) return;
         let message = 'Could not load recipe';
@@ -101,7 +99,7 @@ export default function DiscoverRecipeDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, invalidRecipeId, onboarding, recipeId, requestKey]);
+  }, [accessToken, invalidRecipeId, recipeId, requestKey]);
 
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);

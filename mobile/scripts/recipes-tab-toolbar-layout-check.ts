@@ -91,11 +91,6 @@ async function runPlaywrightLayoutCheck(): Promise<void> {
     for (const width of [360, 412]) {
       const page = await browser.newPage({ viewport: { width, height: 800 } });
       await page.goto(`${origin}${basePath}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-      await page.evaluate(() => {
-        localStorage.setItem('mealprep.onboarding.welcomeDismissed', 'true');
-        localStorage.setItem('mealprep.onboarding.tourCompleted', 'true');
-        localStorage.setItem('mealprep.onboarding.tourQueued', 'false');
-      });
       await page.goto(`${origin}${basePath}/recipes`, { waitUntil: 'networkidle', timeout: 60_000 });
       await page.waitForTimeout(800);
 

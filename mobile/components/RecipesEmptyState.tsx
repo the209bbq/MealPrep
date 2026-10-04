@@ -1,9 +1,8 @@
-import { router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { HydrationSafeIonicon } from './HydrationSafeIonicon';
 import { RECIPES_COPY } from '../config/recipesCopy';
 import { THEME } from '../config/appConfig';
-import { TabEmptyState } from './onboarding/TabEmptyState';
+import { TabEmptyState } from './TabEmptyState';
 
 interface RecipesEmptyStateProps {
   pantryEmpty: boolean;
@@ -11,7 +10,7 @@ interface RecipesEmptyStateProps {
 
 export function RecipesEmptyState({ pantryEmpty }: RecipesEmptyStateProps) {
   if (pantryEmpty) {
-    return <TabEmptyState tab="recipes" />;
+    return <TabEmptyState tab="recipes_pantry" />;
   }
 
   return (
@@ -21,12 +20,6 @@ export function RecipesEmptyState({ pantryEmpty }: RecipesEmptyStateProps) {
       </View>
       <Text className="text-center text-lg font-bold text-ink">{RECIPES_COPY.emptyState.title}</Text>
       <Text className="mt-2 text-center text-sm leading-5 text-muted">{RECIPES_COPY.emptyState.body}</Text>
-      <Pressable
-        onPress={() => router.push('/pantry')}
-        className="mt-5 min-h-[48px] items-center justify-center rounded-2xl border border-border bg-paper px-5 py-3"
-      >
-        <Text className="text-sm font-bold text-ink">{RECIPES_COPY.pantryEmptyCard.scanCta}</Text>
-      </Pressable>
     </View>
   );
 }
