@@ -62,7 +62,7 @@ const sorted = sortStoresByDistanceMiles([
 assert(sorted[0].name === 'near', 'sort by distance');
 
 const saveMartPage = resolveStorePageUrl(oakdaleSaveMart);
-assert(saveMartPage.includes('savemart.com'), 'save mart store page');
+assert(saveMartPage.includes('google.com/maps'), 'save mart without store website uses Maps');
 
 const weekly = resolveWeeklyAdLink(oakdaleSaveMart);
 assert(weekly?.url.includes('weekly-ad'), 'save mart weekly ad');
@@ -113,12 +113,12 @@ const food4Less: StoreLocation = {
   chain: 'Food 4 Less',
 };
 const f4lPage = resolveStorePageUrl(food4Less);
-assert(f4lPage.includes('myfood4less.com/store/food4less/pages/locations'), 'norcal food 4 less store page');
+assert(f4lPage.includes('google.com/maps'), 'norcal food 4 less without website uses Maps');
 const f4lAd = resolveWeeklyAdLink(food4Less);
 assert(f4lAd?.url.includes('myfood4less.com/store/food4less/pages/weekly-ad'), 'norcal food 4 less weekly ad');
 
 const wincoPage = resolveStorePageUrl(winco);
-assert(wincoPage.includes('wincofoods.com/store-locator'), 'winco store locator');
+assert(wincoPage.includes('google.com/maps'), 'winco uses Maps');
 
 assert(VERIFIED_WEEKLY_AD_CHAIN_KEYS.length >= 15, 'weekly ad keys documented');
 

@@ -286,6 +286,7 @@ export function useNearbyStoresList(profile: UserProfile) {
     setQuery,
     zip,
     setZip,
+    searchZip,
     filteredStores,
     loadingStores,
     updatingStores,

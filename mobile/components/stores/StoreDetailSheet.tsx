@@ -17,16 +17,18 @@ import { StoreDeliveryRow } from './StoreDeliveryRow';
 
 type Props = {
   store: StoreLocation | null;
+  searchOriginZip?: string;
   onClose: () => void;
 };
 
-export function StoreDetailSheet({ store, onClose }: Props) {
+export function StoreDetailSheet({ store, searchOriginZip, onClose }: Props) {
   if (!store) return null;
 
   const phone = resolveStorePhone(store);
   const directionsUrl = mapsDirectionsUrl(store);
-  const storePageUrl = resolveStorePageUrl(store);
-  const storePageLabel = resolveStorePageUsesGoogleMaps(store)
+  const storePageOptions = searchOriginZip ? { fallbackZip: searchOriginZip } : undefined;
+  const storePageUrl = resolveStorePageUrl(store, storePageOptions);
+  const storePageLabel = resolveStorePageUsesGoogleMaps(store, storePageOptions)
     ? STORES_TAB_COPY.detailViewOnGoogleMaps
     : STORES_TAB_COPY.detailStorePage;
   const weeklyAd = resolveWeeklyAdLink(store);

@@ -132,7 +132,11 @@ export default function StoresScreen() {
         onRequestClose={() => stores.setLocationModalOpen(false)}
       />
 
-      <StoreDetailSheet store={selectedStore} onClose={() => setSelectedStore(null)} />
+      <StoreDetailSheet
+        store={selectedStore}
+        searchOriginZip={stores.searchZip}
+        onClose={() => setSelectedStore(null)}
+      />
     </View>
   );
 }
