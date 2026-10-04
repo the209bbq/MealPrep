@@ -1,4 +1,7 @@
 import { LIBRARY_IMAGE_BUCKET } from './config.ts';
+import { parseGeminiUsageMetadata, type GeminiUsageMetadata } from './generationUsage.ts';
+import { buildRecipeImagePrompt } from './imagePrompt.ts';
+import type { RecipeImportExtracted } from '../recipe-import/recipeImportSchema.ts';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -14,18 +17,24 @@ function classifyQuota(status: number, body: string): 'rate_limit' | 'quota_exha
   return 'none';
 }
 
-async function generateWithImagenPredict(
+async function generateWithGeminiImage(
   apiKey: string,
   model: string,
   prompt: string,
-): Promise<{ bytes: Uint8Array; contentType: string } | { error: string; quota: 'rate_limit' | 'quota_exhausted' | 'none' }> {
-  const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(apiKey)}`;
+): Promise<
+  | { bytes: Uint8Array; contentType: string; usage: GeminiUsageMetadata }
+  | { error: string; quota: 'rate_limit' | 'quota_exhausted' | 'none' }
+> {
+  const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      instances: [{ prompt }],
-      parameters: { sampleCount: 1, aspectRatio: '4:3' },
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseModalities: ['IMAGE'],
+        imageConfig: { aspectRatio: '4:3' },
+      },
     }),
   });
   const text = await response.text();
@@ -33,15 +42,21 @@ async function generateWithImagenPredict(
     return { error: text.slice(0, 400), quota: classifyQuota(response.status, text) };
   }
   const json = JSON.parse(text) as {
-    predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>;
+    candidates?: Array<{
+      content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> };
+    }>;
+    usageMetadata?: unknown;
   };
-  const b64 = json.predictions?.[0]?.bytesBase64Encoded;
-  if (!b64) return { error: 'No image bytes', quota: 'none' };
+  const parts = json.candidates?.[0]?.content?.parts ?? [];
+  const inline = parts.find((p) => p.inlineData?.data)?.inlineData;
+  const b64 = inline?.data;
+  if (!b64) return { error: 'No image inlineData in response', quota: 'none' };
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  const contentType = json.predictions?.[0]?.mimeType?.includes('png') ? 'image/png' : 'image/jpeg';
-  return { bytes, contentType };
+  const mime = inline?.mimeType ?? 'image/png';
+  const contentType = mime.includes('jpeg') || mime.includes('jpg') ? 'image/jpeg' : 'image/png';
+  return { bytes, contentType, usage: parseGeminiUsageMetadata(json.usageMetadata) };
 }
 
 async function resizeToWebMax(bytes: Uint8Array, contentType: string): Promise<{ bytes: Uint8Array; contentType: string }> {
@@ -70,16 +85,19 @@ export async function generateAndStoreRecipeImage(options: {
   supabaseUrl: string;
   serviceKey: string;
   slug: string;
-  title: string;
-}): Promise<{ result: ImageGenResult; quota: 'rate_limit' | 'quota_exhausted' | 'none' }> {
-  const prompt =
-    `Professional food photography of ${options.title}. Appetizing, realistic plated home-cooked dinner on a simple table. ` +
-    'Soft natural light, shallow depth of field. No people, no hands, no logos, no text, no brands.';
+  recipe: RecipeImportExtracted;
+}): Promise<{
+  result: ImageGenResult;
+  quota: 'rate_limit' | 'quota_exhausted' | 'none';
+  usage?: GeminiUsageMetadata;
+  errorDetail?: string;
+}> {
+  const prompt = buildRecipeImagePrompt(options.recipe);
 
-  const generated = await generateWithImagenPredict(options.apiKey, options.imageModel, prompt);
+  const generated = await generateWithGeminiImage(options.apiKey, options.imageModel, prompt);
   if ('error' in generated) {
     console.warn('library-generate image failed', generated.error);
-    return { result: null, quota: generated.quota };
+    return { result: null, quota: generated.quota, errorDetail: generated.error };
   }
 
   const resized = await resizeToWebMax(generated.bytes, generated.contentType);
@@ -99,13 +117,15 @@ export async function generateAndStoreRecipeImage(options: {
   });
 
   if (!upload.ok) {
-    console.warn('library-generate image upload failed', await upload.text());
-    return { result: null, quota: 'none' };
+    const detail = await upload.text();
+    console.warn('library-generate image upload failed', detail);
+    return { result: null, quota: 'none', errorDetail: detail.slice(0, 400) };
   }
 
   const publicUrl = `${options.supabaseUrl.replace(/\/$/, '')}/storage/v1/object/public/${LIBRARY_IMAGE_BUCKET}/${path}`;
   return {
     result: { bytes: resized.bytes, contentType: resized.contentType, publicUrl },
     quota: 'none',
+    usage: generated.usage,
   };
 }

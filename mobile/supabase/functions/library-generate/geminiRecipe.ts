@@ -3,13 +3,14 @@ import {
   validateGeminiRecipeImportPayload,
   type RecipeImportExtracted,
 } from '../recipe-import/recipeImportSchema.ts';
+import { parseGeminiUsageMetadata, type GeminiUsageMetadata } from './generationUsage.ts';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 export type GeminiQuotaKind = 'none' | 'rate_limit' | 'quota_exhausted';
 
 export type GeminiCallResult<T> =
-  | { ok: true; data: T }
+  | { ok: true; data: T; usage: GeminiUsageMetadata }
   | { ok: false; status?: number; detail: string; quota: GeminiQuotaKind };
 
 const GENERATION_PROMPT = (dishName: string) =>
@@ -83,13 +84,14 @@ async function callGeminiJson<T>(
   try {
     const json = JSON.parse(text) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: unknown;
     };
     const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) {
       return { ok: false, detail: 'Empty Gemini response', quota: 'none' };
     }
     const payload = JSON.parse(rawText) as T;
-    return { ok: true, data: payload };
+    return { ok: true, data: payload, usage: parseGeminiUsageMetadata(json.usageMetadata) };
   } catch (error) {
     return {
       ok: false,
@@ -115,7 +117,7 @@ export async function generateLibraryRecipe(
   if (!validated || !validated.is_recipe) {
     return { ok: false, detail: 'Model returned non-recipe payload', quota: 'none' };
   }
-  return { ok: true, data: { ...validated, servings: 4 } };
+  return { ok: true, data: { ...validated, servings: 4 }, usage: gen.usage };
 }
 
 interface CriticPayload {
@@ -124,14 +126,21 @@ interface CriticPayload {
   fixed_recipe?: Record<string, unknown>;
 }
 
+export type CriticLibraryResult = {
+  approve: boolean;
+  issues: string[];
+  recipe: RecipeImportExtracted;
+  usages: Array<{ phase: 'critic' | 'critic_retry'; usage: GeminiUsageMetadata }>;
+};
+
 export async function criticLibraryRecipe(
   apiKey: string,
   model: string,
   dishName: string,
   recipe: RecipeImportExtracted,
-): Promise<
-  GeminiCallResult<{ approve: boolean; issues: string[]; recipe: RecipeImportExtracted }>
-> {
+): Promise<GeminiCallResult<CriticLibraryResult>> {
+  const usages: Array<{ phase: 'critic' | 'critic_retry'; usage: GeminiUsageMetadata }> = [];
+
   const critic = await callGeminiJson<CriticPayload>(
     apiKey,
     model,
@@ -139,6 +148,7 @@ export async function criticLibraryRecipe(
     CRITIC_SCHEMA,
   );
   if (!critic.ok) return critic;
+  usages.push({ phase: 'critic', usage: critic.usage });
 
   let finalRecipe = recipe;
   if (!critic.data.approve && critic.data.fixed_recipe) {
@@ -151,6 +161,7 @@ export async function criticLibraryRecipe(
         CRITIC_SCHEMA,
       );
       if (!second.ok) return second;
+      usages.push({ phase: 'critic_retry', usage: second.usage });
       if (!second.data.approve) {
         return {
           ok: true,
@@ -158,13 +169,16 @@ export async function criticLibraryRecipe(
             approve: false,
             issues: [...(critic.data.issues ?? []), ...(second.data.issues ?? [])],
             recipe: fixed,
+            usages,
           },
+          usage: critic.usage,
         };
       }
       finalRecipe = fixed;
       return {
         ok: true,
-        data: { approve: true, issues: second.data.issues ?? [], recipe: finalRecipe },
+        data: { approve: true, issues: second.data.issues ?? [], recipe: finalRecipe, usages },
+        usage: critic.usage,
       };
     }
   }
@@ -176,12 +190,15 @@ export async function criticLibraryRecipe(
         approve: false,
         issues: critic.data.issues ?? [],
         recipe: finalRecipe,
+        usages,
       },
+      usage: critic.usage,
     };
   }
 
   return {
     ok: true,
-    data: { approve: true, issues: critic.data.issues ?? [], recipe: finalRecipe },
+    data: { approve: true, issues: critic.data.issues ?? [], recipe: finalRecipe, usages },
+    usage: critic.usage,
   };
 }

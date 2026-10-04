@@ -52,7 +52,7 @@
     "test:recipes-list-shop-line": "npx tsx scripts/recipes-list-shop-line-check.ts",
     "test:recipes-diversity": "npx tsx scripts/recipes-diversity-check.ts",
     "test:recipe-discovery-client": "npx tsx scripts/recipe-discovery-client-check.ts",
-    "test:library-recipes": "npx tsx scripts/library-recipes-check.ts",
+    "test:library-recipes": "npx tsx scripts/library-recipes-check.ts && npx tsx scripts/library-image-prompt-check.ts",
     "test:recipe-import": "npx tsx scripts/recipe-import-check.ts",
     "test:viral-recipes": "npx tsx scripts/viral-recipes-check.ts && npx tsx scripts/viral-recipes-relevance-check.ts",
     "test:viral-recipes-live": "npx tsx scripts/viral-recipes-live-sample.ts",

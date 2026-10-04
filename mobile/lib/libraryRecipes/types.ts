@@ -23,5 +23,6 @@ export interface LibraryRecipeRow {
   status: LibraryRecipeStatus;
   review_notes: string | null;
   model: string | null;
+  generation_usage?: Record<string, unknown> | null;
   created_at: string;
 }
