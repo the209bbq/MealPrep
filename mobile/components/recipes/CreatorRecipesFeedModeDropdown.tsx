@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { THEME } from '../../config/appConfig';
@@ -9,6 +8,7 @@ import {
   CREATOR_RECIPES_FEED_MODES,
   type CreatorRecipesFeedMode,
 } from '../../config/creatorRecipes';
+import { AnchoredDropdownOverlay, useAnchoredDropdownTrigger } from '../AnchoredDropdownOverlay';
 
 export function CreatorRecipesFeedModeDropdown({
   value,
@@ -17,12 +17,12 @@ export function CreatorRecipesFeedModeDropdown({
   value: CreatorRecipesFeedMode;
   onChange: (next: CreatorRecipesFeedMode) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const { triggerRef, open, anchor, toggleMenu, closeMenu, onTriggerLayout } = useAnchoredDropdownTrigger();
 
   return (
-    <View className="relative shrink-0" style={{ zIndex: open ? 10 : 1 }}>
+    <View ref={triggerRef} collapsable={false} onLayout={onTriggerLayout} className="shrink-0">
       <Pressable
-        onPress={() => setOpen((prev) => !prev)}
+        onPress={toggleMenu}
         accessibilityRole="button"
         accessibilityLabel={`${CREATOR_RECIPES_COPY.feedAccessibility}: ${CREATOR_RECIPES_FEED_MODE_LABELS[value]}`}
         accessibilityState={{ expanded: open }}
@@ -33,32 +33,27 @@ export function CreatorRecipesFeedModeDropdown({
         </Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={THEME.muted} />
       </Pressable>
-      {open ? (
-        <View
-          className="absolute right-0 top-full z-20 mt-1 min-w-[132px] overflow-hidden rounded-xl border border-border bg-paper shadow-sm"
-          style={{ maxWidth: 240 }}
-        >
-          {CREATOR_RECIPES_FEED_MODES.map((choice) => {
-            const selected = choice === value;
-            return (
-              <Pressable
-                key={choice}
-                onPress={() => {
-                  onChange(choice);
-                  setOpen(false);
-                }}
-                className={`px-3 py-2 ${selected ? 'bg-primary-light' : 'bg-paper'}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-              >
-                <Text className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}>
-                  {CREATOR_RECIPES_FEED_MODE_LABELS[choice]}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
+      <AnchoredDropdownOverlay visible={open} anchor={anchor} onClose={closeMenu}>
+        {CREATOR_RECIPES_FEED_MODES.map((choice) => {
+          const selected = choice === value;
+          return (
+            <Pressable
+              key={choice}
+              onPress={() => {
+                onChange(choice);
+                closeMenu();
+              }}
+              className={`px-3 py-2 ${selected ? 'bg-primary-light' : 'bg-paper'}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+            >
+              <Text className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}>
+                {CREATOR_RECIPES_FEED_MODE_LABELS[choice]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </AnchoredDropdownOverlay>
     </View>
   );
 }
