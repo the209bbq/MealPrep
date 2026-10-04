@@ -102,6 +102,8 @@ import {
 import { localDateString } from '../lib/communityDeals/localDate';
 import { formatAddedToCalendarMessage } from '../lib/mealCalendar/formatScheduleToast';
 import { mergeGuestKitchenIntoAccount } from '../lib/guest/mergeGuestKitchen';
+import { clearGuestSavedRecipes, readGuestSavedRecipes } from '../lib/savedRecipes/localStore';
+import { mergeGuestSavedRecipesIntoAccount } from '../lib/savedRecipes/supabaseStore';
 import { readJson, removeStorageKey, writeJson } from '../lib/storage';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
 import { getSupabase } from '../lib/supabase';
@@ -545,6 +547,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       clearGuestKitchenStorage();
+    }
+
+    const guestSavedRecipes = readGuestSavedRecipes();
+    if (guestSavedRecipes.length > 0) {
+      await mergeGuestSavedRecipesIntoAccount(supabase, userId, guestSavedRecipes);
+      clearGuestSavedRecipes();
     }
 
     removeStorageKey(STORAGE_KEYS.pantry);

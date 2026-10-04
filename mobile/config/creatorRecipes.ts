@@ -10,26 +10,18 @@ export const CREATOR_RECIPES_FEED_MODES = [
   'quick',
   'budget',
   'classic_recipes',
-  'my_recipes',
 ] as const;
 
 export type CreatorRecipesFeedMode = (typeof CREATOR_RECIPES_FEED_MODES)[number];
 
-export type CreatorRecipesBrowseMode = Exclude<
-  CreatorRecipesFeedMode,
-  'classic_recipes' | 'my_recipes'
->;
+export type CreatorRecipesBrowseMode = Exclude<CreatorRecipesFeedMode, 'classic_recipes'>;
 
 export function isCreatorBrowseMode(mode: CreatorRecipesFeedMode): mode is CreatorRecipesBrowseMode {
-  return mode !== 'classic_recipes' && mode !== 'my_recipes';
+  return mode !== 'classic_recipes';
 }
 
 export function isClassicRecipesFeedMode(mode: CreatorRecipesFeedMode): boolean {
   return mode === 'classic_recipes';
-}
-
-export function isMyRecipesFeedMode(mode: CreatorRecipesFeedMode): boolean {
-  return mode === 'my_recipes';
 }
 
 export const CREATOR_RECIPES = {
@@ -46,7 +38,6 @@ export const CREATOR_RECIPES_FEED_MODE_LABELS: Record<CreatorRecipesFeedMode, st
   quick: 'Quick',
   budget: 'Budget',
   classic_recipes: MEALDB_COPY.feedModeLabel,
-  my_recipes: 'My recipes',
 };
 
 export const CREATOR_RECIPES_COPY = {

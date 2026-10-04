@@ -8,14 +8,23 @@ import {
   resolveKitchenRecipeImageUrl,
 } from '../../lib/recipes/recipeImageUrl';
 import { RecipeThumbnail } from './RecipeThumbnail';
+import { RecipeSaveButton } from './RecipeSaveButton';
 
 interface RecipesUnifiedFeedCardProps {
   row: RecipesTabRow;
   onOpen: () => void;
   sourceTag?: string | null;
+  saved?: boolean;
+  onToggleSave?: () => void;
 }
 
-function RecipesUnifiedFeedCardInner({ row, onOpen, sourceTag }: RecipesUnifiedFeedCardProps) {
+function RecipesUnifiedFeedCardInner({
+  row,
+  onOpen,
+  sourceTag,
+  saved,
+  onToggleSave,
+}: RecipesUnifiedFeedCardProps) {
   const name = row.recipe.name;
   const imageUri = useMemo(
     () =>
@@ -34,12 +43,19 @@ function RecipesUnifiedFeedCardInner({ row, onOpen, sourceTag }: RecipesUnifiedF
       accessibilityLabel={`${name}. ${shopLine}`}
       className="mb-2 overflow-hidden rounded-xl border border-border bg-card"
     >
-      <RecipeThumbnail
-        uri={imageUri}
-        accessibilityLabel=""
-        height={RECIPE_IMAGE.listHeight}
-        lazy
-      />
+      <View className="relative">
+        <RecipeThumbnail
+          uri={imageUri}
+          accessibilityLabel=""
+          height={RECIPE_IMAGE.listHeight}
+          lazy
+        />
+        {onToggleSave ? (
+          <View className="absolute right-2 top-2">
+            <RecipeSaveButton saved={Boolean(saved)} onToggle={onToggleSave} size={20} />
+          </View>
+        ) : null}
+      </View>
       <View className="px-3 py-2.5">
         <Text className="text-base font-semibold text-ink" numberOfLines={2}>
           {name}

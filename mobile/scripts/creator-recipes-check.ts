@@ -4,7 +4,6 @@ import {
   CREATOR_RECIPES_FEED_MODE_LABELS,
   isClassicRecipesFeedMode,
   isCreatorBrowseMode,
-  isMyRecipesFeedMode,
 } from '../config/creatorRecipes';
 import { RECIPE_SOURCES } from '../config/recipeSources';
 import { getCreatorVideosUrl, isCreatorRecipesConfigured } from '../config/appConfig';
@@ -21,7 +20,7 @@ assert.equal(CREATOR_RECIPES_FEED_MODES.includes('popular'), true);
 assert.equal(CREATOR_RECIPES_FEED_MODE_LABELS.classic_recipes, 'Classic recipes');
 assert.equal(isCreatorBrowseMode('quick'), true);
 assert.equal(isClassicRecipesFeedMode('classic_recipes'), true);
-assert.equal(isMyRecipesFeedMode('my_recipes'), true);
+assert.equal(CREATOR_RECIPES_FEED_MODES.includes('my_recipes' as never), false);
 assert.equal(typeof isCreatorRecipesConfigured(), 'boolean');
 assert.equal(typeof getCreatorVideosUrl(), 'string');
 

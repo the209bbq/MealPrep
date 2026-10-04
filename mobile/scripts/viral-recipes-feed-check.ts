@@ -15,11 +15,9 @@ import {
 import type { ViralRecipeLinkItem } from '../lib/viralRecipes/types';
 import { buildPantryMatchIndex } from '../lib/recipeMatch';
 
-assert.equal(VIRAL_RECIPES_FEED_MODES.includes('my_recipes'), true);
+assert.equal(VIRAL_RECIPES_FEED_MODES.includes('my_recipes' as never), false);
 assert.equal(VIRAL_RECIPES_FEED_MODES.includes('classic_recipes'), true);
-assert.equal(VIRAL_RECIPES_FEED_MODE_LABELS.my_recipes, 'My recipes');
 assert.equal(VIRAL_RECIPES_FEED_MODE_LABELS.classic_recipes, MEALDB_COPY.feedModeLabel);
-assert.equal(isViralRecipesCategory('my_recipes'), false);
 assert.equal(isViralRecipesCategory('classic_recipes'), false);
 assert.equal(isClassicRecipesFeedMode('classic_recipes'), true);
 assert.equal(isViralRecipesCategory('viral'), true);

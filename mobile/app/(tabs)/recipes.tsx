@@ -22,10 +22,10 @@ import {
   CREATOR_RECIPES_COPY,
   isClassicRecipesFeedMode,
   isCreatorBrowseMode,
-  isMyRecipesFeedMode,
   type CreatorRecipesBrowseMode,
   type CreatorRecipesFeedMode,
 } from '../../config/creatorRecipes';
+import { SAVED_RECIPES_COPY } from '../../config/savedRecipes';
 import { useRecipesTabFilters } from '../../hooks/useRecipesTabFilters';
 import { useCreatorChannelVideos, useCreatorFeed, useCreatorList } from '../../hooks/useCreatorRecipes';
 import { useUnifiedRecipeSearch } from '../../hooks/useUnifiedRecipeSearch';
@@ -34,7 +34,9 @@ import { useApp } from '../../context/AppContext';
 import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
 import { buildCreatorFeedCardModels } from '../../lib/recipes/creatorFeedRows';
-import { buildMyRecipesFeedRows } from '../../lib/recipes/viralFeedRows';
+import { useSavedRecipes } from '../../hooks/useSavedRecipes';
+import { MyRecipesSheet } from '../../components/recipes/MyRecipesSheet';
+import { savedCreatorItemFromRecord } from '../../lib/savedRecipes/resolveRows';
 import { RECIPE_SOURCES } from '../../config/recipeSources';
 import { MEALDB_COPY } from '../../config/mealdb';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
@@ -62,6 +64,7 @@ export default function RecipesScreen() {
     toggleMealPlanKitchenRecipe,
     onboarding,
     feedKitchenRecipes,
+    isGuest,
   } = useApp();
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
@@ -73,7 +76,16 @@ export default function RecipesScreen() {
     RECIPE_SOURCES.creatorRecipesPrimaryFeed && isCreatorRecipesConfigured();
   const browseMode: CreatorRecipesBrowseMode = isCreatorBrowseMode(feedMode) ? feedMode : 'popular';
   const showClassicRecipesFeed = creatorFeedEnabled && isClassicRecipesFeedMode(feedMode);
-  const showMyRecipesFeed = creatorFeedEnabled && isMyRecipesFeedMode(feedMode);
+  const [myRecipesOpen, setMyRecipesOpen] = useState(false);
+
+  const savedRecipes = useSavedRecipes({
+    session,
+    demoMode,
+    isGuest,
+    kitchenRecipes: feedKitchenRecipes,
+    pantry,
+    pantryMatches: pantryRecipeMatches,
+  });
 
   const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
     enabled: creatorFeedEnabled && !searchQuery.trim() && !selectedCreator,
@@ -134,25 +146,13 @@ export default function RecipesScreen() {
 
   const kitchenRecipes = useMemo(() => feedKitchenRecipes, [feedKitchenRecipes]);
 
-  const myRecipesBaseRows = useMemo(
-    () =>
-      buildMyRecipesFeedRows({
-        kitchenRecipes,
-        pantryMatches: pantryRecipeMatches,
-      }),
-    [kitchenRecipes, pantryRecipeMatches],
-  );
-
   const filterBaseRows = useMemo((): RecipesTabRow[] => {
-    if (creatorFeedEnabled && showMyRecipesFeed) {
-      return myRecipesBaseRows;
-    }
     return buildRecipesTabCatalogRows({
       kitchenRecipes,
       pantryMatches: pantryRecipeMatches,
       discoverySuggestions: [],
     });
-  }, [creatorFeedEnabled, kitchenRecipes, myRecipesBaseRows, pantryRecipeMatches, showMyRecipesFeed]);
+  }, [kitchenRecipes, pantryRecipeMatches]);
 
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
@@ -250,9 +250,7 @@ export default function RecipesScreen() {
   const showLegacyKitchenFeed = !creatorFeedEnabled;
   const searching = searchQuery.trim().length >= 2;
 
-  const hasUnfilteredResults = showMyRecipesFeed
-    ? myRecipesBaseRows.length > 0
-    : showClassicRecipesFeed
+  const hasUnfilteredResults = showClassicRecipesFeed
       ? mealDbRows.length > 0
       : showLegacyKitchenFeed
         ? filterBaseRows.length > 0
@@ -261,7 +259,7 @@ export default function RecipesScreen() {
           : browseVideoModels.length > 0 || creators.length > 0;
 
   const showFilterEmpty =
-    showMyRecipesFeed &&
+    showLegacyKitchenFeed &&
     recipesTabNarrowingFiltersActive(filters) &&
     hasUnfilteredResults &&
     filteredRows.length === 0 &&
@@ -291,6 +289,46 @@ export default function RecipesScreen() {
     !demoMode;
 
   const activeCreator = selectedCreator ?? channelCreator;
+
+  const detailRecipeSaved = useMemo(() => {
+    if (!detailRow || detailRow.kind !== 'kitchen') return false;
+    if (detailRow.recipe.id.startsWith('viral-preview-') && viralOpenState) {
+      const imported = feedKitchenRecipes.find(
+        (recipe) => recipe.sourceUrl && recipe.sourceUrl === viralOpenState.item.watchUrl,
+      );
+      return savedRecipes.isCreatorSaved(viralOpenState.item.videoId, imported ?? null);
+    }
+    return savedRecipes.isKitchenSaved(detailRow.recipe);
+  }, [detailRow, feedKitchenRecipes, savedRecipes, viralOpenState]);
+
+  function toggleDetailRecipeSave() {
+    if (!detailRow || detailRow.kind !== 'kitchen') return;
+    if (detailRow.recipe.id.startsWith('viral-preview-') && viralOpenState) {
+      const imported = feedKitchenRecipes.find(
+        (recipe) => recipe.sourceUrl && recipe.sourceUrl === viralOpenState.item.watchUrl,
+      );
+      savedRecipes.toggleViralItem(viralOpenState.item, imported ?? null);
+      return;
+    }
+    savedRecipes.toggleKitchenRecipe(detailRow.recipe);
+  }
+
+  function openSavedRecipeRow(row: RecipesTabRow) {
+    setMyRecipesOpen(false);
+    if (row.kind === 'kitchen' && row.recipe.id.startsWith('viral-preview-')) {
+      const record = savedRecipes.records.find((entry) => {
+        const item = savedCreatorItemFromRecord(entry);
+        return item?.videoId && row.recipe.id === `viral-preview-${item.videoId}`;
+      });
+      const item = record ? savedCreatorItemFromRecord(record) : null;
+      if (item) {
+        openViralItem(item);
+        onboarding.notifyTutorialStepComplete('recipes');
+        return;
+      }
+    }
+    openDetail(row);
+  }
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8">
@@ -329,6 +367,16 @@ export default function RecipesScreen() {
             autoCorrect={false}
             accessibilityLabel="Search recipes"
           />
+          {creatorFeedEnabled ? (
+            <Pressable
+              onPress={() => setMyRecipesOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={SAVED_RECIPES_COPY.myRecipesButton}
+              className="rounded-lg border border-border bg-card px-2.5 py-2"
+            >
+              <Text className="text-[11px] font-semibold text-ink">{SAVED_RECIPES_COPY.myRecipesButton}</Text>
+            </Pressable>
+          ) : null}
           {creatorFeedEnabled && !searching ? (
             <CreatorRecipesFeedModeDropdown value={feedMode} onChange={setFeedMode} />
           ) : null}
@@ -338,7 +386,7 @@ export default function RecipesScreen() {
           text={typeof params.text === 'string' ? params.text : undefined}
           autoRun={autoStartSharedImport}
         />
-        {showMyRecipesFeed || showLegacyKitchenFeed ? (
+        {showLegacyKitchenFeed ? (
           <RecipesTabFilterBar
             baseRows={filterBaseRows}
             filters={filters}
@@ -416,12 +464,32 @@ export default function RecipesScreen() {
                 key={`classic-${result.row.recipe.id}`}
                 row={result.row}
                 sourceTag={CREATOR_RECIPES_COPY.sourceClassic}
+                saved={
+                  result.row.kind === 'kitchen'
+                    ? savedRecipes.isKitchenSaved(result.row.recipe)
+                    : false
+                }
+                onToggleSave={
+                  result.row.kind === 'kitchen'
+                    ? () => {
+                        if (result.row.kind !== 'kitchen') return;
+                        savedRecipes.toggleKitchenRecipe(result.row.recipe);
+                      }
+                    : undefined
+                }
                 onOpen={() => openDetail(result.row)}
               />
             ) : (
               <CreatorRecipesFeedCard
                 key={result.model.videoId}
                 model={result.model}
+                saved={savedRecipes.isCreatorSaved(
+                  result.model.videoId,
+                  result.model.importedRecipe,
+                )}
+                onToggleSave={() =>
+                  savedRecipes.toggleCreatorVideo(result.model.video, result.model.importedRecipe)
+                }
                 onOpen={() => {
                   openViralItem(result.model.item);
                   onboarding.notifyTutorialStepComplete('recipes');
@@ -437,6 +505,15 @@ export default function RecipesScreen() {
               key={row.recipe.id}
               row={row}
               sourceTag={MEALDB_COPY.feedModeLabel}
+              saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
+              onToggleSave={
+                row.kind === 'kitchen'
+                  ? () => {
+                      if (row.kind !== 'kitchen') return;
+                      savedRecipes.toggleKitchenRecipe(row.recipe);
+                    }
+                  : undefined
+              }
               onOpen={() => openDetail(row)}
             />
           ))
@@ -445,12 +522,13 @@ export default function RecipesScreen() {
       {creatorFeedEnabled &&
       isCreatorBrowseMode(feedMode) &&
       !searching &&
-      !showClassicRecipesFeed &&
-      !showMyRecipesFeed
+      !showClassicRecipesFeed
         ? browseVideoModels.map((model) => (
             <CreatorRecipesFeedCard
               key={model.videoId}
               model={model}
+              saved={savedRecipes.isCreatorSaved(model.videoId, model.importedRecipe)}
+              onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
               onOpen={() => {
                 openViralItem(model.item);
                 onboarding.notifyTutorialStepComplete('recipes');
@@ -462,7 +540,6 @@ export default function RecipesScreen() {
       {creatorFeedEnabled &&
       !searching &&
       !showClassicRecipesFeed &&
-      !showMyRecipesFeed &&
       isCreatorBrowseMode(feedMode) &&
       !selectedCreator &&
       browseVideoModels.length === 0 &&
@@ -470,15 +547,32 @@ export default function RecipesScreen() {
         <Text className="mt-4 text-sm text-muted">{CREATOR_RECIPES_COPY.emptyVideos}</Text>
       ) : null}
 
-      {showMyRecipesFeed || showLegacyKitchenFeed
+      {showLegacyKitchenFeed
         ? filteredRows.map((row) => (
             <RecipesUnifiedFeedCard
               key={row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`}
               row={row}
+              saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
+              onToggleSave={
+                row.kind === 'kitchen'
+                  ? () => {
+                      if (row.kind !== 'kitchen') return;
+                      savedRecipes.toggleKitchenRecipe(row.recipe);
+                    }
+                  : undefined
+              }
               onOpen={() => openDetail(row)}
             />
           ))
         : null}
+
+      <MyRecipesSheet
+        visible={myRecipesOpen}
+        onClose={() => setMyRecipesOpen(false)}
+        rows={savedRecipes.feedRows}
+        guestHint={isGuest && !demoMode}
+        onOpenRow={openSavedRecipeRow}
+      />
 
       <RecipeDetailSheet
         visible={detailRow != null}
@@ -503,6 +597,8 @@ export default function RecipesScreen() {
         isOnMealPlan={isOnMealPlan}
         onToggleKitchen={(recipeId) => void toggleMealPlanKitchenRecipe(recipeId)}
         onToggleDiscovery={(recipe) => void toggleMealPlanDiscoveryRecipe(recipe)}
+        recipeSaved={detailRecipeSaved}
+        onToggleSaveRecipe={detailRow?.kind === 'kitchen' ? toggleDetailRecipeSave : undefined}
       />
     </ScrollView>
   );

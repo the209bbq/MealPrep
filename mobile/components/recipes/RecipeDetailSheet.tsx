@@ -28,6 +28,7 @@ import { isMealDbRecipeId } from '../../lib/mealdb/normalize';
 import { MealDbRecipeCreditLine } from './MealDbRecipeCreditLine';
 import type { Recipe } from '../../types/mealprep';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
+import { RecipeSaveButton } from './RecipeSaveButton';
 
 export interface RecipeDetailSheetProps {
   visible: boolean;
@@ -47,6 +48,8 @@ export interface RecipeDetailSheetProps {
   importError?: string | null;
   onRetryImport?: () => void;
   onSignInForImport?: () => void;
+  recipeSaved?: boolean;
+  onToggleSaveRecipe?: () => void;
 }
 
 type DetailSection = 'ingredients' | 'steps';
@@ -131,6 +134,8 @@ export function RecipeDetailSheet({
   importError = null,
   onRetryImport,
   onSignInForImport,
+  recipeSaved,
+  onToggleSaveRecipe,
 }: RecipeDetailSheetProps) {
   const insets = useSafeAreaInsets();
   const [section, setSection] = useState<DetailSection>('ingredients');
@@ -184,7 +189,11 @@ export function RecipeDetailSheet({
           <Text className="flex-1 text-center text-sm font-semibold text-muted" numberOfLines={1}>
             Recipe
           </Text>
-          <View className="w-10" />
+          {onToggleSaveRecipe ? (
+            <RecipeSaveButton saved={Boolean(recipeSaved)} onToggle={onToggleSaveRecipe} size={20} />
+          ) : (
+            <View className="w-10" />
+          )}
         </View>
 
         <ScrollView className="flex-1 pb-10" keyboardShouldPersistTaps="handled">
