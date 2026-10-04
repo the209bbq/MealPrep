@@ -1,8 +1,14 @@
 import { getRecipeImportUrl, isDemoMode } from '../../config/appConfig';
-import { RECIPE_IMPORT } from '../../config/recipeImport';
+import { RECIPE_IMPORT, RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import { withTimeout } from '../withTimeout';
-import { parseImportInput } from './parseImportInput';
+import { parseImportInput, MIN_TEXT_IMPORT_CHARS } from './parseImportInput';
 import { extractUrlFromClipboardText } from './extractUrlFromClipboardText';
+import {
+  applyRedditCreditToImport,
+  isRedditImportUrl,
+  resolveRedditImportContext,
+  stripRedditUrlsFromText,
+} from './redditClient';
 import type {
   RecipeImportErrorEnvelope,
   RecipeImportExtractedDto,
@@ -40,6 +46,10 @@ export class RecipeImportUpstreamError extends Error {
 
 export class RecipeImportCaptionRequiredError extends Error {
   code = 'CAPTION_REQUIRED';
+}
+
+export class RecipeImportRedditTipError extends Error {
+  code = 'REDDIT_TIP';
 }
 
 export interface RecipeImportCallResult {
@@ -153,10 +163,12 @@ async function callRecipeImport(
 export async function importRecipeFromText(
   text: string,
   accessToken: string | null,
+  options?: { privateImport?: boolean },
 ): Promise<RecipeImportExtractedDto> {
   const result = await callRecipeImport(accessToken, {
     action: 'text',
     text: text.trim(),
+    private_import: options?.privateImport === true,
   });
   return result.recipe;
 }
@@ -164,11 +176,34 @@ export async function importRecipeFromText(
 export async function importRecipeSmartInput(
   raw: string,
   accessToken: string | null,
+  options?: { rememberedRedditPostUrl?: string | null },
 ): Promise<RecipeImportExtractedDto> {
+  const redditContext = resolveRedditImportContext(raw, options?.rememberedRedditPostUrl ?? null);
+  const recipeText = stripRedditUrlsFromText(raw);
+
+  if (redditContext && recipeText.length >= MIN_TEXT_IMPORT_CHARS) {
+    const recipe = await importRecipeFromText(recipeText, accessToken, { privateImport: true });
+    return applyRedditCreditToImport(recipe, redditContext);
+  }
+
   const parsed = parseImportInput(raw);
   if (!parsed) {
+    if (redditContext) {
+      throw new RecipeImportRedditTipError(RECIPE_IMPORT_COPY.redditPasteTip);
+    }
     throw new RecipeImportUpstreamError(RECIPE_IMPORT.invalidUrlMessage);
   }
+
+  if (parsed.kind === 'url' && isRedditImportUrl(parsed.url)) {
+    const caption = parsed.caption?.trim() ?? '';
+    if (caption.length >= MIN_TEXT_IMPORT_CHARS) {
+      const ctx = resolveRedditImportContext(parsed.url, parsed.url)!;
+      const recipe = await importRecipeFromText(caption, accessToken, { privateImport: true });
+      return applyRedditCreditToImport(recipe, ctx);
+    }
+    throw new RecipeImportRedditTipError(RECIPE_IMPORT_COPY.redditPasteTip);
+  }
+
   if (parsed.kind === 'text') {
     return importRecipeFromText(parsed.text, accessToken);
   }
@@ -206,11 +241,12 @@ export async function confirmYoutubeRecipeImport(
 
 export async function importRecipeFromPhotos(
   accessToken: string | null,
-  options: { photoStoragePaths: string[] },
+  options: { photoStoragePaths: string[]; privateImport?: boolean },
 ): Promise<RecipeImportExtractedDto> {
   const result = await callRecipeImport(accessToken, {
     action: 'photo',
     photoStoragePaths: options.photoStoragePaths,
+    private_import: options.privateImport === true,
   });
   return result.recipe;
 }

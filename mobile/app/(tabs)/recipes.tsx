@@ -57,6 +57,7 @@ export default function RecipesScreen() {
     demoMode,
     openAuthSheet,
     saveLinkImportedRecipe,
+    clearImportedRecipeSource,
     servingOverrides,
     applyServingOverridesBatch,
     featureFlags,
@@ -597,6 +598,7 @@ export default function RecipesScreen() {
         isOnMealPlan={isOnMealPlan}
         onToggleKitchen={(recipeId) => void toggleMealPlanKitchenRecipe(recipeId)}
         onToggleDiscovery={(recipe) => void toggleMealPlanDiscoveryRecipe(recipe)}
+        onClearRecipeSource={(recipeId) => void clearImportedRecipeSource(recipeId)}
         recipeSaved={detailRecipeSaved}
         onToggleSaveRecipe={detailRow?.kind === 'kitchen' ? toggleDetailRecipeSave : undefined}
       />

@@ -50,6 +50,7 @@ export interface RecipeDetailSheetProps {
   onSignInForImport?: () => void;
   recipeSaved?: boolean;
   onToggleSaveRecipe?: () => void;
+  onClearRecipeSource?: (recipeId: string) => void;
   viralItem?: ViralRecipeLinkItem | null;
   creatorAvatarUrl?: string | null;
 }
@@ -136,6 +137,7 @@ function ClassicRecipeDetailBody({
   onSignInForImport,
   recipeSaved,
   onToggleSaveRecipe,
+  onClearRecipeSource,
 }: {
   row: RecipesTabRow;
   match: RecipePantryMatch | null | undefined;
@@ -153,6 +155,7 @@ function ClassicRecipeDetailBody({
   onSignInForImport?: () => void;
   recipeSaved?: boolean;
   onToggleSaveRecipe?: () => void;
+  onClearRecipeSource?: (recipeId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [section, setSection] = useState<DetailSection>('ingredients');
@@ -218,12 +221,29 @@ function ClassicRecipeDetailBody({
           {row.kind === 'kitchen' &&
           !isMealDbCatalog &&
           (sourceCredit?.creatorName || sourceCredit?.originalUrl) ? (
-            <RecipeSourceCreditLine
-              creatorName={sourceCredit.creatorName}
-              creatorUrl={sourceCredit.creatorUrl}
-              originalUrl={sourceCredit.originalUrl}
-              className="mt-1"
-            />
+            <>
+              <RecipeSourceCreditLine
+                creatorName={sourceCredit.creatorName}
+                creatorUrl={sourceCredit.creatorUrl}
+                originalUrl={sourceCredit.originalUrl}
+                plainCreatorCredit={sourceCredit.plainCreatorCredit}
+                viewOriginalLabel={sourceCredit.viewOriginalLabel}
+                viewOriginalAccessibility={sourceCredit.viewOriginalAccessibility}
+                className="mt-1"
+              />
+              {row.recipe.sourceType === 'reddit' && onClearRecipeSource ? (
+                <Pressable
+                  onPress={() => onClearRecipeSource(row.recipe.id)}
+                  className="mt-1 self-start"
+                  accessibilityRole="button"
+                  accessibilityLabel={RECIPE_IMPORT_COPY.removeSourceAccessibility}
+                >
+                  <Text className="text-xs font-semibold text-muted">
+                    {RECIPE_IMPORT_COPY.removeSourceCta}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </>
           ) : null}
 
           <Text className="mt-1 text-xs text-muted">
@@ -347,6 +367,7 @@ export function RecipeDetailSheet({
   onSignInForImport,
   recipeSaved,
   onToggleSaveRecipe,
+  onClearRecipeSource,
   viralItem = null,
   creatorAvatarUrl = null,
 }: RecipeDetailSheetProps) {
@@ -403,6 +424,7 @@ export function RecipeDetailSheet({
           onSignInForImport={onSignInForImport}
           recipeSaved={recipeSaved}
           onToggleSaveRecipe={onToggleSaveRecipe}
+          onClearRecipeSource={onClearRecipeSource}
         />
       )}
     </Modal>

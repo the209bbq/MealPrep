@@ -1,5 +1,19 @@
-import { isRedditImportHostname } from './redditImport.ts';
 import { validatePublicHttpFetchUrl } from './ssrfGuard.ts';
+
+const REDDIT_HOSTS = new Set([
+  'reddit.com',
+  'www.reddit.com',
+  'old.reddit.com',
+  'm.reddit.com',
+  'redd.it',
+  'www.redd.it',
+]);
+
+export function isRedditImportHostname(host: string): boolean {
+  const h = host.toLowerCase().replace(/\.$/, '');
+  if (REDDIT_HOSTS.has(h)) return true;
+  return h.endsWith('.reddit.com');
+}
 
 export type RecipeImportSourceType =
   | 'youtube'

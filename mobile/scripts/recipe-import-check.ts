@@ -55,15 +55,15 @@ import { parseImportInput } from '../lib/recipeImport/parseImportInput.ts';
 import { RECIPE_IMPORT } from '../config/recipeImport.ts';
 import { validateUserImportStoragePath } from '../supabase/functions/recipe-import/storagePathValidation.ts';
 import {
-  assertRedditPostImportable,
-  isExternalRecipeLink,
-  mergeRuleParsedRecipe,
-  parseRedditUrl,
-  readCommentListing,
-  redditCreditLabel,
-  redditPostFromListingJson,
-  selectRecipeBodyText,
-} from '../supabase/functions/recipe-import/redditImport.ts';
+  applyRedditCreditToImport,
+  buildRedditCreditLabel,
+  findRedditUrlInText,
+  isRedditImportUrl,
+  parseAuthorFromRecipeText,
+  parseSubredditFromRedditUrl,
+  resolveRedditImportContext,
+  stripRedditUrlsFromText,
+} from '../lib/recipeImport/redditClient.ts';
 import {
   parseRuleBasedRecipeFromText,
   recipeSignalsInText,
@@ -71,8 +71,6 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, '../test-fixtures/recipe-import-jsonld');
-const redditFixturesDir = path.join(__dirname, '../test-fixtures/recipe-import-reddit');
-
 assert.equal(parseIso8601DurationToMinutes('PT15M'), 15);
 assert.equal(parseIso8601DurationToMinutes('PT1H30M'), 90);
 assert.equal(parseRecipeYieldToServings('6 servings'), 6);
@@ -92,14 +90,47 @@ assert.equal(
 assert.equal(classifyRecipeImportUrl('https://old.reddit.com/r/recipes/comments/abc123/t/'), 'reddit');
 assert.equal(classifyRecipeImportUrl('https://redd.it/abc123'), 'reddit');
 assert.equal(classifyImportUrlForClient('https://www.reddit.com/r/recipes/s/AbCdEf'), 'reddit');
-assert.deepEqual(parseRedditUrl('https://redd.it/xyz789'), { postId: 'xyz789' });
-assert.deepEqual(parseRedditUrl('https://www.reddit.com/r/recipes/comments/abc123/slug/'), {
-  postId: 'abc123',
-});
+assert.equal(isRedditImportUrl('https://www.reddit.com/r/recipes/comments/abc123/title/'), true);
 assert.equal(
-  redditCreditLabel('mealprep_fan', 'recipes'),
-  'u/mealprep_fan on r/recipes',
+  findRedditUrlInText('Check https://www.reddit.com/r/recipes/comments/abc123/t/ for soup'),
+  'https://www.reddit.com/r/recipes/comments/abc123/t/',
 );
+assert.equal(parseSubredditFromRedditUrl('https://www.reddit.com/r/recipes/comments/abc123/t/'), 'recipes');
+assert.equal(parseAuthorFromRecipeText('Posted by u/chef_user — great thread'), 'chef_user');
+assert.equal(buildRedditCreditLabel('recipes', 'chef_user'), 'Recipe from u/chef_user · r/recipes');
+assert.equal(buildRedditCreditLabel('Cooking', null), 'From r/Cooking');
+const redditRecipeBody = `Ingredients:
+- 2 cups flour
+- 1 cup sugar
+- 1/2 cup butter
+
+Instructions:
+1. Mix dry ingredients.
+2. Bake at 350F for 25 minutes.`;
+assert.equal(recipeSignalsInText(redditRecipeBody), true);
+assert.ok(parseRuleBasedRecipeFromText('Sheet cake', redditRecipeBody));
+const redditCtx = resolveRedditImportContext(
+  `https://www.reddit.com/r/recipes/comments/abc123/cake/\n\n${redditRecipeBody}`,
+  null,
+)!;
+assert.equal(redditCtx.subreddit, 'recipes');
+const credited = applyRedditCreditToImport(
+  {
+    title: 'Cake',
+    servings: 4,
+    prep_minutes: null,
+    cook_minutes: null,
+    ingredients: [],
+    steps: [],
+    is_recipe: true,
+    confidence: 1,
+    source_url: 'text-import',
+    source_type: 'web',
+  },
+  redditCtx,
+);
+assert.equal(credited.source_type, 'reddit');
+assert.equal(stripRedditUrlsFromText('https://redd.it/abc ' + redditRecipeBody).includes('Ingredients'), true);
 assert.equal(isSocialCaptionSourceType('tiktok'), true);
 assert.equal(isManualCaptionSourceType('facebook'), true);
 assert.equal(isManualCaptionImportKind('instagram'), true);
@@ -386,45 +417,6 @@ assert.equal(
   youtubeThumbnailUrlFromWatchUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')?.includes('hqdefault.jpg'),
   true,
 );
-const redditSelfFixture = JSON.parse(
-  fs.readFileSync(path.join(redditFixturesDir, 'selftext-recipe.json'), 'utf8'),
-);
-const redditSelfPost = redditPostFromListingJson(redditSelfFixture, 'abc123');
-assert.ok(redditSelfPost);
-assert.equal(redditSelfPost!.title, 'Weeknight Lemon Garlic Pasta');
-assert.equal(redditSelfPost!.imageUrl, 'https://i.redd.it/pasta123.jpg');
-const redditSelfBody = selectRecipeBodyText(redditSelfPost!, readCommentListing(redditSelfFixture));
-assert.equal(recipeSignalsInText(redditSelfBody), true);
-const redditSelfParsed = parseRuleBasedRecipeFromText(redditSelfPost!.title, redditSelfBody);
-assert.ok(redditSelfParsed);
-assert.ok(redditSelfParsed!.ingredients.length >= 3);
-assert.ok(redditSelfParsed!.steps.length >= 2);
-const redditSelfRecipe = mergeRuleParsedRecipe(redditSelfParsed, redditSelfPost!);
-assert.equal(redditSelfRecipe!.social_author_name, 'u/mealprep_fan on r/recipes');
-assert.equal(redditSelfRecipe!.source_type, 'reddit');
-
-const redditOpFixture = JSON.parse(
-  fs.readFileSync(path.join(redditFixturesDir, 'op-comment-recipe.json'), 'utf8'),
-);
-const redditOpPost = redditPostFromListingJson(redditOpFixture, 'def456');
-assert.ok(redditOpPost);
-const redditOpBody = selectRecipeBodyText(redditOpPost!, readCommentListing(redditOpFixture));
-assert.ok(parseRuleBasedRecipeFromText(redditOpPost!.title, redditOpBody));
-
-const redditLinkFixture = JSON.parse(
-  fs.readFileSync(path.join(redditFixturesDir, 'link-post.json'), 'utf8'),
-);
-const redditLinkPost = redditPostFromListingJson(redditLinkFixture, 'ghi789');
-assert.ok(redditLinkPost);
-assert.equal(isExternalRecipeLink(redditLinkPost!), true);
-
-const redditDeletedFixture = JSON.parse(
-  fs.readFileSync(path.join(redditFixturesDir, 'deleted-post.json'), 'utf8'),
-);
-const redditDeletedPost = redditPostFromListingJson(redditDeletedFixture, 'del111');
-assert.ok(redditDeletedPost);
-assert.throws(() => assertRedditPostImportable(redditDeletedPost!), /deleted/i);
-
 const redditCredit = sourceCreditFromImportDto({
   title: 'Soup',
   servings: 4,
@@ -436,11 +428,11 @@ const redditCredit = sourceCreditFromImportDto({
   confidence: 1,
   source_url: 'https://www.reddit.com/r/recipes/comments/abc123/soup/',
   source_type: 'reddit',
-  social_author_name: 'u/chef on r/recipes',
+  social_author_name: 'Recipe from u/chef · r/recipes',
   social_author_url: 'https://www.reddit.com/user/chef',
 });
 assert.equal(redditCredit.plainCreatorCredit, true);
-assert.equal(redditCredit.creatorName, 'u/chef on r/recipes');
+assert.equal(redditCredit.creatorName, 'Recipe from u/chef · r/recipes');
 assert.equal(redditCredit.viewOriginalLabel, 'View original post');
 
 assert.match(kitchenRecipeFeedMetaLine({

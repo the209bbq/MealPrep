@@ -57,18 +57,6 @@ import {
   resolveYouTubeImportImageUrl,
   withImportImageUrl,
 } from './recipeImageMeta.ts';
-import {
-  assertRedditPostImportable,
-  fetchRedditListingJson,
-  isExternalRecipeLink,
-  mergeRuleParsedRecipe,
-  readCommentListing,
-  RedditImportError,
-  REDDIT_FETCH_USER_AGENT,
-  redditPostFromListingJson,
-  resolveRedditPostIdFromUrl,
-  selectRecipeBodyText,
-} from './redditImport.ts';
 import { parseRuleBasedRecipeFromText } from './textRecipeParse.ts';
 
 const corsHeaders = {
@@ -98,6 +86,8 @@ interface ImportRequestBody {
   videoStoragePath?: string;
   photoStoragePaths?: string[];
   images?: Array<{ mimeType?: string; data?: string }>;
+  /** Skip shared recipe_import_cache (Reddit-sourced / private user imports). */
+  private_import?: boolean;
 }
 
 interface ImportFallbacksPayload {
@@ -165,10 +155,21 @@ async function readImportCache(urlKey: string): Promise<RecipeImportExtracted | 
   return row.payload;
 }
 
+function shouldSkipSharedImportCache(body: ImportRequestBody, normalizedUrl?: string | null): boolean {
+  if (body.private_import === true) return true;
+  const blob = `${body.text ?? ''}${body.captionText ?? ''}`.toLowerCase();
+  if (blob.includes('reddit.com') || blob.includes('redd.it')) return true;
+  if (normalizedUrl && classifyRecipeImportUrl(normalizedUrl) === 'reddit') return true;
+  return false;
+}
+
 async function writeImportCache(urlKey: string, sourceUrl: string, payload: RecipeImportExtracted): Promise<void> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceKey) return;
+
+  const cacheBlob = `${urlKey}|${sourceUrl}|${payload.source_url ?? ''}`.toLowerCase();
+  if (cacheBlob.includes('reddit.com') || cacheBlob.includes('redd.it')) return;
 
   const hash = await sha256Hex(urlKey);
   const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
@@ -469,110 +470,6 @@ async function importFromUrl(
   return { recipe: withImage, cached: false };
 }
 
-async function importRedditLink(apiKey: string, normalizedUrl: string): Promise<ImportFromUrlResult> {
-  const cacheKey = buildImportCacheKey(normalizedUrl, 'reddit');
-  const cached = await readImportCache(cacheKey);
-  if (cached) {
-    return {
-      recipe: withImportImageUrl(
-        { ...cached, source_url: cached.source_url || normalizedUrl },
-        cached.image_url ?? imageUrlForCachedImport(cached, 'reddit', normalizedUrl),
-        normalizedUrl,
-      ),
-      cached: true,
-    };
-  }
-
-  try {
-    const postId = await resolveRedditPostIdFromUrl(normalizedUrl, fetch, REDDIT_FETCH_USER_AGENT);
-    const listingJson = await fetchRedditListingJson(postId, fetch, REDDIT_FETCH_USER_AGENT);
-    const post = redditPostFromListingJson(listingJson, postId);
-    if (!post) {
-      return {
-        notRecipe: true,
-        message: 'Could not read that Reddit post.',
-        captionForSearch: '',
-        creatorHint: null,
-      };
-    }
-    assertRedditPostImportable(post);
-
-    if (isExternalRecipeLink(post) && post.externalUrl) {
-      const external = await importFromUrl(apiKey, post.externalUrl, 'web');
-      if (!external) return null;
-      if ('notRecipe' in external && external.notRecipe) {
-        return external;
-      }
-      if ('recipe' in external) {
-        const creditName = `u/${post.author} on r/${post.subreddit}`;
-        const withRedditMeta = withImportImageUrl(
-          {
-            ...external.recipe,
-            source_url: post.canonicalPostUrl,
-            source_type: 'reddit',
-            social_author_name: creditName,
-            social_author_url: `https://www.reddit.com/user/${encodeURIComponent(post.author)}`,
-            image_url: external.recipe.image_url ?? post.imageUrl,
-          },
-          external.recipe.image_url ?? post.imageUrl,
-          post.canonicalPostUrl,
-        );
-        await writeImportCache(cacheKey, post.canonicalPostUrl, withRedditMeta);
-        return { recipe: withRedditMeta, cached: false };
-      }
-    }
-
-    const comments = readCommentListing(listingJson);
-    const bodyText = selectRecipeBodyText(post, comments);
-    const ruleParsed = parseRuleBasedRecipeFromText(post.title, bodyText);
-    let recipe = mergeRuleParsedRecipe(ruleParsed, post);
-
-    if (!recipe || !recipeLooksValid(recipe)) {
-      const geminiText = [post.title, bodyText].filter(Boolean).join('\n\n');
-      const fromGemini = await extractRecipeFromPageText(
-        apiKey,
-        geminiText,
-        post.canonicalPostUrl,
-        'reddit',
-        { singleModelAttempt: true },
-      );
-      if (!fromGemini) return null;
-      recipe = withImportImageUrl(
-        {
-          ...fromGemini,
-          social_author_name: `u/${post.author} on r/${post.subreddit}`,
-          social_author_url: `https://www.reddit.com/user/${encodeURIComponent(post.author)}`,
-        },
-        post.imageUrl,
-        post.canonicalPostUrl,
-      );
-    }
-
-    if (!recipeLooksValid(recipe)) {
-      return {
-        notRecipe: true,
-        message: 'We could not find a recipe in that Reddit post.',
-        captionForSearch: bodyText.slice(0, 400),
-        creatorHint: `u/${post.author}`,
-      };
-    }
-
-    await writeImportCache(cacheKey, post.canonicalPostUrl, recipe);
-    return { recipe, cached: false };
-  } catch (error) {
-    if (error instanceof RedditImportError) {
-      return {
-        notRecipe: true,
-        message: error.userMessage,
-        captionForSearch: '',
-        creatorHint: null,
-        suppressFallbacks: true,
-      };
-    }
-    throw error;
-  }
-}
-
 async function importTikTokLink(apiKey: string, normalizedUrl: string): Promise<ImportFromUrlResult> {
   const oembed = await fetchTikTokOembed(normalizedUrl);
   if (!oembed) {
@@ -615,15 +512,44 @@ async function maybeAttachAuthorPublicLink(recipe: RecipeImportExtracted): Promi
 
 const MIN_TEXT_IMPORT_CHARS = 24;
 
+function guessTitleFromImportText(text: string): string {
+  const line = text
+    .split('\n')
+    .map((row) => row.trim())
+    .find((row) => row.length > 2 && !/^ingredients?\b/i.test(row) && !/^instructions?\b/i.test(row));
+  return line?.slice(0, 120) ?? 'Imported recipe';
+}
+
 async function importFromPlainText(
   apiKey: string,
   text: string,
+  options?: { skipSharedCache?: boolean },
 ): Promise<ImportFromUrlResult> {
   const cacheKey = urlHashKey(`text|${text.slice(0, 4000)}`);
-  const cached = await readImportCache(cacheKey);
-  if (cached) return { recipe: { ...cached, source_url: 'text-import' }, cached: true };
+  const skipCache = options?.skipSharedCache === true;
+  if (!skipCache) {
+    const cached = await readImportCache(cacheKey);
+    if (cached) return { recipe: { ...cached, source_url: 'text-import' }, cached: true };
+  }
 
-  const fromGemini = await extractRecipeFromPageText(apiKey, text, 'text-import', 'web');
+  const ruleParsed = parseRuleBasedRecipeFromText(guessTitleFromImportText(text), text);
+  if (ruleParsed) {
+    const fromRules: RecipeImportExtracted = {
+      ...ruleParsed,
+      prep_minutes: null,
+      cook_minutes: null,
+      source_url: 'text-import',
+      source_type: 'web',
+    };
+    if (recipeLooksValid(fromRules)) {
+      if (!skipCache) await writeImportCache(cacheKey, 'text-import', fromRules);
+      return { recipe: fromRules, cached: false };
+    }
+  }
+
+  const fromGemini = await extractRecipeFromPageText(apiKey, text, 'text-import', 'web', {
+    singleModelAttempt: skipCache,
+  });
   if (!fromGemini) return null;
   if (!recipeLooksValid(fromGemini)) {
     return {
@@ -633,7 +559,7 @@ async function importFromPlainText(
       creatorHint: null,
     };
   }
-  await writeImportCache(cacheKey, 'text-import', fromGemini);
+  if (!skipCache) await writeImportCache(cacheKey, 'text-import', fromGemini);
   return { recipe: fromGemini, cached: false };
 }
 
@@ -741,8 +667,9 @@ Deno.serve(async (req) => {
     if (text.length < MIN_TEXT_IMPORT_CHARS) {
       return jsonResponse({ error: 'Paste a longer recipe or caption to import.', code: 'BAD_REQUEST' }, 400);
     }
+    const skipSharedCache = shouldSkipSharedImportCache(body);
     try {
-      const result = await importFromPlainText(apiKey, text);
+      const result = await importFromPlainText(apiKey, text, { skipSharedCache });
       if (!result) {
         return jsonResponse({ error: 'Could not import that text right now.', code: 'UPSTREAM_ERROR' }, 502);
       }
@@ -797,7 +724,10 @@ Deno.serve(async (req) => {
         );
       }
       extracted = await maybeAttachAuthorPublicLink(extracted);
-      await writeImportCache(cacheKey, 'photo-scan', extracted);
+      const skipPhotoCache = shouldSkipSharedImportCache(body);
+      if (!skipPhotoCache) {
+        await writeImportCache(cacheKey, 'photo-scan', extracted);
+      }
       return jsonResponse({ recipe: extracted, cached: false });
     } catch (error) {
       console.error('recipe-import photo error', error);
@@ -912,8 +842,9 @@ Deno.serve(async (req) => {
   if (!normalized) {
     const fallbackText = (body.text ?? body.captionText ?? '').trim();
     if (fallbackText.length >= MIN_TEXT_IMPORT_CHARS) {
+      const skipSharedCache = shouldSkipSharedImportCache(body);
       try {
-        const result = await importFromPlainText(apiKey, fallbackText);
+        const result = await importFromPlainText(apiKey, fallbackText, { skipSharedCache });
         if (!result) {
           return jsonResponse({ error: 'Could not import that text right now.', code: 'UPSTREAM_ERROR' }, 502);
         }
@@ -935,22 +866,14 @@ Deno.serve(async (req) => {
   }
 
   if (sourceType === 'reddit') {
-    try {
-      const result = await importRedditLink(apiKey, normalized);
-      if (!result) {
-        return jsonResponse({ error: 'Could not import that Reddit post.', code: 'UPSTREAM_ERROR' }, 502);
-      }
-      if ('notRecipe' in result && result.notRecipe) {
-        if (result.suppressFallbacks) {
-          return jsonResponse({ error: result.message, code: 'NOT_RECIPE' }, 422);
-        }
-        return await respondNotRecipeWithAutoYoutube(apiKey, 'reddit', false, result);
-      }
-      return jsonResponse({ recipe: result.recipe, cached: result.cached });
-    } catch (error) {
-      console.error('recipe-import reddit error', error);
-      return jsonResponse({ error: 'Import failed unexpectedly.', code: 'UPSTREAM_ERROR' }, 502);
-    }
+    return jsonResponse(
+      {
+        error:
+          'Reddit links cannot be imported automatically. Copy the recipe text or use a photo instead.',
+        code: 'REDDIT_CLIENT_ONLY',
+      },
+      422,
+    );
   }
 
   if (sourceType === 'tiktok') {

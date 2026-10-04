@@ -1,39 +1,4 @@
 // AUTO-GENERATED single-file bundle for pasting into the Supabase dashboard. Source: supabase/functions/recipe-import/
-// supabase/functions/recipe-import/safeHttpUrl.ts
-var BLOCKED_SCHEME_PREFIXES = ["javascript:", "data:", "vbscript:", "file:"];
-function isAllowedHttpUrlString(url) {
-  const trimmed = url.trim();
-  if (!trimmed) return false;
-  const lower = trimmed.toLowerCase();
-  for (const blocked of BLOCKED_SCHEME_PREFIXES) {
-    if (lower.startsWith(blocked)) return false;
-  }
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.username || parsed.password) return false;
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-function sanitizeHttpUrl(url) {
-  if (url == null) return null;
-  const trimmed = url.trim();
-  if (!trimmed || !isAllowedHttpUrlString(trimmed)) return null;
-  return trimmed;
-}
-function resolveAndSanitizeHttpUrl(url, pageUrl) {
-  if (url == null) return null;
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-  try {
-    const absolute = new URL(trimmed, pageUrl).href;
-    return sanitizeHttpUrl(absolute);
-  } catch {
-    return null;
-  }
-}
-
 // supabase/functions/recipe-import/ssrfGuard.ts
 function parseIpv4(host) {
   const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -134,143 +99,7 @@ function resolveRedirectLocation(current, locationHeader) {
   }
 }
 
-// supabase/functions/recipe-import/textRecipeParse.ts
-var INGREDIENT_HEADINGS = /^(#{1,3}\s*)?(ingredients?|what you(?:'ll| will) need|shopping list)\s*:?\s*$/i;
-var STEP_HEADINGS = /^(#{1,3}\s*)?(instructions?|directions?|method|steps?|how to make|preparation)\s*:?\s*$/i;
-var BULLET_LINE = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/;
-var QUANTITY_INGREDIENT = /^([\d¼½¾⅓⅔⅛⅜⅝⅞./\s]+)?\s*([a-zA-Z]+(?:\.|\/[a-zA-Z]+)?)?\s+(.+)$/;
-function decodeHtmlEntities(text) {
-  return text.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-}
-function normalizeRecipeText(raw) {
-  return decodeHtmlEntities(raw).replace(/\r\n/g, "\n").replace(/\u00a0/g, " ").trim();
-}
-function parseIngredientLine(line) {
-  const cleaned = line.replace(/\*\*/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").trim();
-  if (!cleaned || cleaned.length < 2) return null;
-  const qtyMatch = cleaned.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞./\s-]+)\s+(\S+)\s+(.+)$/);
-  if (qtyMatch) {
-    const qtyRaw = qtyMatch[1].trim();
-    const unit = qtyMatch[2].trim();
-    const name = qtyMatch[3].trim();
-    const quantity = parseQuantityToken(qtyRaw);
-    if (name.length > 0) {
-      return { name, quantity, unit };
-    }
-  }
-  const loose = cleaned.match(QUANTITY_INGREDIENT);
-  if (loose && loose[3]) {
-    const quantity = parseQuantityToken((loose[1] ?? "1").trim());
-    const unit = (loose[2] ?? "each").trim();
-    const name = loose[3].trim();
-    if (name.length > 1) {
-      return { name, quantity, unit: unit || "each" };
-    }
-  }
-  return { name: cleaned, quantity: 1, unit: "each" };
-}
-function parseQuantityToken(raw) {
-  const map = {
-    "\xBC": 0.25,
-    "\xBD": 0.5,
-    "\xBE": 0.75,
-    "\u2153": 1 / 3,
-    "\u2154": 2 / 3,
-    "\u215B": 0.125
-  };
-  let text = raw.trim();
-  for (const [sym, val] of Object.entries(map)) {
-    text = text.replace(sym, ` ${val} `);
-  }
-  if (text.includes("/")) {
-    const parts = text.split(/\s+/).filter(Boolean);
-    let sum = 0;
-    for (const part of parts) {
-      if (part.includes("/")) {
-        const [a, b] = part.split("/").map((x) => Number.parseFloat(x));
-        if (Number.isFinite(a) && Number.isFinite(b) && b !== 0) sum += a / b;
-      } else {
-        const n2 = Number.parseFloat(part);
-        if (Number.isFinite(n2)) sum += n2;
-      }
-    }
-    if (sum > 0) return sum;
-  }
-  const n = Number.parseFloat(text);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
-function splitSections(lines) {
-  const ingredients = [];
-  const steps = [];
-  let mode = "none";
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    if (INGREDIENT_HEADINGS.test(trimmed)) {
-      mode = "ingredients";
-      continue;
-    }
-    if (STEP_HEADINGS.test(trimmed)) {
-      mode = "steps";
-      continue;
-    }
-    const bullet = BULLET_LINE.exec(trimmed);
-    const content = bullet ? bullet[1].trim() : trimmed;
-    if (mode === "ingredients") {
-      ingredients.push(content);
-    } else if (mode === "steps") {
-      steps.push(content);
-    } else if (bullet) {
-      if (steps.length > 0 || ingredients.length >= 3) {
-        steps.push(content);
-      } else {
-        ingredients.push(content);
-      }
-    } else if (/^\d+[.)]\s/.test(trimmed)) {
-      steps.push(content);
-    }
-  }
-  return { ingredients, steps };
-}
-function recipeSignalsInText(text) {
-  const normalized = normalizeRecipeText(text);
-  if (!normalized) return false;
-  const lower = normalized.toLowerCase();
-  if (INGREDIENT_HEADINGS.test(lower.split("\n")[0] ?? "")) return true;
-  if (STEP_HEADINGS.test(lower)) return true;
-  const lines = normalized.split("\n").map((l) => l.trim()).filter(Boolean);
-  const { ingredients, steps } = splitSections(lines);
-  return ingredients.length >= 2 && steps.length >= 1;
-}
-function parseRuleBasedRecipeFromText(title, body) {
-  const recipeTitle = title.trim();
-  const normalizedBody = normalizeRecipeText(body);
-  if (!recipeTitle || !normalizedBody) return null;
-  const lines = normalizedBody.split("\n");
-  const { ingredients: ingLines, steps: stepLines } = splitSections(lines);
-  const ingredients = [];
-  for (const line of ingLines) {
-    const parsed = parseIngredientLine(line);
-    if (parsed) ingredients.push(parsed);
-  }
-  const steps = stepLines.map((s) => s.replace(/^\d+[.)]\s*/, "").trim()).filter((s) => s.length > 2);
-  if (ingredients.length < 2 || steps.length < 1) {
-    return null;
-  }
-  const servingsMatch = normalizedBody.match(/(?:servings?|serves?)\s*:?\s*(\d+)/i);
-  const servings = servingsMatch ? Math.max(1, Number.parseInt(servingsMatch[1], 10)) : 4;
-  return {
-    title: recipeTitle,
-    servings,
-    ingredients,
-    steps,
-    is_recipe: true,
-    confidence: 0.72
-  };
-}
-
-// supabase/functions/recipe-import/redditImport.ts
-var REDDIT_FETCH_USER_AGENT = "MealPlanaticRecipeImport/1.0 (+https://mealplanatic.app; reddit-recipe-importer)";
+// supabase/functions/recipe-import/urlClassification.ts
 var REDDIT_HOSTS = /* @__PURE__ */ new Set([
   "reddit.com",
   "www.reddit.com",
@@ -279,269 +108,11 @@ var REDDIT_HOSTS = /* @__PURE__ */ new Set([
   "redd.it",
   "www.redd.it"
 ]);
-var RedditImportError = class extends Error {
-  code;
-  userMessage;
-  constructor(code, userMessage) {
-    super(userMessage);
-    this.code = code;
-    this.userMessage = userMessage;
-  }
-};
 function isRedditImportHostname(host) {
   const h = host.toLowerCase().replace(/\.$/, "");
   if (REDDIT_HOSTS.has(h)) return true;
   return h.endsWith(".reddit.com");
 }
-function parseRedditUrl(urlString) {
-  let url;
-  try {
-    url = new URL(urlString);
-  } catch {
-    return null;
-  }
-  if (!isRedditImportHostname(url.hostname)) return null;
-  if (url.hostname.replace(/^www\./, "") === "redd.it") {
-    const id = url.pathname.replace(/^\//, "").split("/")[0];
-    return id ? { postId: id } : null;
-  }
-  const shareMatch = url.pathname.match(/^\/r\/[^/]+\/s\/([A-Za-z0-9]+)\/?$/i);
-  if (shareMatch) {
-    return { sharePath: url.pathname };
-  }
-  const commentsMatch = url.pathname.match(/\/comments\/([a-z0-9]+)/i);
-  if (commentsMatch) {
-    return { postId: commentsMatch[1] };
-  }
-  return null;
-}
-function buildRedditCommentsJsonUrl(postId) {
-  return `https://www.reddit.com/comments/${postId}.json?limit=20`;
-}
-function redditCreditLabel(author, subreddit) {
-  const user = author.startsWith("u/") ? author : `u/${author}`;
-  const sub = subreddit.startsWith("r/") ? subreddit : `r/${subreddit}`;
-  return `${user} on ${sub}`;
-}
-function redditAuthorProfileUrl(author) {
-  const name = author.replace(/^\/?u\//i, "");
-  return `https://www.reddit.com/user/${encodeURIComponent(name)}`;
-}
-function decodeRedditUrl(raw) {
-  if (!raw?.trim()) return null;
-  const decoded = raw.replace(/&amp;/g, "&").trim();
-  return sanitizeHttpUrl(decoded);
-}
-function readPostListingPayload(json) {
-  if (!Array.isArray(json) || json.length < 1) return null;
-  const listing = json[0];
-  const child = listing.data?.children?.[0];
-  return child?.data ?? null;
-}
-function readCommentListing(json) {
-  if (!Array.isArray(json) || json.length < 2) return [];
-  const listing = json[1];
-  const children = listing.data?.children ?? [];
-  const rows = [];
-  for (const node of children) {
-    const row = node;
-    if (row.kind !== "t1" || !row.data) continue;
-    const author = typeof row.data.author === "string" ? row.data.author : "";
-    const body = typeof row.data.body === "string" ? row.data.body : "";
-    const score = typeof row.data.score === "number" ? row.data.score : 0;
-    const parentId = typeof row.data.parent_id === "string" ? row.data.parent_id : "";
-    if (!author || !body || author === "[deleted]") continue;
-    rows.push({ author, body, score, parentId });
-  }
-  return rows;
-}
-function redditPostFromListingJson(json, fallbackPostId) {
-  const data = readPostListingPayload(json);
-  if (!data) return null;
-  const postId = typeof data.id === "string" && data.id || fallbackPostId || "";
-  const title = typeof data.title === "string" ? data.title.trim() : "";
-  const selftext = typeof data.selftext === "string" ? data.selftext : "";
-  const author = typeof data.author === "string" ? data.author : "";
-  const subreddit = typeof data.subreddit === "string" ? data.subreddit : "";
-  const permalink = typeof data.permalink === "string" ? data.permalink : "";
-  const isSelf = data.is_self === true;
-  const over18 = data.over_18 === true;
-  const removedBy = typeof data.removed_by_category === "string" ? data.removed_by_category : null;
-  const removed = author === "[deleted]" || Boolean(removedBy) || data.removed === true || data.removed_by === "moderator";
-  const urlField = typeof data.url === "string" ? data.url : null;
-  const urlOverridden = typeof data.url_overridden_by_dest === "string" ? data.url_overridden_by_dest : null;
-  const externalUrl = !isSelf ? decodeRedditUrl(urlOverridden ?? urlField) : null;
-  let imageUrl = null;
-  const preview = data.preview;
-  const previewUrl = preview?.images?.[0]?.source?.url;
-  imageUrl = decodeRedditUrl(previewUrl);
-  if (!imageUrl && urlField && !isSelf) {
-    const maybeImage = decodeRedditUrl(urlField);
-    if (maybeImage && /\.(jpe?g|png|gif|webp)(\?|$)/i.test(maybeImage)) {
-      imageUrl = maybeImage;
-    }
-  }
-  const gallery = data.media_metadata;
-  if (!imageUrl && gallery && typeof gallery === "object") {
-    for (const key of Object.keys(gallery)) {
-      const u = gallery[key]?.s?.u;
-      const decoded = decodeRedditUrl(u);
-      if (decoded) {
-        imageUrl = decoded;
-        break;
-      }
-    }
-  }
-  const canonicalPostUrl = permalink ? `https://www.reddit.com${permalink.startsWith("/") ? permalink : `/${permalink}`}` : `https://www.reddit.com/comments/${postId}/`;
-  return {
-    postId,
-    permalink,
-    canonicalPostUrl,
-    title,
-    selftext,
-    author,
-    subreddit,
-    isSelf,
-    over18,
-    externalUrl,
-    imageUrl,
-    removed
-  };
-}
-function selectRecipeBodyText(post, comments) {
-  const candidates = [];
-  if (post.selftext.trim()) candidates.push(post.selftext);
-  const postFullname = `t3_${post.postId}`;
-  const topLevel = comments.filter((c) => c.parentId === postFullname);
-  const opComments = topLevel.filter((c) => c.author === post.author).sort((a, b) => b.score - a.score);
-  for (const c of opComments) candidates.push(c.body);
-  const topComment = [...topLevel].sort((a, b) => b.score - a.score)[0];
-  if (topComment && !opComments.includes(topComment)) {
-    candidates.push(topComment.body);
-  }
-  for (const text of candidates) {
-    if (recipeSignalsInText(text)) return text;
-  }
-  return candidates[0] ?? "";
-}
-function isExternalRecipeLink(post) {
-  if (post.isSelf || !post.externalUrl) return false;
-  try {
-    const host = new URL(post.externalUrl).hostname.toLowerCase();
-    if (isRedditImportHostname(host) || host.endsWith(".reddit.com")) return false;
-    if (/^(i\.)?redd\.it$/i.test(host)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-function assertRedditPostImportable(post) {
-  if (post.removed || post.author === "[deleted]") {
-    throw new RedditImportError(
-      "REDDIT_DELETED",
-      "That Reddit post was deleted or removed, so we cannot import a recipe from it."
-    );
-  }
-  if (post.over18) {
-    throw new RedditImportError(
-      "REDDIT_NSFW",
-      "That Reddit post is marked NSFW. We cannot import recipes from NSFW posts."
-    );
-  }
-}
-function mergeRuleParsedRecipe(parsed, post) {
-  if (!parsed) return null;
-  const credit = redditCreditLabel(post.author, post.subreddit);
-  return {
-    ...parsed,
-    prep_minutes: null,
-    cook_minutes: null,
-    source_url: post.canonicalPostUrl,
-    source_type: "reddit",
-    social_author_name: credit,
-    social_author_url: redditAuthorProfileUrl(post.author),
-    image_url: post.imageUrl
-  };
-}
-async function resolveRedditShareLink(shareUrl, fetchFn, userAgent) {
-  let currentUrl = shareUrl;
-  for (let hop = 0; hop <= RECIPE_FETCH_MAX_REDIRECTS; hop += 1) {
-    const validated = validatePublicHttpFetchUrl(currentUrl);
-    if (!validated.ok) return null;
-    let response;
-    try {
-      response = await fetchFn(validated.url.toString(), {
-        redirect: "manual",
-        headers: { "User-Agent": userAgent, Accept: "text/html,*/*" }
-      });
-    } catch {
-      return null;
-    }
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location) return null;
-      const next = resolveRedirectLocation(validated.url, location);
-      if (!next) return null;
-      currentUrl = next;
-      continue;
-    }
-    if (response.status === 403 || response.status === 404) return null;
-    return currentUrl;
-  }
-  return null;
-}
-async function fetchRedditListingJson(postId, fetchFn, userAgent) {
-  const url = buildRedditCommentsJsonUrl(postId);
-  const validated = validatePublicHttpFetchUrl(url);
-  if (!validated.ok) {
-    throw new RedditImportError("REDDIT_BAD_LINK", "That Reddit link is not valid.");
-  }
-  let response;
-  try {
-    response = await fetchFn(validated.url.toString(), {
-      headers: { "User-Agent": userAgent, Accept: "application/json" },
-      signal: AbortSignal.timeout(12e3)
-    });
-  } catch {
-    throw new RedditImportError(
-      "REDDIT_BAD_LINK",
-      "Could not reach Reddit right now. Try again in a moment."
-    );
-  }
-  if (response.status === 403 || response.status === 401) {
-    throw new RedditImportError(
-      "REDDIT_PRIVATE",
-      "That Reddit post is private or unavailable."
-    );
-  }
-  if (!response.ok) {
-    throw new RedditImportError(
-      "REDDIT_BAD_LINK",
-      "Could not read that Reddit post."
-    );
-  }
-  return await response.json();
-}
-async function resolveRedditPostIdFromUrl(normalizedUrl, fetchFn, userAgent) {
-  const parsed = parseRedditUrl(normalizedUrl);
-  if (!parsed) {
-    throw new RedditImportError("REDDIT_BAD_LINK", "Paste a valid Reddit post link.");
-  }
-  if ("postId" in parsed) return parsed.postId;
-  const resolved = await resolveRedditShareLink(
-    new URL(normalizedUrl).origin + parsed.sharePath,
-    fetchFn,
-    userAgent
-  );
-  if (!resolved) {
-    throw new RedditImportError("REDDIT_BAD_LINK", "Could not open that Reddit share link.");
-  }
-  const fromResolved = parseRedditUrl(resolved);
-  if (fromResolved && "postId" in fromResolved) return fromResolved.postId;
-  throw new RedditImportError("REDDIT_BAD_LINK", "That Reddit share link did not resolve to a post.");
-}
-
-// supabase/functions/recipe-import/urlClassification.ts
 var YOUTUBE_HOSTS = /* @__PURE__ */ new Set([
   "youtube.com",
   "www.youtube.com",
@@ -627,6 +198,41 @@ function orderImportFallbackSteps(context) {
     steps.push("paste_caption");
   }
   return steps;
+}
+
+// supabase/functions/recipe-import/safeHttpUrl.ts
+var BLOCKED_SCHEME_PREFIXES = ["javascript:", "data:", "vbscript:", "file:"];
+function isAllowedHttpUrlString(url) {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  for (const blocked of BLOCKED_SCHEME_PREFIXES) {
+    if (lower.startsWith(blocked)) return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.username || parsed.password) return false;
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+function sanitizeHttpUrl(url) {
+  if (url == null) return null;
+  const trimmed = url.trim();
+  if (!trimmed || !isAllowedHttpUrlString(trimmed)) return null;
+  return trimmed;
+}
+function resolveAndSanitizeHttpUrl(url, pageUrl) {
+  if (url == null) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const absolute = new URL(trimmed, pageUrl).href;
+    return sanitizeHttpUrl(absolute);
+  } catch {
+    return null;
+  }
 }
 
 // supabase/functions/recipe-import/tiktokOembed.ts
@@ -1184,7 +790,7 @@ function recipeTypeMatches(typeField) {
   }
   return false;
 }
-function parseIngredientLine2(text) {
+function parseIngredientLine(text) {
   const trimmed = text.trim();
   const match = trimmed.match(
     /^([\d./\s]+)?\s*([a-zA-Z]+(?:\.[a-zA-Z]+)?)?\s+(.+)$/
@@ -1217,10 +823,10 @@ function parseIngredientObject(ing) {
     return { name, quantity: Number.isFinite(qty) ? qty : 1, unit };
   }
   if (typeof amount === "string" && amount.trim()) {
-    const parsed = parseIngredientLine2(amount);
+    const parsed = parseIngredientLine(amount);
     return { ...parsed, name: name || parsed.name };
   }
-  return parseIngredientLine2(name);
+  return parseIngredientLine(name);
 }
 function extractSteps(instructions) {
   if (!instructions) return [];
@@ -1282,7 +888,7 @@ function recipeJsonLdToExtracted(node, sourceUrl) {
   if (Array.isArray(ingredientsRaw)) {
     for (const entry of ingredientsRaw) {
       if (typeof entry === "string") {
-        const parsed = parseIngredientLine2(entry);
+        const parsed = parseIngredientLine(entry);
         if (parsed.name) ingredients.push({ ...parsed, note: void 0 });
       } else if (isObject(entry)) {
         const parsed = parseIngredientObject(entry);
@@ -1755,6 +1361,131 @@ function imageUrlForCachedImport(recipe, sourceType, normalizedUrl) {
   return null;
 }
 
+// supabase/functions/recipe-import/textRecipeParse.ts
+var INGREDIENT_HEADINGS = /^(#{1,3}\s*)?(ingredients?|what you(?:'ll| will) need|shopping list)\s*:?\s*$/i;
+var STEP_HEADINGS = /^(#{1,3}\s*)?(instructions?|directions?|method|steps?|how to make|preparation)\s*:?\s*$/i;
+var BULLET_LINE = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/;
+var QUANTITY_INGREDIENT = /^([\d¼½¾⅓⅔⅛⅜⅝⅞./\s]+)?\s*([a-zA-Z]+(?:\.|\/[a-zA-Z]+)?)?\s+(.+)$/;
+function decodeHtmlEntities(text) {
+  return text.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+function normalizeRecipeText(raw) {
+  return decodeHtmlEntities(raw).replace(/\r\n/g, "\n").replace(/\u00a0/g, " ").trim();
+}
+function parseIngredientLine2(line) {
+  const cleaned = line.replace(/\*\*/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").trim();
+  if (!cleaned || cleaned.length < 2) return null;
+  const qtyMatch = cleaned.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞./\s-]+)\s+(\S+)\s+(.+)$/);
+  if (qtyMatch) {
+    const qtyRaw = qtyMatch[1].trim();
+    const unit = qtyMatch[2].trim();
+    const name = qtyMatch[3].trim();
+    const quantity = parseQuantityToken(qtyRaw);
+    if (name.length > 0) {
+      return { name, quantity, unit };
+    }
+  }
+  const loose = cleaned.match(QUANTITY_INGREDIENT);
+  if (loose && loose[3]) {
+    const quantity = parseQuantityToken((loose[1] ?? "1").trim());
+    const unit = (loose[2] ?? "each").trim();
+    const name = loose[3].trim();
+    if (name.length > 1) {
+      return { name, quantity, unit: unit || "each" };
+    }
+  }
+  return { name: cleaned, quantity: 1, unit: "each" };
+}
+function parseQuantityToken(raw) {
+  const map = {
+    "\xBC": 0.25,
+    "\xBD": 0.5,
+    "\xBE": 0.75,
+    "\u2153": 1 / 3,
+    "\u2154": 2 / 3,
+    "\u215B": 0.125
+  };
+  let text = raw.trim();
+  for (const [sym, val] of Object.entries(map)) {
+    text = text.replace(sym, ` ${val} `);
+  }
+  if (text.includes("/")) {
+    const parts = text.split(/\s+/).filter(Boolean);
+    let sum = 0;
+    for (const part of parts) {
+      if (part.includes("/")) {
+        const [a, b] = part.split("/").map((x) => Number.parseFloat(x));
+        if (Number.isFinite(a) && Number.isFinite(b) && b !== 0) sum += a / b;
+      } else {
+        const n2 = Number.parseFloat(part);
+        if (Number.isFinite(n2)) sum += n2;
+      }
+    }
+    if (sum > 0) return sum;
+  }
+  const n = Number.parseFloat(text);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+function splitSections(lines) {
+  const ingredients = [];
+  const steps = [];
+  let mode = "none";
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (INGREDIENT_HEADINGS.test(trimmed)) {
+      mode = "ingredients";
+      continue;
+    }
+    if (STEP_HEADINGS.test(trimmed)) {
+      mode = "steps";
+      continue;
+    }
+    const bullet = BULLET_LINE.exec(trimmed);
+    const content = bullet ? bullet[1].trim() : trimmed;
+    if (mode === "ingredients") {
+      ingredients.push(content);
+    } else if (mode === "steps") {
+      steps.push(content);
+    } else if (bullet) {
+      if (steps.length > 0 || ingredients.length >= 3) {
+        steps.push(content);
+      } else {
+        ingredients.push(content);
+      }
+    } else if (/^\d+[.)]\s/.test(trimmed)) {
+      steps.push(content);
+    }
+  }
+  return { ingredients, steps };
+}
+function parseRuleBasedRecipeFromText(title, body) {
+  const recipeTitle = title.trim();
+  const normalizedBody = normalizeRecipeText(body);
+  if (!recipeTitle || !normalizedBody) return null;
+  const lines = normalizedBody.split("\n");
+  const { ingredients: ingLines, steps: stepLines } = splitSections(lines);
+  const ingredients = [];
+  for (const line of ingLines) {
+    const parsed = parseIngredientLine2(line);
+    if (parsed) ingredients.push(parsed);
+  }
+  const steps = stepLines.map((s) => s.replace(/^\d+[.)]\s*/, "").trim()).filter((s) => s.length > 2);
+  if (ingredients.length < 2 || steps.length < 1) {
+    return null;
+  }
+  const servingsMatch = normalizedBody.match(/(?:servings?|serves?)\s*:?\s*(\d+)/i);
+  const servings = servingsMatch ? Math.max(1, Number.parseInt(servingsMatch[1], 10)) : 4;
+  return {
+    title: recipeTitle,
+    servings,
+    ingredients,
+    steps,
+    is_recipe: true,
+    confidence: 0.72
+  };
+}
+
 // supabase/functions/recipe-import/index.ts
 var corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1822,10 +1553,19 @@ async function readImportCache(urlKey) {
   if (new Date(row.expires_at).getTime() < Date.now()) return null;
   return row.payload;
 }
+function shouldSkipSharedImportCache(body, normalizedUrl) {
+  if (body.private_import === true) return true;
+  const blob = `${body.text ?? ""}${body.captionText ?? ""}`.toLowerCase();
+  if (blob.includes("reddit.com") || blob.includes("redd.it")) return true;
+  if (normalizedUrl && classifyRecipeImportUrl(normalizedUrl) === "reddit") return true;
+  return false;
+}
 async function writeImportCache(urlKey, sourceUrl, payload) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) return;
+  const cacheBlob = `${urlKey}|${sourceUrl}|${payload.source_url ?? ""}`.toLowerCase();
+  if (cacheBlob.includes("reddit.com") || cacheBlob.includes("redd.it")) return;
   const hash = await sha256Hex(urlKey);
   const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
   await fetch(`${supabaseUrl}/rest/v1/recipe_import_cache`, {
@@ -2057,103 +1797,6 @@ async function importFromUrl(apiKey, normalizedUrl, sourceType) {
   await writeImportCache(cacheKey, normalizedUrl, withImage);
   return { recipe: withImage, cached: false };
 }
-async function importRedditLink(apiKey, normalizedUrl) {
-  const cacheKey = buildImportCacheKey(normalizedUrl, "reddit");
-  const cached = await readImportCache(cacheKey);
-  if (cached) {
-    return {
-      recipe: withImportImageUrl(
-        { ...cached, source_url: cached.source_url || normalizedUrl },
-        cached.image_url ?? imageUrlForCachedImport(cached, "reddit", normalizedUrl),
-        normalizedUrl
-      ),
-      cached: true
-    };
-  }
-  try {
-    const postId = await resolveRedditPostIdFromUrl(normalizedUrl, fetch, REDDIT_FETCH_USER_AGENT);
-    const listingJson = await fetchRedditListingJson(postId, fetch, REDDIT_FETCH_USER_AGENT);
-    const post = redditPostFromListingJson(listingJson, postId);
-    if (!post) {
-      return {
-        notRecipe: true,
-        message: "Could not read that Reddit post.",
-        captionForSearch: "",
-        creatorHint: null
-      };
-    }
-    assertRedditPostImportable(post);
-    if (isExternalRecipeLink(post) && post.externalUrl) {
-      const external = await importFromUrl(apiKey, post.externalUrl, "web");
-      if (!external) return null;
-      if ("notRecipe" in external && external.notRecipe) {
-        return external;
-      }
-      if ("recipe" in external) {
-        const creditName = `u/${post.author} on r/${post.subreddit}`;
-        const withRedditMeta = withImportImageUrl(
-          {
-            ...external.recipe,
-            source_url: post.canonicalPostUrl,
-            source_type: "reddit",
-            social_author_name: creditName,
-            social_author_url: `https://www.reddit.com/user/${encodeURIComponent(post.author)}`,
-            image_url: external.recipe.image_url ?? post.imageUrl
-          },
-          external.recipe.image_url ?? post.imageUrl,
-          post.canonicalPostUrl
-        );
-        await writeImportCache(cacheKey, post.canonicalPostUrl, withRedditMeta);
-        return { recipe: withRedditMeta, cached: false };
-      }
-    }
-    const comments = readCommentListing(listingJson);
-    const bodyText = selectRecipeBodyText(post, comments);
-    const ruleParsed = parseRuleBasedRecipeFromText(post.title, bodyText);
-    let recipe = mergeRuleParsedRecipe(ruleParsed, post);
-    if (!recipe || !recipeLooksValid(recipe)) {
-      const geminiText = [post.title, bodyText].filter(Boolean).join("\n\n");
-      const fromGemini = await extractRecipeFromPageText(
-        apiKey,
-        geminiText,
-        post.canonicalPostUrl,
-        "reddit",
-        { singleModelAttempt: true }
-      );
-      if (!fromGemini) return null;
-      recipe = withImportImageUrl(
-        {
-          ...fromGemini,
-          social_author_name: `u/${post.author} on r/${post.subreddit}`,
-          social_author_url: `https://www.reddit.com/user/${encodeURIComponent(post.author)}`
-        },
-        post.imageUrl,
-        post.canonicalPostUrl
-      );
-    }
-    if (!recipeLooksValid(recipe)) {
-      return {
-        notRecipe: true,
-        message: "We could not find a recipe in that Reddit post.",
-        captionForSearch: bodyText.slice(0, 400),
-        creatorHint: `u/${post.author}`
-      };
-    }
-    await writeImportCache(cacheKey, post.canonicalPostUrl, recipe);
-    return { recipe, cached: false };
-  } catch (error) {
-    if (error instanceof RedditImportError) {
-      return {
-        notRecipe: true,
-        message: error.userMessage,
-        captionForSearch: "",
-        creatorHint: null,
-        suppressFallbacks: true
-      };
-    }
-    throw error;
-  }
-}
 async function importTikTokLink(apiKey, normalizedUrl) {
   const oembed = await fetchTikTokOembed(normalizedUrl);
   if (!oembed) {
@@ -2192,11 +1835,34 @@ async function maybeAttachAuthorPublicLink(recipe) {
   return { ...recipe, author_public_recipe_url: suggestion.watchUrl };
 }
 var MIN_TEXT_IMPORT_CHARS = 24;
-async function importFromPlainText(apiKey, text) {
+function guessTitleFromImportText(text) {
+  const line = text.split("\n").map((row) => row.trim()).find((row) => row.length > 2 && !/^ingredients?\b/i.test(row) && !/^instructions?\b/i.test(row));
+  return line?.slice(0, 120) ?? "Imported recipe";
+}
+async function importFromPlainText(apiKey, text, options) {
   const cacheKey = urlHashKey(`text|${text.slice(0, 4e3)}`);
-  const cached = await readImportCache(cacheKey);
-  if (cached) return { recipe: { ...cached, source_url: "text-import" }, cached: true };
-  const fromGemini = await extractRecipeFromPageText(apiKey, text, "text-import", "web");
+  const skipCache = options?.skipSharedCache === true;
+  if (!skipCache) {
+    const cached = await readImportCache(cacheKey);
+    if (cached) return { recipe: { ...cached, source_url: "text-import" }, cached: true };
+  }
+  const ruleParsed = parseRuleBasedRecipeFromText(guessTitleFromImportText(text), text);
+  if (ruleParsed) {
+    const fromRules = {
+      ...ruleParsed,
+      prep_minutes: null,
+      cook_minutes: null,
+      source_url: "text-import",
+      source_type: "web"
+    };
+    if (recipeLooksValid(fromRules)) {
+      if (!skipCache) await writeImportCache(cacheKey, "text-import", fromRules);
+      return { recipe: fromRules, cached: false };
+    }
+  }
+  const fromGemini = await extractRecipeFromPageText(apiKey, text, "text-import", "web", {
+    singleModelAttempt: skipCache
+  });
   if (!fromGemini) return null;
   if (!recipeLooksValid(fromGemini)) {
     return {
@@ -2206,7 +1872,7 @@ async function importFromPlainText(apiKey, text) {
       creatorHint: null
     };
   }
-  await writeImportCache(cacheKey, "text-import", fromGemini);
+  if (!skipCache) await writeImportCache(cacheKey, "text-import", fromGemini);
   return { recipe: fromGemini, cached: false };
 }
 async function respondNotRecipeWithAutoYoutube(apiKey, sourceType, hasCaption, notRecipe) {
@@ -2299,8 +1965,9 @@ Deno.serve(async (req) => {
     if (text.length < MIN_TEXT_IMPORT_CHARS) {
       return jsonResponse({ error: "Paste a longer recipe or caption to import.", code: "BAD_REQUEST" }, 400);
     }
+    const skipSharedCache = shouldSkipSharedImportCache(body);
     try {
-      const result = await importFromPlainText(apiKey, text);
+      const result = await importFromPlainText(apiKey, text, { skipSharedCache });
       if (!result) {
         return jsonResponse({ error: "Could not import that text right now.", code: "UPSTREAM_ERROR" }, 502);
       }
@@ -2351,7 +2018,10 @@ Deno.serve(async (req) => {
         );
       }
       extracted = await maybeAttachAuthorPublicLink(extracted);
-      await writeImportCache(cacheKey, "photo-scan", extracted);
+      const skipPhotoCache = shouldSkipSharedImportCache(body);
+      if (!skipPhotoCache) {
+        await writeImportCache(cacheKey, "photo-scan", extracted);
+      }
       return jsonResponse({ recipe: extracted, cached: false });
     } catch (error) {
       console.error("recipe-import photo error", error);
@@ -2455,8 +2125,9 @@ Deno.serve(async (req) => {
   if (!normalized) {
     const fallbackText = (body.text ?? body.captionText ?? "").trim();
     if (fallbackText.length >= MIN_TEXT_IMPORT_CHARS) {
+      const skipSharedCache = shouldSkipSharedImportCache(body);
       try {
-        const result = await importFromPlainText(apiKey, fallbackText);
+        const result = await importFromPlainText(apiKey, fallbackText, { skipSharedCache });
         if (!result) {
           return jsonResponse({ error: "Could not import that text right now.", code: "UPSTREAM_ERROR" }, 502);
         }
@@ -2476,22 +2147,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Unsupported URL", code: "BAD_REQUEST" }, 400);
   }
   if (sourceType === "reddit") {
-    try {
-      const result = await importRedditLink(apiKey, normalized);
-      if (!result) {
-        return jsonResponse({ error: "Could not import that Reddit post.", code: "UPSTREAM_ERROR" }, 502);
-      }
-      if ("notRecipe" in result && result.notRecipe) {
-        if (result.suppressFallbacks) {
-          return jsonResponse({ error: result.message, code: "NOT_RECIPE" }, 422);
-        }
-        return await respondNotRecipeWithAutoYoutube(apiKey, "reddit", false, result);
-      }
-      return jsonResponse({ recipe: result.recipe, cached: result.cached });
-    } catch (error) {
-      console.error("recipe-import reddit error", error);
-      return jsonResponse({ error: "Import failed unexpectedly.", code: "UPSTREAM_ERROR" }, 502);
-    }
+    return jsonResponse(
+      {
+        error: "Reddit links cannot be imported automatically. Copy the recipe text or use a photo instead.",
+        code: "REDDIT_CLIENT_ONLY"
+      },
+      422
+    );
   }
   if (sourceType === "tiktok") {
     const caption = (body.captionText ?? "").trim();

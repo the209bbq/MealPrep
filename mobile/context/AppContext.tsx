@@ -124,6 +124,7 @@ import {
   resolveDiscoveryGroceryRecipeId,
 } from '../lib/recipeDiscovery/slugs';
 import type { RecipeDiscoveryListItem } from '../lib/recipeDiscovery/types';
+import { recipeWithoutSourceAttribution } from '../lib/recipeImport/clearRecipeSource';
 import { mapExtractedImportToRecipe } from '../lib/recipeImport/mapToAppRecipe';
 import type { RecipeImportExtractedDto } from '../lib/recipeImport/types';
 import {
@@ -340,6 +341,7 @@ interface AppContextValue {
     options: { asMaster: boolean; recipeApiId: number },
   ) => Promise<Recipe>;
   saveLinkImportedRecipe: (extracted: RecipeImportExtractedDto) => Promise<Recipe>;
+  clearImportedRecipeSource: (recipeId: string) => Promise<void>;
   addPantryFromScan: (name: string, photoUri: string | null) => void;
   addManualPantryItem: (input: {
     name: string;
@@ -1785,6 +1787,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, isGuest, ownerId, supabase, userId],
   );
 
+  const clearImportedRecipeSource = useCallback(
+    async (recipeId: string) => {
+      const recipe = recipes.find((r) => r.id === recipeId);
+      if (!recipe?.sourceUrl) return;
+      const cleared = recipeWithoutSourceAttribution(recipe);
+      if (demoMode || isGuest) {
+        setRecipes((prev) => {
+          const next = prev.map((r) => (r.id === recipeId ? cleared : r));
+          if (demoMode) writeJson(STORAGE_KEYS.recipes, next);
+          else writeGuestRecipes(next);
+          return next;
+        });
+        return;
+      }
+      if (!supabase || !userId) return;
+      const saved = await upsertLinkImportedRecipe(supabase, userId, cleared);
+      setRecipes((prev) => prev.map((r) => (r.id === recipeId ? saved : r)));
+    },
+    [demoMode, isGuest, recipes, supabase, userId],
+  );
+
   const toggleMealPlanDiscoveryRecipe = useCallback(
     async (item: RecipeDiscoveryListItem) => {
       const existing = isRecipeOnMealPlan(mealPlan, { recipeApiId: item.id });
@@ -2227,6 +2250,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateRecipe,
       importDiscoveredRecipe,
       saveLinkImportedRecipe,
+      clearImportedRecipeSource,
       addPantryFromScan,
       addManualPantryItem,
       updatePantryItemEntry,
@@ -2334,6 +2358,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateRecipe,
       importDiscoveredRecipe,
       saveLinkImportedRecipe,
+      clearImportedRecipeSource,
       pantryRecipeMatches,
       pantryRecipeMatchesRankedFiltered,
       pantryRecipeRecommendations,
