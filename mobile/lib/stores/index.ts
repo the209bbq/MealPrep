@@ -9,6 +9,7 @@ import { applyOriginDistancesAndSort } from './storeDistance';
 import { nearbyStoreSearchRadiusMeters } from './storeSearchRadius';
 import { readCachedNearbyStores } from './storeSearchCache';
 import { fetchNearbyStoresFromSupabase } from './supabaseNearbyStores';
+import { filterCatalogStoresForNearbyList, normalizePipelineOrigin, shouldUseRegionalFallbackForPreview, sortAndLimitStoresForStoresTab } from './storesNearbyPipeline';
 import type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
 
 export type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
@@ -46,19 +47,23 @@ export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): Ins
   const origin = resolveSearchOriginFast(params);
   if (!origin) return null;
 
+  const originKey = normalizePipelineOrigin(origin);
   const radiusM = nearbyStoreSearchRadiusMeters({
     isGpsOrigin: params.isGpsOrigin,
     radiusMultiplier: params.radiusMultiplier,
   });
-  const cached = readCachedNearbyStores(origin, radiusM);
+  const cached = readCachedNearbyStores(originKey, radiusM);
   if (cached?.length) {
+    const filtered = filterCatalogStoresForNearbyList(cached);
+    const withUrls = filtered.map((s) => ({ ...s, url: mapsDirectionsUrl(s) }));
+    const listed =
+      params.displayLimit != null
+        ? sortAndLimitStoresForStoresTab(withUrls, origin, params.displayLimit)
+        : applyOriginDistancesAndSort(withUrls, origin);
     return {
       origin,
       source: 'cache',
-      stores: applyOriginDistancesAndSort(
-        cached.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
-        origin,
-      ),
+      stores: listed,
     };
   }
 
@@ -90,14 +95,16 @@ export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): Ins
   }
 
   const regional = chooseRegionalStaticFallback(origin);
-  if (regional.length > 0) {
+  if (regional.length > 0 && shouldUseRegionalFallbackForPreview()) {
+    const withUrls = regional.map((s) => ({ ...s, url: mapsDirectionsUrl(s) }));
+    const listed =
+      params.displayLimit != null
+        ? sortAndLimitStoresForStoresTab(withUrls, origin, params.displayLimit)
+        : applyOriginDistancesAndSort(withUrls, origin);
     return {
       origin,
       source: 'cache',
-      stores: applyOriginDistancesAndSort(
-        regional.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
-        origin,
-      ),
+      stores: listed,
     };
   }
 
@@ -140,7 +147,7 @@ export async function searchNearbyGroceryStores(params: NearbyStoreSearchParams)
   });
 
   if (supabase.ok) {
-    catalogStores = supabase.stores;
+    catalogStores = filterCatalogStoresForNearbyList(supabase.stores);
     if (supabase.fromCache) {
       catalogWarning = SMART_SHOP_COPY.osmNetworkRetry;
     }

@@ -29,7 +29,7 @@ export type OverpassFetchResult =
   | { ok: false; reason: 'rate_limited' | 'network' | 'empty' };
 
 export function overpassCacheKey(origin: { lat: number; lng: number }, radiusMiles: number): string {
-  return `overpass:v2:${origin.lat.toFixed(3)}:${origin.lng.toFixed(3)}:${radiusMiles}`;
+  return `overpass:v3:${origin.lat.toFixed(3)}:${origin.lng.toFixed(3)}:${radiusMiles}`;
 }
 
 export function readCachedOverpassStores(

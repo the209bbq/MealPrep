@@ -68,7 +68,7 @@ const CORE_GROCERY_SHOPS = new Set([
   'kosher',
 ]);
 
-function matchesExcludePattern(haystack: string): boolean {
+export function matchesGroceryNameExcludePattern(haystack: string): boolean {
   const lower = haystack.toLowerCase();
   if (lower.includes('dollar general market')) return false;
   if (
@@ -87,6 +87,10 @@ function matchesExcludePattern(haystack: string): boolean {
   }
   if (/\brocket\b/i.test(lower)) return true;
   return SMART_SHOP_STORES.nameExcludePatterns.some((p) => lower.includes(p.toLowerCase()));
+}
+
+function matchesExcludePattern(haystack: string): boolean {
+  return matchesGroceryNameExcludePattern(haystack);
 }
 
 /** “… Food Mart” convenience names — only if OSM shop is supermarket or grocery. */
