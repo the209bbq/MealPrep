@@ -174,5 +174,11 @@ export function storeRecordToLocation(store: import('../stores/types').StoreReco
     pricingSource: store.pricingSource,
     krogerLocationId: store.krogerLocationId,
     url: store.url,
+    phone: store.phone,
+    website: store.website,
+    deliveryUrl: store.deliveryUrl,
+    openingHours: store.openingHours,
+    openNow: store.openNow,
+    pricingTeaser: store.pricingTeaser,
   };
 }

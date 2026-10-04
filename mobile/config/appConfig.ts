@@ -32,10 +32,17 @@ export const TABS: TabConfig[] = [
   { name: 'pantry', title: 'Pantry', href: '/pantry', icon: 'leaf-outline', iconActive: 'leaf' },
   {
     name: 'grocery',
-    title: 'Grocery list',
+    title: 'Grocery',
     href: '/grocery',
     icon: 'cart-outline',
     iconActive: 'cart',
+  },
+  {
+    name: 'stores',
+    title: 'Stores',
+    href: '/stores',
+    icon: 'storefront-outline',
+    iconActive: 'storefront',
   },
   {
     name: 'admin',
