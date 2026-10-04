@@ -78,7 +78,23 @@ function matchesExcludePattern(haystack: string): boolean {
   ) {
     return true;
   }
+  if (
+    /\b(quick stop|quik stop|speedway|love'?s|flyers|mine-mart|fast & easy mart|five star food|wine vinegar)\b/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  if (/\brocket\b/i.test(lower)) return true;
   return SMART_SHOP_STORES.nameExcludePatterns.some((p) => lower.includes(p.toLowerCase()));
+}
+
+/** “… Food Mart” convenience names — only if OSM shop is supermarket or grocery. */
+export function foodMartAllowedForShopTags(tags: Record<string, string>): boolean {
+  const haystack = haystackFromTags(tags);
+  if (!/\bfood mart\b/i.test(haystack)) return true;
+  const shop = (tags.shop ?? '').trim().toLowerCase();
+  return shop === 'supermarket' || shop === 'grocery';
 }
 
 export function isAllowedOsmGroceryElement(tags: Record<string, string>): boolean {
@@ -89,6 +105,7 @@ export function isAllowedOsmGroceryElement(tags: Record<string, string>): boolea
   if (tags.amenity === 'fuel' || shop === 'fuel' || tags.amenity === 'gas_station') return false;
   if (DISALLOWED_OSM_SHOPS.has(shop)) return false;
   if (matchesExcludePattern(haystack)) return false;
+  if (!foodMartAllowedForShopTags(tags)) return false;
 
   if (CORE_GROCERY_SHOPS.has(shop)) {
     return true;
@@ -111,7 +128,7 @@ export function isAllowedOsmGroceryElement(tags: Record<string, string>): boolea
   }
 
   if (resolveGroceryChainFromHaystack(haystack)) {
-    return shop !== 'convenience' && shop !== '';
+    return shop !== 'convenience' && !DISALLOWED_OSM_SHOPS.has(shop);
   }
 
   return false;

@@ -84,6 +84,7 @@ function elementsToStores(
       distanceMiles: Math.round(distanceMiles * 100) / 100,
       source: 'osm',
       pricingSource: 'none',
+      osmShop: tags.shop?.trim() || undefined,
       url: undefined,
       ...storeRecordExtrasFromOsmTags(tags),
     });

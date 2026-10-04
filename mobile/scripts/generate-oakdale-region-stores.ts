@@ -84,6 +84,7 @@ for (const el of elements) {
     lng,
     source: 'osm',
     pricingSource: 'none',
+    osmShop: tags.shop?.trim() || undefined,
     ...storeRecordExtrasFromOsmTags(tags),
   });
 }

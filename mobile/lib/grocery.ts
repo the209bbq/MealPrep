@@ -6,7 +6,7 @@ import {
   findPantryItemsForIngredient,
   totalPantryQuantityInUnit,
 } from './recipeMatch/pantryStock';
-import { isGroceryOriginPinned, preferGroceryOrigin, withGroceryOrigin } from './grocery/origin';
+import { isGroceryOriginPinned, preferGroceryOrigin } from './grocery/origin';
 import { normalizeIngredientName } from './recipeMatch/normalize';
 
 /** Store aisle order for grouped grocery UI. */

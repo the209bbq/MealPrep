@@ -211,6 +211,9 @@ assert.equal(
 
 assert.equal(isAllowedOsmGroceryElement({ name: '7-Eleven', shop: 'convenience' }), false);
 assert.equal(isAllowedOsmGroceryElement({ name: 'Chevron', shop: 'convenience' }), false);
+assert.equal(isAllowedOsmGroceryElement({ name: 'Quick Stop', shop: 'convenience' }), false);
+assert.equal(isAllowedOsmGroceryElement({ name: "Sunny's Food Mart", shop: 'convenience' }), false);
+assert.equal(isAllowedOsmGroceryElement({ name: "Sunny's Food Mart", shop: 'supermarket' }), true);
 assert.equal(isAllowedOsmGroceryElement({ name: 'Save Mart', shop: 'supermarket' }), true);
 assert.equal(isAllowedOsmGroceryElement({ name: 'Dollar General Market', shop: 'supermarket' }), true);
 
