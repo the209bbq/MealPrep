@@ -10,6 +10,7 @@ import {
   isSupabaseConfigured,
 } from '../config/appConfig';
 import { GROCERY_COPY } from '../config/grocery';
+import { SAVED_RECIPES_COPY } from '../config/savedRecipes';
 import { GUEST_OWNER_ID } from '../config/guestMode';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
@@ -243,6 +244,7 @@ interface UndoToastState {
   onUndo: () => void;
   actionLabel?: string;
   onAction?: () => void;
+  showUndo?: boolean;
 }
 
 interface MealMadeUndoState {
@@ -328,6 +330,9 @@ interface AppContextValue {
   saveUserDietPrefs: (prefs: UserDietPrefs) => Promise<void>;
   undoToast: UndoToastState | null;
   dismissUndoToast: () => void;
+  notifySavedToMyRecipes: (onViewMyRecipes: () => void) => void;
+  notifyRemovedFromMyRecipes: (onUndo: () => void) => void;
+  notifyMyRecipesSaveFailed: () => void;
   setServingOverride: (recipeId: string, servings: number) => void;
   applyServingOverridesBatch: (updates: Record<string, number>) => void;
   toggleGroceryItem: (id: string) => void;
@@ -2173,6 +2178,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const dismissUndoToast = useCallback(() => setUndoToast(null), []);
 
+  const notifySavedToMyRecipes = useCallback((onViewMyRecipes: () => void) => {
+    setUndoToast({
+      message: SAVED_RECIPES_COPY.toastSaved,
+      showUndo: false,
+      actionLabel: SAVED_RECIPES_COPY.myRecipesViewAction,
+      onAction: () => {
+        setUndoToast(null);
+        onViewMyRecipes();
+      },
+      onUndo: () => setUndoToast(null),
+    });
+  }, []);
+
+  const notifyRemovedFromMyRecipes = useCallback((onUndo: () => void) => {
+    setUndoToast({
+      message: SAVED_RECIPES_COPY.toastRemoved,
+      onUndo: () => {
+        onUndo();
+        setUndoToast(null);
+      },
+    });
+  }, []);
+
+  const notifyMyRecipesSaveFailed = useCallback(() => {
+    setUndoToast({
+      message: SAVED_RECIPES_COPY.toastSaveFailed,
+      showUndo: false,
+      onUndo: () => setUndoToast(null),
+    });
+  }, []);
+
   const mealMadeReviewTitle = useMemo(() => {
     if (!mealMadeReview) return null;
     return mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)?.title ?? null;
@@ -2240,6 +2276,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveUserDietPrefs,
       undoToast,
       dismissUndoToast,
+      notifySavedToMyRecipes,
+      notifyRemovedFromMyRecipes,
+      notifyMyRecipesSaveFailed,
       setServingOverride,
       applyServingOverridesBatch,
       toggleGroceryItem,
@@ -2355,6 +2394,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveUserDietPrefs,
       undoToast,
       dismissUndoToast,
+      notifySavedToMyRecipes,
+      notifyRemovedFromMyRecipes,
+      notifyMyRecipesSaveFailed,
       updateRecipe,
       importDiscoveredRecipe,
       saveLinkImportedRecipe,

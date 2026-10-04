@@ -7,7 +7,6 @@ import { THEME } from '../../config/appConfig';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import { VIRAL_RECIPES_COPY } from '../../config/viralRecipes';
-import { SAVED_RECIPES_COPY } from '../../config/savedRecipes';
 import { formatIngredientText, formatQuantityWithUnit } from '../../lib/formatQuantity';
 import { sanitizeHttpUrl } from '../../lib/recipeImport/safeHttpUrl';
 import type { RecipePantryMatch } from '../../lib/recipeMatch';
@@ -16,6 +15,7 @@ import type { ViralRecipeLinkItem } from '../../lib/viralRecipes/types';
 import { RecipeDietNotice } from '../diet/RecipeDietNotice';
 import { ingredientLinesFromRecipe } from '../../lib/diet/ingredientLines';
 import { RecipeSaveButton } from './RecipeSaveButton';
+import { RecipeSaveCta } from './RecipeSaveCta';
 
 type DetailSection = 'ingredients' | 'steps';
 
@@ -32,6 +32,7 @@ export interface VideoRecipeDetailViewProps {
   onAddMissing: () => void;
   recipeSaved?: boolean;
   onToggleSaveRecipe?: () => void;
+  saveDisabled?: boolean;
   /** Preview / screenshot mode: force loading UI without network. */
   previewLoading?: boolean;
   /** Controlled tab for screenshots. */
@@ -162,6 +163,7 @@ export function VideoRecipeDetailView({
   onAddMissing,
   recipeSaved,
   onToggleSaveRecipe,
+  saveDisabled = false,
   previewLoading = false,
   initialSection = 'ingredients',
 }: VideoRecipeDetailViewProps) {
@@ -195,7 +197,12 @@ export function VideoRecipeDetailView({
           Video recipe
         </Text>
         {onToggleSaveRecipe ? (
-          <RecipeSaveButton saved={Boolean(recipeSaved)} onToggle={onToggleSaveRecipe} size={20} />
+          <RecipeSaveButton
+            saved={Boolean(recipeSaved)}
+            onToggle={onToggleSaveRecipe}
+            size={20}
+            disabled={saveDisabled}
+          />
         ) : (
           <View className="w-10" />
         )}
@@ -329,21 +336,11 @@ export function VideoRecipeDetailView({
         >
           <View className="gap-2">
             {onToggleSaveRecipe ? (
-              <Pressable
-                onPress={onToggleSaveRecipe}
-                className={`min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl px-4 ${
-                  recipeSaved ? 'border border-border bg-paper' : 'bg-primary'
-                }`}
-              >
-                <Ionicons
-                  name={recipeSaved ? 'bookmark' : 'bookmark-outline'}
-                  size={22}
-                  color={recipeSaved ? THEME.primary : THEME.onPrimary}
-                />
-                <Text className={`text-base font-bold ${recipeSaved ? 'text-ink' : 'text-on-primary'}`}>
-                  {recipeSaved ? SAVED_RECIPES_COPY.saved : VIRAL_RECIPES_COPY.saveToMyRecipes}
-                </Text>
-              </Pressable>
+              <RecipeSaveCta
+                saved={Boolean(recipeSaved)}
+                onToggle={onToggleSaveRecipe}
+                disabled={saveDisabled}
+              />
             ) : null}
             {missingCount > 0 ? (
               <Pressable

@@ -8,23 +8,31 @@ export function RecipeSaveButton({
   onToggle,
   size = 22,
   className = '',
+  disabled = false,
 }: {
   saved: boolean;
   onToggle: () => void;
   size?: number;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={(event: GestureResponderEvent) => {
         event.stopPropagation?.();
+        if (disabled) return;
         onToggle();
       }}
+      disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={saved ? SAVED_RECIPES_COPY.unsave : SAVED_RECIPES_COPY.save}
-      accessibilityState={{ selected: saved }}
+      accessibilityLabel={
+        saved ? SAVED_RECIPES_COPY.savedAccessibility : SAVED_RECIPES_COPY.saveAccessibility
+      }
+      accessibilityState={{ selected: saved, disabled }}
       hitSlop={8}
-      className={`items-center justify-center rounded-full bg-card/90 p-1.5 ${className}`}
+      className={`items-center justify-center rounded-full p-1.5 ${
+        saved ? 'border border-primary bg-primary-light' : 'bg-card/90'
+      } ${disabled ? 'opacity-60' : ''} ${className}`}
     >
       <Ionicons
         name={saved ? 'bookmark' : 'bookmark-outline'}

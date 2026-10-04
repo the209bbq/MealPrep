@@ -8,9 +8,17 @@ export interface UndoToastProps {
   onDismiss: () => void;
   actionLabel?: string;
   onAction?: () => void;
+  showUndo?: boolean;
 }
 
-export function UndoToast({ message, onUndo, onDismiss, actionLabel, onAction }: UndoToastProps) {
+export function UndoToast({
+  message,
+  onUndo,
+  onDismiss,
+  actionLabel,
+  onAction,
+  showUndo = true,
+}: UndoToastProps) {
   useEffect(() => {
     const timer = setTimeout(() => onDismiss(), UNDO_TOAST_AUTO_DISMISS_MS);
     return () => clearTimeout(timer);
@@ -31,9 +39,11 @@ export function UndoToast({ message, onUndo, onDismiss, actionLabel, onAction }:
             <Text className="text-xs font-bold text-primary-accent">{actionLabel}</Text>
           </Pressable>
         ) : null}
-        <Pressable onPress={onUndo} className="rounded-full bg-primary px-3 py-1.5">
-          <Text className="text-xs font-bold text-on-primary">Undo</Text>
-        </Pressable>
+        {showUndo ? (
+          <Pressable onPress={onUndo} className="rounded-full bg-primary px-3 py-1.5">
+            <Text className="text-xs font-bold text-on-primary">Undo</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={onDismiss} hitSlop={8} className="px-1">
           <Text className="text-lg leading-none text-muted">×</Text>
         </Pressable>

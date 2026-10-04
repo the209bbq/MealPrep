@@ -18,6 +18,7 @@ interface RecipesUnifiedFeedCardProps {
   sourceTag?: string | null;
   saved?: boolean;
   onToggleSave?: () => void;
+  saveDisabled?: boolean;
 }
 
 function RecipesUnifiedFeedCardInner({
@@ -26,6 +27,7 @@ function RecipesUnifiedFeedCardInner({
   sourceTag,
   saved,
   onToggleSave,
+  saveDisabled = false,
 }: RecipesUnifiedFeedCardProps) {
   const name = row.recipe.name;
   const imageUri = useMemo(
@@ -56,7 +58,12 @@ function RecipesUnifiedFeedCardInner({
         <DietAllergenBadge ingredientLines={ingredientLines} />
         {onToggleSave ? (
           <View className="absolute right-2 top-2">
-            <RecipeSaveButton saved={Boolean(saved)} onToggle={onToggleSave} size={20} />
+            <RecipeSaveButton
+              saved={Boolean(saved)}
+              onToggle={onToggleSave}
+              size={20}
+              disabled={saveDisabled}
+            />
           </View>
         ) : null}
       </View>
