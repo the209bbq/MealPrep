@@ -75,6 +75,7 @@ import { uploadScanPhoto } from '../../lib/scanPhotos/client';
 import { TabEmptyState } from '../../components/TabEmptyState';
 import { ViewScanPhotoButton } from '../../components/ViewScanPhotoButton';
 import { PANTRY_CATEGORIES, type PantryCategory, type PantryItem } from '../../types/mealprep';
+import { MAIN_INGREDIENT_COPY } from '../../config/mainIngredient';
 
 type ScanPhase = 'idle' | 'loading' | 'review';
 
@@ -622,6 +623,14 @@ export default function PantryScreen() {
     setAddOpen(true);
   }
 
+  function cookWithPantryItem(item: PantryItem) {
+    closeManualModal();
+    router.push({
+      pathname: '/recipes',
+      params: { cookWith: encodeURIComponent(item.name.trim()) },
+    });
+  }
+
   function openEditModal(item: PantryItem) {
     setEditItem(item);
     setManualName(item.name);
@@ -1029,12 +1038,24 @@ export default function PantryScreen() {
             ) : null}
             {formError ? <Text className="mt-2 text-xs font-semibold text-danger">{formError}</Text> : null}
             {editItem ? (
-              <Pressable
-                onPress={requestDeleteItem}
-                className="mt-4 rounded-2xl border border-danger/30 py-3"
-              >
-                <Text className="text-center font-bold text-danger">Delete item</Text>
-              </Pressable>
+              <>
+                <Pressable
+                  onPress={() => cookWithPantryItem(editItem)}
+                  className="mt-4 rounded-2xl border border-primary/30 bg-primary-light py-3"
+                  accessibilityRole="button"
+                  accessibilityLabel={MAIN_INGREDIENT_COPY.cookWithThisAction}
+                >
+                  <Text className="text-center font-bold text-primary-dark">
+                    {MAIN_INGREDIENT_COPY.cookWithThisAction}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={requestDeleteItem}
+                  className="mt-3 rounded-2xl border border-danger/30 py-3"
+                >
+                  <Text className="text-center font-bold text-danger">Delete item</Text>
+                </Pressable>
+              </>
             ) : null}
             <View className="mt-6 flex-row gap-2">
               <Pressable onPress={closeManualModal} className="flex-1 rounded-2xl border border-border py-3">
