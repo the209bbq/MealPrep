@@ -1,20 +1,21 @@
 // Creator recipe videos — cached YouTube metadata for trusted channels (no search.list).
 //
-// Deploy: supabase functions deploy creator-videos
+// Deploy: supabase functions deploy creator-videos --no-verify-jwt
 // Secrets: YOUTUBE_API_KEY, CREATOR_ADMIN_SECRET (refresh + upsert by handle)
-// Default: Verify JWT enabled — guests may call public read actions with the anon key.
+// JWT verification off — the app sends the Supabase publishable (anon) key, not a user JWT.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { buildChannelFitWeightMap, mixCreatorFeed } from './feedMix.ts';
 import { compareCreatorsByFitAndSubscribers } from './fitOrder.ts';
 import {
+  isLowQualityFeedVideo,
   matchesBudgetFeed,
   matchesQuickFeed,
 } from './recipeVideoFilter.ts';
+import { refreshAndPersistCreator } from './refreshPersist.ts';
 import {
-  fetchChannelBundle,
-  refreshCreatorVideos,
   upsertCreatorByHandle,
+  YOUTUBE_UNITS_CHANNELS_FOR_HANDLE,
 } from './youtubeRefresh.ts';
 
 const corsHeaders = {
@@ -226,6 +227,12 @@ async function readFeedVideos(
   if (error) throw error;
   let rows = (data ?? []) as VideoRow[];
 
+  if (mode === 'popular') {
+    rows = rows.filter(
+      (row) => !isLowQualityFeedVideo(row.title, row.description_snippet ?? ''),
+    );
+  }
+
   if (mode === 'quick') {
     rows = rows.filter((row) =>
       matchesQuickFeed(
@@ -322,65 +329,78 @@ async function handlePublicAction(
 async function refreshAllEnabledCreators(
   admin: ReturnType<typeof createClient>,
   apiKey: string,
-): Promise<{ refreshedCreators: number; refreshedVideos: number }> {
+): Promise<{
+  refreshedCreators: number;
+  refreshedVideos: number;
+  youtubeUnitsEstimate: number;
+  creators: Array<{
+    channelId: string;
+    displayName: string;
+    ok: boolean;
+    error?: string;
+    videosUpserted: number;
+  }>;
+}> {
   const { data: creators, error } = await admin
     .from('recipe_creators')
-    .select('youtube_channel_id, enabled')
+    .select('youtube_channel_id, display_name, enabled')
     .eq('enabled', true);
   if (error) throw error;
 
+  const results: Array<{
+    channelId: string;
+    displayName: string;
+    ok: boolean;
+    error?: string;
+    videosUpserted: number;
+  }> = [];
   let videoCount = 0;
+  let youtubeUnitsEstimate = 0;
+
   for (const row of creators ?? []) {
     const channelId = (row as { youtube_channel_id: string }).youtube_channel_id;
-    const bundle = await fetchChannelBundle(apiKey, channelId);
-    if (!bundle) continue;
-
-    const { videos, avgViews, avgLikes } = await refreshCreatorVideos(
-      apiKey,
-      channelId,
-      bundle.uploadsPlaylistId,
-    );
-
-    const { error: updateCreatorError } = await admin
-      .from('recipe_creators')
-      .update({
-        display_name: bundle.creator.display_name,
-        handle: bundle.creator.handle,
-        channel_url: bundle.creator.channel_url,
-        avatar_url: bundle.creator.avatar_url,
-        subscriber_count: bundle.creator.subscriber_count,
-        total_views: bundle.creator.total_views,
-        avg_views: avgViews,
-        avg_likes: avgLikes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('youtube_channel_id', channelId);
-    if (updateCreatorError) throw updateCreatorError;
-
-    if (videos.length > 0) {
-      const { error: upsertVideosError } = await admin
-        .from('creator_videos')
-        .upsert(videos, { onConflict: 'video_id' });
-      if (upsertVideosError) throw upsertVideosError;
-      videoCount += videos.length;
-    }
+    const seedName = (row as { display_name?: string }).display_name ?? channelId;
+    const outcome = await refreshAndPersistCreator(admin, apiKey, channelId);
+    youtubeUnitsEstimate += outcome.youtubeUnits;
+    videoCount += outcome.videosUpserted;
+    results.push({
+      channelId: outcome.channelId,
+      displayName: outcome.displayName || seedName,
+      ok: outcome.ok,
+      error: outcome.error,
+      videosUpserted: outcome.videosUpserted,
+    });
   }
 
-  return { refreshedCreators: creators?.length ?? 0, refreshedVideos: videoCount };
+  return {
+    refreshedCreators: creators?.length ?? 0,
+    refreshedVideos: videoCount,
+    youtubeUnitsEstimate,
+    creators: results,
+  };
 }
 
 async function refreshSingleCreator(
   admin: ReturnType<typeof createClient>,
   apiKey: string,
   options: { handle?: string; channelId?: string },
-): Promise<{ channelId: string; videos: number } | null> {
+): Promise<{
+  channelId: string;
+  displayName: string;
+  ok: boolean;
+  error?: string;
+  videosUpserted: number;
+  youtubeUnitsEstimate: number;
+} | null> {
   let channelId = options.channelId?.trim() ?? '';
   let creatorPatch: Record<string, unknown> | null = null;
+  let youtubeUnitsEstimate = 0;
 
   const isNewByHandle = Boolean(!channelId && options.handle?.trim());
 
   if (isNewByHandle) {
     const resolved = await upsertCreatorByHandle(apiKey, options.handle!);
+    youtubeUnitsEstimate += YOUTUBE_UNITS_CHANNELS_FOR_HANDLE;
     if (!resolved) return null;
     channelId = resolved.channelId;
     creatorPatch = {
@@ -393,53 +413,19 @@ async function refreshSingleCreator(
 
   if (!channelId) return null;
 
-  const bundle = await fetchChannelBundle(apiKey, channelId);
-  if (!bundle) return null;
+  const outcome = await refreshAndPersistCreator(admin, apiKey, channelId, {
+    creatorPatchOnInsert: isNewByHandle ? creatorPatch ?? undefined : undefined,
+  });
+  youtubeUnitsEstimate += outcome.youtubeUnits;
 
-  const { videos, avgViews, avgLikes } = await refreshCreatorVideos(
-    apiKey,
-    channelId,
-    bundle.uploadsPlaylistId,
-  );
-
-  if (isNewByHandle && creatorPatch) {
-    const { error: insertError } = await admin.from('recipe_creators').upsert(
-      {
-        ...creatorPatch,
-        youtube_channel_id: channelId,
-        avg_views: avgViews,
-        avg_likes: avgLikes,
-        enabled: true,
-      },
-      { onConflict: 'youtube_channel_id' },
-    );
-    if (insertError) throw insertError;
-  } else {
-    const { error: updateError } = await admin
-      .from('recipe_creators')
-      .update({
-        display_name: bundle.creator.display_name,
-        handle: bundle.creator.handle,
-        channel_url: bundle.creator.channel_url,
-        avatar_url: bundle.creator.avatar_url,
-        subscriber_count: bundle.creator.subscriber_count,
-        total_views: bundle.creator.total_views,
-        avg_views: avgViews,
-        avg_likes: avgLikes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('youtube_channel_id', channelId);
-    if (updateError) throw updateError;
-  }
-
-  if (videos.length > 0) {
-    const { error: upsertVideosError } = await admin
-      .from('creator_videos')
-      .upsert(videos, { onConflict: 'video_id' });
-    if (upsertVideosError) throw upsertVideosError;
-  }
-
-  return { channelId, videos: videos.length };
+  return {
+    channelId: outcome.channelId,
+    displayName: outcome.displayName,
+    ok: outcome.ok,
+    error: outcome.error,
+    videosUpserted: outcome.videosUpserted,
+    youtubeUnitsEstimate,
+  };
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -506,11 +492,22 @@ Deno.serve(async (req) => {
         if (!result) {
           return jsonResponse({ error: 'Could not resolve creator', code: 'NOT_FOUND' }, 404);
         }
+        if (!result.ok) {
+          return jsonResponse(
+            { ok: false, ...result, code: 'UPSTREAM_ERROR' },
+            502,
+          );
+        }
         return jsonResponse({ ok: true, ...result });
       }
 
       const summary = await refreshAllEnabledCreators(admin, apiKey);
-      return jsonResponse({ ok: true, ...summary });
+      const failed = summary.creators.filter((row) => !row.ok).length;
+      return jsonResponse({
+        ok: failed === 0,
+        ...summary,
+        failedCreators: failed,
+      });
     } catch (err) {
       console.error('creator-videos refresh failed', err);
       return jsonResponse({ error: 'Refresh failed', code: 'UPSTREAM_ERROR' }, 502);

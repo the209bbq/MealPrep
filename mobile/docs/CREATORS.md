@@ -63,8 +63,10 @@ Deploy:
 
 ```bash
 cd mobile
-supabase functions deploy creator-videos
+supabase functions deploy creator-videos --no-verify-jwt
 ```
+
+The mobile app calls this function with the **publishable (anon) key** in `Authorization`, not an end-user JWT — keep JWT verification disabled for this function (same pattern as `library-generate`).
 
 Secrets (Supabase project → Edge Functions → Secrets):
 
@@ -86,11 +88,12 @@ Uses **no** `search.list`. Per enabled creator, each refresh cycle uses roughly:
 
 **~3 units per creator** per full refresh. For 32 creators ≈ **96 units** every 12h ≈ **192 units/day** (well under the 10,000/day free quota).
 
-Refresh all enabled creators:
+Refresh all enabled creators (continues on per-creator errors; returns a per-creator summary and `youtubeUnitsEstimate`):
 
 ```bash
 curl -sS -X POST "$SUPABASE_URL/functions/v1/creator-videos" \
   -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+  -H "apikey: $SUPABASE_ANON_KEY" \
   -H "Content-Type: application/json" \
   -H "x-creator-admin-secret: $CREATOR_ADMIN_SECRET" \
   -d '{"action":"refresh"}'
@@ -118,27 +121,38 @@ curl -sS -X POST "$SUPABASE_URL/functions/v1/creator-videos" \
 
 Public read actions (JWT / anon): `creators`, `creator`, `feed` (`popular` | `new` | `quick` | `budget`), `search` (Postgres full-text — **no YouTube quota**).
 
-### pg_cron (optional, ~every 12 hours)
+### pg_cron (~every 12 hours)
 
-Run in the Supabase SQL editor after enabling `pg_cron` and storing secrets in Vault or using your scheduler of choice:
+Migration `supabase/migrations/20261004150000_creator_videos_refresh_cron.sql` enables `pg_cron` + `pg_net` (if needed) and schedules refresh. It reads secrets from **Supabase Vault** — never embed `CREATOR_ADMIN_SECRET` in SQL.
+
+**1. Store Vault secrets** (SQL editor or Dashboard → Database → Vault):
 
 ```sql
--- Example: invoke refresh via pg_net (adjust URL and secret storage to your project)
-select cron.schedule(
-  'creator-videos-refresh-12h',
-  '0 */12 * * *',
-  $$
-  select net.http_post(
-    url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/creator-videos',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer YOUR_ANON_KEY',
-      'x-creator-admin-secret', 'YOUR_CREATOR_ADMIN_SECRET'
-    ),
-    body := '{"action":"refresh"}'::jsonb
-  );
-  $$
-);
+-- Project API URL, no trailing slash (e.g. https://abcdefgh.supabase.co)
+select vault.create_secret('https://YOUR_PROJECT_REF.supabase.co', 'supabase_project_url');
+
+-- Publishable anon key (same as EXPO_PUBLIC / client)
+select vault.create_secret('YOUR_SUPABASE_ANON_KEY', 'supabase_anon_key');
+
+-- Matches Edge Function secret CREATOR_ADMIN_SECRET
+select vault.create_secret('YOUR_CREATOR_ADMIN_SECRET', 'creator_admin_secret');
+```
+
+To rotate a secret, use `vault.update_secret` (see [Supabase Vault docs](https://supabase.com/docs/guides/database/vault)).
+
+**2. Apply migrations** (`supabase db push`). The job `creator-videos-refresh-12h` runs at `0 */12 * * *` (UTC).
+
+**3. Deploy** the edge function with `--no-verify-jwt` so pg_net can call it with the anon key + `x-creator-admin-secret` header.
+
+Manual test (same headers the cron job sends):
+
+```bash
+curl -sS -X POST "$SUPABASE_URL/functions/v1/creator-videos" \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+  -H "apikey: $SUPABASE_ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -H "x-creator-admin-secret: $CREATOR_ADMIN_SECRET" \
+  -d '{"action":"refresh"}'
 ```
 
 ## Legacy `viral-recipes`
