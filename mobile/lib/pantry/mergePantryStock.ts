@@ -83,11 +83,18 @@ export function mergePantryStock(
   return { pantry: merged, inserted, updated };
 }
 
+function newPantryRowId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14)}${Math.random().toString(16).slice(2, 6)}`;
+}
+
 export function groceryItemToPantryItem(item: GroceryListItem, now = new Date().toISOString()): PantryItem {
   const slug = item.name.toLowerCase().replace(/\s+/g, '-');
   const category = item.category as PantryCategory;
   return {
-    id: `restock-${now}-${slug}-${Math.random().toString(36).slice(2, 8)}`,
+    id: newPantryRowId(),
     ingredientId: `grocery-${slug}`,
     name: item.name.trim(),
     category,

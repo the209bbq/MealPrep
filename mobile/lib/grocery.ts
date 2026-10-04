@@ -24,6 +24,16 @@ export function isManualGroceryItem(item: GroceryListItem): boolean {
   return item.ingredientId.startsWith('manual-');
 }
 
+/** Rows the user added explicitly (manual entry or “add missing” while recipe is not on the meal plan). */
+export function isUserPinnedGroceryItem(
+  item: GroceryListItem,
+  plannedRecipeIds: readonly string[],
+): boolean {
+  if (isManualGroceryItem(item)) return true;
+  if (item.sourceRecipeIds.length === 0) return true;
+  return item.sourceRecipeIds.some((recipeId) => !plannedRecipeIds.includes(recipeId));
+}
+
 export function groupGroceryByAisle(items: GroceryListItem[]): { category: PantryCategory; label: string; items: GroceryListItem[] }[] {
   const byCat = new Map<PantryCategory, GroceryListItem[]>();
   for (const item of items) {
@@ -78,7 +88,7 @@ export function buildGroceryList(
   pantry: PantryItem[],
   servingOverrides: Record<string, number>,
   previous: GroceryListItem[],
-  options?: BuildGroceryListOptions & { householdSize?: number },
+  options?: BuildGroceryListOptions,
 ): GroceryListItem[] {
   const dismissals = options?.groceryDismissals ?? new Set<string>();
   const needed = new Map<
@@ -88,10 +98,7 @@ export function buildGroceryList(
 
   for (const recipe of recipes) {
     if (!selectedRecipeIds.includes(recipe.id)) continue;
-    const householdSize = options?.householdSize;
-    const servings =
-      servingOverrides[recipe.id] ??
-      (householdSize != null && householdSize > 0 ? householdSize : recipe.servings);
+    const servings = servingOverrides[recipe.id] ?? recipe.servings;
     const scale = recipe.servings > 0 ? servings / recipe.servings : 1;
     for (const ingredient of recipe.ingredients) {
       const key = `${normalizeIngredientName(ingredient.name)}::${ingredient.unit.trim().toLowerCase()}`;
@@ -114,7 +121,7 @@ export function buildGroceryList(
 
   const checked = new Map(previous.map((item) => [normalizeIngredientName(item.name) + '::' + item.unit.trim().toLowerCase(), item.checked]));
 
-  const manualItems = previous.filter((item) => isManualGroceryItem(item));
+  const pinnedItems = previous.filter((item) => isUserPinnedGroceryItem(item, selectedRecipeIds));
 
   const list: GroceryListItem[] = [];
   for (const [key, value] of needed) {
@@ -159,7 +166,7 @@ export function buildGroceryList(
   }
 
   const recipeItems = list.sort((a, b) => a.name.localeCompare(b.name));
-  return mergeManualGroceryLines(recipeItems, manualItems);
+  return mergeManualGroceryLines(recipeItems, pinnedItems);
 }
 
 function groceryLineKey(item: Pick<GroceryListItem, 'name' | 'unit'>): string {

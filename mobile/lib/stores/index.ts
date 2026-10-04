@@ -2,6 +2,7 @@ import { mapsDirectionsUrl, SMART_SHOP_COPY, SMART_SHOP_STORES } from '../../con
 import { geocodeUsZip } from './nominatim';
 import { fetchOverpassStores, readCachedOverpassStores } from './overpass';
 import { loadSavedStoresFallback } from './savedStoresFallback';
+import { loadRegionalStaticGroceryStores } from './regionalStaticStores';
 import { resolveSearchOriginFast, resolveSearchOriginWithGeocode } from './resolveOrigin';
 import { applyOriginDistancesAndSort } from './storeDistance';
 import type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
@@ -65,11 +66,13 @@ export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): Ins
     };
   }
 
-  const fallback = loadSavedStoresFallback(params.zip);
+  const saved = loadSavedStoresFallback(params.zip);
+  const regional = loadRegionalStaticGroceryStores();
+  const fallback = saved.length > 0 ? saved : regional;
   if (fallback.length > 0) {
     return {
       origin,
-      source: 'saved',
+      source: saved.length > 0 ? 'saved' : 'cache',
       stores: applyOriginDistancesAndSort(
         fallback.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
         origin,
@@ -94,7 +97,9 @@ function applyOsmResult(
   }
 
   if (osmStores.length === 0) {
-    const fallback = loadSavedStoresFallback(params.zip);
+    const saved = loadSavedStoresFallback(params.zip);
+    const regional = loadRegionalStaticGroceryStores();
+    const fallback = saved.length > 0 ? saved : regional;
     if (fallback.length > 0) {
       osmStores = fallback;
       osmWarning = SMART_SHOP_COPY.osmNetworkRetry;

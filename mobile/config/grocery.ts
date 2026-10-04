@@ -32,6 +32,8 @@ export const GROCERY_COPY = {
   addedMissingSingle: (name: string) => `Added ${name} to your grocery list`,
   addedMissingPlural: (count: number) => `Added ${count} missing items to your grocery list`,
   alreadyOnGroceryList: 'Those missing items are already on your grocery list',
+  nothingMissingOnGroceryList: 'Nothing missing — your pantry already has these ingredients',
+  addMissingUnavailable: 'Could not add items yet. Try again in a moment.',
   viewGroceryListAction: 'View list',
   plannedMealsLine: (count: number) => `${count} planned meal(s) · only buy what recipes still need`,
   toBuyInCartLine: (open: number, checked: number) => `${open} to buy · ${checked} in cart`,

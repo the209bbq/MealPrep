@@ -68,7 +68,7 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'safeway',
     displayName: 'Safeway',
     matchPatterns: ['safeway'],
-    storePageUrl: 'https://local.safeway.com/search?q={query}',
+    storePageUrl: 'https://www.safeway.com/find-store.html?q={query}',
     weeklyAdUrl: 'https://www.safeway.com/weeklyad',
     delivery: { instacartSlug: 'safeway', instacart: true, doordash: true, ubereats: true },
   },
