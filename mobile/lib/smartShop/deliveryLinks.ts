@@ -1,5 +1,6 @@
 import { GROCERY_CHAINS, type DeliveryServiceId, type GroceryChainConfig } from '../../config/smartShopChains';
 import { DELIVERY_URL_TEMPLATES, fillDeliveryTemplate } from '../../config/smartShopDelivery';
+import { formatQuantityWithUnit } from '../formatQuantity';
 import type { StoreLocation } from '../deals/types';
 
 function haystack(store: Pick<StoreLocation, 'name' | 'chain'>): string {
@@ -57,5 +58,7 @@ export function deliveryListOrderUrl(service: DeliveryServiceId): string {
 export function formatGroceryListPlainText(
   items: ReadonlyArray<{ name: string; quantity: number; unit: string }>,
 ): string {
-  return items.map((i) => `${i.name} — ${i.quantity} ${i.unit}`.trim()).join('\n');
+  return items
+    .map((i) => `${i.name} — ${formatQuantityWithUnit(i.quantity, i.unit)}`.trim())
+    .join('\n');
 }

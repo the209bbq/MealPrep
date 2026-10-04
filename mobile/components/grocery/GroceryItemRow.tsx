@@ -4,6 +4,7 @@ import { THEME } from '../../config/appConfig';
 import { GROCERY_COPY } from '../../config/grocery';
 import type { GroceryCommunityDealBadge } from '../../lib/communityDeals/matchItem';
 import { formatMoney } from '../../lib/smartShop/aggregateDeals';
+import { formatQuantityWithUnit } from '../../lib/formatQuantity';
 import type { GroceryListItem } from '../../types/mealprep';
 
 interface GroceryItemRowProps {
@@ -16,7 +17,7 @@ interface GroceryItemRowProps {
 }
 
 export function GroceryItemRow({ item, recipeLabels, onToggle, onRemove, dimmed, communityDeal }: GroceryItemRowProps) {
-  const qtyLabel = `${item.quantity} ${item.unit}`;
+  const qtyLabel = formatQuantityWithUnit(item.quantity, item.unit);
 
   return (
     <Pressable

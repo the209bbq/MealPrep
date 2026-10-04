@@ -26,6 +26,7 @@ import { LIBRARY_RECIPES } from '../../config/libraryRecipes';
 import { isLibraryRecipeAppId } from '../../lib/libraryRecipes/slug';
 import { isMealDbRecipeId } from '../../lib/mealdb/normalize';
 import { MealDbRecipeCreditLine } from './MealDbRecipeCreditLine';
+import { formatIngredientText, formatQuantityWithUnit } from '../../lib/formatQuantity';
 import type { Recipe } from '../../types/mealprep';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 import { RecipeSaveButton } from './RecipeSaveButton';
@@ -292,12 +293,18 @@ export function RecipeDetailSheet({
                 ) : kitchenRecipe.ingredients.length === 0 ? (
                   <Text className="text-sm text-muted">No ingredients listed.</Text>
                 ) : (
-                  kitchenRecipe.ingredients.map((ing) => (
-                    <Text key={ing.ingredientId} className="mt-2 text-sm leading-6 text-ink">
-                      · {ing.name}
-                      {ing.quantity > 0 ? ` — ${ing.quantity} ${ing.unit}` : ''}
-                    </Text>
-                  ))
+                  kitchenRecipe.ingredients.map((ing) => {
+                    const name = formatIngredientText(ing.name);
+                    const line =
+                      ing.quantity > 0
+                        ? `· ${name} — ${formatQuantityWithUnit(ing.quantity, ing.unit)}`
+                        : `· ${name}`;
+                    return (
+                      <Text key={ing.ingredientId} className="mt-2 text-sm leading-6 text-ink">
+                        {line}
+                      </Text>
+                    );
+                  })
                 )}
               </View>
             ) : (

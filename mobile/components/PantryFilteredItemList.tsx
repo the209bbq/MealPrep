@@ -3,6 +3,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 import { CATEGORY_LABELS } from '../config/appConfig';
 import { PANTRY_LIST_COPY, type PantryStorageLocation } from '../config/pantryStorage';
 import { groupPantryIntoLocationSections } from '../lib/pantryGrouping';
+import { formatQuantityWithUnit } from '../lib/formatQuantity';
 import type { PantryCategory, PantryItem } from '../types/mealprep';
 
 interface PantryFilteredItemListProps {
@@ -23,7 +24,7 @@ function PantryItemRow({ item, onPress }: { item: PantryItem; onPress: () => voi
         <View className="flex-1 pr-2">
           <Text className="text-base font-bold text-ink">{item.name}</Text>
           <Text className="text-sm text-muted">
-            {CATEGORY_LABELS[item.category]} · {item.quantity} {item.unit}
+            {CATEGORY_LABELS[item.category]} · {formatQuantityWithUnit(item.quantity, item.unit)}
           </Text>
         </View>
         {item.photoUri ? (

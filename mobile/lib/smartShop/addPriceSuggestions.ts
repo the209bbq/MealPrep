@@ -3,6 +3,7 @@ import { matchCommunityDealToGroceryItem } from '../communityDeals/matchItem';
 import type { CommunityStoreDeal } from '../communityDeals/types';
 import type { DealsSearchResult, ItemStoreDeal } from '../deals/types';
 import type { GroceryListItem } from '../../types/mealprep';
+import { formatQuantity } from '../formatQuantity';
 import { itemNameKey, readRememberedSizeUnit } from './addPriceMemory';
 
 export function groceryItemSizeUnit(item: GroceryListItem): string {
@@ -10,8 +11,7 @@ export function groceryItemSizeUnit(item: GroceryListItem): string {
   if (!unit) return '';
   const qty = item.quantity;
   if (!Number.isFinite(qty) || qty <= 0 || qty === 1) return unit;
-  const rounded = Math.round(qty * 100) / 100;
-  return `${rounded} ${unit}`;
+  return `${formatQuantity(qty, { unit })} ${unit}`;
 }
 
 export function sizeUnitForGroceryItem(

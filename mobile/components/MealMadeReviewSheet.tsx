@@ -1,4 +1,5 @@
 import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { formatQuantityWithUnit } from '../lib/formatQuantity';
 import type { MatchedIngredient } from '../lib/recipeMatch/match';
 import { THEME } from '../config/appConfig';
 
@@ -54,7 +55,8 @@ export function MealMadeReviewSheet({
                     <View className="mr-2 flex-1">
                       <Text className="font-semibold text-ink">{pantryItem.name}</Text>
                       <Text className="text-xs text-muted">
-                        Recipe: {row.ingredient.name} · use {row.ingredient.quantity} {row.ingredient.unit}
+                        Recipe: {row.ingredient.name} · use{' '}
+                        {formatQuantityWithUnit(row.ingredient.quantity, row.ingredient.unit)}
                       </Text>
                     </View>
                     <Switch
