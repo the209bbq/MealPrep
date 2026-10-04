@@ -1,5 +1,6 @@
 import { Linking, Pressable, Text, View } from 'react-native';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
+import { formatQuantityWithUnit } from '../../lib/formatQuantity';
 import { StoreCommunityDealsSection } from './StoreCommunityDealsSection';
 import { StoreDeliveryButtons } from './StoreDeliveryButtons';
 import { ItemRetailerSearchButtons, StoreRetailerButtons } from './StoreRetailerButtons';
@@ -196,7 +197,7 @@ export function SmartShopComparisonResults({
               <View key={item.id} className="mb-3 rounded-2xl border border-border bg-card p-4">
                 <Text className="font-bold text-ink">{item.name}</Text>
                 <Text className="text-sm text-muted">
-                  Need {item.quantity} {item.unit}
+                  Need {formatQuantityWithUnit(item.quantity, item.unit)}
                 </Text>
                 {best ? (
                   <View className="mt-2">

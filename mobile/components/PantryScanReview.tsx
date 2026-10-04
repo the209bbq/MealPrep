@@ -8,6 +8,7 @@ import {
   PANTRY_SCAN_TIP,
   type PantryStorageLocation,
 } from '../config/pantryStorage';
+import { formatQuantityWithUnit } from '../lib/formatQuantity';
 import { buildIngredientCatalog } from '../lib/pantryVision/matchIngredients';
 import { applyBatchStorageLocation, createManualPantryReviewItem } from '../lib/pantryVision/reviewItems';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
@@ -148,7 +149,7 @@ export function PantryScanReview({
           />
           {item.quantity > 0 ? (
             <Text className="shrink-0 text-[10px] text-muted">
-              {item.quantity} {item.unit}
+              {formatQuantityWithUnit(item.quantity, item.unit)}
             </Text>
           ) : null}
           {item.needsReview ? (

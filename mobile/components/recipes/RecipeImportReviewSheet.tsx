@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { RecipeImportExtractedDto } from '../../lib/recipeImport/types';
+import { formatIngredientAmount } from '../../lib/formatQuantity';
 import { sourceCreditFromImportDto } from '../../lib/recipeImport/sourceCredit';
 import { RecipeSourceCreditLine } from './RecipeSourceCreditLine';
 
@@ -38,7 +39,10 @@ function RecipeImportReviewForm({
   const [stepsText, setStepsText] = useState(draft.steps.join('\n'));
   const [ingredientsText, setIngredientsText] = useState(
     draft.ingredients
-      .map((ing) => `${ing.quantity} ${ing.unit} ${ing.name}${ing.note ? ` (${ing.note})` : ''}`)
+      .map((ing) => {
+        const line = formatIngredientAmount(ing.quantity, ing.unit, ing.name);
+        return ing.note ? `${line} (${ing.note})` : line;
+      })
       .join('\n'),
   );
   const [saving, setSaving] = useState(false);

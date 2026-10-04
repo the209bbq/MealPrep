@@ -14,6 +14,7 @@ import { AddToCalendarButton } from '../../components/mealCalendar/AddToCalendar
 import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { THEME } from '../../config/appConfig';
 import { RECIPES_COPY } from '../../config/recipesCopy';
+import { formatIngredientAmount } from '../../lib/formatQuantity';
 import { useApp } from '../../context/AppContext';
 import { scoreDiscoveryRecipeAgainstPantry } from '../../lib/recipeDiscovery/scorePantry';
 import {
@@ -165,7 +166,7 @@ export default function DiscoverRecipeDetailScreen() {
           <Card title="Ingredients" className="mt-4">
             {recipe.ingredients.map((ing) => (
               <Text key={ing.id} className="mt-1 text-sm text-muted">
-                {ing.quantity} {ing.unit} {ing.name}
+                {formatIngredientAmount(ing.quantity, ing.unit, ing.name)}
                 {ing.optional ? ' (optional)' : ''}
               </Text>
             ))}
