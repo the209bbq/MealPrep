@@ -2,6 +2,7 @@ import { ScrollView, Text, View } from 'react-native';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { MealMadeReviewSheet } from '../../components/MealMadeReviewSheet';
+import { HomeMyRecipesStrip } from '../../components/home/HomeMyRecipesStrip';
 import { MealWeekCalendarCard } from '../../components/mealCalendar/MealWeekCalendarCard';
 import { useApp } from '../../context/AppContext';
 
@@ -22,6 +23,8 @@ export default function HomeScreen() {
       <ScrollView className="flex-1 bg-paper px-4 pb-8" contentContainerStyle={{ paddingBottom: 24 }}>
         <InstallAppBanner />
         <GuestSaveNudge />
+
+        <HomeMyRecipesStrip />
 
         <MealWeekCalendarCard />
 

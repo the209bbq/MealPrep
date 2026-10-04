@@ -1,5 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
+import {
+  readHomeWeekCalendarExpanded,
+  writeHomeWeekCalendarExpanded,
+} from '../../lib/mealCalendar/homeWeekCalendarUi';
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { router } from 'expo-router';
@@ -90,6 +94,22 @@ export function MealWeekCalendarCard() {
   const [monthOpen, setMonthOpen] = useState(false);
   const [pickerDate, setPickerDate] = useState<string | null>(null);
   const [menuItem, setMenuItem] = useState<MealPlanItem | null>(null);
+  const [weekExpanded, setWeekExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setWeekExpanded(readHomeWeekCalendarExpanded());
+  }, [hydrated]);
+
+  function toggleWeekExpanded() {
+    setWeekExpanded((value) => {
+      const next = !value;
+      writeHomeWeekCalendarExpanded(next);
+      return next;
+    });
+  }
+
+  const weekSummaryLabel = `This week · ${weekMeals.length} meal${weekMeals.length === 1 ? '' : 's'} planned`;
 
   const pickerDefaultSlot: MealSlot = pickerDate
     ? nextMealSlotForDate(mealPlan, pickerDate)
@@ -114,7 +134,19 @@ export function MealWeekCalendarCard() {
 
   return (
     <>
-      <Card className="relative mt-4" title="This week" subtitle="Tap a meal to open the recipe">
+      <Card className="relative mt-4" title="This week" subtitle={weekExpanded ? 'Tap a meal to open the recipe' : undefined}>
+        <Pressable
+          onPress={toggleWeekExpanded}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: weekExpanded }}
+          className={`flex-row items-center justify-between rounded-xl border border-border bg-paper px-3 py-2.5 active:opacity-90 ${weekExpanded ? 'mb-3' : ''}`}
+        >
+          <Text className="text-sm font-semibold text-ink">{weekSummaryLabel}</Text>
+          <Ionicons name={weekExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={THEME.muted} />
+        </Pressable>
+
+        {weekExpanded ? (
+          <>
         <View className="absolute right-4 top-4 flex-row gap-2">
           <Pressable
             onPress={() => void exportWeekIcs()}
@@ -186,6 +218,8 @@ export function MealWeekCalendarCard() {
         >
           <Text className="text-sm font-bold text-on-primary">{MEAL_CALENDAR.shopForWeekLabel}</Text>
         </Pressable>
+          </>
+        ) : null}
       </Card>
 
       <MealCalendarMonthModal

@@ -25,6 +25,7 @@ import {
   addGroceryDismissals,
   clearGroceryDismissals,
   groceryDismissalKey,
+  groceryManualLineDismissalKey,
   readGroceryDismissals,
   removeGroceryDismissals,
 } from '../lib/grocery/dismissals';
@@ -482,6 +483,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const plannedRecipeIds = useMemo(
     () => activeMealPlanRecipeIds(mealPlan, feedKitchenRecipes, ownerId),
     [feedKitchenRecipes, mealPlan, ownerId],
+  );
+
+  const groceryDismissalContext = useMemo(
+    () => ({ plannedRecipeIds, recipes: feedKitchenRecipes }),
+    [feedKitchenRecipes, plannedRecipeIds],
   );
 
   const loadLiveData = useCallback(async () => {
@@ -1079,6 +1085,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           groceryDismissals: dismissals,
         });
         addedCount = added.length;
+        if (added.length > 0) {
+          removeGroceryDismissals(
+            ownerId,
+            added.map((item) => groceryManualLineDismissalKey(item.name, item.unit)),
+          );
+        }
         persistGroceryList(next);
         if (options?.showToast) {
           if (added.length > 0) {
@@ -1572,7 +1584,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => {
       const trimmed = input.name.trim();
       if (!trimmed) return;
-      const item = createManualGroceryItem({ ...input, name: trimmed });
+      const unit = input.unit.trim() || 'each';
+      removeGroceryDismissals(ownerId, [groceryManualLineDismissalKey(trimmed, unit)]);
+      const item = createManualGroceryItem({ ...input, name: trimmed, unit });
       setGrocery((prev) => {
         const next = [...prev, item];
         if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
@@ -1590,14 +1604,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [demoMode, isGuest, supabase, userId],
+    [demoMode, isGuest, ownerId, supabase, userId],
   );
 
   const clearCheckedGroceryItems = useCallback(() => {
     const removed = grocery.filter((item) => item.checked);
     if (removed.length === 0) return;
 
-    const dismissalKeys = removed.flatMap((item) => groceryDismissalKeysForItem(item));
+    const dismissalKeys = removed.flatMap((item) =>
+      groceryDismissalKeysForItem(item, groceryDismissalContext),
+    );
     addGroceryDismissals(ownerId, dismissalKeys);
 
     const previousGrocery = grocery;
@@ -1660,6 +1676,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [
     demoMode,
     grocery,
+    groceryDismissalContext,
     isGuest,
     ownerId,
     pantry,
@@ -1675,7 +1692,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const removed = prev.find((item) => item.id === id);
         if (!removed) return prev;
 
-        const dismissalKeys = groceryDismissalKeysForItem(removed);
+        const dismissalKeys = groceryDismissalKeysForItem(removed, groceryDismissalContext);
         addGroceryDismissals(ownerId, dismissalKeys);
 
         const previous = prev;
@@ -1695,7 +1712,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [ownerId, persistGroceryList],
+    [groceryDismissalContext, ownerId, persistGroceryList],
   );
 
   const seedPantry = useCallback(() => {

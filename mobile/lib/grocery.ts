@@ -1,7 +1,7 @@
 import { CATEGORY_LABELS } from '../config/appConfig';
 import type { GroceryListItem, PantryCategory, PantryItem, Recipe } from '../types/mealprep';
 import { inferGroceryCategoryFromName } from './grocery/categorize';
-import { isGroceryDismissed } from './grocery/dismissals';
+import { isGroceryDismissed, isGroceryManualLineDismissed } from './grocery/dismissals';
 import {
   findPantryItemsForIngredient,
   totalPantryQuantityInUnit,
@@ -112,7 +112,11 @@ export function buildGroceryList(
 
   const checked = new Map(previous.map((item) => [normalizeIngredientName(item.name) + '::' + item.unit.trim().toLowerCase(), item.checked]));
 
-  const pinnedItems = previous.filter((item) => isGroceryOriginPinned(item.origin));
+  const pinnedItems = previous.filter(
+    (item) =>
+      isGroceryOriginPinned(item.origin) &&
+      !isGroceryManualLineDismissed(dismissals, item.name, item.unit),
+  );
 
   const list: GroceryListItem[] = [];
   for (const [key, value] of needed) {
