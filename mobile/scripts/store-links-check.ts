@@ -1,5 +1,5 @@
 /**
- * Store page URL resolution — chains vs Google Maps fallback (never raw Overture websites).
+ * Store page URL resolution — exact Overture page, prefilled locator, or Google Maps.
  * Run from mobile/: npm run test:store-links
  */
 
@@ -11,6 +11,7 @@ import {
   resolveStorePageUsesGoogleMaps,
   resolveWeeklyAdLink,
 } from '../lib/stores/storeLinks';
+import { STORE_LINK_FALLBACK_ZIP } from '../lib/stores/storeLinkFixtures';
 
 const base: StoreLocation = {
   id: 'test',
@@ -34,30 +35,51 @@ assert.equal(
 );
 assert.equal(resolveStorePageUsesGoogleMaps(base), true, 'non-chain uses Maps label');
 
-const saveMart: StoreLocation = {
+const saveMartExact: StoreLocation = {
   ...base,
-  id: 'save-mart',
+  id: 'save-mart-exact',
   name: 'Save Mart',
   chain: 'Save Mart',
-  website: 'https://dead-savemart.test',
+  city: 'Oakdale',
+  zip: '95361',
+  website: 'https://www.savemart.com/stores/693c06f6-0000-0000-0000-000000000000/OAKDALE/48/OAKDALE',
 };
-const saveMartUrl = resolveStorePageUrl(saveMart);
-assert.ok(saveMartUrl.includes('savemart.com'), 'chain store page from storeChains');
-assert.equal(resolveStorePageUsesGoogleMaps(saveMart), false, 'chain uses store page label');
-assert.ok(!saveMartUrl.includes('dead-savemart'), 'chain ignores bad Overture website');
+assert.equal(
+  resolveStorePageUrl(saveMartExact),
+  saveMartExact.website,
+  'save mart uses Overture store page on savemart.com',
+);
+assert.equal(resolveStorePageUsesGoogleMaps(saveMartExact), false);
+
+const saveMartNoPage: StoreLocation = {
+  ...saveMartExact,
+  id: 'save-mart-maps',
+  website: 'https://savemart.com/?utm_source=google',
+};
+assert.equal(resolveStorePageUrl(saveMartNoPage), googleMapsPlaceSearchUrl(saveMartNoPage), 'bare homepage -> Maps');
 
 const smartFinal: StoreLocation = {
-  ...saveMart,
+  ...base,
   id: 'smart-final',
   name: 'Smart & Final',
   chain: 'Smart & Final',
+  website: 'https://www.smartandfinal.com/sm/planning/rsid/811',
 };
-assert.equal(resolveStorePageUrl(smartFinal), googleMapsPlaceSearchUrl(smartFinal), 'chain without locator uses Maps');
-assert.equal(resolveStorePageUsesGoogleMaps(smartFinal), true, 'no locator => Maps label');
+assert.equal(resolveStorePageUrl(smartFinal), smartFinal.website, 'smart final exact rsid page');
 assert.equal(resolveWeeklyAdLink(smartFinal)?.url.includes('smartandfinal.com'), true, 'weekly ad still from chain');
 
+const smartFinalNoUrl: StoreLocation = {
+  ...smartFinal,
+  website: undefined,
+};
+assert.equal(
+  resolveStorePageUrl(smartFinalNoUrl),
+  googleMapsPlaceSearchUrl(smartFinalNoUrl),
+  'smart final without website uses Maps',
+);
+
 const safeway: StoreLocation = {
-  ...saveMart,
+  ...base,
   id: 'safeway',
   name: 'Safeway',
   chain: 'Safeway',
@@ -66,8 +88,79 @@ const safeway: StoreLocation = {
   zip: '95361',
 };
 const safewayPage = resolveStorePageUrl(safeway);
-assert.ok(safewayPage.includes('safeway.com/store-locator'), 'safeway locator template');
-assert.ok(safewayPage.includes('Oakdale'), 'safeway locator includes address query');
+assert.ok(safewayPage.includes('safeway.com/store-locator'), 'safeway prefilled locator');
+assert.ok(safewayPage.includes('95361'), 'safeway locator uses store zip');
+
+const safewayLocal: StoreLocation = {
+  ...safeway,
+  website: 'https://local.safeway.com/safeway/ca/oakdale/1441-e-f-st.html',
+};
+assert.equal(resolveStorePageUrl(safewayLocal), safewayLocal.website, 'safeway local store page');
+
+const publix: StoreLocation = {
+  ...base,
+  id: 'publix-tx',
+  name: 'Publix',
+  chain: 'Publix',
+  addressLine: '1234 W Anderson Ln',
+  city: 'Austin',
+  state: 'TX',
+  zip: '78757',
+};
+const publixPage = resolveStorePageUrl(publix);
+assert.ok(publixPage.includes('publix.com/locations'), 'publix prefilled locator');
+assert.ok(publixPage.includes('Austin'), 'publix locator uses address query');
+
+const wincoNoZip: StoreLocation = {
+  ...base,
+  id: 'winco',
+  name: 'WinCo Foods',
+  chain: 'WinCo Foods',
+  city: 'Boise',
+  state: 'ID',
+  zip: undefined,
+};
+const wincoMaps = resolveStorePageUrl(wincoNoZip, { fallbackZip: STORE_LINK_FALLBACK_ZIP });
+assert.equal(wincoMaps, googleMapsPlaceSearchUrl(wincoNoZip), 'winco without locator uses Maps');
+
+const hyvee: StoreLocation = {
+  ...base,
+  id: 'hyvee',
+  name: 'Hy-Vee',
+  chain: 'Hy-Vee',
+  city: 'Des Moines',
+  state: 'IA',
+  zip: undefined,
+};
+const hyveePage = resolveStorePageUrl(hyvee, { fallbackZip: '50310' });
+assert.ok(hyveePage.includes('hy-vee.com/stores'), 'hy-vee prefilled zip');
+assert.ok(hyveePage.includes('50310'), 'hy-vee uses fallback zip');
+
+const krogerExact: StoreLocation = {
+  ...base,
+  id: 'kroger',
+  name: 'Kroger',
+  chain: 'Kroger',
+  city: 'Austin',
+  state: 'TX',
+  zip: '78701',
+  website: 'https://www.kroger.com/stores/details/034/00340',
+};
+assert.equal(resolveStorePageUrl(krogerExact), krogerExact.website, 'kroger exact store page');
+
+const groceryOutlet: StoreLocation = {
+  ...base,
+  id: 'go',
+  name: 'Grocery Outlet',
+  chain: 'Grocery Outlet',
+  website: 'https://www.groceryoutlet.com/circulars/storeid/192',
+};
+assert.equal(resolveStorePageUrl(groceryOutlet), groceryOutlet.website, 'grocery outlet store page from website');
+assert.equal(
+  resolveWeeklyAdLink(groceryOutlet)?.url,
+  'https://www.groceryoutlet.com/circulars/storeid/192',
+  'grocery outlet store weekly ad',
+);
 
 const maps = googleMapsPlaceSearchUrl(base);
 assert.ok(maps.includes('Riverbank%20Market'), 'maps search uses name + address, not lat/lng');

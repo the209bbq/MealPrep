@@ -1,7 +1,7 @@
 import type { StoreLocation } from '../lib/deals/types';
 
 /**
- * Grocery chains near Oakdale / Modesto / Riverbank / Escalon — store locator + weekly ad URLs.
+ * Grocery chains — store locator + weekly ad URLs.
  * Weekly-ad links are dateless landing pages that always show the current flyer.
  */
 
@@ -20,10 +20,17 @@ export interface StoreChainConfig {
   displayName: string;
   matchPatterns: readonly string[];
   /**
-   * Store-locator URL template. Placeholders: {zip}, {city}, {state}, {query}.
-   * {query} is a URL-encoded "chain + address" search string.
+   * Prefilled store-locator URL template. Placeholders: {zip}, {city}, {state}, {query}.
+   * Only used when the template contains a placeholder (generic locators fall back to Maps).
    */
   storePageUrl?: string;
+  /**
+   * Regex tested against the full normalized store.website URL.
+   * When matched (on an allowed host), Overture website is used as the store page.
+   */
+  storePagePathPattern?: string;
+  /** Optional hostname allowlist (suffix match). When omitted, pattern alone must match. */
+  allowedWebsiteHosts?: readonly string[];
   weeklyAdUrl?: string;
   /** When true, weekly ad is hosted off the primary domain (labeled in UI). */
   weeklyAdIsThirdParty?: boolean;
@@ -36,7 +43,8 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'save_mart',
     displayName: 'Save Mart',
     matchPatterns: ['save mart', 'savemart'],
-    storePageUrl: 'https://www.savemart.com/stores/?showStoreLocator=true',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?savemart\\.com/stores/.+',
+    allowedWebsiteHosts: ['savemart.com'],
     weeklyAdUrl: 'https://www.savemart.com/wp/weekly-ad',
     delivery: { instacartSlug: 'savemart', instacart: true, doordash: true, ubereats: true },
   },
@@ -44,7 +52,6 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'foodmaxx',
     displayName: 'FoodMaxx',
     matchPatterns: ['foodmaxx', 'food maxx'],
-    storePageUrl: 'https://www.foodmaxx.com/store-locator',
     weeklyAdUrl: 'https://www.foodmaxx.com/wp/weekly-ad',
     delivery: { instacartSlug: 'foodmaxx', instacart: true, doordash: true, ubereats: true },
   },
@@ -52,7 +59,6 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'cost_less',
     displayName: 'Cost Less Food Co.',
     matchPatterns: ['cost less', 'costless'],
-    storePageUrl: 'https://www.costlessfoods.com/locations',
     weeklyAdUrl: 'https://costlessfoods.com/weekly-ad/',
     delivery: { deliverySearchName: 'Cost Less Foods', instacart: true, doordash: true, ubereats: true },
   },
@@ -60,7 +66,8 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'raleys',
     displayName: "Raley's",
     matchPatterns: ['raley', "raley's", 'raleys', 'bel air', 'nob hill'],
-    storePageUrl: 'https://www.raleys.com/stores',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?raleys\\.com/stores/.+',
+    allowedWebsiteHosts: ['raleys.com'],
     weeklyAdUrl: 'https://www.raleys.com/weekly-ad',
     delivery: { instacartSlug: 'raleys', instacart: true, doordash: true, ubereats: true },
   },
@@ -68,15 +75,50 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'safeway',
     displayName: 'Safeway',
     matchPatterns: ['safeway'],
-    storePageUrl: 'https://www.safeway.com/store-locator.html?q={query}',
+    storePageUrl: 'https://www.safeway.com/store-locator.html?location={zip}',
+    storePagePathPattern:
+      '^https://((local\\.)?safeway\\.com/.+|([a-z0-9-]+\\.)?safeway\\.com/(?!store-locator)[^?#]+)',
+    allowedWebsiteHosts: ['safeway.com'],
     weeklyAdUrl: 'https://www.safeway.com/weeklyad',
     delivery: { instacartSlug: 'safeway', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'albertsons',
+    displayName: 'Albertsons',
+    matchPatterns: ['albertsons'],
+    storePageUrl: 'https://www.albertsons.com/store-locator.html?location={zip}',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?albertsons\\.com/.+',
+    allowedWebsiteHosts: ['albertsons.com'],
+    weeklyAdUrl: 'https://www.albertsons.com/weeklyad',
+    delivery: { instacartSlug: 'albertsons', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'vons',
+    displayName: 'Vons',
+    matchPatterns: ['vons'],
+    storePageUrl: 'https://www.vons.com/store-locator.html?location={zip}',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?vons\\.com/.+',
+    allowedWebsiteHosts: ['vons.com'],
+    weeklyAdUrl: 'https://www.vons.com/weeklyad',
+    delivery: { instacartSlug: 'vons', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'pavilions',
+    displayName: 'Pavilions',
+    matchPatterns: ['pavilions'],
+    storePageUrl: 'https://www.pavilions.com/store-locator.html?location={zip}',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?pavilions\\.com/.+',
+    allowedWebsiteHosts: ['pavilions.com'],
+    weeklyAdUrl: 'https://www.pavilions.com/weeklyad',
+    delivery: { instacartSlug: 'pavilions', instacart: true, doordash: true, ubereats: true },
   },
   {
     key: 'walmart',
     displayName: 'Walmart',
     matchPatterns: ['walmart supercenter', 'walmart neighborhood', 'neighborhood market', 'walmart'],
     storePageUrl: 'https://www.walmart.com/store/finder?location={zip}',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?walmart\\.com/store/.+',
+    allowedWebsiteHosts: ['walmart.com'],
     weeklyAdUrl: 'https://www.walmart.com/shop/deals',
     delivery: { deliverySearchName: 'Walmart', instacart: true, doordash: true, ubereats: true },
   },
@@ -92,7 +134,6 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'winco',
     displayName: 'WinCo',
     matchPatterns: ['winco', 'winco foods'],
-    storePageUrl: 'https://www.wincofoods.com/store-locator',
     weeklyAdUrl: 'https://www.wincofoods.com/weekly-ad',
     delivery: { instacart: false, doordash: false, ubereats: true },
   },
@@ -100,7 +141,8 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'grocery_outlet',
     displayName: 'Grocery Outlet',
     matchPatterns: ['grocery outlet'],
-    storePageUrl: 'https://www.groceryoutlet.com/store-locator',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?groceryoutlet\\.com/(circulars/storeid/\\d+|stores/.+)',
+    allowedWebsiteHosts: ['groceryoutlet.com'],
     weeklyAdUrl: 'https://www.groceryoutlet.com/circulars',
     delivery: { instacartSlug: 'grocery-outlet', instacart: true, doordash: true, ubereats: true },
   },
@@ -109,14 +151,135 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     displayName: 'Food 4 Less',
     matchPatterns: ['food 4 less', 'food4less', 'food for less'],
     /** Save Mart–operated NorCal / Central Valley stores (not Kroger’s food4less.com chain). */
-    storePageUrl: 'https://www.myfood4less.com/store/food4less/pages/locations',
+    excludeStore: (store) => Boolean(store.krogerLocationId) || store.pricingSource === 'kroger',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?myfood4less\\.com/.+',
+    allowedWebsiteHosts: ['myfood4less.com'],
     weeklyAdUrl: 'https://www.myfood4less.com/store/food4less/pages/weekly-ad',
     delivery: { deliverySearchName: 'Food 4 Less', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'kroger',
+    displayName: 'Kroger',
+    matchPatterns: ['kroger'],
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?kroger\\.com/stores/.+',
+    allowedWebsiteHosts: ['kroger.com'],
+    weeklyAdUrl: 'https://www.kroger.com/weeklyad',
+    delivery: { instacartSlug: 'kroger', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'fred_meyer',
+    displayName: 'Fred Meyer',
+    matchPatterns: ['fred meyer', 'fredmeyer'],
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?(fredmeyer|kroger)\\.com/stores/.+',
+    allowedWebsiteHosts: ['fredmeyer.com', 'kroger.com'],
+    weeklyAdUrl: 'https://www.fredmeyer.com/weeklyad',
+    delivery: { instacartSlug: 'fred-meyer', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'king_soopers',
+    displayName: 'King Soopers',
+    matchPatterns: ['king soopers', 'king sooper'],
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?kingsoopers\\.com/stores/.+',
+    allowedWebsiteHosts: ['kingsoopers.com', 'kroger.com'],
+    weeklyAdUrl: 'https://www.kingsoopers.com/weeklyad',
+    delivery: { instacartSlug: 'king-soopers', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'ralphs',
+    displayName: 'Ralphs',
+    matchPatterns: ['ralphs'],
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?ralphs\\.com/stores/.+',
+    allowedWebsiteHosts: ['ralphs.com', 'kroger.com'],
+    weeklyAdUrl: 'https://www.ralphs.com/weeklyad',
+    delivery: { instacartSlug: 'ralphs', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'publix',
+    displayName: 'Publix',
+    matchPatterns: ['publix'],
+    storePageUrl: 'https://www.publix.com/locations?search={query}',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?publix\\.com/locations/.+',
+    allowedWebsiteHosts: ['publix.com'],
+    weeklyAdUrl: 'https://www.publix.com/savings/weekly-ad',
+    delivery: { instacartSlug: 'publix', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'heb',
+    displayName: 'H-E-B',
+    matchPatterns: ['h-e-b', 'heb'],
+    storePageUrl: 'https://www.heb.com/store-locator?q={query}',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?heb\\.com/.+',
+    allowedWebsiteHosts: ['heb.com'],
+    weeklyAdUrl: 'https://www.heb.com/h-e-b-ads',
+    delivery: { deliverySearchName: 'H-E-B', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'meijer',
+    displayName: 'Meijer',
+    matchPatterns: ['meijer'],
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?meijer\\.com/.+',
+    allowedWebsiteHosts: ['meijer.com'],
+    weeklyAdUrl: 'https://www.meijer.com/shopping/weekly-ads.html',
+    delivery: { deliverySearchName: 'Meijer', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'wegmans',
+    displayName: 'Wegmans',
+    matchPatterns: ['wegmans'],
+    storePageUrl: 'https://www.wegmans.com/stores?search={query}',
+    weeklyAdUrl: 'https://www.wegmans.com/shop/categories/weekly-specials',
+    delivery: { deliverySearchName: 'Wegmans', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'hy_vee',
+    displayName: 'Hy-Vee',
+    matchPatterns: ['hy-vee', 'hy vee', 'hyvee'],
+    storePageUrl: 'https://www.hy-vee.com/stores?zip={zip}',
+    weeklyAdUrl: 'https://www.hy-vee.com/deals/weekly-ads',
+    delivery: { deliverySearchName: 'Hy-Vee', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'food_lion',
+    displayName: 'Food Lion',
+    matchPatterns: ['food lion'],
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?foodlion\\.com/.+',
+    allowedWebsiteHosts: ['foodlion.com'],
+    weeklyAdUrl: 'https://www.foodlion.com/weekly-specials/',
+    delivery: { deliverySearchName: 'Food Lion', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'stop_and_shop',
+    displayName: 'Stop & Shop',
+    matchPatterns: ['stop & shop', 'stop and shop'],
+    storePageUrl: 'https://www.stopandshop.com/store-locator?location={zip}',
+    weeklyAdUrl: 'https://www.stopandshop.com/weeklyad',
+    delivery: { instacartSlug: 'stop-shop', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'whole_foods',
+    displayName: 'Whole Foods Market',
+    matchPatterns: ['whole foods'],
+    storePageUrl: 'https://www.wholefoodsmarket.com/stores/search?location={zip}',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?wholefoodsmarket\\.com/stores/.+',
+    allowedWebsiteHosts: ['wholefoodsmarket.com'],
+    weeklyAdUrl: 'https://www.wholefoodsmarket.com/sales-flyer',
+    delivery: { instacartSlug: 'whole-foods', instacart: true, doordash: true, ubereats: true },
+  },
+  {
+    key: 'stater_bros',
+    displayName: 'Stater Bros.',
+    matchPatterns: ['stater bros', 'stater brothers'],
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?staterbros\\.com/stores/.+',
+    allowedWebsiteHosts: ['staterbros.com'],
+    weeklyAdUrl: 'https://www.staterbros.com/weekly-ad',
+    delivery: { deliverySearchName: 'Stater Bros', instacart: true, doordash: true, ubereats: true },
   },
   {
     key: 'smart_final',
     displayName: 'Smart & Final',
     matchPatterns: ['smart & final', 'smart and final', 'smart final'],
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?smartandfinal\\.com/sm/planning/rsid/\\d+',
+    allowedWebsiteHosts: ['smartandfinal.com'],
     weeklyAdUrl: 'https://www.smartandfinal.com/circular',
     delivery: { instacartSlug: 'smart-and-final', instacart: true, doordash: true, ubereats: true },
   },
@@ -140,7 +303,9 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'sprouts',
     displayName: 'Sprouts',
     matchPatterns: ['sprouts'],
-    storePageUrl: 'https://www.sprouts.com/stores',
+    storePageUrl: 'https://www.sprouts.com/stores?zip={zip}',
+    storePagePathPattern: '^https://([a-z0-9-]+\\.)?sprouts\\.com/stores/.+',
+    allowedWebsiteHosts: ['sprouts.com'],
     weeklyAdUrl: 'https://www.sprouts.com/weekly-ad',
     delivery: { instacartSlug: 'sprouts', instacart: true, doordash: true, ubereats: true },
   },
@@ -148,7 +313,7 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'aldi',
     displayName: 'Aldi',
     matchPatterns: ['aldi'],
-    storePageUrl: 'https://www.aldi.us/stores',
+    storePageUrl: 'https://www.aldi.us/stores?zip={zip}',
     weeklyAdUrl: 'https://www.aldi.us/weekly-specials',
     delivery: { instacart: true, doordash: true, ubereats: true },
   },

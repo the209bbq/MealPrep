@@ -2,8 +2,14 @@ import { resolveStoreChainConfig } from '../../config/storeChains';
 import { fillDeliveryTemplate } from '../../config/smartShopDelivery';
 import type { StoreLocation } from '../deals/types';
 import { instacartStoreUrl, doordashStoreUrl } from '../smartShop/deliveryLinks';
+import { resolveExactStoreWebsiteUrl } from './chainStoreWebsite';
 import { resolveOpenNowFromOsmHours } from './openingHours';
 import type { StoreRecord } from './types';
+
+export type ResolveStorePageOptions = {
+  /** When the store record has no ZIP, use this for locator templates (user search origin). */
+  fallbackZip?: string;
+};
 
 export function resolveStorePhone(store: Pick<StoreLocation, 'phone'>): string | undefined {
   const raw = store.phone?.trim();
@@ -16,9 +22,24 @@ function storeSearchQuery(store: Pick<StoreLocation, 'name' | 'chain' | 'address
   return [store.chain || store.name, store.addressLine, store.city, store.state, store.zip].filter(Boolean).join(' ');
 }
 
-function fillStorePageTemplate(template: string, store: Pick<StoreLocation, 'name' | 'chain' | 'addressLine' | 'city' | 'state' | 'zip'>): string {
-  const zip = store.zip?.trim().slice(0, 5) ?? '';
-  const query = storeSearchQuery(store);
+const LOCATOR_PLACEHOLDER_RE = /\{(zip|city|state|query)\}/;
+
+function effectiveZip(
+  store: Pick<StoreLocation, 'zip'>,
+  fallbackZip?: string,
+): string {
+  const fromStore = store.zip?.trim().slice(0, 5);
+  if (fromStore) return fromStore;
+  return fallbackZip?.trim().slice(0, 5) ?? '';
+}
+
+function fillStorePageTemplate(
+  template: string,
+  store: Pick<StoreLocation, 'name' | 'chain' | 'addressLine' | 'city' | 'state' | 'zip'>,
+  fallbackZip?: string,
+): string {
+  const zip = effectiveZip(store, fallbackZip);
+  const query = storeSearchQuery({ ...store, zip: store.zip ?? zip });
   return template
     .replace(/\{zip\}/g, encodeURIComponent(zip))
     .replace(/\{city\}/g, encodeURIComponent(store.city ?? ''))
@@ -33,11 +54,17 @@ export function googleMapsPlaceSearchUrl(
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
-export function resolveStorePageUsesGoogleMaps(
-  store: Pick<StoreLocation, 'name' | 'chain' | 'krogerLocationId' | 'pricingSource'>,
-): boolean {
+function resolvePrefilledLocatorUrl(
+  store: Pick<
+    StoreLocation,
+    'name' | 'chain' | 'addressLine' | 'city' | 'state' | 'zip' | 'krogerLocationId' | 'pricingSource'
+  >,
+  fallbackZip?: string,
+): string | null {
   const chain = resolveStoreChainConfig(store);
-  return !chain?.storePageUrl;
+  const template = chain?.storePageUrl;
+  if (!template || !LOCATOR_PLACEHOLDER_RE.test(template)) return null;
+  return fillStorePageTemplate(template, store, fallbackZip);
 }
 
 export function resolveStorePageUrl(
@@ -45,13 +72,32 @@ export function resolveStorePageUrl(
     StoreLocation,
     'name' | 'chain' | 'addressLine' | 'city' | 'state' | 'zip' | 'lat' | 'lng' | 'website' | 'krogerLocationId' | 'pricingSource'
   >,
+  options?: ResolveStorePageOptions,
 ): string {
   const chain = resolveStoreChainConfig(store);
-  if (chain?.storePageUrl) {
-    return fillStorePageTemplate(chain.storePageUrl, store);
-  }
+  const exact = resolveExactStoreWebsiteUrl(store, chain);
+  if (exact) return exact;
+
+  const prefilled = resolvePrefilledLocatorUrl(store, options?.fallbackZip);
+  if (prefilled) return prefilled;
 
   return googleMapsPlaceSearchUrl(store);
+}
+
+export function resolveStorePageUsesGoogleMaps(
+  store: Pick<
+    StoreLocation,
+    'name' | 'chain' | 'addressLine' | 'city' | 'state' | 'zip' | 'lat' | 'lng' | 'website' | 'krogerLocationId' | 'pricingSource'
+  >,
+  options?: ResolveStorePageOptions,
+): boolean {
+  return resolveStorePageUrl(store, options).startsWith('https://www.google.com/maps/');
+}
+
+function groceryOutletStoreWeeklyAdUrl(website: string): string | null {
+  const m = website.match(/groceryoutlet\.com\/circulars\/storeid\/(\d+)/i);
+  if (!m) return null;
+  return `https://www.groceryoutlet.com/circulars/storeid/${m[1]}`;
 }
 
 export type WeeklyAdLink = {
@@ -60,9 +106,14 @@ export type WeeklyAdLink = {
 };
 
 export function resolveWeeklyAdLink(
-  store: Pick<StoreLocation, 'name' | 'chain' | 'krogerLocationId' | 'pricingSource'>,
+  store: Pick<StoreLocation, 'name' | 'chain' | 'krogerLocationId' | 'pricingSource' | 'website'>,
 ): WeeklyAdLink | undefined {
   const chain = resolveStoreChainConfig(store);
+  const website = store.website?.trim();
+  if (website && chain?.key === 'grocery_outlet') {
+    const fromSite = groceryOutletStoreWeeklyAdUrl(website);
+    if (fromSite) return { url: fromSite };
+  }
   if (!chain?.weeklyAdUrl) return undefined;
   return {
     url: chain.weeklyAdUrl,
