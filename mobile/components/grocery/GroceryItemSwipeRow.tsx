@@ -31,8 +31,10 @@ function SwipeDeleteAction({ onPress }: { onPress: () => void }) {
 }
 
 export function GroceryItemSwipeRow(props: GroceryItemSwipeRowProps) {
+  const row = <GroceryItemRow {...props} />;
+
   if (Platform.OS === 'web') {
-    return <GroceryItemRow {...props} />;
+    return row;
   }
 
   return (
@@ -43,7 +45,7 @@ export function GroceryItemSwipeRow(props: GroceryItemSwipeRowProps) {
         if (direction === 'right') props.onRemove();
       }}
     >
-      <GroceryItemRow {...props} />
+      {row}
     </Swipeable>
   );
 }

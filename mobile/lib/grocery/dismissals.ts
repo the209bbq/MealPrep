@@ -11,6 +11,19 @@ export function groceryDismissalKey(recipeId: string, ingredientName: string, un
   return `${recipeId}::${normalizeIngredientName(ingredientName)}::${unit.trim().toLowerCase()}`;
 }
 
+/** Dismisses a manual / unscoped grocery line (no recipe ids) so pinned rows do not return after sync. */
+export function groceryManualLineDismissalKey(ingredientName: string, unit: string): string {
+  return `manual-line::${normalizeIngredientName(ingredientName)}::${unit.trim().toLowerCase()}`;
+}
+
+export function isGroceryManualLineDismissed(
+  dismissals: Set<string>,
+  ingredientName: string,
+  unit: string,
+): boolean {
+  return dismissals.has(groceryManualLineDismissalKey(ingredientName, unit));
+}
+
 export function readGroceryDismissals(ownerId: string): Set<string> {
   const list = readJson<string[]>(storageKey(ownerId), []);
   return new Set(list);
