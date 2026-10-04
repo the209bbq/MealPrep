@@ -5,6 +5,7 @@ import { THEME } from '../../config/appConfig';
 import {
   CREATOR_RECIPES_COPY,
   CREATOR_RECIPES_FEED_MODE_LABELS,
+  CREATOR_RECIPES_FEED_MODE_SHORT_LABELS,
   CREATOR_RECIPES_FEED_MODES,
   type CreatorRecipesFeedMode,
 } from '../../config/creatorRecipes';
@@ -19,19 +20,24 @@ export function CreatorRecipesFeedModeDropdown({
   const [open, setOpen] = useState(false);
 
   return (
-    <View className="relative" style={{ zIndex: open ? 10 : 1 }}>
+    <View className="relative shrink-0" style={{ zIndex: open ? 10 : 1 }}>
       <Pressable
         onPress={() => setOpen((prev) => !prev)}
         accessibilityRole="button"
-        accessibilityLabel={CREATOR_RECIPES_COPY.feedAccessibility}
+        accessibilityLabel={`${CREATOR_RECIPES_COPY.feedAccessibility}: ${CREATOR_RECIPES_FEED_MODE_LABELS[value]}`}
         accessibilityState={{ expanded: open }}
-        className="flex-row items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5"
+        className="max-w-[108px] flex-row items-center gap-0.5 rounded-lg border border-border bg-card px-2 py-1.5"
       >
-        <Text className="text-xs font-semibold text-ink">{CREATOR_RECIPES_FEED_MODE_LABELS[value]}</Text>
+        <Text className="shrink text-xs font-semibold text-ink" numberOfLines={1}>
+          {CREATOR_RECIPES_FEED_MODE_SHORT_LABELS[value]}
+        </Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={THEME.muted} />
       </Pressable>
       {open ? (
-        <View className="absolute right-0 top-full z-20 mt-1 min-w-[132px] overflow-hidden rounded-xl border border-border bg-paper shadow-sm">
+        <View
+          className="absolute right-0 top-full z-20 mt-1 min-w-[132px] overflow-hidden rounded-xl border border-border bg-paper shadow-sm"
+          style={{ maxWidth: 240 }}
+        >
           {CREATOR_RECIPES_FEED_MODES.map((choice) => {
             const selected = choice === value;
             return (

@@ -40,6 +40,15 @@ export const CREATOR_RECIPES_FEED_MODE_LABELS: Record<CreatorRecipesFeedMode, st
   classic_recipes: MEALDB_COPY.feedModeLabel,
 };
 
+/** Compact labels for the feed dropdown trigger on narrow toolbars. */
+export const CREATOR_RECIPES_FEED_MODE_SHORT_LABELS: Record<CreatorRecipesFeedMode, string> = {
+  popular: 'Popular',
+  new: 'New',
+  quick: 'Quick',
+  budget: 'Budget',
+  classic_recipes: 'Classic',
+};
+
 export const CREATOR_RECIPES_COPY = {
   feedTitle: 'Recipes from creators you trust',
   feedSubtitle: 'Cook from real video recipes — tap to import and match your pantry',
