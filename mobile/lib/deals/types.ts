@@ -19,6 +19,12 @@ export interface StoreLocation {
   pricingSource?: StorePricingSource;
   krogerLocationId?: string;
   url?: string;
+  phone?: string;
+  website?: string;
+  deliveryUrl?: string;
+  openingHours?: string;
+  openNow?: boolean;
+  pricingTeaser?: 'coming_soon';
 }
 
 export interface ItemStoreDeal {

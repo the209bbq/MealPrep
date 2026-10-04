@@ -19,7 +19,7 @@ const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
 const port = Number(process.env.PORT ?? 8765);
 const origin = `http://127.0.0.1:${port}`;
 
-const ROUTES = (process.env.HYDRATION_ROUTES ?? '/,/pantry,/recipes,/grocery,/profile,/smart-shop,/delete-account')
+const ROUTES = (process.env.HYDRATION_ROUTES ?? '/,/pantry,/recipes,/grocery,/stores,/profile,/smart-shop,/delete-account')
   .split(',')
   .map((r) => r.trim())
   .filter(Boolean);

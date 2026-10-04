@@ -6,6 +6,7 @@
 import { assembleDealsResult } from '../lib/deals/buildShopResult';
 import { coordsForStoreSearch } from '../lib/smartShop/coordsResolve';
 import { localZipPlaceLabel } from '../lib/stores/localZipTable';
+import { resolveOpenNowFromOsmHours } from '../lib/stores/openingHours.ts';
 import { parseCityStateFromNominatimDisplay } from '../lib/stores/zipPlaceParse';
 import { estimateSmartShopSavings } from '../lib/smartShop/aggregateDeals';
 import type { ItemStoreDeal, StoreLocation } from '../lib/deals/types';
@@ -142,6 +143,8 @@ assert(
 
 assert(localZipPlaceLabel('95361') === 'Oakdale, CA', 'built-in ZIP table should label Oakdale');
 assert(localZipPlaceLabel('95350') === 'Modesto, CA', 'built-in ZIP table should label Modesto');
+assert(resolveOpenNowFromOsmHours('24/7') === true, 'opening_hours 24/7 should be open');
+assert(resolveOpenNowFromOsmHours('') === undefined, 'empty hours should be unknown');
 assert(localZipPlaceLabel('99999') === null, 'unknown ZIP should not fake a label');
 
 console.log('Smart Shop honesty tests passed.');

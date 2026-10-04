@@ -20,6 +20,7 @@ const ROUTE_NAMES = [
   'admin',
   'pantry',
   'grocery',
+  'stores',
   'recipes',
   'smart-shop',
   'privacy',
