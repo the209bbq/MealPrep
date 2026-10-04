@@ -6,6 +6,14 @@ export const VIRAL_RECIPES_CATEGORIES = ['viral', 'quick', 'budget'] as const;
 
 export type ViralRecipesCategory = (typeof VIRAL_RECIPES_CATEGORIES)[number];
 
+export const VIRAL_RECIPES_FEED_MODES = [...VIRAL_RECIPES_CATEGORIES, 'my_recipes'] as const;
+
+export type ViralRecipesFeedMode = (typeof VIRAL_RECIPES_FEED_MODES)[number];
+
+export function isViralRecipesCategory(mode: ViralRecipesFeedMode): mode is ViralRecipesCategory {
+  return mode !== 'my_recipes';
+}
+
 export const VIRAL_RECIPES = {
   enabled: true,
   requestTimeoutMs: 20_000,
@@ -20,6 +28,13 @@ export const VIRAL_RECIPES_CATEGORY_LABELS: Record<ViralRecipesCategory, string>
   budget: 'Budget',
 };
 
+export const VIRAL_RECIPES_FEED_MODE_LABELS: Record<ViralRecipesFeedMode, string> = {
+  viral: 'Viral',
+  quick: 'Quick',
+  budget: 'Budget',
+  my_recipes: 'My recipes',
+};
+
 /** Mirrors `CATEGORY_SEARCH_QUERIES` in supabase/functions/viral-recipes/youtubeDiscovery.ts */
 export const VIRAL_RECIPES_CATEGORY_QUERIES: Record<ViralRecipesCategory, readonly string[]> = {
   viral: ['viral dinner recipe', 'tiktok famous dinner recipe'],
@@ -28,8 +43,12 @@ export const VIRAL_RECIPES_CATEGORY_QUERIES: Record<ViralRecipesCategory, readon
 };
 
 export const VIRAL_RECIPES_COPY = {
+  feedTitle: 'Viral recipes',
+  feedSubtitle: 'Trending videos — tap to import, cook with what you already have',
+  cardTapToImport: 'Tap to import & match your pantry',
+  detailImporting: 'Pulling ingredients from the video…',
   shelfTitle: 'Viral recipes',
-  shelfSubtitle: 'Trending cooking videos — tap to watch, save to your collection',
+  shelfSubtitle: 'Trending cooking videos — tap to import and match your pantry',
   categoryLabel: 'Category',
   categoryAccessibility: 'Choose viral recipe category',
   loading: 'Loading ideas…',
