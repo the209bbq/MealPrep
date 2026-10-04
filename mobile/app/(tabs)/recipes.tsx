@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { Card } from '../../components/Card';
@@ -48,9 +48,27 @@ import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { CreatorListItem } from '../../lib/creatorVideos/types';
+import { MainIngredientChipRow } from '../../components/recipes/MainIngredientChipRow';
+import { MAIN_INGREDIENT_COPY } from '../../config/mainIngredient';
+import {
+  creatorFeedModelMatchesMainPick,
+  mainIngredientPickFromLabel,
+  recipeFromRecipesTabRow,
+  recipesTabRowMatchesMainPick,
+  sortRowsByMainIngredientRanking,
+  suggestMainIngredientChips,
+  type MainIngredientPick,
+} from '../../lib/mainIngredient';
+import type { RecipesSearchResultItem } from '../../lib/recipes/mergeSearchResults';
 
 export default function RecipesScreen() {
-  const params = useLocalSearchParams<{ recipeId?: string; url?: string; text?: string; import?: string }>();
+  const params = useLocalSearchParams<{
+    recipeId?: string;
+    url?: string;
+    text?: string;
+    import?: string;
+    cookWith?: string;
+  }>();
   const {
     pantry,
     session,
@@ -178,8 +196,122 @@ export default function RecipesScreen() {
   );
 
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
+  const [selectedMainIngredient, setSelectedMainIngredient] = useState<MainIngredientPick | null>(null);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const pantryEmpty = pantry.length === 0;
+
+  const cookWithParam = typeof params.cookWith === 'string' ? params.cookWith.trim() : '';
+  useEffect(() => {
+    if (!cookWithParam) return;
+    try {
+      setSelectedMainIngredient(mainIngredientPickFromLabel(decodeURIComponent(cookWithParam)));
+    } catch {
+      setSelectedMainIngredient(mainIngredientPickFromLabel(cookWithParam));
+    }
+  }, [cookWithParam]);
+
+  const mainIngredientChipOptions = useMemo(() => suggestMainIngredientChips(pantry), [pantry]);
+
+  const applyMainIngredientToTabRows = useCallback(
+    (rows: RecipesTabRow[]) => {
+      if (!selectedMainIngredient) return rows;
+      const filtered = rows.filter((row) => recipesTabRowMatchesMainPick(row, selectedMainIngredient));
+      return sortRowsByMainIngredientRanking(
+        filtered,
+        recipeFromRecipesTabRow,
+        (row) => row.match,
+      );
+    },
+    [selectedMainIngredient],
+  );
+
+  const applyMainIngredientToCreatorModels = useCallback(
+    (models: ReturnType<typeof buildCreatorFeedCardModels>) => {
+      if (!selectedMainIngredient) return models;
+      const filtered = models.filter((model) =>
+        creatorFeedModelMatchesMainPick(model, selectedMainIngredient),
+      );
+      return sortRowsByMainIngredientRanking(
+        filtered,
+        (model) =>
+          model.importedRecipe ?? {
+            id: model.videoId,
+            name: model.item.title,
+            tag: 'Creator',
+            description: '',
+            servings: 4,
+            minutes: 30,
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+            ingredients: [],
+            steps: [],
+            isMaster: false,
+            createdAt: '',
+          },
+        (model) => model.match ?? {
+          recipeId: model.videoId,
+          recipeName: model.item.title,
+          totalIngredients: 0,
+          matchedCount: 0,
+          missingCount: 0,
+          percentMatch: 0,
+          matched: [],
+          missing: [],
+        },
+      );
+    },
+    [selectedMainIngredient],
+  );
+
+  const applyMainIngredientToSearchResults = useCallback(
+    (results: RecipesSearchResultItem[]) => {
+      if (!selectedMainIngredient) return results;
+      const filtered = results.filter((result) => {
+        if (result.kind === 'classic') {
+          return recipesTabRowMatchesMainPick(result.row, selectedMainIngredient);
+        }
+        return creatorFeedModelMatchesMainPick(result.model, selectedMainIngredient);
+      });
+      return sortRowsByMainIngredientRanking(
+        filtered,
+        (result) =>
+          result.kind === 'classic'
+            ? recipeFromRecipesTabRow(result.row)
+            : result.model.importedRecipe ?? {
+                id: result.model.videoId,
+                name: result.model.item.title,
+                tag: 'Creator',
+                description: '',
+                servings: 4,
+                minutes: 30,
+                calories: 0,
+                protein: 0,
+                carbs: 0,
+                fat: 0,
+                ingredients: [],
+                steps: [],
+                isMaster: false,
+                createdAt: '',
+              },
+        (result) =>
+          result.kind === 'classic'
+            ? result.row.match
+            : result.model.match ?? {
+                recipeId: result.model.videoId,
+                recipeName: result.model.item.title,
+                totalIngredients: 0,
+                matchedCount: 0,
+                missingCount: 0,
+                percentMatch: 0,
+                matched: [],
+                missing: [],
+              },
+      );
+    },
+    [selectedMainIngredient],
+  );
 
   const kitchenRecipes = useMemo(() => feedKitchenRecipes, [feedKitchenRecipes]);
 
@@ -194,19 +326,29 @@ export default function RecipesScreen() {
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
     const fed = buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
-    return filterRecipesTabRowsForDietPrefs(fed, userDietPrefs);
-  }, [filterBaseRows, filters, searchQuery, feedDiversitySeed, userDietPrefs]);
+    const diet = filterRecipesTabRowsForDietPrefs(fed, userDietPrefs);
+    return applyMainIngredientToTabRows(diet);
+  }, [
+    applyMainIngredientToTabRows,
+    filterBaseRows,
+    filters,
+    searchQuery,
+    feedDiversitySeed,
+    userDietPrefs,
+  ]);
 
   const classicRecipeRows = useMemo(() => {
     if (!showClassicRecipesFeed || searchQuery.trim()) return [];
-    return filterRecipesTabRowsForDietPrefs(mealDbRows, userDietPrefs);
-  }, [mealDbRows, searchQuery, showClassicRecipesFeed, userDietPrefs]);
+    const diet = filterRecipesTabRowsForDietPrefs(mealDbRows, userDietPrefs);
+    return applyMainIngredientToTabRows(diet);
+  }, [applyMainIngredientToTabRows, mealDbRows, searchQuery, showClassicRecipesFeed, userDietPrefs]);
 
   const browseVideoModels = useMemo(() => {
     if (!creatorFeedEnabled || searchQuery.trim()) return [];
     const videos = selectedCreator ? channelVideos : feedVideos;
     const models = buildCreatorFeedCardModels(videos, kitchenRecipes, pantryRecipeMatches);
-    return filterCreatorFeedModelsForDietPrefs(models, userDietPrefs);
+    const diet = filterCreatorFeedModelsForDietPrefs(models, userDietPrefs);
+    return applyMainIngredientToCreatorModels(diet);
   }, [
     channelVideos,
     creatorFeedEnabled,
@@ -216,6 +358,7 @@ export default function RecipesScreen() {
     searchQuery,
     selectedCreator,
     userDietPrefs,
+    applyMainIngredientToCreatorModels,
   ]);
 
   const { results: searchResults, loading: searchLoading, error: searchError } =
@@ -227,10 +370,10 @@ export default function RecipesScreen() {
       pantryMatches: pantryRecipeMatches,
     });
 
-  const searchResultsFiltered = useMemo(
-    () => filterRecipeSearchResultsForDietPrefs(searchResults, userDietPrefs),
-    [searchResults, userDietPrefs],
-  );
+  const searchResultsFiltered = useMemo(() => {
+    const diet = filterRecipeSearchResultsForDietPrefs(searchResults, userDietPrefs);
+    return applyMainIngredientToSearchResults(diet);
+  }, [applyMainIngredientToSearchResults, searchResults, userDietPrefs]);
 
   function openDetail(row: RecipesTabRow) {
     setPickedDetailRow(row);
@@ -301,6 +444,20 @@ export default function RecipesScreen() {
 
   const showSearchEmpty =
     searching && !searchLoading && searchResultsFiltered.length === 0;
+
+  const showMainIngredientEmpty =
+    Boolean(selectedMainIngredient) &&
+    !listLoading &&
+    !showSearchEmpty &&
+    !showFilterEmpty &&
+    !showCatalogEmpty &&
+    (searching
+      ? searchResultsFiltered.length === 0
+      : showClassicRecipesFeed
+        ? classicRecipeRows.length === 0
+        : creatorFeedEnabled && !showLegacyKitchenFeed
+          ? browseVideoModels.length === 0
+          : filteredRows.length === 0);
 
   const showSignInOnImportError =
     Boolean(viralOpenState?.importError) &&
@@ -427,6 +584,11 @@ export default function RecipesScreen() {
           text={typeof params.text === 'string' ? params.text : undefined}
           autoRun={autoStartSharedImport}
         />
+        <MainIngredientChipRow
+          options={mainIngredientChipOptions}
+          selected={selectedMainIngredient}
+          onSelect={setSelectedMainIngredient}
+        />
         {showLegacyKitchenFeed ? (
           <RecipesTabFilterBar
             baseRows={filterBaseRows}
@@ -496,6 +658,19 @@ export default function RecipesScreen() {
       {showFilterEmpty ? <RecipesTabFiltersEmptyState onClearAll={clearAllFilters} /> : null}
       {showSearchEmpty ? (
         <Text className="mt-4 text-sm text-muted">{CREATOR_RECIPES_COPY.emptySearch}</Text>
+      ) : null}
+      {showMainIngredientEmpty ? (
+        <View className="mt-4 rounded-xl border border-border bg-card px-4 py-4">
+          <Text className="text-sm text-muted">{MAIN_INGREDIENT_COPY.emptyFiltered}</Text>
+          <Pressable
+            onPress={() => setSelectedMainIngredient(null)}
+            className="mt-3 items-center rounded-lg border border-border py-2"
+            accessibilityRole="button"
+            accessibilityLabel={MAIN_INGREDIENT_COPY.clearFilter}
+          >
+            <Text className="text-sm font-semibold text-primary">{MAIN_INGREDIENT_COPY.clearFilter}</Text>
+          </Pressable>
+        </View>
       ) : null}
 
       {searching
