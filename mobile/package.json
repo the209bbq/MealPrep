@@ -66,6 +66,7 @@
     "test:recipes-tab-catalog": "npx tsx scripts/recipes-tab-catalog-check.ts",
     "test:grocery": "npx tsx scripts/grocery-regression.ts && npx tsx scripts/grocery-categorize-check.ts && npx tsx scripts/grocery-recipe-smartshop-flow-check.ts && npx tsx scripts/grocery-replace-supabase-check.ts",
     "test:smart-shop": "npx tsx scripts/smart-shop-filter-examples.ts && npx tsx scripts/smart-shop-retailer-tests.ts && npx tsx scripts/smart-shop-honesty-tests.ts && npx tsx scripts/overpass-store-search-check.ts",
+    "test:stores-tab": "npx tsx scripts/stores-tab-check.ts",
     "test:package-pricing": "node --experimental-strip-types scripts/package-pricing-check.mjs",
     "test:community-prices": "npx tsx scripts/community-price-comparison-check.mjs",
     "test:add-price": "npx tsx scripts/add-price-suggestions-check.ts",

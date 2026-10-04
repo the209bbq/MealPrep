@@ -3,6 +3,7 @@ import { geocodeUsZip } from './nominatim';
 import { fetchOverpassStores, readCachedOverpassStores } from './overpass';
 import { loadSavedStoresFallback } from './savedStoresFallback';
 import { resolveSearchOriginFast, resolveSearchOriginWithGeocode } from './resolveOrigin';
+import { applyOriginDistancesAndSort } from './storeDistance';
 import type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
 
 export type { NearbyStoreSearchParams, ResolvedGeo, StoreRecord } from './types';
@@ -57,7 +58,10 @@ export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): Ins
     return {
       origin,
       source: 'cache',
-      stores: cached.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+      stores: applyOriginDistancesAndSort(
+        cached.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+        origin,
+      ),
     };
   }
 
@@ -66,7 +70,10 @@ export function previewNearbyGroceryStores(params: NearbyStoreSearchParams): Ins
     return {
       origin,
       source: 'saved',
-      stores: fallback.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+      stores: applyOriginDistancesAndSort(
+        fallback.map((s) => ({ ...s, url: mapsDirectionsUrl(s) })),
+        origin,
+      ),
     };
   }
 
@@ -113,10 +120,13 @@ export async function searchNearbyGroceryStores(params: NearbyStoreSearchParams)
     origin,
     osmWarning,
     storeSearchFailed,
-    stores: osmStores.map((s) => ({
-      ...s,
-      url: mapsDirectionsUrl(s),
-    })),
+    stores: applyOriginDistancesAndSort(
+      osmStores.map((s) => ({
+        ...s,
+        url: mapsDirectionsUrl(s),
+      })),
+      origin,
+    ),
   };
 }
 

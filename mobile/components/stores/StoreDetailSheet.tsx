@@ -4,9 +4,11 @@ import { STORES_TAB_COPY } from '../../config/storesTab';
 import { THEME } from '../../config/appConfig';
 import { mapsDirectionsUrl } from '../../config/smartShop';
 import type { StoreLocation } from '../../lib/deals/types';
+import { formatDistanceMiles } from '../../lib/stores/storeDistance';
 import { openExternalUrl } from '../../lib/smartShop/openExternalUrl';
-import { resolveStoreOrderUrl, resolveStorePhone } from '../../lib/stores/storeLinks';
+import { resolveStorePageUrl, resolveStorePhone, resolveWeeklyAdLink } from '../../lib/stores/storeLinks';
 import { formatStoreAddress } from '../../lib/stores/formatAddress';
+import { StoreDeliveryRow } from './StoreDeliveryRow';
 
 type Props = {
   store: StoreLocation | null;
@@ -17,8 +19,9 @@ export function StoreDetailSheet({ store, onClose }: Props) {
   if (!store) return null;
 
   const phone = resolveStorePhone(store);
-  const order = resolveStoreOrderUrl(store);
-  const directionsUrl = store.url ?? mapsDirectionsUrl(store);
+  const directionsUrl = mapsDirectionsUrl(store);
+  const storePageUrl = resolveStorePageUrl(store);
+  const weeklyAd = resolveWeeklyAdLink(store);
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
@@ -31,13 +34,18 @@ export function StoreDetailSheet({ store, onClose }: Props) {
                 <Text className="mt-0.5 text-sm text-muted">{store.name}</Text>
               ) : null}
               <Text className="mt-2 text-sm text-muted">{formatStoreAddress(store)}</Text>
-              {store.openNow != null ? (
-                <Text
-                  className={`mt-2 text-xs font-semibold ${store.openNow ? 'text-success-dark' : 'text-muted'}`}
-                >
-                  {store.openNow ? STORES_TAB_COPY.openNow : STORES_TAB_COPY.closedNow}
-                </Text>
-              ) : null}
+              <View className="mt-2 flex-row flex-wrap items-center gap-x-2 gap-y-0.5">
+                {store.distanceMiles != null ? (
+                  <Text className="text-sm font-medium text-ink">{formatDistanceMiles(store.distanceMiles)}</Text>
+                ) : null}
+                {store.openNow != null ? (
+                  <Text
+                    className={`text-xs font-semibold ${store.openNow ? 'text-success-dark' : 'text-muted'}`}
+                  >
+                    {store.openNow ? STORES_TAB_COPY.openNow : STORES_TAB_COPY.closedNow}
+                  </Text>
+                ) : null}
+              </View>
             </View>
             <Pressable onPress={onClose} accessibilityLabel="Close store details" className="rounded-full p-2">
               <Ionicons name="close" size={24} color={THEME.muted} />
@@ -69,18 +77,28 @@ export function StoreDetailSheet({ store, onClose }: Props) {
               </Pressable>
             ) : null}
 
-            {order ? (
+            <Pressable
+              onPress={() => void openExternalUrl(storePageUrl)}
+              className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-paper px-4 py-3"
+            >
+              <Ionicons name="storefront-outline" size={20} color={THEME.primary} />
+              <Text className="font-bold text-primary">{STORES_TAB_COPY.detailStorePage}</Text>
+            </Pressable>
+
+            {weeklyAd ? (
               <Pressable
-                onPress={() => void openExternalUrl(order.url)}
+                onPress={() => void openExternalUrl(weeklyAd.url)}
                 className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-paper px-4 py-3"
               >
-                <Ionicons name="cart-outline" size={20} color={THEME.primary} />
+                <Ionicons name="newspaper-outline" size={20} color={THEME.primary} />
                 <Text className="font-bold text-primary">
-                  {order.label === 'order' ? STORES_TAB_COPY.detailOrderOnline : STORES_TAB_COPY.detailWebsite}
+                  {weeklyAd.thirdParty ? STORES_TAB_COPY.detailWeeklyAdThirdParty : STORES_TAB_COPY.detailWeeklyAd}
                 </Text>
               </Pressable>
             ) : null}
           </View>
+
+          <StoreDeliveryRow store={store} />
         </View>
       </View>
     </Modal>

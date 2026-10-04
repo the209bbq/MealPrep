@@ -5,7 +5,8 @@ import { useHydrated } from '../../hooks/useHydrated';
 import type { UserProfile } from '../../types/mealprep';
 import { nearbyStoresInstantPreview, searchNearbyStores, type StoreLocation } from '../deals';
 import { geocodeUsZip } from './nominatim';
-import { sortStoreLocationsForDisplay } from './groceryFilter';
+import { sortStoresByDistanceMiles, withDistancesFromOrigin } from './storeDistance';
+import { resolveSearchOriginFast } from './resolveOrigin';
 import { isValidUsZip, normalizeUsZipInput, requestDeviceLocation } from '../smartShop/location';
 import {
   persistHomeLocation,
@@ -65,10 +66,16 @@ export function useNearbyStoresList(profile: UserProfile) {
     void resolveZipPlaceLabel(searchZip).then((label) => setZipPlaceLabel(label));
   }, [hydrated, searchZip]);
 
-  const sortedStores = useMemo(
-    () => sortStoreLocationsForDisplay(nearbyStores, []),
-    [nearbyStores],
-  );
+  const searchOrigin = useMemo(() => {
+    const coords = readInitialCoords(profile);
+    if (coords) return coords;
+    return resolveSearchOriginFast({ zip: searchZip });
+  }, [profile.homeLat, profile.homeLng, profile.homeZip, profile.id, searchZip]);
+
+  const sortedStores = useMemo(() => {
+    const withDistance = searchOrigin ? withDistancesFromOrigin(nearbyStores, searchOrigin) : nearbyStores;
+    return sortStoresByDistanceMiles(withDistance);
+  }, [nearbyStores, searchOrigin]);
 
   const filteredStores = useMemo(() => {
     const q = query.trim().toLowerCase();

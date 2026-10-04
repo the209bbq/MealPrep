@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 import { STORES_TAB_COPY } from '../../config/storesTab';
 import type { StoreLocation } from '../../lib/deals/types';
+import { formatDistanceMiles } from '../../lib/stores/storeDistance';
 
 type Props = {
   stores: StoreLocation[];
@@ -26,7 +27,7 @@ export function StoresNearbyList({ stores, onSelectStore }: Props) {
             <View className="mt-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5">
               {town ? <Text className="text-sm text-muted">{town}</Text> : null}
               {store.distanceMiles != null ? (
-                <Text className="text-sm text-muted">{store.distanceMiles.toFixed(1)} mi</Text>
+                <Text className="text-sm text-muted">{formatDistanceMiles(store.distanceMiles)}</Text>
               ) : null}
               {store.openNow != null ? (
                 <Text
