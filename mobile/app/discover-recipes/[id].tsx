@@ -29,6 +29,10 @@ import { scheduleTargetFromDiscoveryRecipe } from '../../lib/mealCalendar/schedu
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 import { RecipeDietNotice } from '../../components/diet/RecipeDietNotice';
 import { ingredientLinesFromDiscovery } from '../../lib/diet/ingredientLines';
+import { RecipeCostPerServing } from '../../components/recipes/RecipeCostPerServing';
+import { discoveryRecipeServingOverrideId } from '../../config/recipesTabFilters';
+import { resolveDiscoveryRecipeImageUrl } from '../../lib/recipes/recipeImageUrl';
+import type { Recipe } from '../../types/mealprep';
 export default function DiscoverRecipeDetailScreen() {
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const recipeId = Number.parseInt(String(idParam), 10);
@@ -76,6 +80,32 @@ export default function DiscoverRecipeDetailScreen() {
     () => (recipe ? scoreDiscoveryRecipeAgainstPantry(recipe, pantry) : null),
     [recipe, pantry],
   );
+
+  const recipeForCost = useMemo((): Recipe | null => {
+    if (!recipe) return null;
+    return {
+      id: discoveryRecipeServingOverrideId(recipe.id),
+      name: recipe.name,
+      tag: recipe.cuisine,
+      description: recipe.description,
+      servings: recipe.servings,
+      minutes: (recipe.prep_time ?? 0) + (recipe.cook_time ?? 0),
+      calories: recipe.calories_per_serving,
+      protein: recipe.protein,
+      carbs: recipe.carbs ?? 0,
+      fat: recipe.fat ?? 0,
+      ingredients: recipe.ingredients.map((ing) => ({
+        ingredientId: `recipeapi-ing-${ing.id}`,
+        name: ing.optional ? `${ing.name} (optional)` : ing.name,
+        quantity: ing.quantity,
+        unit: ing.unit,
+      })),
+      steps: recipe.instructions ?? [],
+      isMaster: false,
+      createdAt: '',
+      imageUrl: resolveDiscoveryRecipeImageUrl(recipe),
+    };
+  }, [recipe]);
 
   useEffect(() => {
     if (invalidRecipeId) return;
@@ -161,6 +191,7 @@ export default function DiscoverRecipeDetailScreen() {
             {recipe.carbs != null ? ` · ${recipe.carbs}g carbs` : ''}
             {recipe.fat != null ? ` · ${recipe.fat}g fat` : ''}
           </Text>
+          {recipeForCost ? <RecipeCostPerServing recipe={recipeForCost} ownerId={ownerId} /> : null}
           {pantryMatch ? <RecipePantryMatchBadge match={pantryMatch} /> : null}
           <RecipeDietNotice ingredientLines={ingredientLinesFromDiscovery(recipe)} />
 

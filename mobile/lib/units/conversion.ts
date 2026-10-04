@@ -36,6 +36,10 @@ const VOLUME_TO_ML: Record<string, number> = {
   cup: 236.588,
   cups: 236.588,
   pinch: 0.3,
+  'fl oz': 29.5735,
+  floz: 29.5735,
+  'fluid ounce': 29.5735,
+  'fluid ounces': 29.5735,
 };
 
 /** Count units that convert to “each” via a fixed multiplier (e.g. dozen → 12 each). */

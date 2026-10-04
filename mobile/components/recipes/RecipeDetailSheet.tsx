@@ -34,6 +34,8 @@ import type { ViralRecipeLinkItem } from '../../lib/viralRecipes/types';
 import { RecipeDietNotice } from '../diet/RecipeDietNotice';
 import { ingredientLinesFromRecipe } from '../../lib/diet/ingredientLines';
 import { isVideoRecipeDetailContext, VideoRecipeDetailView } from './VideoRecipeDetailView';
+import { RecipeCostPerServing } from './RecipeCostPerServing';
+import { useApp } from '../../context/AppContext';
 
 export interface RecipeDetailSheetProps {
   visible: boolean;
@@ -162,6 +164,7 @@ function ClassicRecipeDetailBody({
   onClearRecipeSource?: (recipeId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { profile } = useApp();
   const [section, setSection] = useState<DetailSection>('ingredients');
 
   const sourceCredit = row.kind === 'kitchen' ? sourceCreditFromRecipe(row.recipe) : null;
@@ -262,6 +265,8 @@ function ClassicRecipeDetailBody({
           <Text className="mt-1 text-xs text-muted">
             {RECIPES_COPY.recipeDetail.servingsAndTime(kitchenRecipe.servings, minutes)}
           </Text>
+
+          <RecipeCostPerServing recipe={kitchenRecipe} ownerId={profile.id} />
 
           <RecipeDietNotice ingredientLines={ingredientLinesFromRecipe(kitchenRecipe)} />
 

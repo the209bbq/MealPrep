@@ -16,6 +16,8 @@ import { RecipeDietNotice } from '../diet/RecipeDietNotice';
 import { ingredientLinesForKitchenRecipe } from '../../lib/diet/ingredientLines';
 import { RecipeSaveButton } from './RecipeSaveButton';
 import { RecipeSaveCta } from './RecipeSaveCta';
+import { RecipeCostPerServing } from './RecipeCostPerServing';
+import { useApp } from '../../context/AppContext';
 
 type DetailSection = 'ingredients' | 'steps';
 
@@ -168,6 +170,7 @@ export function VideoRecipeDetailView({
   initialSection = 'ingredients',
 }: VideoRecipeDetailViewProps) {
   const insets = useSafeAreaInsets();
+  const { profile } = useApp();
   const [section, setSection] = useState<DetailSection>(initialSection);
   const showLoading = previewLoading || importing;
   const missingCount = match?.missingCount ?? 0;
@@ -242,6 +245,10 @@ export function VideoRecipeDetailView({
 
           {!showLoading && !importError ? (
             <PantryStatusLine missingCount={missingCount} minutes={recipe.minutes} servings={recipe.servings} />
+          ) : null}
+
+          {!showLoading && !importError ? (
+            <RecipeCostPerServing recipe={recipe} ownerId={profile.id} />
           ) : null}
 
           {!showLoading && !importError ? (
