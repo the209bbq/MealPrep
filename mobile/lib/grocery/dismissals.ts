@@ -11,6 +11,19 @@ export function groceryDismissalKey(recipeId: string, ingredientName: string, un
   return `${recipeId}::${normalizeIngredientName(ingredientName)}::${unit.trim().toLowerCase()}`;
 }
 
+/** Blocks re-merging a removed manual / add-missing row from a stale previous list during rebuild. */
+export function groceryPinnedLineDismissalKey(ingredientName: string, unit: string): string {
+  return `pinned::${normalizeIngredientName(ingredientName)}::${unit.trim().toLowerCase()}`;
+}
+
+export function isGroceryPinnedLineDismissed(
+  dismissals: Set<string>,
+  ingredientName: string,
+  unit: string,
+): boolean {
+  return dismissals.has(groceryPinnedLineDismissalKey(ingredientName, unit));
+}
+
 export function readGroceryDismissals(ownerId: string): Set<string> {
   const list = readJson<string[]>(storageKey(ownerId), []);
   return new Set(list);

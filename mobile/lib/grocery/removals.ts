@@ -1,7 +1,12 @@
 import type { GroceryListItem } from '../../types/mealprep';
-import { groceryDismissalKey } from './dismissals';
+import { groceryDismissalKey, groceryPinnedLineDismissalKey } from './dismissals';
 
 export function groceryDismissalKeysForItem(item: GroceryListItem): string[] {
-  if (item.sourceRecipeIds.length === 0) return [];
-  return item.sourceRecipeIds.map((recipeId) => groceryDismissalKey(recipeId, item.name, item.unit));
+  const keys = item.sourceRecipeIds.map((recipeId) =>
+    groceryDismissalKey(recipeId, item.name, item.unit),
+  );
+  if (item.origin !== 'plan') {
+    keys.push(groceryPinnedLineDismissalKey(item.name, item.unit));
+  }
+  return keys;
 }
