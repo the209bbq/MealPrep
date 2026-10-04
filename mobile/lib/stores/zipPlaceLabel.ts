@@ -11,7 +11,7 @@ export function readCachedZipPlaceLabel(zip: string): string | undefined {
   if (!/^\d{5}$/.test(normalized)) return undefined;
   const local = localZipPlaceLabel(normalized);
   if (local) return local;
-  const cacheKey = `nominatim:zip:${normalized}`;
+  const cacheKey = `zcta:zip:${normalized}`;
   const cached = readCache<GeocodedPoint>(cacheKey) ?? readPersistentCache<GeocodedPoint>(cacheKey);
   if (!cached) return undefined;
   return placeLabelFromGeocodePoint(cached, normalized);

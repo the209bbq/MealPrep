@@ -76,6 +76,8 @@ export interface NearbyStoresParams {
   lng?: number;
   zip?: string;
   radiusMiles?: number;
+  isGpsOrigin?: boolean;
+  radiusMultiplier?: 1 | 2;
 }
 
 export interface FetchDealsParams {

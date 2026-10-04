@@ -5,7 +5,7 @@ import type { GeocodedPoint } from './nominatim';
 import { placeLabelFromGeocodePoint } from './zipPlaceParse';
 import type { NearbyStoreSearchParams, ResolvedGeo } from './types';
 function zipGeocodeCacheKey(zip: string): string {
-  return `nominatim:zip:${zip}`;
+  return `zcta:zip:${zip}`;
 }
 
 function readCachedZipPoint(zip: string): GeocodedPoint | undefined {

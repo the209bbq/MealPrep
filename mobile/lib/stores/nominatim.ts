@@ -1,9 +1,8 @@
 import { SMART_SHOP_STORES } from '../../config/smartShop';
 import { readCache, writeCache } from './cache';
 import { lookupLocalZipGeocode } from './localZipTable';
-import { isRateLimitedStatus, nominatimSearchParams, osmRequestHeaders } from './osmHttp';
 import { readPersistentCache, writePersistentCache } from './osmPersistentCache';
-import { geocodeUsZipViaZippopotam } from './zippopotam';
+import { lookupZctaCentroid } from './zctaCentroids';
 
 export interface GeocodedPoint {
   lat: number;
@@ -19,7 +18,7 @@ export async function geocodeUsZip(zip: string): Promise<GeocodeResult> {
   const normalized = zip.trim().slice(0, 5);
   if (!/^\d{5}$/.test(normalized)) return { ok: false, reason: 'invalid_zip' };
 
-  const cacheKey = `nominatim:zip:${normalized}`;
+  const cacheKey = `zcta:zip:${normalized}`;
   const cached = readCache<GeocodedPoint>(cacheKey);
   if (cached) return { ok: true, point: cached };
 
@@ -36,42 +35,14 @@ export async function geocodeUsZip(zip: string): Promise<GeocodeResult> {
     return { ok: true, point: local };
   }
 
-  const zippo = await geocodeUsZipViaZippopotam(normalized);
-  if (zippo) {
-    writeCache(cacheKey, zippo, SMART_SHOP_STORES.cacheTtlMs);
-    writePersistentCache(cacheKey, zippo, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
-    return { ok: true, point: zippo };
+  const zcta = await lookupZctaCentroid(normalized);
+  if (zcta) {
+    writeCache(cacheKey, zcta, SMART_SHOP_STORES.cacheTtlMs);
+    writePersistentCache(cacheKey, zcta, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
+    return { ok: true, point: zcta };
   }
 
-  const url = `${SMART_SHOP_STORES.nominatimBaseUrl}/search?${nominatimSearchParams({
-    postalcode: normalized,
-    country: 'us',
-    format: 'json',
-    limit: '1',
-  }).toString()}`;
-
-  try {
-    const response = await fetch(url, { headers: osmRequestHeaders() });
-    if (isRateLimitedStatus(response.status)) return { ok: false, reason: 'rate_limited' };
-    if (!response.ok) return { ok: false, reason: 'network' };
-
-    const rows = (await response.json()) as { lat?: string; lon?: string; display_name?: string }[];
-    const hit = rows[0];
-    if (!hit?.lat || !hit.lon) return { ok: false, reason: 'not_found' };
-
-    const point: GeocodedPoint = {
-      lat: Number(hit.lat),
-      lng: Number(hit.lon),
-      displayName: hit.display_name,
-    };
-    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return { ok: false, reason: 'not_found' };
-
-    writeCache(cacheKey, point, SMART_SHOP_STORES.cacheTtlMs);
-    writePersistentCache(cacheKey, point, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
-    return { ok: true, point };
-  } catch {
-    return { ok: false, reason: 'network' };
-  }
+  return { ok: false, reason: 'not_found' };
 }
 
 /** @deprecated Prefer geocodeUsZip — kept for callers expecting null. */
