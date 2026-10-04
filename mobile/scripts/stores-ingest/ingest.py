@@ -109,7 +109,7 @@ SUPPLEMENT_SHOP_RE = re.compile(
     re.I,
 )
 
-WALMART_PICKUP_RE = re.compile(r"walmart grocery pickup", re.I)
+WALMART_PICKUP_RE = re.compile(r"\bwalmart\b.*\bpickup\b", re.I)
 
 DISALLOWED_CATEGORIES = {
     "convenience_store",
@@ -495,13 +495,23 @@ def upsert_supabase_api(rows: list[StoreRow], project_ref: str, token: str, batc
               updated_at = now();
             """
         ).strip()
+        resp = None
         for attempt in range(8):
-            resp = requests.post(url, headers=headers, json={"query": query}, timeout=120)
+            try:
+                resp = requests.post(url, headers=headers, json={"query": query}, timeout=180)
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                # Upsert is idempotent, so re-sending the batch is safe.
+                wait = min(120, 10 * 2**attempt)
+                print(f"{type(exc).__name__}; retrying in {wait}s", file=sys.stderr)
+                time.sleep(wait)
+                continue
             if resp.status_code not in (429, 502, 503, 504):
                 break
             wait = float(resp.headers.get("Retry-After") or min(120, 10 * 2**attempt))
             print(f"HTTP {resp.status_code}; retrying in {wait:.0f}s", file=sys.stderr)
             time.sleep(wait)
+        if resp is None:
+            raise RuntimeError("Supabase API request failed after retries (timeout/connection)")
         if resp.status_code >= 400:
             raise RuntimeError(f"Supabase API error {resp.status_code}: {resp.text[:500]}")
         print(f"Upserted {i + len(chunk)} / {len(rows)}", file=sys.stderr)
