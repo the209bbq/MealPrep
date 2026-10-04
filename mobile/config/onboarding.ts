@@ -40,8 +40,8 @@ export type OnboardingTabEmptyCopy = {
   icon: OnboardingIoniconName;
   title: string;
   body: string;
-  ctaLabel: string;
-  href: Href;
+  ctaLabel?: string;
+  href?: Href;
 };
 
 export type OnboardingCopy = {
@@ -175,8 +175,6 @@ export const ONBOARDING_COPY: OnboardingCopy = {
       icon: 'camera-outline',
       title: 'Your pantry is empty',
       body: 'Scan a shelf or add a few items so we know what you can cook.',
-      ctaLabel: 'Scan pantry',
-      href: APP_ROUTES.pantry,
     },
     recipes: {
       icon: 'restaurant-outline',

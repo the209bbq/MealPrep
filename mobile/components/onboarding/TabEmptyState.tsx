@@ -14,6 +14,7 @@ type TabEmptyStateProps = {
 /** Shared empty state with one clear next action for new users. */
 export function TabEmptyState({ tab, className = 'mt-4' }: TabEmptyStateProps) {
   const copy = ONBOARDING_COPY.emptyStates[tab];
+  const { ctaLabel, href: ctaHref } = copy;
 
   return (
     <View
@@ -25,13 +26,15 @@ export function TabEmptyState({ tab, className = 'mt-4' }: TabEmptyStateProps) {
       </View>
       <Text className="text-center text-lg font-bold text-ink">{copy.title}</Text>
       <Text className="mt-2 text-center text-sm leading-6 text-muted">{copy.body}</Text>
-      <Pressable
-        onPress={() => router.push(copy.href)}
-        accessibilityRole="button"
-        className="mt-5 min-h-[48px] w-full max-w-xs items-center justify-center rounded-2xl bg-primary px-5 py-3"
-      >
-        <Text className="text-base font-bold text-on-primary">{copy.ctaLabel}</Text>
-      </Pressable>
+      {ctaLabel && ctaHref ? (
+        <Pressable
+          onPress={() => router.push(ctaHref)}
+          accessibilityRole="button"
+          className="mt-5 min-h-[48px] w-full max-w-xs items-center justify-center rounded-2xl bg-primary px-5 py-3"
+        >
+          <Text className="text-base font-bold text-on-primary">{ctaLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
