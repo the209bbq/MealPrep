@@ -142,6 +142,7 @@ export interface Recipe {
     | 'tiktok'
     | 'instagram'
     | 'facebook'
+    | 'reddit'
     | 'photo'
     | 'video'
     | 'themealdb';

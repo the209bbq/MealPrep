@@ -4,6 +4,7 @@ export type RecipeImportSourceType =
   | 'tiktok'
   | 'instagram'
   | 'facebook'
+  | 'reddit'
   | 'photo'
   | 'video';
 

@@ -57,6 +57,19 @@ import {
   resolveYouTubeImportImageUrl,
   withImportImageUrl,
 } from './recipeImageMeta.ts';
+import {
+  assertRedditPostImportable,
+  fetchRedditListingJson,
+  isExternalRecipeLink,
+  mergeRuleParsedRecipe,
+  readCommentListing,
+  RedditImportError,
+  REDDIT_FETCH_USER_AGENT,
+  redditPostFromListingJson,
+  resolveRedditPostIdFromUrl,
+  selectRecipeBodyText,
+} from './redditImport.ts';
+import { parseRuleBasedRecipeFromText } from './textRecipeParse.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -240,7 +253,14 @@ type ImportSuccess = { recipe: RecipeImportExtracted; cached: boolean; youtubeSu
 
 type ImportFromUrlResult =
   | ImportSuccess
-  | { notRecipe: true; message: string; captionForSearch?: string; creatorHint?: string | null }
+  | {
+      notRecipe: true;
+      message: string;
+      captionForSearch?: string;
+      creatorHint?: string | null;
+      /** When true, do not offer YouTube search fallback (policy/unavailable content). */
+      suppressFallbacks?: boolean;
+    }
   | null;
 
 function buildImportCacheKey(
@@ -447,6 +467,110 @@ async function importFromUrl(
   }
   await writeImportCache(cacheKey, normalizedUrl, withImage);
   return { recipe: withImage, cached: false };
+}
+
+async function importRedditLink(apiKey: string, normalizedUrl: string): Promise<ImportFromUrlResult> {
+  const cacheKey = buildImportCacheKey(normalizedUrl, 'reddit');
+  const cached = await readImportCache(cacheKey);
+  if (cached) {
+    return {
+      recipe: withImportImageUrl(
+        { ...cached, source_url: cached.source_url || normalizedUrl },
+        cached.image_url ?? imageUrlForCachedImport(cached, 'reddit', normalizedUrl),
+        normalizedUrl,
+      ),
+      cached: true,
+    };
+  }
+
+  try {
+    const postId = await resolveRedditPostIdFromUrl(normalizedUrl, fetch, REDDIT_FETCH_USER_AGENT);
+    const listingJson = await fetchRedditListingJson(postId, fetch, REDDIT_FETCH_USER_AGENT);
+    const post = redditPostFromListingJson(listingJson, postId);
+    if (!post) {
+      return {
+        notRecipe: true,
+        message: 'Could not read that Reddit post.',
+        captionForSearch: '',
+        creatorHint: null,
+      };
+    }
+    assertRedditPostImportable(post);
+
+    if (isExternalRecipeLink(post) && post.externalUrl) {
+      const external = await importFromUrl(apiKey, post.externalUrl, 'web');
+      if (!external) return null;
+      if ('notRecipe' in external && external.notRecipe) {
+        return external;
+      }
+      if ('recipe' in external) {
+        const creditName = `u/${post.author} on r/${post.subreddit}`;
+        const withRedditMeta = withImportImageUrl(
+          {
+            ...external.recipe,
+            source_url: post.canonicalPostUrl,
+            source_type: 'reddit',
+            social_author_name: creditName,
+            social_author_url: `https://www.reddit.com/user/${encodeURIComponent(post.author)}`,
+            image_url: external.recipe.image_url ?? post.imageUrl,
+          },
+          external.recipe.image_url ?? post.imageUrl,
+          post.canonicalPostUrl,
+        );
+        await writeImportCache(cacheKey, post.canonicalPostUrl, withRedditMeta);
+        return { recipe: withRedditMeta, cached: false };
+      }
+    }
+
+    const comments = readCommentListing(listingJson);
+    const bodyText = selectRecipeBodyText(post, comments);
+    const ruleParsed = parseRuleBasedRecipeFromText(post.title, bodyText);
+    let recipe = mergeRuleParsedRecipe(ruleParsed, post);
+
+    if (!recipe || !recipeLooksValid(recipe)) {
+      const geminiText = [post.title, bodyText].filter(Boolean).join('\n\n');
+      const fromGemini = await extractRecipeFromPageText(
+        apiKey,
+        geminiText,
+        post.canonicalPostUrl,
+        'reddit',
+        { singleModelAttempt: true },
+      );
+      if (!fromGemini) return null;
+      recipe = withImportImageUrl(
+        {
+          ...fromGemini,
+          social_author_name: `u/${post.author} on r/${post.subreddit}`,
+          social_author_url: `https://www.reddit.com/user/${encodeURIComponent(post.author)}`,
+        },
+        post.imageUrl,
+        post.canonicalPostUrl,
+      );
+    }
+
+    if (!recipeLooksValid(recipe)) {
+      return {
+        notRecipe: true,
+        message: 'We could not find a recipe in that Reddit post.',
+        captionForSearch: bodyText.slice(0, 400),
+        creatorHint: `u/${post.author}`,
+      };
+    }
+
+    await writeImportCache(cacheKey, post.canonicalPostUrl, recipe);
+    return { recipe, cached: false };
+  } catch (error) {
+    if (error instanceof RedditImportError) {
+      return {
+        notRecipe: true,
+        message: error.userMessage,
+        captionForSearch: '',
+        creatorHint: null,
+        suppressFallbacks: true,
+      };
+    }
+    throw error;
+  }
 }
 
 async function importTikTokLink(apiKey: string, normalizedUrl: string): Promise<ImportFromUrlResult> {
@@ -808,6 +932,25 @@ Deno.serve(async (req) => {
   const sourceType = classifyRecipeImportUrl(normalized);
   if (!sourceType) {
     return jsonResponse({ error: 'Unsupported URL', code: 'BAD_REQUEST' }, 400);
+  }
+
+  if (sourceType === 'reddit') {
+    try {
+      const result = await importRedditLink(apiKey, normalized);
+      if (!result) {
+        return jsonResponse({ error: 'Could not import that Reddit post.', code: 'UPSTREAM_ERROR' }, 502);
+      }
+      if ('notRecipe' in result && result.notRecipe) {
+        if (result.suppressFallbacks) {
+          return jsonResponse({ error: result.message, code: 'NOT_RECIPE' }, 422);
+        }
+        return await respondNotRecipeWithAutoYoutube(apiKey, 'reddit', false, result);
+      }
+      return jsonResponse({ recipe: result.recipe, cached: result.cached });
+    } catch (error) {
+      console.error('recipe-import reddit error', error);
+      return jsonResponse({ error: 'Import failed unexpectedly.', code: 'UPSTREAM_ERROR' }, 502);
+    }
   }
 
   if (sourceType === 'tiktok') {

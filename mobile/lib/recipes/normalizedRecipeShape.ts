@@ -18,6 +18,7 @@ export type NormalizedRecipeSourceType =
   | 'tiktok'
   | 'instagram'
   | 'facebook'
+  | 'reddit'
   | 'photo'
   | 'video'
   | 'themealdb';

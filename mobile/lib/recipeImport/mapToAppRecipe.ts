@@ -38,6 +38,7 @@ function importExtractedToNormalizedShape(
     tiktok: 'Imported · TikTok',
     instagram: 'Imported · Instagram',
     facebook: 'Imported · Facebook',
+    reddit: 'Imported · Reddit',
     photo: 'Imported · Photo',
     video: 'Imported · Video',
   };
@@ -47,6 +48,7 @@ function importExtractedToNormalizedShape(
     tiktok: 'Imported from a TikTok post and saved in your own words.',
     instagram: 'Imported from an Instagram caption and saved in your own words.',
     facebook: 'Imported from a Facebook post and saved in your own words.',
+    reddit: 'Imported from a Reddit post and saved in your own words.',
     photo: 'Imported from your recipe photos and saved in your own words.',
     video: 'Imported from your saved cooking video and saved in your own words.',
   };

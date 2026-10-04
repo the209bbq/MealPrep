@@ -1,0 +1,38 @@
+[
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t3",
+          "data": {
+            "id": "abc123",
+            "title": "Weeknight Lemon Garlic Pasta",
+            "selftext": "**Ingredients:**\n\n* 8 oz spaghetti\n* 3 cloves garlic, minced\n* 2 tbsp olive oil\n* 1 lemon, juiced\n* Salt and pepper\n\n**Instructions:**\n\n1. Boil pasta until al dente.\n2. Sauté garlic in oil until fragrant.\n3. Toss pasta with garlic oil and lemon juice. Season and serve.",
+            "author": "mealprep_fan",
+            "subreddit": "recipes",
+            "permalink": "/r/recipes/comments/abc123/weeknight_lemon_garlic_pasta/",
+            "url": "https://www.reddit.com/r/recipes/comments/abc123/weeknight_lemon_garlic_pasta/",
+            "is_self": true,
+            "over_18": false,
+            "preview": {
+              "images": [
+                {
+                  "source": {
+                    "url": "https://i.redd.it/pasta123.jpg"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Listing",
+    "data": {
+      "children": []
+    }
+  }
+]

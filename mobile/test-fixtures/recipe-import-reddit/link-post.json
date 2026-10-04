@@ -1,0 +1,30 @@
+[
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t3",
+          "data": {
+            "id": "ghi789",
+            "title": "Best banana bread",
+            "selftext": "",
+            "author": "link_poster",
+            "subreddit": "Cooking",
+            "permalink": "/r/Cooking/comments/ghi789/best_banana_bread/",
+            "url": "https://www.allrecipes.com/recipe/20144/banana-banana-bread/",
+            "url_overridden_by_dest": "https://www.allrecipes.com/recipe/20144/banana-banana-bread/",
+            "is_self": false,
+            "over_18": false
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Listing",
+    "data": {
+      "children": []
+    }
+  }
+]

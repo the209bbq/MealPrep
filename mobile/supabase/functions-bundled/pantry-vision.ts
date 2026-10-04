@@ -6,8 +6,7 @@ var DEFAULT_GEMINI_FALLBACK_MODELS = [
   "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash"
+  "gemini-2.5-flash"
 ];
 var DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 38e3;
 var GEMINI_REQUEST_TIMEOUT_MS = DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;

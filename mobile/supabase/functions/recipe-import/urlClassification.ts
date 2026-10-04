@@ -1,3 +1,4 @@
+import { isRedditImportHostname } from './redditImport.ts';
 import { validatePublicHttpFetchUrl } from './ssrfGuard.ts';
 
 export type RecipeImportSourceType =
@@ -6,6 +7,7 @@ export type RecipeImportSourceType =
   | 'tiktok'
   | 'instagram'
   | 'facebook'
+  | 'reddit'
   | 'photo'
   | 'video';
 
@@ -60,6 +62,7 @@ export function classifyRecipeImportUrl(urlString: string): RecipeImportSourceTy
   if (FACEBOOK_HOSTS.has(host) || host.endsWith('.facebook.com') || host === 'fb.watch') {
     return 'facebook';
   }
+  if (isRedditImportHostname(host)) return 'reddit';
   return 'web';
 }
 
