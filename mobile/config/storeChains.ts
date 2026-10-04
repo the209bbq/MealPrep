@@ -92,7 +92,7 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     key: 'winco',
     displayName: 'WinCo',
     matchPatterns: ['winco', 'winco foods'],
-    storePageUrl: 'https://www.wincofoods.com/locations',
+    storePageUrl: 'https://www.wincofoods.com/store-locator',
     weeklyAdUrl: 'https://www.wincofoods.com/weekly-ad',
     delivery: { instacart: false, doordash: false, ubereats: true },
   },
@@ -105,25 +105,12 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     delivery: { instacartSlug: 'grocery-outlet', instacart: true, doordash: true, ubereats: true },
   },
   {
-    key: 'food_4_less_norcal',
+    key: 'food_4_less',
     displayName: 'Food 4 Less',
     matchPatterns: ['food 4 less', 'food4less', 'food for less'],
-    storePageUrl: 'https://www.myfood4less.com/store-locator',
-    weeklyAdUrl: 'https://myfood4less.com/store/food4less/pages/weekly-ad',
-    excludeStore: (store) =>
-      Boolean(store.krogerLocationId) || store.pricingSource === 'kroger' || /kroger/i.test(store.chain),
-    delivery: { deliverySearchName: 'Food 4 Less', instacart: true, doordash: true, ubereats: true },
-  },
-  {
-    key: 'food_4_less_kroger',
-    displayName: 'Food 4 Less',
-    matchPatterns: ['food 4 less', 'food4less', 'food for less'],
-    storePageUrl: 'https://www.food4less.com/stores/search?q={query}',
-    weeklyAdUrl: 'https://www.food4less.com/weeklyad',
-    excludeStore: (store) =>
-      !store.krogerLocationId &&
-      store.pricingSource !== 'kroger' &&
-      !/kroger/i.test(store.chain),
+    /** Save Mart–operated NorCal / Central Valley stores (not Kroger’s food4less.com chain). */
+    storePageUrl: 'https://www.myfood4less.com/store/food4less/pages/locations',
+    weeklyAdUrl: 'https://www.myfood4less.com/store/food4less/pages/weekly-ad',
     delivery: { deliverySearchName: 'Food 4 Less', instacart: true, doordash: true, ubereats: true },
   },
   {

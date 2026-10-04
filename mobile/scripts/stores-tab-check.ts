@@ -98,6 +98,20 @@ assert(uberUrl.includes('uber.com') && uberUrl.includes('Save%20Mart'), 'uber ea
 
 assert(resolveStoreChainConfig(oakdaleSaveMart)?.key === 'save_mart', 'chain resolve');
 
+const food4Less: StoreLocation = {
+  ...oakdaleSaveMart,
+  id: 'f4l',
+  name: 'Food 4 Less',
+  chain: 'Food 4 Less',
+};
+const f4lPage = resolveStorePageUrl(food4Less);
+assert(f4lPage.includes('myfood4less.com/store/food4less/pages/locations'), 'norcal food 4 less store page');
+const f4lAd = resolveWeeklyAdLink(food4Less);
+assert(f4lAd?.url.includes('myfood4less.com/store/food4less/pages/weekly-ad'), 'norcal food 4 less weekly ad');
+
+const wincoPage = resolveStorePageUrl(winco);
+assert(wincoPage.includes('wincofoods.com/store-locator'), 'winco store locator');
+
 assert(VERIFIED_WEEKLY_AD_CHAIN_KEYS.length >= 15, 'weekly ad keys documented');
 
 console.log('stores-tab-check: ok');
