@@ -6,6 +6,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { applyHideOverrides, loadCreatorVideoOverrides } from './creatorVideoOverrides.ts';
+import { loadChannelIdsWithVisibleFeedVideos } from './creatorListVisibility.ts';
 import { buildChannelFitWeightMap, mixCreatorFeed } from './feedMix.ts';
 import { compareCreatorsByFitAndSubscribers } from './fitOrder.ts';
 import {
@@ -233,7 +234,10 @@ async function readFeedVideos(
 
   if (mode === 'popular') {
     rows = rows.filter(
-      (row) => !isLowQualityFeedVideo(row.title, row.description_snippet ?? ''),
+      (row) =>
+        !isLowQualityFeedVideo(row.title, row.description_snippet ?? '', {
+          isShort: row.is_short,
+        }),
     );
     const relativeViewScore = (row: VideoRow): number => {
       const channelAvg = creatorsMap.get(row.channel_id)?.avg_views ?? 0;
@@ -276,7 +280,9 @@ async function handlePublicAction(
   const hideOverrides = await loadCreatorVideoOverrides(admin);
 
   if (body.action === 'creators') {
+    const channelsWithVideos = await loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides);
     const creators = [...creatorsMap.values()]
+      .filter((row) => channelsWithVideos.has(row.youtube_channel_id))
       .sort(compareCreatorsByFitAndSubscribers)
       .map(creatorToDto);
     return jsonResponse({ creators });

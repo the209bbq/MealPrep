@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Regenerate recipe_creators seed migration from supabase/seed-data/youtube_cooking_creators.json
+ * Regenerate recipe_creators seed migration from supabase/seed-data/youtube_cooking_creators.json.
+ * `source` values: top25, below_cutoff, david_pick, intl_added (see recipe_creators_source_check).
  */
 import fs from 'node:fs';
 import path from 'node:path';
