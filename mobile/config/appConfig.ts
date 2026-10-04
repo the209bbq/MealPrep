@@ -100,8 +100,8 @@ export const getRecipeApiProxyUrl = (): string => {
 export const PHOTO_SCAN = {
   enabled: true,
   /** Long edge sent to pantry-vision (native + web use the same rule). */
-  maxImageDimension: 1600,
-  jpegQuality: 0.82,
+  maxImageDimension: 1280,
+  jpegQuality: 0.7,
   maxPayloadBytes: 2_800_000,
   /** Quality hints before upload (analysis on a downsampled thumb, not the full upload). */
   qualityAnalysisLongEdge: 256,
@@ -122,6 +122,7 @@ export const PHOTO_SCAN = {
   notConfiguredMessage:
     'Pantry photo scan is not available on this app yet. Ask an admin to finish setup.',
   rateLimitMessage: 'Too many scans — wait a minute and try again.',
+  cameraPermissionMessage: 'Camera access is needed to scan your pantry. Enable it in settings and try again.',
   scanFailedTitle: 'Couldn’t read that photo',
   scanFailedMessage:
     'Something went wrong while analyzing your photo. Check your connection and try again.',

@@ -29,9 +29,7 @@ import {
 } from '../../components/PantryStorageLocationChips';
 import { CATEGORY_LABELS, isPantryVisionConfigured, PHOTO_SCAN, THEME } from '../../config/appConfig';
 import { GUEST_MODE_COPY } from '../../config/guestMode';
-import {
-  readLastPantryScanLocation,
-} from '../../config/pantryScan';
+import { PANTRY_SCAN_UI_COPY, readLastPantryScanLocation } from '../../config/pantryScan';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   isPantryStorageLocation,
@@ -141,7 +139,7 @@ export default function PantryScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [modelLabel, setModelLabel] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
-  const [scanAgainBusy, setScanAgainBusy] = useState(false);
+  const [addPhotoBusy, setAddPhotoBusy] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<PantryItem | null>(null);
@@ -258,6 +256,7 @@ export default function PantryScreen() {
   async function runVisionFromPrepared(
     prepared: PreparedPantryImage,
     scanLocation: PantryStorageLocation,
+    options?: { mergeIntoReview?: boolean },
   ) {
     if (!featureFlags.photoScan) {
       const message = 'Photo pantry scan is turned off. An admin can re-enable it in feature toggles.';
@@ -286,8 +285,13 @@ export default function PantryScreen() {
     setScanLocationHint(scanLocation);
     clearScanFailure();
     setScanQualityWarning(prepared.qualityWarnings?.join(' ') ?? null);
-    setPhase('loading');
-    setPreviewUri(prepared.uri);
+    if (!options?.mergeIntoReview) {
+      setPhase('loading');
+      setPreviewUri(prepared.uri);
+    } else {
+      setAddPhotoBusy(true);
+      setSaveError(null);
+    }
 
     const attempt = { kind: 'prepared' as const, prepared, location: scanLocation };
 
@@ -304,7 +308,10 @@ export default function PantryScreen() {
 
     try {
       const { detectionsToReviewItems } = await import('../../lib/pantryVision/reviewItems');
-      const result = await pantryVisionClient.analyzePantryPhoto(prepared, scanAccessToken, { scanLocation });
+      const result = await pantryVisionClient.analyzePantryPhoto(prepared, scanAccessToken, {
+        scanLocation,
+        bypassCache: options?.mergeIntoReview,
+      });
       const rows = detectionsToReviewItems(
         result.items,
         pantry,
@@ -313,6 +320,21 @@ export default function PantryScreen() {
         demoMode,
         scanLocation,
       );
+      if (options?.mergeIntoReview) {
+        if (rows.length === 0) {
+          setSaveError(PANTRY_SCAN_UI_COPY.noNewItemsInPhoto);
+        } else {
+          setReviewItems((prev) => {
+            const merged = mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation);
+            registerAiBaselineEntries(merged, aiBaselineRef.current);
+            return merged;
+          });
+          setModelLabel(result.model);
+          setPreviewUri(prepared.uri);
+        }
+        setLastScanAttempt(attempt);
+        return;
+      }
       if (rows.length === 0) {
         logPantryScanFailure('EMPTY_DETECTIONS');
         setScanNoItemsFound(attempt);
@@ -360,8 +382,16 @@ export default function PantryScreen() {
                     ? error.message
                     : PHOTO_SCAN.scanFailedMessage;
       const canRetry = !(error instanceof PantryVisionNotConfiguredError);
-      setScanFailure(message, title, canRetry ? attempt : null);
-      setPhase('idle');
+      if (options?.mergeIntoReview) {
+        setSaveError(message);
+      } else {
+        setScanFailure(message, title, canRetry ? attempt : null);
+        setPhase('idle');
+      }
+    } finally {
+      if (options?.mergeIntoReview) {
+        setAddPhotoBusy(false);
+      }
     }
   }
 
@@ -389,39 +419,69 @@ export default function PantryScreen() {
     }
   }
 
-  async function handleScanAgainFromReview() {
-    if (!lastScanAttempt) return;
-    setScanAgainBusy(true);
-    try {
-      const scanLocation = lastScanAttempt.location;
-      const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
-      const pantryVisionClient = await import('../../lib/pantryVision/client');
-      const prepared =
-        lastScanAttempt.kind === 'prepared'
-          ? lastScanAttempt.prepared
-          : await preparePantryImage(lastScanAttempt.uri);
-      const result = await pantryVisionClient.analyzePantryPhoto(prepared, accessToken, {
-        scanLocation,
-        bypassCache: true,
-      });
-      setReviewItems((prev) => {
-        const merged = mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation);
-        registerAiBaselineEntries(merged, aiBaselineRef.current);
-        return merged;
-      });
-      setModelLabel(result.model);
-    } catch (error) {
-      const { PantryVisionScanError } = await import('../../lib/pantryVision/client');
-      const message =
-        error instanceof PantryVisionScanError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : PHOTO_SCAN.scanFailedMessage;
-      setSaveError(message);
-    } finally {
-      setScanAgainBusy(false);
+  async function handleAddAnotherPhotoFromReview() {
+    const scanLocation = scanLocationHint;
+    if (Platform.OS === 'web') {
+      try {
+        const { pickWebImageFile } = await import('../../lib/web/pickWebImageFile');
+        const { preparePantryImageFromFile } = await import('../../lib/pantryVision/prepareImage.web');
+        const file = await pickWebImageFile();
+        if (!file) return;
+        const prepared = await preparePantryImageFromFile(file);
+        await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
+      } catch (error) {
+        if (error instanceof PantryImageQualityError && error.reason === 'blank') {
+          setSaveError(error.message);
+        } else {
+          setSaveError(PHOTO_SCAN.scanFailedMessage);
+        }
+      }
+      return;
     }
+    Alert.alert(PANTRY_SCAN_UI_COPY.choosePhotoSourceTitle, PANTRY_SCAN_UI_COPY.choosePhotoSourceMessage, [
+      {
+        text: PANTRY_SCAN_UI_COPY.takePhoto,
+        onPress: () => void pickNativePhotoAndMerge(scanLocation, 'camera'),
+      },
+      {
+        text: PANTRY_SCAN_UI_COPY.chooseFromLibrary,
+        onPress: () => void pickNativePhotoAndMerge(scanLocation, 'library'),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  async function pickNativePhotoAndMerge(scanLocation: PantryStorageLocation, source: 'camera' | 'library') {
+    const { access } = await resolvePhotoScanAccess(photoScanAccess, session);
+    if (access !== 'allowed') {
+      const copy = photoScanAccessUserMessage(access);
+      if (copy) setSaveError(copy.message);
+      return;
+    }
+    if (source === 'camera') {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setSaveError(PHOTO_SCAN.cameraPermissionMessage);
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: PHOTO_SCAN.jpegQuality,
+      });
+      if (result.canceled || !result.assets[0]) return;
+      const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
+      const prepared = await preparePantryImage(result.assets[0].uri);
+      await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: false,
+      quality: PHOTO_SCAN.jpegQuality,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
+    const prepared = await preparePantryImage(result.assets[0].uri);
+    await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
   }
 
   function promptGuestPhotoScanSignIn() {
@@ -451,7 +511,11 @@ export default function PantryScreen() {
     if (source === 'camera') {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Camera', 'Camera permission is required for pantry scanning.');
+        if (Platform.OS === 'web') {
+          setScanFailure(PHOTO_SCAN.cameraPermissionMessage, PHOTO_SCAN.scanFailedTitle, null);
+        } else {
+          Alert.alert('Camera', PHOTO_SCAN.cameraPermissionMessage);
+        }
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -845,8 +909,8 @@ export default function PantryScreen() {
               onChange={setReviewItems}
               onSave={() => void handleSaveReview()}
               onCancel={handleCancelReview}
-              onScanAgain={lastScanAttempt ? () => void handleScanAgainFromReview() : undefined}
-              scanAgainBusy={scanAgainBusy}
+              onAddAnotherPhoto={() => void handleAddAnotherPhotoFromReview()}
+              addPhotoBusy={addPhotoBusy}
               saving={saving}
               modelLabel={isAdmin ? modelLabel : undefined}
               saveError={saveError}

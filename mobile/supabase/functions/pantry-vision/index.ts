@@ -281,8 +281,8 @@ function pantryRowsSeemCompleteForSinglePass(
   return avg >= minAvgConfidence;
 }
 
-function shouldRunPantryVerifySecondPass(budgetExhausted: boolean): boolean {
-  return !budgetExhausted;
+function shouldRunPantryVerifySecondPass(_budgetExhausted: boolean): boolean {
+  return false;
 }
 
 const EDGE_PANTRY_MERGE_IDENTITY: PantryMergeIdentity = {
@@ -295,7 +295,7 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_RETRY_BACKOFF_MS = 450;
 const GEMINI_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 503]);
 const geminiModelTimeoutMemory = new ModelTimeoutMemory();
-const PANTRY_VISION_CACHE_VERSION = 'v5';
+const PANTRY_VISION_CACHE_VERSION = 'v6';
 const PANTRY_VISION_SINGLE_PASS_MIN_ITEMS = 8;
 const PANTRY_VISION_SINGLE_PASS_MIN_AVG_CONFIDENCE = 0.72;
 const PANTRY_MAX_ITEMS = 120;
@@ -364,7 +364,6 @@ const RESPONSE_JSON_SCHEMA = {
         type: 'object',
         properties: {
           name: { type: 'string' },
-          brand: { type: 'string' },
           quantity: { type: 'number' },
           unit: { type: 'string' },
           category: { type: 'string', enum: [...PANTRY_CATEGORIES] },
@@ -384,7 +383,6 @@ const USER_MAX_PER_WINDOW = 12;
 
 type DetectedPantryItem = {
   name: string;
-  brand?: string;
   quantity: number;
   unit: string;
   category: (typeof PANTRY_CATEGORIES)[number];
@@ -601,6 +599,11 @@ function normalizeNameKey(name: string): string {
     .trim();
 }
 
+/** Generic recipe ingredient label (lowercase, no brands). */
+function formatGenericIngredientName(raw: string): string {
+  return normalizeNameKey(raw);
+}
+
 function stableSortItems(items: DetectedPantryItem[]): DetectedPantryItem[] {
   return [...items].sort((a, b) => normalizeNameKey(a.name).localeCompare(normalizeNameKey(b.name)));
 }
@@ -616,8 +619,6 @@ function sanitizeItems(raw: unknown): DetectedPantryItem[] {
     const row = entry as Record<string, unknown>;
     const name = typeof row.name === 'string' ? row.name.trim() : '';
     if (!name) continue;
-    const brandRaw = typeof row.brand === 'string' ? row.brand.trim() : '';
-    const brand = brandRaw ? brandRaw.slice(0, 64) : undefined;
     const quantity = Number(row.quantity);
     const unit = typeof row.unit === 'string' ? row.unit.trim() || 'each' : 'each';
     const categoryRaw = typeof row.category === 'string' ? row.category : 'dry_goods';
@@ -630,8 +631,7 @@ function sanitizeItems(raw: unknown): DetectedPantryItem[] {
       ? (storageRaw as (typeof PANTRY_STORAGE)[number])
       : 'pantry';
     out.push({
-      name: name.slice(0, 120),
-      brand,
+      name: formatGenericIngredientName(name).slice(0, 120),
       quantity: Number.isFinite(quantity) && quantity > 0 ? Math.min(quantity, 9999) : 1,
       unit: unit.slice(0, 32),
       category,
@@ -747,17 +747,16 @@ function geminiEnumeratePrompt(scanLocation: (typeof PANTRY_STORAGE)[number]): s
     '- Read the FRONT product label only. Ignore ingredient lists, nutrition panels, and side/back text.\n' +
     '- Skip non-food (pet food, cleaning supplies, napkins, appliances, empty jars, bags, tools).\n' +
     '- Do not guess: omit anything you cannot read clearly from the front label. Do NOT list products that are not visible.\n' +
-    '- Do NOT use barcodes.\n' +
-    '- name: what the product actually IS for cooking (generic recipe ingredient, lowercase-friendly). Be specific when it matters: honey peanut butter not almond butter; pancake syrup not maple syrup; Kool-Aid = drink mix or powdered drink mix; Sara Lee loaf = bread not bread mix; cheddar crackers not just crackers when the label says Goldfish-style cheese crackers.\n' +
-    '- brand: optional store or product brand when visible (separate field). Example: name "cheddar crackers", brand "Goldfish".\n' +
+    '- Do NOT use barcodes. Never put store or product brand names in name (no Kraft, WinCo, Goldfish, etc.).\n' +
+    '- name: generic recipe ingredient only, lowercase, singular when natural (egg, cheddar cheese, milk). Be specific when it matters: honey peanut butter not almond butter; pancake syrup not maple syrup; powdered drink mix not juice brand; bread not bread mix; cheddar cheese crackers not just crackers.\n' +
     '- Check lower shelves, back rows, and partially hidden items behind front-facing packages.\n' +
     '- Scan shelf by shelf top-to-bottom; on each shelf go left-to-right.\n' +
     '- One JSON object per distinct product. If three identical cans are visible, quantity 3 and unit "can".\n' +
-    '- Use realistic units (oz, lb, each, bottle, jar, can). Set confidence 0-1.\n' +
-    'Examples (name only): {"name":"black olives","brand":"WinCo","quantity":1,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.9}\n' +
-    '{"name":"pancake syrup","quantity":1,"unit":"bottle","category":"condiments","storage":"pantry","confidence":0.88}\n' +
-    '{"name":"honey peanut butter","quantity":1,"unit":"jar","category":"dry_goods","storage":"pantry","confidence":0.87}\n' +
-    '{"name":"cake flour","quantity":1,"unit":"box","category":"dry_goods","storage":"pantry","confidence":0.86}\n' +
+    '- quantity is optional rough count when visible; default 1. Use realistic units (oz, lb, each, bottle, jar, can). Set confidence 0-1.\n' +
+    'Examples: {"name":"black olives","quantity":1,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.9}\n' +
+    '{"name":"cheddar cheese","quantity":1,"unit":"block","category":"dairy","storage":"fridge","confidence":0.88}\n' +
+    '{"name":"eggs","quantity":12,"unit":"each","category":"dairy","storage":"fridge","confidence":0.9}\n' +
+    '{"name":"milk","quantity":1,"unit":"gallon","category":"dairy","storage":"fridge","confidence":0.87}\n' +
     'Return JSON only matching the schema.'
   );
 }

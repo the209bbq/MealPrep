@@ -18,6 +18,9 @@ export const PANTRY_SCAN_UI_COPY = {
   choosePhotoSourceMessage: 'How do you want to add a photo?',
   takePhoto: 'Take photo',
   chooseFromLibrary: 'Choose from library',
+  addAnotherPhoto: 'Add another photo',
+  addAnotherPhotoBusy: 'Scanning photo…',
+  noNewItemsInPhoto: 'No new items in that photo — try a different angle.',
 } as const;
 
 export function readLastPantryScanLocation(): PantryStorageLocation {

@@ -5,6 +5,7 @@ import {
   type PantryStorageLocation,
 } from '../../config/pantryStorage';
 import type { PantryCategory, PantryItem, Recipe } from '../../types/mealprep';
+import { areSameIngredientForPantryDedupe } from '../recipeMatch/ingredientNormalize';
 import {
   dedupeDetections,
   dropJunkDetections,
@@ -28,6 +29,23 @@ export function resolveReviewItemStorage(
   const auto = suggestStorageLocationForPantryItem(name, category);
   if (auto !== scanHint) return auto;
   return scanHint;
+}
+
+/** Drop detections that already match something in the user's pantry (by id or normalized name). */
+export function filterDetectionsNotAlreadyInPantry(
+  detections: PantryVisionDetection[],
+  pantry: PantryItem[],
+): PantryVisionDetection[] {
+  if (pantry.length === 0) return detections;
+  const pantryCatalog = buildIngredientCatalog(pantry, []);
+  return detections.filter((detection) => {
+    const match = matchDetectionToCatalog(detection, pantryCatalog);
+    for (const item of pantry) {
+      if (item.ingredientId === match.ingredientId) return false;
+      if (areSameIngredientForPantryDedupe(item.name, match.name)) return false;
+    }
+    return true;
+  });
 }
 
 export function normalizeDetectionsForReview(
@@ -71,7 +89,10 @@ export function detectionsToReviewItems(
   isDemoSample: boolean,
   scanHint: PantryStorageLocation = DEFAULT_PANTRY_STORAGE_LOCATION,
 ): PantryScanReviewItem[] {
-  const normalized = normalizeDetectionsForReview(detections);
+  const normalized = filterDetectionsNotAlreadyInPantry(
+    normalizeDetectionsForReview(detections),
+    pantry,
+  );
   const catalog = buildIngredientCatalog(pantry, recipes);
   const stamp = Date.now();
   return normalized.map((detection, index) => {
