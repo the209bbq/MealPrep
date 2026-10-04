@@ -12,9 +12,10 @@ import { RecipeThumbnail } from './RecipeThumbnail';
 interface RecipesUnifiedFeedCardProps {
   row: RecipesTabRow;
   onOpen: () => void;
+  sourceTag?: string | null;
 }
 
-function RecipesUnifiedFeedCardInner({ row, onOpen }: RecipesUnifiedFeedCardProps) {
+function RecipesUnifiedFeedCardInner({ row, onOpen, sourceTag }: RecipesUnifiedFeedCardProps) {
   const name = row.recipe.name;
   const imageUri = useMemo(
     () =>
@@ -49,6 +50,11 @@ function RecipesUnifiedFeedCardInner({ row, onOpen }: RecipesUnifiedFeedCardProp
         >
           {shopLine}
         </Text>
+        {sourceTag ? (
+          <Text className="mt-1 text-[11px] text-muted" numberOfLines={1}>
+            {sourceTag}
+          </Text>
+        ) : null}
       </View>
     </Pressable>
   );
