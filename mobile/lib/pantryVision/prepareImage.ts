@@ -4,6 +4,7 @@ import { evaluateJpegBase64Quality } from './imageQuality';
 import {
   computeLongEdgeResize,
   PantryImageQualityError,
+  type PreparePantryImageOptions,
 } from './prepareImageShared';
 import type { PreparedPantryImage } from './types';
 
@@ -28,7 +29,14 @@ async function encodeWithQuality(
   );
 }
 
-export async function preparePantryImage(uri: string): Promise<PreparedPantryImage> {
+export async function preparePantryImage(
+  uri: string,
+  options?: PreparePantryImageOptions,
+): Promise<PreparedPantryImage> {
+  const maxLongEdge = options?.maxLongEdge ?? PHOTO_SCAN.maxImageDimension;
+  const maxPayloadBytes = options?.maxPayloadBytes ?? PHOTO_SCAN.maxPayloadBytes;
+  const skipQualityCheck = options?.skipQualityCheck ?? false;
+
   const oriented = await ImageManipulator.manipulateAsync(uri, [], {
     compress: 1,
     format: ImageManipulator.SaveFormat.JPEG,
@@ -37,10 +45,10 @@ export async function preparePantryImage(uri: string): Promise<PreparedPantryIma
   const { width: targetW, height: targetH } = computeLongEdgeResize(
     oriented.width,
     oriented.height,
-    PHOTO_SCAN.maxImageDimension,
+    maxLongEdge,
   );
 
-  let quality = PHOTO_SCAN.jpegQuality;
+  let quality = options?.jpegQuality ?? PHOTO_SCAN.jpegQuality;
   let manipulated = await encodeWithQuality(
     oriented.uri,
     targetW,
@@ -55,7 +63,7 @@ export async function preparePantryImage(uri: string): Promise<PreparedPantryIma
   }
   let byteLength = Math.floor((base64.length * 3) / 4);
 
-  while (byteLength > PHOTO_SCAN.maxPayloadBytes && quality > 0.42) {
+  while (byteLength > maxPayloadBytes && quality > 0.42) {
     quality -= 0.06;
     manipulated = await encodeWithQuality(
       oriented.uri,
@@ -70,23 +78,25 @@ export async function preparePantryImage(uri: string): Promise<PreparedPantryIma
     byteLength = Math.floor((base64.length * 3) / 4);
   }
 
-  if (byteLength > PHOTO_SCAN.maxPayloadBytes) {
+  if (byteLength > maxPayloadBytes) {
     throw new Error('Photo is still too large after resizing. Try a closer crop.');
   }
 
-  const thumb = await ImageManipulator.manipulateAsync(
-    manipulated.uri,
-    [{ resize: { width: 128 } }],
-    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-  );
   let qualityWarnings: string[] | undefined;
-  if (thumb.base64) {
-    const evaluation = await evaluateJpegBase64Quality(thumb.base64);
-    if (evaluation.hardReject === 'blank') {
-      throw new PantryImageQualityError('blank', evaluation.hardRejectMessage ?? PHOTO_SCAN.imageBlankMessage);
-    }
-    if (evaluation.warnings.length > 0) {
-      qualityWarnings = evaluation.warnings;
+  if (!skipQualityCheck) {
+    const thumb = await ImageManipulator.manipulateAsync(
+      manipulated.uri,
+      [{ resize: { width: 128 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    if (thumb.base64) {
+      const evaluation = await evaluateJpegBase64Quality(thumb.base64);
+      if (evaluation.hardReject === 'blank') {
+        throw new PantryImageQualityError('blank', evaluation.hardRejectMessage ?? PHOTO_SCAN.imageBlankMessage);
+      }
+      if (evaluation.warnings.length > 0) {
+        qualityWarnings = evaluation.warnings;
+      }
     }
   }
 

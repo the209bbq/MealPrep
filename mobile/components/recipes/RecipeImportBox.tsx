@@ -2,7 +2,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   Text,
   TextInput,
@@ -25,31 +24,14 @@ import {
   importRecipeFromUploadedVideoPath,
   importRecipeSmartInput,
 } from '../../lib/recipeImport/client';
-import { readImportLinkFromClipboard } from '../../lib/recipeImport/pasteImportLink';
+import {
+  pickRecipeImportPhotoFromCamera,
+  pickRecipeImportPhotosFromLibrary,
+  type RecipeImportPickedImage,
+} from '../../lib/recipeImport/pickRecipeImportPhoto';
 import type { RecipeImportExtractedDto, RecipeImportFallbacksDto } from '../../lib/recipeImport/types';
 import { uploadRecipeImportPhotos, uploadRecipeImportVideo } from '../../lib/recipeImport/uploadImportVideo';
 import { RecipeImportReviewSheet } from './RecipeImportReviewSheet';
-
-async function pickRecipeImages(max: number): Promise<{ mimeType: string; data: string }[]> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) {
-    throw new Error('Photo library permission is needed.');
-  }
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    allowsMultipleSelection: true,
-    selectionLimit: max,
-    quality: 0.85,
-    base64: true,
-  });
-  if (result.canceled || !result.assets?.length) return [];
-  return result.assets
-    .filter((asset) => asset.base64)
-    .map((asset) => ({
-      mimeType: asset.mimeType ?? 'image/jpeg',
-      data: asset.base64!,
-    }));
-}
 
 async function pickImportVideo(): Promise<{
   uri: string;
@@ -97,7 +79,6 @@ export function RecipeImportBox({
   const [error, setError] = useState<string | null>(null);
   const [fallbacks, setFallbacks] = useState<RecipeImportFallbacksDto | null>(null);
   const [review, setReview] = useState<RecipeImportExtractedDto | null>(null);
-  const [pasteHint, setPasteHint] = useState(false);
   const autoRunRef = useRef(false);
 
   const handleImportError = useCallback((err: unknown) => {
@@ -150,14 +131,49 @@ export function RecipeImportBox({
     void runSmartImport(initialText);
   }, [autoRun, initialText, runSmartImport]);
 
-  const pasteFromClipboard = useCallback(async () => {
-    setPasteHint(false);
+  async function uploadPickedImages(images: RecipeImportPickedImage[]) {
+    if ((!session && !demoMode) || !authUserId) {
+      setError(RECIPE_IMPORT_COPY.guestSignInMessage);
+      return null;
+    }
+    return uploadRecipeImportPhotos(
+      authUserId,
+      images.map((image) => ({
+        uri: '',
+        mimeType: image.mimeType,
+        base64: image.data,
+      })),
+    );
+  }
+
+  async function runCameraPhotoImport() {
+    if ((!session && !demoMode) || !authUserId) {
+      setError(RECIPE_IMPORT_COPY.guestSignInMessage);
+      return;
+    }
+    setLoading(true);
     setError(null);
-    const pasted = await readImportLinkFromClipboard();
-    if (!pasted) return;
-    setInput(pasted);
-    setPasteHint(true);
-  }, []);
+    try {
+      const images = await pickRecipeImportPhotoFromCamera();
+      if (images.length === 0) {
+        setLoading(false);
+        return;
+      }
+      const paths = await uploadPickedImages(images);
+      if (!paths) {
+        setLoading(false);
+        return;
+      }
+      const token = session?.access_token ?? null;
+      const extracted = await importRecipeFromPhotos(token, { photoStoragePaths: paths });
+      setReview(extracted);
+      setFallbacks(null);
+    } catch (err) {
+      handleImportError(err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function runPhotoImport() {
     if ((!session && !demoMode) || !authUserId) {
@@ -167,19 +183,16 @@ export function RecipeImportBox({
     setLoading(true);
     setError(null);
     try {
-      const images = await pickRecipeImages(RECIPE_IMPORT.maxPhotos);
+      const images = await pickRecipeImportPhotosFromLibrary(RECIPE_IMPORT.maxPhotos);
       if (images.length === 0) {
         setLoading(false);
         return;
       }
-      const paths = await uploadRecipeImportPhotos(
-        authUserId,
-        images.map((image) => ({
-          uri: '',
-          mimeType: image.mimeType,
-          base64: image.data,
-        })),
-      );
+      const paths = await uploadPickedImages(images);
+      if (!paths) {
+        setLoading(false);
+        return;
+      }
       const token = session?.access_token ?? null;
       const extracted = await importRecipeFromPhotos(token, { photoStoragePaths: paths });
       setReview(extracted);
@@ -222,19 +235,16 @@ export function RecipeImportBox({
     }
     setLoading(true);
     try {
-      const images = await pickRecipeImages(RECIPE_IMPORT.maxPhotos);
+      const images = await pickRecipeImportPhotosFromLibrary(RECIPE_IMPORT.maxPhotos);
       if (images.length === 0) {
         setLoading(false);
         return;
       }
-      const paths = await uploadRecipeImportPhotos(
-        authUserId,
-        images.map((image) => ({
-          uri: '',
-          mimeType: image.mimeType,
-          base64: image.data,
-        })),
-      );
+      const paths = await uploadPickedImages(images);
+      if (!paths) {
+        setLoading(false);
+        return;
+      }
       const token = session?.access_token ?? null;
       const extracted = await importRecipeFromScreenshots(token, {
         captionText: input.trim() || undefined,
@@ -267,14 +277,6 @@ export function RecipeImportBox({
     }
   }
 
-  function openMediaPicker() {
-    Alert.alert(RECIPE_IMPORT_COPY.needMoreHint, undefined, [
-      { text: RECIPE_IMPORT_COPY.addPhotoCta, onPress: () => void runPhotoImport() },
-      { text: RECIPE_IMPORT_COPY.addVideoCta, onPress: () => void runVideoImport() },
-      { text: RECIPE_IMPORT_COPY.cancel, style: 'cancel' },
-    ]);
-  }
-
   return (
     <>
       <View className="mt-3">
@@ -283,7 +285,6 @@ export function RecipeImportBox({
             value={input}
             onChangeText={(text) => {
               setInput(text);
-              setPasteHint(false);
               setError(null);
               setFallbacks(null);
             }}
@@ -296,25 +297,15 @@ export function RecipeImportBox({
             accessibilityLabel={RECIPE_IMPORT_COPY.importBoxLabel}
             onSubmitEditing={() => void runSmartImport()}
           />
-          <View className="flex-row items-center border-l border-border">
-            <Pressable
-              onPress={() => void pasteFromClipboard()}
-              className="min-h-[48px] justify-center px-3"
-              accessibilityRole="button"
-              accessibilityLabel={RECIPE_IMPORT_COPY.pasteLinkAccessibility}
-            >
-              <Text className="text-xs font-bold text-primary">{RECIPE_IMPORT_COPY.pasteLinkCta}</Text>
-            </Pressable>
-            <Pressable
-              onPress={openMediaPicker}
-              disabled={loading}
-              className="min-h-[48px] items-center justify-center border-l border-border px-3"
-              accessibilityRole="button"
-              accessibilityLabel={RECIPE_IMPORT_COPY.cameraAccessibility}
-            >
-              <Ionicons name="camera-outline" size={22} color={THEME.primary} />
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={() => void runCameraPhotoImport()}
+            disabled={loading}
+            className="min-h-[48px] items-center justify-center border-l border-border px-3"
+            accessibilityRole="button"
+            accessibilityLabel={RECIPE_IMPORT_COPY.cameraAccessibility}
+          >
+            <Ionicons name="camera-outline" size={22} color={THEME.primary} />
+          </Pressable>
         </View>
         <Pressable
           onPress={() => void runSmartImport()}
@@ -329,8 +320,8 @@ export function RecipeImportBox({
             <Text className="text-sm font-bold text-on-primary">{RECIPE_IMPORT_COPY.importCta}</Text>
           )}
         </Pressable>
-        {pasteHint ? (
-          <Text className="mt-1 text-xs text-muted">{RECIPE_IMPORT_COPY.pasteAppliedHint}</Text>
+        {!loading && !error && !fallbacks ? (
+          <Text className="mt-1 text-xs text-muted">{RECIPE_IMPORT_COPY.importBoxHint}</Text>
         ) : null}
         {loading ? (
           <Text className="mt-1 text-xs text-muted">{RECIPE_IMPORT_COPY.importing}</Text>

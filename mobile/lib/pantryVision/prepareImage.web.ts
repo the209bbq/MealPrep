@@ -8,6 +8,7 @@ import {
   computeLongEdgeResize,
   evaluateImageQuality,
   PantryImageQualityError,
+  type PreparePantryImageOptions,
 } from './prepareImageShared';
 import type { PreparedPantryImage } from './types';
 
@@ -105,16 +106,23 @@ function evaluateCanvasQuality(canvas: HTMLCanvasElement) {
   return evaluateImageQuality(luma, width, height);
 }
 
-export async function preparePantryImageFromFile(file: File): Promise<PreparedPantryImage> {
+export async function preparePantryImageFromFile(
+  file: File,
+  options?: PreparePantryImageOptions,
+): Promise<PreparedPantryImage> {
   if (file.size <= 0) {
     throw new Error('That photo file looks empty. Try picking it again.');
   }
+
+  const maxLongEdge = options?.maxLongEdge ?? PHOTO_SCAN.maxImageDimension;
+  const maxPayloadBytes = options?.maxPayloadBytes ?? PHOTO_SCAN.maxPayloadBytes;
+  const skipQualityCheck = options?.skipQualityCheck ?? false;
 
   const bitmap = await loadBitmap(file);
   const { width: targetW, height: targetH } = computeLongEdgeResize(
     bitmap.width,
     bitmap.height,
-    PHOTO_SCAN.maxImageDimension,
+    maxLongEdge,
   );
 
   const canvas = document.createElement('canvas');
@@ -125,24 +133,27 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
   ctx.drawImage(bitmap, 0, 0, targetW, targetH);
   bitmap.close?.();
 
-  const qualityAssessment = evaluateCanvasQuality(canvas);
-  if (qualityAssessment.hardReject === 'blank') {
-    throw new PantryImageQualityError('blank', qualityAssessment.hardRejectMessage ?? PHOTO_SCAN.imageBlankMessage);
+  let qualityWarnings: string[] | undefined;
+  if (!skipQualityCheck) {
+    const qualityAssessment = evaluateCanvasQuality(canvas);
+    if (qualityAssessment.hardReject === 'blank') {
+      throw new PantryImageQualityError('blank', qualityAssessment.hardRejectMessage ?? PHOTO_SCAN.imageBlankMessage);
+    }
+    qualityWarnings =
+      qualityAssessment.warnings.length > 0 ? qualityAssessment.warnings : undefined;
   }
-  const qualityWarnings =
-    qualityAssessment.warnings.length > 0 ? qualityAssessment.warnings : undefined;
 
-  let quality = PHOTO_SCAN.jpegQuality;
+  let quality = options?.jpegQuality ?? PHOTO_SCAN.jpegQuality;
   let base64 = canvasToJpegBase64(canvas, quality);
   let byteLength = Math.floor((base64.length * 3) / 4);
 
-  while (byteLength > PHOTO_SCAN.maxPayloadBytes && quality > 0.42) {
+  while (byteLength > maxPayloadBytes && quality > 0.42) {
     quality -= 0.06;
     base64 = canvasToJpegBase64(canvas, quality);
     byteLength = Math.floor((base64.length * 3) / 4);
   }
 
-  if (byteLength > PHOTO_SCAN.maxPayloadBytes) {
+  if (byteLength > maxPayloadBytes) {
     throw new Error('Photo is still too large after resizing. Try a closer crop.');
   }
 
@@ -165,7 +176,10 @@ export async function preparePantryImageFromFile(file: File): Promise<PreparedPa
 }
 
 /** Resize an object URL / data URL (from image picker on web). */
-export async function preparePantryImage(uri: string): Promise<PreparedPantryImage> {
+export async function preparePantryImage(
+  uri: string,
+  options?: PreparePantryImageOptions,
+): Promise<PreparedPantryImage> {
   let blob: Blob;
   try {
     const response = await fetch(uri);
@@ -179,5 +193,5 @@ export async function preparePantryImage(uri: string): Promise<PreparedPantryIma
 
   const mimeType = blob.type ? inferImageMimeType({ name: 'photo.jpg', type: blob.type }) : 'image/jpeg';
   const file = new File([blob], 'pantry.jpg', { type: mimeType });
-  return preparePantryImageFromFile(file);
+  return preparePantryImageFromFile(file, options);
 }
