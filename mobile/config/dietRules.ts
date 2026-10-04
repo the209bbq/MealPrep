@@ -151,10 +151,6 @@ export const ALLERGEN_KEYWORD_RULES: { allergens: AllergenId[]; keywords: string
       'beer',
       'malt',
       'seitan',
-      'regular oats',
-      'rolled oats',
-      'oatmeal',
-      'oats',
     ],
   },
 ];
