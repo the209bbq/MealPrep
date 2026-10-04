@@ -357,7 +357,7 @@ interface AppContextValue {
   feedKitchenRecipes: Recipe[];
   refreshLibraryRecipes: () => void;
   libraryRecipesLoading: boolean;
-  addMissingRecipeIngredientsToGrocery: (recipeId: string) => void;
+  addMissingRecipeIngredientsToGrocery: (recipeId: string, matchOverride?: RecipePantryMatch) => void;
   addMissingDiscoveryRecipeIngredientsToGrocery: (item: RecipeDiscoveryListItem) => void;
   onboarding: ReturnType<typeof useOnboarding>;
   accountUi: {
@@ -2044,8 +2044,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addMissingRecipeIngredientsToGrocery = useCallback(
-    (recipeId: string) => {
-      const match = pantryRecipeMatches.byRecipeId.get(recipeId);
+    (recipeId: string, matchOverride?: RecipePantryMatch) => {
+      const match = matchOverride ?? pantryRecipeMatches.byRecipeId.get(recipeId);
       if (!match) return;
       appendMissingIngredientsForRecipe(recipeId, match.missing, { showToast: true });
     },

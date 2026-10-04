@@ -24,6 +24,8 @@ import {
 import type { RecipePantryMatch } from '../../lib/recipeMatch';
 import { LIBRARY_RECIPES } from '../../config/libraryRecipes';
 import { isLibraryRecipeAppId } from '../../lib/libraryRecipes/slug';
+import { isMealDbRecipeId } from '../../lib/mealdb/normalize';
+import { MealDbRecipeCreditLine } from './MealDbRecipeCreditLine';
 import type { Recipe } from '../../types/mealprep';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 
@@ -35,7 +37,7 @@ export interface RecipeDetailSheetProps {
   batchCalculatorEnabled: boolean;
   onClose: () => void;
   onChangeServings: (next: number) => void;
-  onAddMissingKitchen: (recipeId: string) => void;
+  onAddMissingKitchen: (recipeId: string, matchOverride?: RecipePantryMatch) => void;
   onAddMissingDiscovery: (recipe: RecipeDiscoveryListItem) => void;
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
   onToggleKitchen: (recipeId: string) => void;
@@ -160,10 +162,15 @@ export function RecipeDetailSheet({
       ? scheduleTargetFromKitchenRecipe(row.recipe)
       : scheduleTargetFromDiscoveryRecipe(row.recipe);
 
+  const isMealDbCatalog =
+    row.kind === 'kitchen' && (isMealDbRecipeId(row.recipe.id) || row.recipe.sourceType === 'themealdb');
+
   const onPlan =
-    row.kind === 'kitchen'
+    row.kind === 'kitchen' && !isMealDbCatalog
       ? isOnMealPlan({ recipeSlug: row.recipe.id })
-      : isOnMealPlan({ recipeApiId: row.recipe.id });
+      : row.kind === 'discovery'
+        ? isOnMealPlan({ recipeApiId: row.recipe.id })
+        : false;
 
   const missingCount = match?.missingCount ?? 0;
 
@@ -195,7 +202,13 @@ export function RecipeDetailSheet({
               <Text className="mt-1 text-xs text-muted">{LIBRARY_RECIPES.detailTag}</Text>
             ) : null}
 
-            {row.kind === 'kitchen' && (sourceCredit?.creatorName || sourceCredit?.originalUrl) ? (
+            {row.kind === 'kitchen' && isMealDbCatalog ? (
+              <MealDbRecipeCreditLine recipe={row.recipe} className="mt-1" />
+            ) : null}
+
+            {row.kind === 'kitchen' &&
+            !isMealDbCatalog &&
+            (sourceCredit?.creatorName || sourceCredit?.originalUrl) ? (
               <RecipeSourceCreditLine
                 creatorName={sourceCredit.creatorName}
                 creatorUrl={sourceCredit.creatorUrl}
@@ -209,28 +222,30 @@ export function RecipeDetailSheet({
             </Text>
 
             <View className="mt-3 flex-row flex-wrap items-center gap-2">
-              <Pressable
-                onPress={() => {
-                  if (importing) return;
-                  if (row.kind === 'kitchen') void onToggleKitchen(row.recipe.id);
-                  else void onToggleDiscovery(row.recipe);
-                }}
-                disabled={importing}
-                className={`rounded-full px-3 py-1.5 ${onPlan ? 'bg-primary' : 'border border-border bg-card'}`}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add
-                }
-              >
-                <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-ink'}`}>
-                  {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
-                </Text>
-              </Pressable>
+              {!isMealDbCatalog ? (
+                <Pressable
+                  onPress={() => {
+                    if (importing) return;
+                    if (row.kind === 'kitchen') void onToggleKitchen(row.recipe.id);
+                    else void onToggleDiscovery(row.recipe);
+                  }}
+                  disabled={importing}
+                  className={`rounded-full px-3 py-1.5 ${onPlan ? 'bg-primary' : 'border border-border bg-card'}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add
+                  }
+                >
+                  <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-ink'}`}>
+                    {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
+                  </Text>
+                </Pressable>
+              ) : null}
               <AddToCalendarButton target={scheduleTarget} size={20} className="rounded-full border border-border bg-card p-2" />
               {!importing && missingCount > 0 ? (
                 <Pressable
                   onPress={() => {
-                    if (row.kind === 'kitchen') onAddMissingKitchen(row.recipe.id);
+                    if (row.kind === 'kitchen') onAddMissingKitchen(row.recipe.id, match ?? undefined);
                     else onAddMissingDiscovery(row.recipe);
                   }}
                   className="rounded-full border border-primary bg-primary-light px-3 py-1.5"

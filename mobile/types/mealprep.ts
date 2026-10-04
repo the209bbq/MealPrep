@@ -136,7 +136,15 @@ export interface Recipe {
   isMaster: boolean;
   createdAt: string;
   sourceUrl?: string;
-  sourceType?: 'youtube' | 'web' | 'tiktok' | 'instagram' | 'facebook' | 'photo' | 'video';
+  sourceType?:
+    | 'youtube'
+    | 'web'
+    | 'tiktok'
+    | 'instagram'
+    | 'facebook'
+    | 'photo'
+    | 'video'
+    | 'themealdb';
   sourceTitle?: string;
   sourceChannelName?: string;
   sourceChannelUrl?: string;
