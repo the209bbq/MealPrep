@@ -271,6 +271,15 @@ export default function RecipesScreen() {
 
   const activeCreator = selectedCreator ?? channelCreator;
 
+  const detailCreatorAvatarUrl = useMemo(() => {
+    if (!viralOpenState) return null;
+    const videoId = viralOpenState.item.videoId;
+    const fromBrowse = browseVideoModels.find((m) => m.videoId === videoId);
+    if (fromBrowse) return fromBrowse.video.creatorAvatarUrl;
+    const fromChannel = channelVideos.find((v) => v.videoId === videoId);
+    return fromChannel?.creatorAvatarUrl ?? null;
+  }, [browseVideoModels, channelVideos, viralOpenState]);
+
   const detailRecipeSaved = useMemo(() => {
     if (!detailRow || detailRow.kind !== 'kitchen') return false;
     if (detailRow.recipe.id.startsWith('viral-preview-') && viralOpenState) {
@@ -561,6 +570,8 @@ export default function RecipesScreen() {
         visible={detailRow != null}
         row={detailRow}
         match={detailMatch}
+        viralItem={viralOpenState?.item ?? null}
+        creatorAvatarUrl={detailCreatorAvatarUrl}
         importing={viralOpenState?.importing ?? false}
         importError={viralOpenState?.importError}
         onRetryImport={

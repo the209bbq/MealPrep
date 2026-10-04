@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { GroceryEmptyState } from '../../components/grocery/GroceryEmptyState';
-import { GroceryItemRow } from '../../components/grocery/GroceryItemRow';
+import { GroceryItemSwipeRow } from '../../components/grocery/GroceryItemSwipeRow';
 import { CATEGORY_LABELS, THEME } from '../../config/appConfig';
 import { APP_ROUTES } from '../../config/appRoutes';
 import { GROCERY_COPY } from '../../config/grocery';
@@ -54,7 +54,6 @@ export default function GroceryScreen() {
   const [manualCategory, setManualCategory] = useState<PantryCategory>(() => inferGroceryCategoryFromName(''));
   const [aisleTouched, setAisleTouched] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
   const [addError, setAddError] = useState<{ title: string; message: string } | null>(null);
 
   const open = useMemo(() => grocery.filter((g) => !g.checked), [grocery]);
@@ -85,16 +84,6 @@ export default function GroceryScreen() {
   function confirmClearChecked() {
     setClearConfirmOpen(false);
     clearCheckedGroceryItems();
-  }
-
-  function requestRemoveItem(id: string, name: string) {
-    setRemoveTarget({ id, name });
-  }
-
-  function confirmRemoveItem() {
-    if (!removeTarget) return;
-    removeGroceryItem(removeTarget.id);
-    setRemoveTarget(null);
   }
 
   function submitManualItem() {
@@ -192,12 +181,12 @@ export default function GroceryScreen() {
                       <Text className="text-sm text-muted">({section.items.length})</Text>
                     </View>
                     {section.items.map((item) => (
-                      <GroceryItemRow
+                      <GroceryItemSwipeRow
                         key={item.id}
                         item={item}
                         recipeLabels={recipeLabelFor(item)}
                         onToggle={() => toggleGroceryItem(item.id)}
-                        onRemove={() => requestRemoveItem(item.id, item.name)}
+                        onRemove={() => removeGroceryItem(item.id)}
                         communityDeal={communityBadges.get(item.id)}
                       />
                     ))}
@@ -219,12 +208,12 @@ export default function GroceryScreen() {
                   </Pressable>
                   {cartExpanded
                     ? done.map((item) => (
-                        <GroceryItemRow
+                        <GroceryItemSwipeRow
                           key={item.id}
                           item={item}
                           recipeLabels={recipeLabelFor(item)}
                           onToggle={() => toggleGroceryItem(item.id)}
-                          onRemove={() => requestRemoveItem(item.id, item.name)}
+                          onRemove={() => removeGroceryItem(item.id)}
                           dimmed
                         />
                       ))
@@ -276,17 +265,6 @@ export default function GroceryScreen() {
         cancelLabel={GROCERY_COPY.cancel}
         onConfirm={() => setAddError(null)}
         onCancel={() => setAddError(null)}
-      />
-
-      <ConfirmDialog
-        visible={removeTarget != null}
-        title={GROCERY_COPY.removeItemTitle}
-        message={removeTarget ? GROCERY_COPY.removeItemMessage(removeTarget.name) : ''}
-        confirmLabel={GROCERY_COPY.removeItem}
-        cancelLabel={GROCERY_COPY.cancel}
-        destructive
-        onConfirm={confirmRemoveItem}
-        onCancel={() => setRemoveTarget(null)}
       />
 
       <Modal visible={addOpen} animationType="slide" transparent onRequestClose={() => setAddOpen(false)}>
