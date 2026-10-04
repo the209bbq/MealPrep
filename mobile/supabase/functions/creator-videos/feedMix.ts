@@ -20,9 +20,11 @@ function channelWeight(
 function pickScore<T extends MixableVideo>(
   row: T,
   weights: Map<string, number> | undefined,
+  viewScore?: (row: T) => number,
 ): number {
   const fitBoost = channelWeight(row.channel_id, weights) * 1_000_000_000_000;
-  return fitBoost + row.view_count;
+  const views = viewScore ? viewScore(row) : row.view_count;
+  return fitBoost + views;
 }
 
 /**
@@ -34,14 +36,18 @@ export function mixCreatorFeed<T extends MixableVideo>(
     topWindow?: number;
     maxPerCreator?: number;
     channelFitWeight?: Map<string, number>;
+    viewScore?: (row: T) => number;
   },
 ): T[] {
   const topWindow = options?.topWindow ?? DEFAULT_TOP_WINDOW;
   const maxPerCreator = options?.maxPerCreator ?? DEFAULT_MAX_PER_CREATOR;
   const weights = options?.channelFitWeight;
+  const viewScore = options?.viewScore;
   if (rows.length <= 1) return [...rows];
 
-  const pool = [...rows].sort((a, b) => pickScore(b, weights) - pickScore(a, weights));
+  const pool = [...rows].sort(
+    (a, b) => pickScore(b, weights, viewScore) - pickScore(a, weights, viewScore),
+  );
   const head: T[] = [];
   const counts = new Map<string, number>();
 
@@ -54,7 +60,7 @@ export function mixCreatorFeed<T extends MixableVideo>(
       const channelId = candidate.channel_id;
       const count = counts.get(channelId) ?? 0;
       if (count >= maxPerCreator) continue;
-      const score = pickScore(candidate, weights);
+      const score = pickScore(candidate, weights, viewScore);
       if (score > pickScoreValue) {
         pickScoreValue = score;
         pickIndex = i;
@@ -68,7 +74,9 @@ export function mixCreatorFeed<T extends MixableVideo>(
     head.push(picked);
   }
 
-  const tail = pool.sort((a, b) => pickScore(b, weights) - pickScore(a, weights));
+  const tail = pool.sort(
+    (a, b) => pickScore(b, weights, viewScore) - pickScore(a, weights, viewScore),
+  );
   return [...head, ...tail];
 }
 

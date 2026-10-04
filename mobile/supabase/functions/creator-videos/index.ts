@@ -5,6 +5,7 @@
 // JWT verification off — the app sends the Supabase publishable (anon) key, not a user JWT.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { applyHideOverrides, loadCreatorVideoOverrides } from './creatorVideoOverrides.ts';
 import { buildChannelFitWeightMap, mixCreatorFeed } from './feedMix.ts';
 import { compareCreatorsByFitAndSubscribers } from './fitOrder.ts';
 import {
@@ -80,6 +81,7 @@ interface CreatorRow {
   channel_url: string;
   avatar_url: string | null;
   subscriber_count: number;
+  avg_views: number;
   rank: number | null;
   fit: string | null;
   source: string | null;
@@ -190,7 +192,7 @@ async function loadCreatorsMap(
   const { data, error } = await admin
     .from('recipe_creators')
     .select(
-      'id, youtube_channel_id, display_name, handle, channel_url, avatar_url, subscriber_count, rank, fit, source',
+      'id, youtube_channel_id, display_name, handle, channel_url, avatar_url, subscriber_count, avg_views, rank, fit, source',
     )
     .eq('enabled', true);
   if (error) throw error;
@@ -206,6 +208,8 @@ async function readFeedVideos(
   admin: ReturnType<typeof createClient>,
   mode: FeedMode,
   channelFitWeight: Map<string, number>,
+  creatorsMap: Map<string, CreatorRow>,
+  hideOverrides: ReadonlyMap<string, 'hide' | 'show'>,
 ): Promise<VideoRow[]> {
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   let query = admin
@@ -216,7 +220,7 @@ async function readFeedVideos(
     .limit(400);
 
   if (mode === 'popular') {
-    query = query.gte('published_at', ninetyDaysAgo).order('view_count', { ascending: false });
+    query = query.gte('published_at', ninetyDaysAgo);
   } else if (mode === 'new') {
     query = query.order('published_at', { ascending: false, nullsFirst: false });
   } else {
@@ -225,12 +229,22 @@ async function readFeedVideos(
 
   const { data, error } = await query;
   if (error) throw error;
-  let rows = (data ?? []) as VideoRow[];
+  let rows = applyHideOverrides((data ?? []) as VideoRow[], hideOverrides);
 
   if (mode === 'popular') {
     rows = rows.filter(
       (row) => !isLowQualityFeedVideo(row.title, row.description_snippet ?? ''),
     );
+    const relativeViewScore = (row: VideoRow): number => {
+      const channelAvg = creatorsMap.get(row.channel_id)?.avg_views ?? 0;
+      const baseline = channelAvg > 0 ? channelAvg : Math.max(row.view_count, 1);
+      return row.view_count / baseline;
+    };
+    rows = mixCreatorFeed(rows, {
+      channelFitWeight: channelFitWeight,
+      viewScore: (row) => Math.round(relativeViewScore(row) * 1_000_000),
+    });
+    return rows.slice(0, 60);
   }
 
   if (mode === 'quick') {
@@ -250,7 +264,7 @@ async function readFeedVideos(
     rows.sort((a, b) => b.view_count - a.view_count);
   }
 
-  return mixCreatorFeed(rows, { channelFitWeight }).slice(0, 60);
+  return mixCreatorFeed(rows, { channelFitWeight: channelFitWeight }).slice(0, 60);
 }
 
 async function handlePublicAction(
@@ -259,6 +273,7 @@ async function handlePublicAction(
   limitKey: string,
 ): Promise<Response> {
   const creatorsMap = await loadCreatorsMap(admin);
+  const hideOverrides = await loadCreatorVideoOverrides(admin);
 
   if (body.action === 'creators') {
     const creators = [...creatorsMap.values()]
@@ -293,14 +308,16 @@ async function handlePublicAction(
       .order('published_at', { ascending: false, nullsFirst: false })
       .limit(80);
     if (error) throw error;
-    const videos = ((data ?? []) as VideoRow[]).map((row) => videoToDto(row, creator));
+    const videos = applyHideOverrides((data ?? []) as VideoRow[], hideOverrides).map((row) =>
+      videoToDto(row, creator),
+    );
     return jsonResponse({ creator: creatorToDto(creator), videos });
   }
 
   if (body.action === 'feed') {
     const mode = parseFeedMode(body.mode);
     const fitWeights = buildChannelFitWeightMap(creatorsMap.values());
-    const rows = await readFeedVideos(admin, mode, fitWeights);
+    const rows = await readFeedVideos(admin, mode, fitWeights, creatorsMap, hideOverrides);
     const videos = rows.map((row) => videoToDto(row, creatorsMap.get(row.channel_id)));
     return jsonResponse({ mode, videos });
   }
@@ -318,7 +335,7 @@ async function handlePublicAction(
     }
     const { data, error } = await admin.rpc('search_creator_videos', { p_query: q, p_limit: 40 });
     if (error) throw error;
-    const rows = (data ?? []) as VideoRow[];
+    const rows = applyHideOverrides((data ?? []) as VideoRow[], hideOverrides);
     const videos = rows.map((row) => videoToDto(row, creatorsMap.get(row.channel_id)));
     return jsonResponse({ videos, q });
   }
@@ -357,10 +374,14 @@ async function refreshAllEnabledCreators(
   let videoCount = 0;
   let youtubeUnitsEstimate = 0;
 
+  const videoOverrides = await loadCreatorVideoOverrides(admin);
+
   for (const row of creators ?? []) {
     const channelId = (row as { youtube_channel_id: string }).youtube_channel_id;
     const seedName = (row as { display_name?: string }).display_name ?? channelId;
-    const outcome = await refreshAndPersistCreator(admin, apiKey, channelId);
+    const outcome = await refreshAndPersistCreator(admin, apiKey, channelId, {
+      videoOverrides,
+    });
     youtubeUnitsEstimate += outcome.youtubeUnits;
     videoCount += outcome.videosUpserted;
     results.push({
@@ -413,8 +434,10 @@ async function refreshSingleCreator(
 
   if (!channelId) return null;
 
+  const videoOverrides = await loadCreatorVideoOverrides(admin);
   const outcome = await refreshAndPersistCreator(admin, apiKey, channelId, {
     creatorPatchOnInsert: isNewByHandle ? creatorPatch ?? undefined : undefined,
+    videoOverrides,
   });
   youtubeUnitsEstimate += outcome.youtubeUnits;
 

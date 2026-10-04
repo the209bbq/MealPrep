@@ -5,28 +5,40 @@ const NON_RECIPE_TITLE = new RegExp(
   'i',
 );
 
-/** Hard excludes — checked on title first, then full text for channel/TV/news patterns. */
+/** Hard excludes — title only (never description boilerplate). */
 const EXCLUDE_TITLE = new RegExp(
   '\\b(' +
-    'i tried|every country|\\$\\s*1\\s*vs|ranked|ranks|taste test|eating\\b|mukbang|' +
-    'review|blender|knives|machine|burner|protein bars|equipment|' +
-    'taking a break|retirement|subscribers|feedback|announcement|update\\b|' +
+    'i tried|every country|\\$\\s*1\\s*vs|ranked|ranks|taste test|mukbang|' +
+    'review|blender|knives|burner|protein bars|equipment|' +
+    'taking a break|retirement|feedback|announcement|' +
     'full episode|recap|beat bobby flay|chopped|restaurant impossible|diners, drive-ins|' +
-    '\\bhacks\\b' +
+    '\\bhacks\\b|challenge|mystery|last meals|gear heads|kitchen tools|gadget|' +
+    'levels of|tasters|\\brate\\b|explains|what does|how to pick|answering|' +
+    'questions|takes on|controversial' +
   ')\\b',
   'i',
 );
 
-const EXCLUDE_ANYWHERE = new RegExp(
-  '\\b(subscribers|thank you to our \\d|million subscribers|q\\s*&\\s*a)\\b',
+/** Subscriber / milestone videos — title only (descriptions often mention subscribers). */
+const EXCLUDE_CHANNEL_NEWS_TITLE = new RegExp(
+  '\\b(subscribers|thank you to our \\d|million subscribers)\\b',
   'i',
 );
+
+const EXCLUDE_VS = /\s+vs\.?\s+/i;
+
+const EXCLUDE_LIVE_PREFIX = /^LIVE:/i;
+
+const EXCLUDE_TOOLS_IN_TITLE = /\b(tools|kitchen tools)\b/i;
 
 const GEAR_BEST_UNDER = /\bbest\b.{0,40}\bunder\s*\$/i;
 
 /** Meal-focused grocery / budget challenges (keep) override generic "challenge" noise. */
 const MEAL_CHALLENGE_KEEP = new RegExp(
-  '\\b((\\d+\\s+)?cheap\\s+dinners?|budget\\s+meals?|grocery\\s+challenge.{0,40}(dinners?|meals?|recipes?))\\b',
+  '\\b(' +
+    '(\\d+\\s+)?cheap\\s+dinners?|budget\\s+meals?|' +
+    'grocery\\s+challenge|\\$\\d+\\s+grocery\\s+challenge' +
+  ').{0,50}\\b(dinners?|meals?|recipes?|week)\\b|\\b(dinners?|meals?|recipes?)\\b.{0,50}\\b(grocery\\s+challenge|\\$\\d+\\s+grocery)\\b',
   'i',
 );
 
@@ -35,7 +47,9 @@ const TITLE_RECIPE_SIGNAL = new RegExp(
     'recipe|recipes|cook|cooking|bake|baking|dinner|dinners|lunch|breakfast|brunch|meal|meals|' +
     'meal prep|air fryer|instant pot|slow cooker|soup|stew|curry|pasta|chicken|beef|steak|salmon|' +
     'tacos|salad|dessert|cookies|cake|how to make|sheet pan|one[- ]pan|one[- ]pot|shakshuka|rag[uù]|' +
-    'bolognese|tenders|orange chicken|budget|turkey|pork|vegetables' +
+    'bolognese|tenders|orange chicken|budget|turkey|pork|vegetables|' +
+    'burger|pizza|rice|bread|potato|potatoes|shrimp|ramen|sandwich|chili|casserole|fish|poach|ice cream|' +
+    'fed my family|\\$\\d+\\s+meal' +
   ')\\b',
   'i',
 );
@@ -82,9 +96,12 @@ export function isExcludedNonRecipeContent(title: string, descriptionSnippet: st
   if (MEAL_CHALLENGE_KEEP.test(titleText)) return false;
 
   if (NON_RECIPE_TITLE.test(combined)) return true;
+  if (EXCLUDE_CHANNEL_NEWS_TITLE.test(titleText)) return true;
+  if (EXCLUDE_LIVE_PREFIX.test(titleText)) return true;
+  if (EXCLUDE_VS.test(titleText)) return true;
+  if (EXCLUDE_TOOLS_IN_TITLE.test(titleText)) return true;
   if (EXCLUDE_TITLE.test(titleText)) return true;
   if (GEAR_BEST_UNDER.test(titleText)) return true;
-  if (EXCLUDE_ANYWHERE.test(combined)) return true;
 
   return false;
 }
