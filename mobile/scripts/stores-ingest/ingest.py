@@ -11,6 +11,7 @@ import re
 import sys
 import textwrap
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Optional
@@ -423,6 +424,75 @@ def estimate_size_bytes(rows: list[StoreRow]) -> int:
     return int(per * len(rows))
 
 
+WEBSITE_CHECK_UA = (
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+)
+WEBSITE_CHECK_TIMEOUT = 8.0
+
+
+def _normalize_website_url(website: Optional[str]) -> Optional[str]:
+    if not website:
+        return None
+    raw = website.strip()
+    if not raw:
+        return None
+    if not re.match(r"^https?://", raw, re.I):
+        raw = f"https://{raw.lstrip('/')}"
+    return raw[:500]
+
+
+def _website_alive(url: str) -> bool:
+    headers = {"User-Agent": WEBSITE_CHECK_UA}
+    try:
+        head = requests.head(url, headers=headers, timeout=WEBSITE_CHECK_TIMEOUT, allow_redirects=True)
+        if head.status_code == 405 or head.status_code >= 500:
+            get = requests.get(
+                url,
+                headers=headers,
+                timeout=WEBSITE_CHECK_TIMEOUT,
+                allow_redirects=True,
+                stream=True,
+            )
+            get.close()
+            return get.status_code < 400
+        return head.status_code < 400
+    except requests.RequestException:
+        return False
+
+
+def null_dead_websites(rows: list[StoreRow], workers: int = 16) -> list[StoreRow]:
+    """Set website to NULL when HEAD/GET fails (DNS, timeout, 4xx/5xx)."""
+    urls: dict[str, list[StoreRow]] = {}
+    for row in rows:
+        url = _normalize_website_url(row.website)
+        if url:
+            urls.setdefault(url, []).append(row)
+
+    if not urls:
+        return rows
+
+    alive: dict[str, bool] = {}
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = {pool.submit(_website_alive, url): url for url in urls}
+        for fut in as_completed(futures):
+            url = futures[fut]
+            try:
+                alive[url] = fut.result()
+            except Exception:
+                alive[url] = False
+
+    nulled = 0
+    for url, group in urls.items():
+        if alive.get(url):
+            continue
+        for row in group:
+            row.website = None
+            nulled += 1
+    print(f"Website check: nulled {nulled} dead URLs ({len(urls)} unique checked)", file=sys.stderr)
+    return rows
+
+
 def upsert_postgres(rows: list[StoreRow], database_url: str, batch_size: int) -> None:
     import psycopg2
 
@@ -525,6 +595,12 @@ def main() -> None:
     parser.add_argument("--mode", choices=["postgres", "supabase-api"], default="supabase-api")
     parser.add_argument("--project-ref", default=os.environ.get("SUPABASE_PROJECT_REF"))
     parser.add_argument("--batch-size", type=int, default=1000)
+    parser.add_argument(
+        "--check-websites",
+        action="store_true",
+        help="Concurrently verify store websites; set website to NULL when unreachable",
+    )
+    parser.add_argument("--website-check-workers", type=int, default=16)
     args = parser.parse_args()
 
     release = args.release or latest_overture_release()
@@ -532,6 +608,8 @@ def main() -> None:
     rows = fetch_overture_rows(release, args.state)
     rows = drop_walmart_pickup_near_store(rows)
     rows = dedupe_nearby(rows)
+    if args.check_websites:
+        rows = null_dead_websites(rows, workers=args.website_check_workers)
     est = estimate_size_bytes(rows)
     print(f"Rows after filter/dedupe: {len(rows)}")
     print(f"Estimated JSON payload ~{est / 1024:.1f} KiB ({est / (1024*1024):.2f} MiB)")

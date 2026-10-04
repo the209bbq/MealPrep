@@ -6,7 +6,12 @@ import { mapsDirectionsUrl } from '../../config/smartShop';
 import type { StoreLocation } from '../../lib/deals/types';
 import { formatDistanceMiles } from '../../lib/stores/storeDistance';
 import { openExternalUrl } from '../../lib/smartShop/openExternalUrl';
-import { resolveStorePageUrl, resolveStorePhone, resolveWeeklyAdLink } from '../../lib/stores/storeLinks';
+import {
+  resolveStorePageUrl,
+  resolveStorePageUsesGoogleMaps,
+  resolveStorePhone,
+  resolveWeeklyAdLink,
+} from '../../lib/stores/storeLinks';
 import { formatStoreAddress } from '../../lib/stores/formatAddress';
 import { StoreDeliveryRow } from './StoreDeliveryRow';
 
@@ -21,6 +26,9 @@ export function StoreDetailSheet({ store, onClose }: Props) {
   const phone = resolveStorePhone(store);
   const directionsUrl = mapsDirectionsUrl(store);
   const storePageUrl = resolveStorePageUrl(store);
+  const storePageLabel = resolveStorePageUsesGoogleMaps(store)
+    ? STORES_TAB_COPY.detailViewOnGoogleMaps
+    : STORES_TAB_COPY.detailStorePage;
   const weeklyAd = resolveWeeklyAdLink(store);
 
   return (
@@ -82,7 +90,7 @@ export function StoreDetailSheet({ store, onClose }: Props) {
               className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-paper px-4 py-3"
             >
               <Ionicons name="storefront-outline" size={20} color={THEME.primary} />
-              <Text className="font-bold text-primary">{STORES_TAB_COPY.detailStorePage}</Text>
+              <Text className="font-bold text-primary">{storePageLabel}</Text>
             </Pressable>
 
             {weeklyAd ? (

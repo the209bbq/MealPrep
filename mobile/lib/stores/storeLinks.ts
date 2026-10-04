@@ -29,11 +29,15 @@ function fillStorePageTemplate(template: string, store: Pick<StoreLocation, 'nam
 export function googleMapsPlaceSearchUrl(
   store: Pick<StoreLocation, 'name' | 'chain' | 'addressLine' | 'city' | 'state' | 'zip' | 'lat' | 'lng'>,
 ): string {
-  if (store.lat != null && store.lng != null) {
-    return `https://www.google.com/maps/search/?api=1&query=${store.lat},${store.lng}`;
-  }
   const q = encodeURIComponent(storeSearchQuery(store));
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
+}
+
+export function resolveStorePageUsesGoogleMaps(
+  store: Pick<StoreLocation, 'name' | 'chain' | 'krogerLocationId' | 'pricingSource'>,
+): boolean {
+  const chain = resolveStoreChainConfig(store);
+  return !chain?.storePageUrl;
 }
 
 export function resolveStorePageUrl(
@@ -45,12 +49,6 @@ export function resolveStorePageUrl(
   const chain = resolveStoreChainConfig(store);
   if (chain?.storePageUrl) {
     return fillStorePageTemplate(chain.storePageUrl, store);
-  }
-
-  const direct = store.website?.trim();
-  if (direct) {
-    if (/^https?:\/\//i.test(direct)) return direct;
-    return `https://${direct.replace(/^\/\//, '')}`;
   }
 
   return googleMapsPlaceSearchUrl(store);
