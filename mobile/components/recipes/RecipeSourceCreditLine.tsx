@@ -55,7 +55,7 @@ export function RecipeSourceCreditLine({
           accessibilityLabel={RECIPE_IMPORT_COPY.viewOriginalAccessibility}
           hitSlop={4}
         >
-          <Text className="text-xs font-semibold text-primary">{RECIPE_IMPORT_COPY.viewOriginal}</Text>
+          <Text className="text-sm font-semibold text-primary">{RECIPE_IMPORT_COPY.viewOriginal}</Text>
         </Pressable>
       ) : null}
     </View>

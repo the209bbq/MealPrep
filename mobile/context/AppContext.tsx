@@ -27,6 +27,7 @@ import {
   clearGroceryDismissals,
   groceryDismissalKey,
   readGroceryDismissals,
+  removeGroceryDismissals,
 } from '../lib/grocery/dismissals';
 import { applyGroceryCheckRestock, reverseGroceryCheckRestock } from '../lib/grocery/restockLedger';
 import { bumpGroceryPersistGeneration, enqueueGroceryPersist } from '../lib/grocery/persistQueue';
@@ -1628,6 +1629,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUndoToast({
           message: GROCERY_COPY.undoRemoved(removed.name),
           onUndo: () => {
+            removeGroceryDismissals(ownerId, dismissalKeys);
             setGrocery(previous);
             persistGroceryList(previous);
             setUndoToast(null);

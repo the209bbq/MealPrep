@@ -23,6 +23,16 @@ export function addGroceryDismissals(ownerId: string, keys: string[]): void {
   writeJson(storageKey(ownerId), [...current]);
 }
 
+export function removeGroceryDismissals(ownerId: string, keys: string[]): void {
+  if (keys.length === 0) return;
+  const current = readGroceryDismissals(ownerId);
+  let changed = false;
+  for (const key of keys) {
+    if (current.delete(key)) changed = true;
+  }
+  if (changed) writeJson(storageKey(ownerId), [...current]);
+}
+
 export function clearGroceryDismissals(ownerId: string): void {
   removeStorageKey(storageKey(ownerId));
 }
