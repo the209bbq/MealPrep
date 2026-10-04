@@ -10,6 +10,7 @@ const shots = [
   { path: '/pantry', file: 'tab_pantry.png' },
   { path: '/recipes', file: 'tab_recipes.png' },
   { path: '/grocery', file: 'tab_grocery.png' },
+  { path: '/stores', file: 'tab_stores.png' },
   { path: '/admin', file: 'tab_admin_panel.png', role: 'admin' },
   { path: '/', file: 'tab_home_member.png', role: 'member' },
 ];

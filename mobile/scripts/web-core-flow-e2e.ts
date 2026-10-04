@@ -245,7 +245,7 @@ async function exerciseRecipesQuestionFilter(page: Page): Promise<void> {
 /** Nudge is Home-only; demo/web E2E runs without Supabase (demo mode hides the nudge entirely). */
 async function assertGuestSaveNudgeNotOnKitchenTabs(page: Page): Promise<void> {
   const message = GUEST_SAVE_NUDGE_CONFIG.copy.message;
-  for (const tab of ['Pantry', 'Recipes', 'Grocery List'] as const) {
+  for (const tab of ['Pantry', 'Recipes', 'Grocery'] as const) {
     await page.getByRole('tab', { name: tab }).click();
     const body = await page.locator('body').innerText();
     assert(!body.includes(message), `guest save nudge should not appear on ${tab}`);

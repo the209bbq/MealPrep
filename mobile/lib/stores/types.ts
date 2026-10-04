@@ -16,6 +16,14 @@ export interface StoreRecord {
   pricingSource: StorePricingSource;
   krogerLocationId?: string;
   url?: string;
+  phone?: string;
+  website?: string;
+  /** Per-store delivery or order-ahead URL (Instacart, store portal, etc.). */
+  deliveryUrl?: string;
+  openingHours?: string;
+  openNow?: boolean;
+  /** When set, show a non-numeric pricing teaser (no invented prices). */
+  pricingTeaser?: 'coming_soon';
 }
 
 export interface NearbyStoreSearchParams {

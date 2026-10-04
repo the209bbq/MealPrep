@@ -10,6 +10,7 @@ import {
 } from './groceryFilter';
 import { readPersistentCache, readPersistentCacheStale, writePersistentCache } from './osmPersistentCache';
 import { raceOverpassMirrors } from './overpassFetch';
+import { storeRecordExtrasFromOsmTags } from './storeLinks';
 import type { NearbyStoreSearchParams, StoreRecord } from './types';
 
 function parseAddress(tags: Record<string, string>): {
@@ -98,6 +99,7 @@ function elementsToStores(
       source: 'osm',
       pricingSource: 'none',
       url: undefined,
+      ...storeRecordExtrasFromOsmTags(tags),
     });
   }
 

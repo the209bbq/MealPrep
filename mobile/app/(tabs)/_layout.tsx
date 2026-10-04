@@ -50,7 +50,7 @@ export default function TabsLayout() {
             paddingBottom: 6,
             paddingTop: 6,
           },
-          tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+          tabBarLabelStyle: { fontSize: 9, fontWeight: '600' },
         }}
       >
         {TABS.map((tab) => (
