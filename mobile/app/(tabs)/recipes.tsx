@@ -4,10 +4,12 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
 import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedFeedCard';
+import { ViralRecipesFeedCard } from '../../components/recipes/ViralRecipesFeedCard';
+import { ViralRecipesFeedModeDropdown } from '../../components/recipes/ViralRecipesFeedModeDropdown';
 import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { RECIPES_COPY } from '../../config/recipesCopy';
-import { THEME } from '../../config/appConfig';
+import { THEME, isViralRecipesConfigured } from '../../config/appConfig';
 import {
   applyRecipesTabFilters,
   discoveryRecipeServingOverrideId,
@@ -17,17 +19,25 @@ import {
 } from '../../config/recipesTabFilters';
 import { useRecipesTabFilters } from '../../hooks/useRecipesTabFilters';
 import { usePantryDiscoverySuggestions } from '../../hooks/usePantryDiscoverySuggestions';
+import { useViralRecipes } from '../../hooks/useViralRecipes';
+import { useViralRecipeOpen } from '../../hooks/useViralRecipeOpen';
 import { useApp } from '../../context/AppContext';
 import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
+import { buildMyRecipesFeedRows, buildViralFeedCardModels } from '../../lib/recipes/viralFeedRows';
 import { RECIPE_SOURCES } from '../../config/recipeSources';
+import { isViralRecipesCategory, VIRAL_RECIPES_COPY, type ViralRecipesFeedMode } from '../../config/viralRecipes';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
+import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 
 export default function RecipesScreen() {
   const params = useLocalSearchParams<{ recipeId?: string; url?: string; text?: string; import?: string }>();
   const {
     pantry,
     session,
+    demoMode,
+    openAuthSheet,
+    saveLinkImportedRecipe,
     servingOverrides,
     setServingOverride,
     applyServingOverridesBatch,
@@ -47,6 +57,29 @@ export default function RecipesScreen() {
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
   const [pickedDetailRow, setPickedDetailRow] = useState<RecipesTabRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [feedMode, setFeedMode] = useState<ViralRecipesFeedMode>('viral');
+  const viralFeedEnabled = RECIPE_SOURCES.viralRecipesPrimaryFeed && isViralRecipesConfigured();
+  const viralCategory = isViralRecipesCategory(feedMode) ? feedMode : 'viral';
+  const { items: viralItems, loading: viralLoading, error: viralError } = useViralRecipes(
+    session,
+    viralCategory,
+  );
+
+  const {
+    viralOpenState,
+    openViralItem,
+    closeViral,
+    retryImport,
+  } = useViralRecipeOpen({
+    session,
+    demoMode,
+    kitchenRecipes: feedKitchenRecipes,
+    pantry,
+    pantryMatches: pantryRecipeMatches,
+    saveImported: saveLinkImportedRecipe,
+    openAuthSheet,
+  });
+
   const sharedImportText = useMemo(() => {
     const direct = typeof params.url === 'string' ? params.url.trim() : '';
     if (direct) return direct;
@@ -78,7 +111,19 @@ export default function RecipesScreen() {
 
   const kitchenRecipes = useMemo(() => feedKitchenRecipes, [feedKitchenRecipes]);
 
+  const myRecipesBaseRows = useMemo(
+    () =>
+      buildMyRecipesFeedRows({
+        kitchenRecipes,
+        pantryMatches: pantryRecipeMatches,
+      }),
+    [kitchenRecipes, pantryRecipeMatches],
+  );
+
   const filterBaseRows = useMemo((): RecipesTabRow[] => {
+    if (viralFeedEnabled && feedMode === 'my_recipes') {
+      return myRecipesBaseRows;
+    }
     const kitchenOnly = buildRecipesTabCatalogRows({
       kitchenRecipes,
       pantryMatches: pantryRecipeMatches,
@@ -90,12 +135,28 @@ export default function RecipesScreen() {
       pantryMatches: pantryRecipeMatches,
       discoverySuggestions,
     });
-  }, [discoverySuggestions, kitchenRecipes, pantryRecipeMatches]);
+  }, [
+    discoverySuggestions,
+    feedMode,
+    kitchenRecipes,
+    myRecipesBaseRows,
+    pantryRecipeMatches,
+    viralFeedEnabled,
+  ]);
 
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
     return buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
   }, [filterBaseRows, filters, searchQuery, feedDiversitySeed]);
+
+  const viralCardModels = useMemo(() => {
+    if (!viralFeedEnabled || feedMode === 'my_recipes') return [];
+    const haystack = searchQuery.trim().toLowerCase();
+    const filtered = haystack
+      ? viralItems.filter((item) => item.title.toLowerCase().includes(haystack))
+      : viralItems;
+    return buildViralFeedCardModels(filtered, kitchenRecipes, pantryRecipeMatches);
+  }, [feedMode, kitchenRecipes, pantryRecipeMatches, searchQuery, viralFeedEnabled, viralItems]);
 
   function showDifferentIdeas() {
     setFeedDiversitySeed((value) => value + 1);
@@ -107,6 +168,7 @@ export default function RecipesScreen() {
   }
 
   const detailRow = useMemo(() => {
+    if (viralOpenState) return viralOpenState.row;
     if (pickedDetailRow) return pickedDetailRow;
     if (!routeRecipeId) return null;
     return (
@@ -114,7 +176,16 @@ export default function RecipesScreen() {
         (candidate) => candidate.kind === 'kitchen' && candidate.recipe.id === routeRecipeId,
       ) ?? null
     );
-  }, [filterBaseRows, pickedDetailRow, routeRecipeId]);
+  }, [filterBaseRows, pickedDetailRow, routeRecipeId, viralOpenState]);
+
+  const detailMatch = useMemo(() => {
+    if (!detailRow) return undefined;
+    if (viralOpenState && detailRow.kind === 'kitchen') {
+      const fresh = pantryRecipeMatches.byRecipeId.get(detailRow.recipe.id);
+      if (fresh) return fresh;
+    }
+    return detailRow.match;
+  }, [detailRow, pantryRecipeMatches.byRecipeId, viralOpenState]);
 
   const peopleTargetServings = recipesTabPeopleTargetServings(filters.people);
   useEffect(() => {
@@ -147,28 +218,49 @@ export default function RecipesScreen() {
     setServingOverride(discoveryRecipeServingOverrideId(detailRow.recipe.id), next);
   }
 
-  const hasUnfilteredResults = filterBaseRows.length > 0;
+  const showMyRecipesFeed = viralFeedEnabled && feedMode === 'my_recipes';
+  const showLegacyKitchenFeed = !viralFeedEnabled;
+
+  const hasUnfilteredResults = showMyRecipesFeed
+    ? myRecipesBaseRows.length > 0
+    : showLegacyKitchenFeed
+      ? filterBaseRows.length > 0
+      : viralCardModels.length > 0;
   const showFilterEmpty =
+    showMyRecipesFeed &&
     recipesTabNarrowingFiltersActive(filters) &&
     hasUnfilteredResults &&
     filteredRows.length === 0 &&
     !searchQuery.trim();
 
   const showCatalogEmpty =
-    !showFilterEmpty && !discoveryLoading && filterBaseRows.length === 0 && !searchQuery.trim();
+    !showFilterEmpty &&
+    !discoveryLoading &&
+    !viralLoading &&
+    !hasUnfilteredResults &&
+    !searchQuery.trim();
 
   const showSearchEmpty =
     !discoveryLoading &&
-    filterBaseRows.length > 0 &&
-    filteredRows.length === 0 &&
+    !viralLoading &&
+    hasUnfilteredResults &&
+    (showMyRecipesFeed ? filteredRows.length === 0 : viralCardModels.length === 0) &&
     Boolean(searchQuery.trim());
+
+  const showSignInOnImportError =
+    Boolean(viralOpenState?.importError) &&
+    viralOpenState?.importError === RECIPE_IMPORT_COPY.guestSignInMessage &&
+    !session &&
+    !demoMode;
 
   return (
     <ScrollView className="flex-1 bg-paper px-4 pb-8">
       <Card
         className="mt-4"
-        title={RECIPES_COPY.cookNowCard.title}
-        subtitle={RECIPES_COPY.cookNowCard.subtitle}
+        title={viralFeedEnabled ? VIRAL_RECIPES_COPY.feedTitle : RECIPES_COPY.cookNowCard.title}
+        subtitle={
+          viralFeedEnabled ? VIRAL_RECIPES_COPY.feedSubtitle : RECIPES_COPY.cookNowCard.subtitle
+        }
       >
         <View className="mt-2 flex-row items-center gap-2">
           <TextInput
@@ -181,34 +273,41 @@ export default function RecipesScreen() {
             autoCorrect={false}
             accessibilityLabel="Search recipes"
           />
+          {viralFeedEnabled ? (
+            <ViralRecipesFeedModeDropdown value={feedMode} onChange={setFeedMode} />
+          ) : null}
         </View>
         <RecipeImportFromShareParams
           url={typeof params.url === 'string' ? params.url : undefined}
           text={typeof params.text === 'string' ? params.text : undefined}
           autoRun={autoStartSharedImport}
         />
-        <RecipesTabFilterBar
-          baseRows={filterBaseRows}
-          filters={filters}
-          onSetFilter={setFilter}
-          onClearAll={clearAllFilters}
-        />
+        {showMyRecipesFeed || showLegacyKitchenFeed ? (
+          <RecipesTabFilterBar
+            baseRows={filterBaseRows}
+            filters={filters}
+            onSetFilter={setFilter}
+            onClearAll={clearAllFilters}
+          />
+        ) : null}
         {pantryEmpty ? (
           <Text className="mt-2 text-xs text-muted">{RECIPES_COPY.cookNowCard.emptyPantryBrowseHint}</Text>
         ) : null}
-        <Pressable
-          onPress={showDifferentIdeas}
-          disabled={discoveryLoading || libraryRecipesLoading}
-          className="mt-2 min-h-[40px] items-center justify-center rounded-lg px-3 py-2"
-          accessibilityRole="button"
-          accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
-        >
-          <Text className="text-sm font-semibold text-primary">
-            {discoveryLoading || libraryRecipesLoading
-              ? RECIPES_COPY.discoveryPanel.searching
-              : RECIPES_COPY.cookNowCard.showDifferentIdeas}
-          </Text>
-        </Pressable>
+        {(showMyRecipesFeed || showLegacyKitchenFeed) && !viralFeedEnabled ? (
+          <Pressable
+            onPress={showDifferentIdeas}
+            disabled={discoveryLoading || libraryRecipesLoading}
+            className="mt-2 min-h-[40px] items-center justify-center rounded-lg px-3 py-2"
+            accessibilityRole="button"
+            accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
+          >
+            <Text className="text-sm font-semibold text-primary">
+              {discoveryLoading || libraryRecipesLoading
+                ? RECIPES_COPY.discoveryPanel.searching
+                : RECIPES_COPY.cookNowCard.showDifferentIdeas}
+            </Text>
+          </Pressable>
+        ) : null}
       </Card>
 
       {discoveryLoading ? (
@@ -221,23 +320,59 @@ export default function RecipesScreen() {
         <Text className="mt-3 text-sm text-muted">{discoveryError}</Text>
       ) : null}
 
+      {viralFeedEnabled && feedMode !== 'my_recipes' && viralLoading ? (
+        <View className="mt-4 flex-row items-center gap-2">
+          <ActivityIndicator color={THEME.primary} />
+          <Text className="text-sm text-muted">{VIRAL_RECIPES_COPY.loading}</Text>
+        </View>
+      ) : null}
+      {viralFeedEnabled && feedMode !== 'my_recipes' && !viralLoading && viralError ? (
+        <Text className="mt-3 text-sm text-muted">{viralError}</Text>
+      ) : null}
+
       {showCatalogEmpty ? <RecipesEmptyState pantryEmpty={false} /> : null}
       {showFilterEmpty ? <RecipesTabFiltersEmptyState onClearAll={clearAllFilters} /> : null}
       {showSearchEmpty ? (
         <Text className="mt-4 text-sm text-muted">{RECIPES_COPY.discoveryPanel.noFilterResults}</Text>
       ) : null}
 
-      {filteredRows.map((row) => (
-        <RecipesUnifiedFeedCard key={row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`} row={row} onOpen={() => openDetail(row)} />
-      ))}
+      {viralFeedEnabled && feedMode !== 'my_recipes'
+        ? viralCardModels.map((model) => (
+            <ViralRecipesFeedCard
+              key={model.videoId}
+              model={model}
+              onOpen={() => {
+                openViralItem(model.item);
+                onboarding.notifyTutorialStepComplete('recipes');
+              }}
+            />
+          ))
+        : null}
+
+      {showMyRecipesFeed || showLegacyKitchenFeed
+        ? filteredRows.map((row) => (
+            <RecipesUnifiedFeedCard
+              key={row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`}
+              row={row}
+              onOpen={() => openDetail(row)}
+            />
+          ))
+        : null}
 
       <RecipeDetailSheet
         visible={detailRow != null}
         row={detailRow}
-        match={detailRow?.match}
+        match={detailMatch}
         servings={detailServings}
         batchCalculatorEnabled={Boolean(featureFlags.batchCalculator)}
+        importing={viralOpenState?.importing ?? false}
+        importError={viralOpenState?.importError}
+        onRetryImport={
+          viralOpenState?.importError && !showSignInOnImportError ? retryImport : undefined
+        }
+        onSignInForImport={showSignInOnImportError ? openAuthSheet : undefined}
         onClose={() => {
+          closeViral();
           setPickedDetailRow(null);
           if (routeRecipeId) router.replace('/recipes');
         }}

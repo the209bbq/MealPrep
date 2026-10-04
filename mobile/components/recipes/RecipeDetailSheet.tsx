@@ -1,6 +1,7 @@
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { VIRAL_RECIPES_COPY } from '../../config/viralRecipes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddToCalendarButton } from '../mealCalendar/AddToCalendarButton';
 import { THEME } from '../../config/appConfig';
@@ -39,6 +40,11 @@ export interface RecipeDetailSheetProps {
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
   onToggleKitchen: (recipeId: string) => void;
   onToggleDiscovery: (recipe: RecipeDiscoveryListItem) => void;
+  /** Viral tap-to-import: show spinner in ingredients/steps while recipe-import runs. */
+  importing?: boolean;
+  importError?: string | null;
+  onRetryImport?: () => void;
+  onSignInForImport?: () => void;
 }
 
 type DetailSection = 'ingredients' | 'steps';
@@ -119,6 +125,10 @@ export function RecipeDetailSheet({
   isOnMealPlan,
   onToggleKitchen,
   onToggleDiscovery,
+  importing = false,
+  importError = null,
+  onRetryImport,
+  onSignInForImport,
 }: RecipeDetailSheetProps) {
   const insets = useSafeAreaInsets();
   const [section, setSection] = useState<DetailSection>('ingredients');
@@ -201,9 +211,11 @@ export function RecipeDetailSheet({
             <View className="mt-3 flex-row flex-wrap items-center gap-2">
               <Pressable
                 onPress={() => {
+                  if (importing) return;
                   if (row.kind === 'kitchen') void onToggleKitchen(row.recipe.id);
                   else void onToggleDiscovery(row.recipe);
                 }}
+                disabled={importing}
                 className={`rounded-full px-3 py-1.5 ${onPlan ? 'bg-primary' : 'border border-border bg-card'}`}
                 accessibilityRole="button"
                 accessibilityLabel={
@@ -215,7 +227,7 @@ export function RecipeDetailSheet({
                 </Text>
               </Pressable>
               <AddToCalendarButton target={scheduleTarget} size={20} className="rounded-full border border-border bg-card p-2" />
-              {missingCount > 0 ? (
+              {!importing && missingCount > 0 ? (
                 <Pressable
                   onPress={() => {
                     if (row.kind === 'kitchen') onAddMissingKitchen(row.recipe.id);
@@ -230,6 +242,31 @@ export function RecipeDetailSheet({
                 </Pressable>
               ) : null}
             </View>
+
+            {importing ? (
+              <View className="mt-3 flex-row items-center gap-2">
+                <ActivityIndicator color={THEME.primary} size="small" />
+                <Text className="text-sm text-muted">{VIRAL_RECIPES_COPY.detailImporting}</Text>
+              </View>
+            ) : null}
+            {importError ? (
+              <View className="mt-3">
+                <Text className="text-sm text-muted">{importError}</Text>
+                {onRetryImport ? (
+                  <Pressable onPress={onRetryImport} className="mt-2 self-start rounded-lg border border-border px-3 py-2">
+                    <Text className="text-xs font-bold text-primary">Try again</Text>
+                  </Pressable>
+                ) : null}
+                {onSignInForImport ? (
+                  <Pressable
+                    onPress={onSignInForImport}
+                    className="mt-2 self-start rounded-lg bg-primary px-3 py-2"
+                  >
+                    <Text className="text-xs font-bold text-on-primary">{RECIPE_IMPORT_COPY.guestSignInCta}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
 
             <SectionToggle section={section} onSection={setSection} />
 
@@ -261,7 +298,9 @@ export function RecipeDetailSheet({
                     </Pressable>
                   </View>
                 ) : null}
-                {kitchenRecipe.ingredients.length === 0 ? (
+                {importing ? (
+                  <Text className="text-sm text-muted">{VIRAL_RECIPES_COPY.detailImporting}</Text>
+                ) : kitchenRecipe.ingredients.length === 0 ? (
                   <Text className="text-sm text-muted">No ingredients listed.</Text>
                 ) : (
                   kitchenRecipe.ingredients.map((ing) => (
@@ -278,7 +317,9 @@ export function RecipeDetailSheet({
               </View>
             ) : (
               <View className="mt-3">
-                {kitchenRecipe.steps.length === 0 ? (
+                {importing ? (
+                  <Text className="text-sm text-muted">{VIRAL_RECIPES_COPY.detailImporting}</Text>
+                ) : kitchenRecipe.steps.length === 0 ? (
                   <Text className="text-sm text-muted">
                     {kitchenRecipe.sourceUrl ? RECIPE_IMPORT_COPY.noSteps : 'No steps listed.'}
                   </Text>
