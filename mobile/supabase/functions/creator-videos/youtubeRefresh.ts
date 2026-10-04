@@ -1,4 +1,8 @@
 import {
+  shouldPersistVideoOnRefresh,
+  type CreatorVideoOverrideAction,
+} from './creatorVideoOverrides.ts';
+import {
   isRecipeLikeVideo,
   parseIsoDurationSeconds,
 } from './recipeVideoFilter.ts';
@@ -241,6 +245,7 @@ export async function refreshCreatorVideos(
   apiKey: string,
   channelId: string,
   uploadsPlaylistId: string,
+  overrides: ReadonlyMap<string, CreatorVideoOverrideAction> = new Map(),
 ): Promise<{ videos: VideoUpsertRow[]; avgViews: number; avgLikes: number }> {
   const playlistItems = await fetchPlaylistVideoIds(apiKey, uploadsPlaylistId, UPLOADS_PAGE_SIZE);
   const ids = playlistItems.map((row) => row.videoId);
@@ -252,7 +257,17 @@ export async function refreshCreatorVideos(
     const detail = stats.get(item.videoId);
     const snippetDesc = detail?.snippet?.description?.trim() ?? item.description;
     const title = detail?.snippet?.title?.trim() ?? item.title;
-    if (!isRecipeLikeVideo(title, snippetDesc)) continue;
+    if (
+      !shouldPersistVideoOnRefresh(
+        item.videoId,
+        title,
+        snippetDesc,
+        overrides,
+        isRecipeLikeVideo,
+      )
+    ) {
+      continue;
+    }
 
     const durationSeconds = parseIsoDurationSeconds(detail?.contentDetails?.duration);
     const isShort = durationSeconds != null && durationSeconds > 0 && durationSeconds <= 60;

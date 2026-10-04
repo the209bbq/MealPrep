@@ -53,6 +53,15 @@ insert into public.recipe_creators (
 
 Then run refresh for that handle or channel ID to pull uploads and avatars.
 
+### Manual video overrides
+
+Table `creator_video_overrides` (`video_id`, `action` = `hide` | `show`, optional `note`) — **service role only**. Rows are honored on refresh (force skip/include) and on read (hide removes from feeds, search, and creator pages). Example:
+
+```sql
+insert into public.creator_video_overrides (video_id, action, note)
+values ('dQw4w9WgXcQ', 'hide', 'listicle slipped through filter');
+```
+
 ### Add a creator by handle only
 
 You can insert a row with only `handle` and a placeholder `youtube_channel_id`, or skip SQL and use the refresh endpoint with `handle` — it resolves the channel via `channels.list` `forHandle` (**1 unit**) and upserts the row.
@@ -119,11 +128,11 @@ curl -sS -X POST "$SUPABASE_URL/functions/v1/creator-videos" \
   -d '{"action":"refresh","channelId":"UCxxxxxxxxxxxxxxxx"}'
 ```
 
-Public read actions (JWT / anon): `creators`, `creator`, `feed` (`popular` | `new` | `quick` | `budget`), `search` (Postgres full-text — **no YouTube quota**).
+Public read actions (JWT / anon): `creators`, `creator`, `feed` (`popular` ranks by views ÷ channel `avg_views` over the last 90 days, then mixes creators; `new` | `quick` | `budget`), `search` (Postgres full-text — **no YouTube quota**).
 
 ### pg_cron (~every 12 hours)
 
-Migration `supabase/migrations/20261004150000_creator_videos_refresh_cron.sql` enables `pg_cron` + `pg_net` (if needed) and schedules refresh. It reads secrets from **Supabase Vault** — never embed `CREATOR_ADMIN_SECRET` in SQL.
+Migrations `20261004150000_creator_videos_refresh_cron.sql` and `20261004161000_creator_videos_refresh_cron_timeout.sql` enable `pg_cron` + `pg_net` (if needed) and schedule refresh with a **120s** `pg_net` HTTP timeout. Secrets come from **Supabase Vault** — never embed `CREATOR_ADMIN_SECRET` in SQL.
 
 **1. Store Vault secrets** (SQL editor or Dashboard → Database → Vault):
 

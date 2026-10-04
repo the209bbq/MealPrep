@@ -1,4 +1,5 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import type { CreatorVideoOverrideAction } from './creatorVideoOverrides.ts';
 import {
   estimateRefreshUnitsForCreator,
   estimateVideoListChunks,
@@ -40,9 +41,13 @@ export async function refreshAndPersistCreator(
   admin: SupabaseClient,
   apiKey: string,
   channelId: string,
-  options?: { creatorPatchOnInsert?: Record<string, unknown> },
+  options?: {
+    creatorPatchOnInsert?: Record<string, unknown>;
+    videoOverrides?: ReadonlyMap<string, CreatorVideoOverrideAction>;
+  },
 ): Promise<CreatorRefreshResult> {
   const displayNameFallback = channelId;
+  let youtubeUnits = 1;
 
   try {
     const bundle = await fetchChannelBundle(apiKey, channelId);
@@ -61,8 +66,9 @@ export async function refreshAndPersistCreator(
       apiKey,
       channelId,
       bundle.uploadsPlaylistId,
+      options?.videoOverrides ?? new Map(),
     );
-    const youtubeUnits = estimateRefreshUnitsForCreator(
+    youtubeUnits = estimateRefreshUnitsForCreator(
       1,
       estimateVideoListChunks(Math.max(videos.length, 1)),
     );
