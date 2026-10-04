@@ -56,7 +56,6 @@ export const TABS: TabConfig[] = [
 
 export const FEATURE_FLAG_DEFAULTS: FeatureFlags = {
   photoScan: true,
-  batchCalculator: true,
   grocerySync: true,
   smartShop: true,
   maintenanceMode: false,
@@ -206,10 +205,6 @@ export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; bl
   photoScan: {
     title: 'Photo pantry scan',
     blurb: 'Camera or gallery flow on Pantry with Gemini vision via the pantry-vision Edge Function.',
-  },
-  batchCalculator: {
-    title: 'Batch meal prep calculator',
-    blurb: 'Scale recipe servings and portions from the Recipes tab.',
   },
   grocerySync: {
     title: 'Grocery aggregation',

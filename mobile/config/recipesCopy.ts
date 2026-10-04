@@ -55,13 +55,6 @@ export const RECIPES_COPY = {
     addMissingCta: 'Add missing to grocery list',
   },
 
-  batchCalculator: {
-    title: 'Batch meal prep calculator',
-    scalingSubtitle: (recipeName: string) => `Scaling ${recipeName}`,
-    targetServings: (baseServings: number) => `Target servings (base: ${baseServings})`,
-    scaledIngredients: 'Scaled ingredients',
-  },
-
   mealPlanChip: {
     onPlan: 'In meals',
     add: 'Add to meals',

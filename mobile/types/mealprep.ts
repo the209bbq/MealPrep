@@ -23,7 +23,6 @@ export type PantryCategory = (typeof PANTRY_CATEGORIES)[number];
 
 export const FEATURE_FLAG_KEYS = [
   'photoScan',
-  'batchCalculator',
   'grocerySync',
   'smartShop',
   'maintenanceMode',

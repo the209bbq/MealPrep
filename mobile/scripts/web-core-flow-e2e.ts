@@ -206,7 +206,6 @@ async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): P
     RECIPES_TAB_FILTER_COPY.questions.shop,
     RECIPES_TAB_FILTER_COPY.questions.difficulty,
     RECIPES_TAB_FILTER_COPY.questions.meal,
-    RECIPES_TAB_FILTER_COPY.questions.people,
   ];
   const pickedLabels: string[] = [];
   for (const question of filterQuestions) {

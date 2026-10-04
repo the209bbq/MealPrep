@@ -7,14 +7,12 @@ import {
   RECIPES_TAB_DIFFICULTY_CHOICES,
   RECIPES_TAB_FILTER_COPY,
   RECIPES_TAB_MEAL_CHOICES,
-  RECIPES_TAB_PEOPLE_CHOICES,
   RECIPES_TAB_SHOP_CHOICES,
   RECIPES_TAB_TIME_CHOICES,
   type RecipesTabDifficultyChoice,
   type RecipesTabFilterDimension,
   type RecipesTabFilterState,
   type RecipesTabMealChoice,
-  type RecipesTabPeopleChoice,
   type RecipesTabRow,
   type RecipesTabShopChoice,
   type RecipesTabTimeChoice,
@@ -48,8 +46,6 @@ function optionLabel(
       return RECIPES_TAB_FILTER_COPY.options.meal[value as Exclude<RecipesTabMealChoice, 'any'>];
     case 'shop':
       return RECIPES_TAB_FILTER_COPY.options.shop[value as Exclude<RecipesTabShopChoice, 'any'>];
-    case 'people':
-      return RECIPES_TAB_FILTER_COPY.options.people[value as Exclude<RecipesTabPeopleChoice, 'any'>];
     default:
       return value;
   }
@@ -65,8 +61,6 @@ function choicesForDimension(dimension: RecipesTabFilterDimension): string[] {
       return RECIPES_TAB_MEAL_CHOICES;
     case 'shop':
       return RECIPES_TAB_SHOP_CHOICES;
-    case 'people':
-      return RECIPES_TAB_PEOPLE_CHOICES;
     default:
       return ['any'];
   }
@@ -263,16 +257,6 @@ export function RecipesTabFilterBar({
                 open={openDimension === 'meal'}
                 onToggleOpen={() => toggleDimension('meal')}
                 onSelect={(next) => selectDimension('meal', next as RecipesTabMealChoice)}
-              />
-              <FilterQuestion
-                question={RECIPES_TAB_FILTER_COPY.questions.people}
-                dimension="people"
-                value={filters.people}
-                baseRows={baseRows}
-                filters={filters}
-                open={openDimension === 'people'}
-                onToggleOpen={() => toggleDimension('people')}
-                onSelect={(next) => selectDimension('people', next as RecipesTabPeopleChoice)}
               />
               {active ? (
                 <Pressable
