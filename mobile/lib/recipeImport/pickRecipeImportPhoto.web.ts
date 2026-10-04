@@ -1,5 +1,6 @@
-import { resolveImageMimeType } from '../web/inferImageMimeType';
+import { preparePantryImageFromFile } from '../pantryVision/prepareImage.web';
 import { pickWebImageFile } from '../web/pickWebImageFile';
+import { RECIPE_IMPORT_PHOTO_PREPARE } from './prepareRecipeImportPhotoShared';
 
 export type RecipeImportPickedImage = { mimeType: string; data: string };
 
@@ -9,33 +10,22 @@ export const RECIPE_IMPORT_CAMERA_PERMISSION_MESSAGE =
 export const RECIPE_IMPORT_PHOTO_LIBRARY_PERMISSION_MESSAGE =
   'Could not open your photos. Try again or pick a different image.';
 
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== 'string') {
-        reject(new Error('Could not read photo'));
-        return;
-      }
-      const comma = result.indexOf(',');
-      resolve(comma >= 0 ? result.slice(comma + 1) : result);
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read photo'));
-    reader.readAsDataURL(file);
-  });
+async function prepareFromWebFile(file: File): Promise<RecipeImportPickedImage> {
+  try {
+    const prepared = await preparePantryImageFromFile(file, RECIPE_IMPORT_PHOTO_PREPARE);
+    if (!prepared.base64) {
+      throw new Error('Could not prepare photo for upload.');
+    }
+    return { mimeType: prepared.mimeType, data: prepared.base64 };
+  } catch {
+    throw new Error('Could not read that photo. Try another image.');
+  }
 }
 
 async function pickOneWebImage(capture?: 'environment'): Promise<RecipeImportPickedImage[]> {
   const file = await pickWebImageFile(capture ? { capture } : undefined);
   if (!file) return [];
-  try {
-    const mimeType = await resolveImageMimeType(file);
-    const data = await readFileAsBase64(file);
-    return [{ mimeType, data }];
-  } catch {
-    throw new Error('Could not read that photo. Try another image.');
-  }
+  return [await prepareFromWebFile(file)];
 }
 
 /** Opens the system picker (camera or gallery on mobile web). */

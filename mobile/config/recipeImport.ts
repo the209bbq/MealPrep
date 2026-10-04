@@ -8,6 +8,9 @@ export const RECIPE_IMPORT = {
   requestTimeoutMs: 95_000,
   proxyUrl: process.env.EXPO_PUBLIC_RECIPE_IMPORT_URL ?? '',
   maxPhotos: 4,
+  /** Downscale before upload so edge requests stay small; text stays readable. */
+  photoUploadMaxLongEdge: 1600,
+  photoUploadJpegQuality: 0.8,
   maxVideoBytes: 104_857_600,
   videoMimeTypes: ['video/mp4', 'video/quicktime', 'video/webm'] as const,
   rateLimitMessage: 'Too many imports — wait a minute and try again.',

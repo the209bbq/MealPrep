@@ -52,6 +52,7 @@ import { orderImportFallbackSteps as orderImportFallbackStepsClient } from '../l
 import { shareTargetImportRoute } from '../lib/recipeImport/client.ts';
 import { extractUrlFromClipboardText } from '../lib/recipeImport/extractUrlFromClipboardText.ts';
 import { parseImportInput } from '../lib/recipeImport/parseImportInput.ts';
+import { RECIPE_IMPORT } from '../config/recipeImport.ts';
 import { validateUserImportStoragePath } from '../supabase/functions/recipe-import/storagePathValidation.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -242,6 +243,25 @@ assert.ok(
   importBoxSource.includes('importBoxHint'),
   'RecipeImportBox should show import hint copy',
 );
+
+const pickPhotoNative = fs.readFileSync(
+  path.join(__dirname, '../lib/recipeImport/pickRecipeImportPhoto.ts'),
+  'utf8',
+);
+const pickPhotoWeb = fs.readFileSync(
+  path.join(__dirname, '../lib/recipeImport/pickRecipeImportPhoto.web.ts'),
+  'utf8',
+);
+assert.ok(
+  pickPhotoNative.includes('preparePantryImage') && pickPhotoNative.includes('RECIPE_IMPORT_PHOTO_PREPARE'),
+  'Native recipe photo pick should resize via preparePantryImage',
+);
+assert.ok(
+  pickPhotoWeb.includes('preparePantryImageFromFile') && pickPhotoWeb.includes('RECIPE_IMPORT_PHOTO_PREPARE'),
+  'Web recipe photo pick should resize via preparePantryImageFromFile',
+);
+assert.equal(RECIPE_IMPORT.photoUploadMaxLongEdge, 1600);
+assert.equal(RECIPE_IMPORT.photoUploadJpegQuality, 0.8);
 
 const ytOembed = parseYouTubeOembedPayload({
   author_name: 'Chef Channel',

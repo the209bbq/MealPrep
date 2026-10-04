@@ -1,5 +1,13 @@
 import { PHOTO_SCAN } from '../../config/appConfig';
 
+export type PreparePantryImageOptions = {
+  maxLongEdge?: number;
+  jpegQuality?: number;
+  maxPayloadBytes?: number;
+  /** Skip blank/dark/blur analysis (e.g. recipe cookbook photos). */
+  skipQualityCheck?: boolean;
+};
+
 export type ImageQualityRejectReason = 'blank' | 'too_dark' | 'too_blurry';
 
 export interface ImageQualityAssessment {
