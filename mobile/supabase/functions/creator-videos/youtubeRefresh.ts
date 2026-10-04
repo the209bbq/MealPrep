@@ -2,8 +2,15 @@ import {
   isRecipeLikeVideo,
   parseIsoDurationSeconds,
 } from './recipeVideoFilter.ts';
+import { dedupeVideoUpsertRows } from './videoSanitizer.ts';
 
 const UPLOADS_PAGE_SIZE = 50;
+
+/** YouTube Data API quota units (see Google quota costs). */
+export const YOUTUBE_UNITS_CHANNELS_LIST = 1;
+export const YOUTUBE_UNITS_PLAYLIST_ITEMS_LIST = 1;
+export const YOUTUBE_UNITS_VIDEOS_LIST = 1;
+export const YOUTUBE_UNITS_CHANNELS_FOR_HANDLE = 1;
 
 export interface CreatorRowInput {
   youtube_channel_id: string;
@@ -256,7 +263,7 @@ export async function refreshCreatorVideos(
       video_id: item.videoId,
       channel_id: channelId,
       title,
-      description_snippet: snippetDesc.slice(0, 500) || null,
+      description_snippet: snippetDesc || null,
       thumbnail_url: item.thumbnailUrl,
       published_at: item.publishedAt,
       view_count: viewCount,
@@ -277,7 +284,19 @@ export async function refreshCreatorVideos(
       ? Math.round(videos.reduce((sum, row) => sum + row.like_count, 0) / videos.length)
       : 0;
 
-  return { videos, avgViews, avgLikes };
+  return { videos: dedupeVideoUpsertRows(videos), avgViews, avgLikes };
+}
+
+export function estimateRefreshUnitsForCreator(playlistPages: number, videoListChunks: number): number {
+  return (
+    YOUTUBE_UNITS_CHANNELS_LIST +
+    playlistPages * YOUTUBE_UNITS_PLAYLIST_ITEMS_LIST +
+    videoListChunks * YOUTUBE_UNITS_VIDEOS_LIST
+  );
+}
+
+export function estimateVideoListChunks(videoCount: number): number {
+  return Math.max(1, Math.ceil(videoCount / 50));
 }
 
 export async function upsertCreatorByHandle(
