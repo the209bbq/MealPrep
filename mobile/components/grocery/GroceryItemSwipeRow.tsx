@@ -1,5 +1,5 @@
 import { Ionicons } from '../../lib/icons/Ionicons';
-import { Platform, Pressable, Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { THEME } from '../../config/appConfig';
 import { GROCERY_COPY } from '../../config/grocery';
@@ -31,10 +31,6 @@ function SwipeDeleteAction({ onPress }: { onPress: () => void }) {
 }
 
 export function GroceryItemSwipeRow(props: GroceryItemSwipeRowProps) {
-  if (Platform.OS === 'web') {
-    return <GroceryItemRow {...props} />;
-  }
-
   return (
     <Swipeable
       overshootRight={false}
