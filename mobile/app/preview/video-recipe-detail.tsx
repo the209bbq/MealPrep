@@ -1,4 +1,4 @@
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, Stack, router, useLocalSearchParams } from 'expo-router';
 import { VideoRecipeDetailView } from '../../components/recipes/VideoRecipeDetailView';
 import {
   MOCK_VIDEO_ITEM,
@@ -16,6 +16,11 @@ function parseState(raw: string | string[] | undefined): PreviewState {
 
 export default function VideoRecipeDetailPreviewScreen() {
   const { state: stateParam } = useLocalSearchParams<{ state?: string }>();
+
+  if (!__DEV__) {
+    return <Redirect href="/" />;
+  }
+
   const state = parseState(stateParam);
 
   return (

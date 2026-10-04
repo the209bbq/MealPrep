@@ -131,6 +131,22 @@ function CreatorCreditRow({
   );
 }
 
+function WatchOriginalVideoLink({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="link"
+      accessibilityLabel={RECIPE_IMPORT_COPY.viewOriginalAccessibility}
+      hitSlop={6}
+      className="mt-2 flex-row items-center gap-1.5 self-start"
+    >
+      <Ionicons name="play-circle-outline" size={17} color={THEME.primaryAccent} />
+      <Text className="text-sm font-semibold text-primary-accent">{RECIPE_IMPORT_COPY.viewOriginal}</Text>
+      <Ionicons name="open-outline" size={15} color={THEME.primaryAccent} />
+    </Pressable>
+  );
+}
+
 function PantryStatusLine({ missingCount, minutes, servings }: { missingCount: number; minutes: number; servings: number }) {
   const timePart = RECIPES_COPY.recipeDetail.servingsAndTime(servings, minutes);
   const ready = missingCount === 0;
@@ -230,6 +246,10 @@ export function VideoRecipeDetailView({
           <Text className="text-2xl font-bold leading-tight text-ink">{recipe.name}</Text>
 
           <CreatorCreditRow channelTitle={channelTitle} channelUrl={channelUrl} avatarUrl={avatar} />
+
+          {!showLoading && !importError && watchUrl ? (
+            <WatchOriginalVideoLink onPress={openWatch} />
+          ) : null}
 
           {!showLoading && !importError ? (
             <PantryStatusLine missingCount={missingCount} minutes={recipe.minutes} servings={recipe.servings} />

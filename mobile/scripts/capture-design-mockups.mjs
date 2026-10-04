@@ -3,6 +3,12 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
+/** Dev-only design mockup capture — not for production CI or release builds. */
+if (process.env.NODE_ENV === 'production') {
+  console.error('capture-design-mockups.mjs is dev-only (NODE_ENV=production).');
+  process.exit(1);
+}
+
 const outDir = process.env.ARTIFACT_DIR || '/opt/cursor/artifacts';
 const viewport = { width: 412, height: 915 };
 const port = Number(process.env.EXPO_WEB_PORT || 8081);
