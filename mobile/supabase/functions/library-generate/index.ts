@@ -6,9 +6,21 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { authorizeLibraryGenerate } from './auth.ts';
-import { DEFAULT_BATCH_SIZE, geminiImageModel, geminiTextModel, MAX_BATCH_SIZE } from './config.ts';
+import {
+  DEFAULT_BATCH_SIZE,
+  geminiImageModel,
+  geminiTextModel,
+  MAX_BATCH_SIZE,
+  MAX_QUEUE_ATTEMPTS,
+} from './config.ts';
 import { generateAndStoreRecipeImage } from './geminiImage.ts';
 import { criticLibraryRecipe, generateLibraryRecipe, type GeminiQuotaKind } from './geminiRecipe.ts';
+import {
+  buildLibraryGenerationUsage,
+  usageCall,
+  type GenerationUsageCall,
+  type LibraryGenerationUsage,
+} from './generationUsage.ts';
 import { slugifyLibraryDishName } from './slug.ts';
 import type { RecipeImportExtracted } from '../recipe-import/recipeImportSchema.ts';
 
@@ -22,13 +34,19 @@ interface QueueRow {
   dish_name: string;
   status: string;
   attempts: number;
+  priority: number;
 }
 
 interface ProcessResult {
   dish_name: string;
   slug: string;
-  status: 'published' | 'rejected' | 'failed';
+  status: 'published' | 'rejected' | 'failed' | 'draft';
   notes?: string;
+}
+
+interface RequestBody {
+  batchSize?: number;
+  redoSlugs?: string[];
 }
 
 function sleep(ms: number): Promise<void> {
@@ -39,10 +57,11 @@ function recipeToRow(
   slug: string,
   dishName: string,
   recipe: RecipeImportExtracted,
-  status: 'published' | 'rejected',
+  status: 'published' | 'rejected' | 'draft',
   reviewNotes: string | null,
   model: string,
   imageUrl: string | null,
+  generationUsage: LibraryGenerationUsage | null,
 ) {
   return {
     slug,
@@ -59,7 +78,38 @@ function recipeToRow(
     status,
     review_notes: reviewNotes,
     model,
+    generation_usage: generationUsage,
   };
+}
+
+async function requeueRecipesBySlug(
+  admin: ReturnType<typeof createClient>,
+  slugs: string[],
+): Promise<string[]> {
+  const trimmed = slugs.map((s) => s.trim()).filter(Boolean);
+  if (trimmed.length === 0) return [];
+
+  const { data: recipes, error } = await admin
+    .from('library_recipes')
+    .select('slug,dish_name,status,image_url')
+    .in('slug', trimmed);
+
+  if (error) {
+    console.warn('library-generate redoSlugs lookup failed', error.message);
+    return [];
+  }
+
+  const dishNames: string[] = [];
+  for (const row of recipes ?? []) {
+    if (row.image_url) continue;
+    if (row.status !== 'draft' && row.status !== 'published') continue;
+    dishNames.push(row.dish_name);
+    await admin
+      .from('library_dish_queue')
+      .update({ status: 'pending', last_error: null })
+      .eq('dish_name', row.dish_name);
+  }
+  return dishNames;
 }
 
 Deno.serve(async (req) => {
@@ -99,10 +149,14 @@ Deno.serve(async (req) => {
   }
 
   let batchSize = DEFAULT_BATCH_SIZE;
+  let redoSlugs: string[] = [];
   try {
-    const body = (await req.json()) as { batchSize?: number };
+    const body = (await req.json()) as RequestBody;
     if (typeof body.batchSize === 'number' && Number.isFinite(body.batchSize)) {
       batchSize = Math.min(MAX_BATCH_SIZE, Math.max(1, Math.round(body.batchSize)));
+    }
+    if (Array.isArray(body.redoSlugs)) {
+      redoSlugs = body.redoSlugs.filter((s): s is string => typeof s === 'string');
     }
   } catch {
     /* default batch */
@@ -115,25 +169,50 @@ Deno.serve(async (req) => {
   const textModel = geminiTextModel();
   const imageModel = geminiImageModel();
 
-  const { data: queueRows, error: queueError } = await admin
-    .from('library_dish_queue')
-    .select('dish_name,status,attempts')
-    .eq('status', 'pending')
-    .order('dish_name', { ascending: true })
-    .limit(batchSize);
+  let queueRows: QueueRow[] = [];
+  const redoDishNames = await requeueRecipesBySlug(admin, redoSlugs);
 
-  if (queueError) {
-    return new Response(JSON.stringify({ error: queueError.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+  if (redoDishNames.length > 0) {
+    const { data, error } = await admin
+      .from('library_dish_queue')
+      .select('dish_name,status,attempts,priority')
+      .in('dish_name', redoDishNames)
+      .in('status', ['pending', 'failed'])
+      .lt('attempts', MAX_QUEUE_ATTEMPTS)
+      .order('priority', { ascending: true })
+      .limit(batchSize);
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    queueRows = (data ?? []) as QueueRow[];
+  }
+
+  if (queueRows.length === 0) {
+    const { data, error: queueError } = await admin
+      .from('library_dish_queue')
+      .select('dish_name,status,attempts,priority')
+      .in('status', ['pending', 'failed'])
+      .lt('attempts', MAX_QUEUE_ATTEMPTS)
+      .order('priority', { ascending: true })
+      .limit(batchSize);
+
+    if (queueError) {
+      return new Response(JSON.stringify({ error: queueError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    queueRows = (data ?? []) as QueueRow[];
   }
 
   const results: ProcessResult[] = [];
   let stopForDay = false;
   let quotaKind: GeminiQuotaKind = 'none';
 
-  for (const row of (queueRows ?? []) as QueueRow[]) {
+  for (const row of queueRows) {
     if (stopForDay) break;
 
     const dishName = row.dish_name;
@@ -146,6 +225,8 @@ Deno.serve(async (req) => {
       results.push({ dish_name: dishName, slug: '', status: 'failed', notes: 'Invalid dish name' });
       continue;
     }
+
+    const usageCalls: GenerationUsageCall[] = [];
 
     await admin
       .from('library_dish_queue')
@@ -167,6 +248,7 @@ Deno.serve(async (req) => {
       results.push({ dish_name: dishName, slug, status: 'failed', notes: generated.detail });
       continue;
     }
+    usageCalls.push(usageCall('author', textModel, generated.usage, 'text'));
 
     const critic = await criticLibraryRecipe(apiKey, textModel, dishName, generated.data);
     if (!critic.ok) {
@@ -181,13 +263,20 @@ Deno.serve(async (req) => {
       continue;
     }
 
+    for (const u of critic.data.usages) {
+      usageCalls.push(usageCall(u.phase, textModel, u.usage, 'text'));
+    }
+
     const finalRecipe = critic.data.recipe;
     const approved = critic.data.approve;
-    const reviewNotes = approved
+    let reviewNotes = approved
       ? (critic.data.issues.length > 0 ? critic.data.issues.join('; ') : null)
       : [...critic.data.issues, 'Critic rejected'].join('; ');
 
     let imageUrl: string | null = null;
+    let imageQuotaStop = false;
+    let imageErrorDetail: string | undefined;
+
     if (approved) {
       const image = await generateAndStoreRecipeImage({
         apiKey,
@@ -195,25 +284,68 @@ Deno.serve(async (req) => {
         supabaseUrl,
         serviceKey,
         slug,
-        title: finalRecipe.title,
+        recipe: finalRecipe,
       });
+      if (image.usage) {
+        usageCalls.push(usageCall('image', imageModel, image.usage, 'image'));
+      }
       if (image.quota === 'quota_exhausted') {
         stopForDay = true;
+        imageQuotaStop = true;
       } else if (image.quota === 'rate_limit') {
         await sleep(8_000);
       }
-      imageUrl = image.result?.publicUrl ?? null;
+      if (image.result?.publicUrl) {
+        imageUrl = image.result.publicUrl;
+      } else if (!imageQuotaStop) {
+        imageErrorDetail = image.errorDetail ?? 'Image generation or upload failed';
+      } else {
+        imageErrorDetail = image.errorDetail ?? 'Image quota exhausted';
+      }
     }
 
-    const status = approved ? 'published' : 'rejected';
+    const generationUsage = usageCalls.length > 0 ? buildLibraryGenerationUsage(usageCalls) : null;
+
+    let recipeStatus: 'published' | 'rejected' | 'draft';
+    let queueStatus: 'done' | 'failed' | 'pending';
+    let queueError: string | null = null;
+    let processStatus: ProcessResult['status'];
+
+    if (!approved) {
+      recipeStatus = 'rejected';
+      queueStatus = 'done';
+      queueError = null;
+      processStatus = 'rejected';
+    } else if (imageUrl) {
+      recipeStatus = 'published';
+      queueStatus = 'done';
+      queueError = null;
+      processStatus = 'published';
+    } else if (imageQuotaStop) {
+      recipeStatus = 'draft';
+      const note = `Image generation paused (quota): ${imageErrorDetail ?? 'quota exhausted'}`;
+      reviewNotes = reviewNotes ? `${reviewNotes}; ${note}` : note;
+      queueStatus = 'pending';
+      queueError = imageErrorDetail;
+      processStatus = 'draft';
+    } else {
+      recipeStatus = 'draft';
+      const note = `Image generation failed: ${imageErrorDetail ?? 'unknown error'}`;
+      reviewNotes = reviewNotes ? `${reviewNotes}; ${note}` : note;
+      queueStatus = 'failed';
+      queueError = note;
+      processStatus = 'draft';
+    }
+
     const upsertPayload = recipeToRow(
       slug,
       dishName,
       finalRecipe,
-      status,
+      recipeStatus,
       reviewNotes,
       textModel,
       imageUrl,
+      generationUsage,
     );
 
     const { error: upsertError } = await admin.from('library_recipes').upsert(upsertPayload, {
@@ -231,10 +363,10 @@ Deno.serve(async (req) => {
 
     await admin
       .from('library_dish_queue')
-      .update({ status: 'done', last_error: null })
+      .update({ status: queueStatus, last_error: queueError })
       .eq('dish_name', dishName);
 
-    results.push({ dish_name: dishName, slug, status, notes: reviewNotes ?? undefined });
+    results.push({ dish_name: dishName, slug, status: processStatus, notes: reviewNotes ?? undefined });
 
     await sleep(1_500);
   }
