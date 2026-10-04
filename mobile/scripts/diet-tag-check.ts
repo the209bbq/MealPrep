@@ -60,6 +60,17 @@ function main(): void {
   const dairyFreeCheese = tagRecipe({ ingredientLines: ['dairy-free cheese shreds'] });
   assert.ok(!dairyFreeCheese.contains_allergens.includes('milk'), 'dairy-free cheese should not tag milk');
 
+  function assertFishDiets(line: string, label: string): void {
+    const tag = tagRecipe({ ingredientLines: [line] });
+    assert.ok(!tag.diets_ok.includes('vegetarian'), `${label} should fail vegetarian`);
+    assert.ok(!tag.diets_ok.includes('vegan'), `${label} should fail vegan`);
+    assert.ok(tag.diets_ok.includes('pescatarian'), `${label} should pass pescatarian`);
+  }
+
+  assertFishDiets('salmon fillet', 'salmon');
+  assertFishDiets('large shrimp', 'shrimp');
+  assertFishDiets('1 tbsp fish sauce', 'fish sauce');
+
   console.log('diet-tag-check: ok');
 }
 

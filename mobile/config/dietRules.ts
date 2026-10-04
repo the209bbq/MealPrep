@@ -197,3 +197,13 @@ export const VEGAN_ANIMAL_KEYWORDS: string[] = [
 ];
 
 export const TRACKED_DIETS: DietId[] = ['vegetarian', 'vegan', 'pescatarian', 'keto'];
+
+/** All fish + shellfish ingredient phrases (longest first) for vegetarian/vegan diet checks. */
+export const FISH_SHELLFISH_DIET_PHRASES: string[] = (() => {
+  const phrases = new Set<string>();
+  for (const rule of ALLERGEN_KEYWORD_RULES) {
+    if (!rule.allergens.some((a) => a === 'fish' || a === 'shellfish')) continue;
+    for (const keyword of rule.keywords) phrases.add(keyword);
+  }
+  return [...phrases].sort((a, b) => b.length - a.length);
+})();

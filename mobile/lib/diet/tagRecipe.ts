@@ -1,4 +1,9 @@
-import { MEAT_POULTRY_KEYWORDS, TRACKED_DIETS, VEGAN_ANIMAL_KEYWORDS } from '../../config/dietRules';
+import {
+  FISH_SHELLFISH_DIET_PHRASES,
+  MEAT_POULTRY_KEYWORDS,
+  TRACKED_DIETS,
+  VEGAN_ANIMAL_KEYWORDS,
+} from '../../config/dietRules';
 import {
   allergensForLineParts,
   expandIngredientSegments,
@@ -56,20 +61,8 @@ function failsVegetarian(line: string): boolean {
     for (const keyword of MEAT_POULTRY_KEYWORDS) {
       if (lineMatchesKeyword(haystack, keyword)) return true;
     }
-    const fishShellfish = [
-      'fish',
-      'shrimp',
-      'prawn',
-      'crab',
-      'lobster',
-      'scallop',
-      'clam',
-      'mussel',
-      'oyster',
-      'anchovy',
-    ];
-    for (const keyword of fishShellfish) {
-      if (lineMatchesKeyword(haystack, keyword)) return true;
+    for (const phrase of FISH_SHELLFISH_DIET_PHRASES) {
+      if (lineMatchesKeyword(haystack, phrase)) return true;
     }
   }
   return false;
