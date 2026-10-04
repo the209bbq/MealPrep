@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { Card } from '../../components/Card';
@@ -15,7 +15,6 @@ import { THEME, isCreatorRecipesConfigured } from '../../config/appConfig';
 import {
   applyRecipesTabFilters,
   recipesTabNarrowingFiltersActive,
-  recipesTabPeopleTargetServings,
   type RecipesTabRow,
 } from '../../config/recipesTabFilters';
 import {
@@ -58,9 +57,6 @@ export default function RecipesScreen() {
     openAuthSheet,
     saveLinkImportedRecipe,
     clearImportedRecipeSource,
-    servingOverrides,
-    applyServingOverridesBatch,
-    featureFlags,
     pantryRecipeMatches,
     addMissingRecipeIngredientsToGrocery,
     addMissingDiscoveryRecipeIngredientsToGrocery,
@@ -247,16 +243,6 @@ export default function RecipesScreen() {
     }
     return detailRow.match;
   }, [detailRow, pantryRecipeMatches.byRecipeId, viralOpenState]);
-
-  const peopleTargetServings = recipesTabPeopleTargetServings(filters.people);
-  useEffect(() => {
-    if (peopleTargetServings == null) return;
-    const updates: Record<string, number> = {};
-    for (const recipe of kitchenRecipes) {
-      updates[recipe.id] = peopleTargetServings;
-    }
-    applyServingOverridesBatch(updates);
-  }, [applyServingOverridesBatch, kitchenRecipes, peopleTargetServings]);
 
   const showLegacyKitchenFeed = !creatorFeedEnabled;
   const searching = searchQuery.trim().length >= 2;

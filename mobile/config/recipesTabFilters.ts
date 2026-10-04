@@ -11,21 +11,18 @@ export type RecipesTabTimeChoice = 'any' | '15' | '30' | '45' | '60';
 export type RecipesTabDifficultyChoice = 'any' | RecipesTabDifficultyBucket;
 export type RecipesTabMealChoice = 'any' | 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'side';
 export type RecipesTabShopChoice = 'any' | 'pantry_only' | 'grab_1_2' | 'happy_to_shop';
-export type RecipesTabPeopleChoice = 'any' | 'just_me' | 'two' | 'three_four' | 'five_plus';
 
 export type RecipesTabFilterDimension =
   | 'time'
   | 'difficulty'
   | 'meal'
-  | 'shop'
-  | 'people';
+  | 'shop';
 
 export interface RecipesTabFilterState {
   time: RecipesTabTimeChoice;
   difficulty: RecipesTabDifficultyChoice;
   meal: RecipesTabMealChoice;
   shop: RecipesTabShopChoice;
-  people: RecipesTabPeopleChoice;
 }
 
 export const DEFAULT_RECIPES_TAB_FILTER_STATE: RecipesTabFilterState = {
@@ -33,20 +30,9 @@ export const DEFAULT_RECIPES_TAB_FILTER_STATE: RecipesTabFilterState = {
   difficulty: 'any',
   meal: 'any',
   shop: 'any',
-  people: 'any',
 };
 
 export const RECIPES_TAB_FILTERS_STORAGE_KEY = 'mealprep.recipesTab.filterState';
-
-export const RECIPES_TAB_PEOPLE_SERVINGS: Record<
-  Exclude<RecipesTabPeopleChoice, 'any'>,
-  number
-> = {
-  just_me: 1,
-  two: 2,
-  three_four: 4,
-  five_plus: 6,
-};
 
 export const RECIPES_TAB_FILTER_COPY = {
   filterButton: 'Filter recipes',
@@ -59,7 +45,6 @@ export const RECIPES_TAB_FILTER_COPY = {
     difficulty: 'How hard do you want it to be?',
     meal: 'What meal is this for?',
     shop: 'Do you want to shop?',
-    people: 'How many people are you feeding?',
   },
   options: {
     any: 'Any',
@@ -86,12 +71,6 @@ export const RECIPES_TAB_FILTER_COPY = {
       grab_1_2: 'Fine to grab 1–2 things',
       happy_to_shop: 'Happy to shop',
     } satisfies Record<Exclude<RecipesTabShopChoice, 'any'>, string>,
-    people: {
-      just_me: 'Just me',
-      two: '2',
-      three_four: '3–4',
-      five_plus: '5+',
-    } satisfies Record<Exclude<RecipesTabPeopleChoice, 'any'>, string>,
   },
 } as const;
 
@@ -115,13 +94,6 @@ export const RECIPES_TAB_SHOP_CHOICES: RecipesTabShopChoice[] = [
   'pantry_only',
   'grab_1_2',
   'happy_to_shop',
-];
-export const RECIPES_TAB_PEOPLE_CHOICES: RecipesTabPeopleChoice[] = [
-  'any',
-  'just_me',
-  'two',
-  'three_four',
-  'five_plus',
 ];
 
 export interface RecipesTabKitchenRow {
@@ -237,11 +209,6 @@ function matchesShop(choice: RecipesTabShopChoice, missingCount: number): boolea
   return true;
 }
 
-/** People choice does not remove recipes — it only scales servings. */
-function matchesPeople(): boolean {
-  return true;
-}
-
 function rowMatchesState(row: RecipesTabRow, state: RecipesTabFilterState): boolean {
   const maxMinutes = timeMaxMinutes(state.time);
   if (maxMinutes != null && recipesTabRowMinutes(row) > maxMinutes) return false;
@@ -254,30 +221,23 @@ function rowMatchesState(row: RecipesTabRow, state: RecipesTabFilterState): bool
   }
 
   if (!matchesShop(state.shop, row.match.missingCount)) return false;
-  if (!matchesPeople()) return false;
 
   return true;
 }
 
-/** Any non-default choice (including people / servings). */
+/** Any non-default filter choice. */
 export function recipesTabFiltersActive(state: RecipesTabFilterState): boolean {
-  return (
-    state.time !== 'any' ||
-    state.difficulty !== 'any' ||
-    state.meal !== 'any' ||
-    state.shop !== 'any' ||
-    state.people !== 'any'
-  );
-}
-
-/** Filters that narrow the recipe list (excludes people — servings only). */
-export function recipesTabNarrowingFiltersActive(state: RecipesTabFilterState): boolean {
   return (
     state.time !== 'any' ||
     state.difficulty !== 'any' ||
     state.meal !== 'any' ||
     state.shop !== 'any'
   );
+}
+
+/** Filters that narrow the recipe list. */
+export function recipesTabNarrowingFiltersActive(state: RecipesTabFilterState): boolean {
+  return recipesTabFiltersActive(state);
 }
 
 export function applyRecipesTabFilters<T extends RecipesTabRow>(
@@ -310,11 +270,6 @@ export function clearRecipesTabFilters(): RecipesTabFilterState {
   return { ...DEFAULT_RECIPES_TAB_FILTER_STATE };
 }
 
-export function recipesTabPeopleTargetServings(people: RecipesTabPeopleChoice): number | null {
-  if (people === 'any') return null;
-  return RECIPES_TAB_PEOPLE_SERVINGS[people];
-}
-
 const SUMMARY_TIME: Record<Exclude<RecipesTabTimeChoice, 'any'>, string> = {
   '15': '15 min',
   '30': '30 min',
@@ -328,13 +283,6 @@ const SUMMARY_SHOP: Record<Exclude<RecipesTabShopChoice, 'any'>, string> = {
   happy_to_shop: 'OK to shop',
 };
 
-const SUMMARY_PEOPLE: Record<Exclude<RecipesTabPeopleChoice, 'any'>, string> = {
-  just_me: 'Just me',
-  two: '2 people',
-  three_four: '3–4',
-  five_plus: '5+',
-};
-
 /** Short summary for the filter button (active picks only). */
 export function recipesTabFilterSummary(state: RecipesTabFilterState): string {
   const parts: string[] = [];
@@ -344,7 +292,6 @@ export function recipesTabFilterSummary(state: RecipesTabFilterState): string {
     parts.push(RECIPES_TAB_FILTER_COPY.options.difficulty[state.difficulty]);
   }
   if (state.meal !== 'any') parts.push(RECIPES_TAB_FILTER_COPY.options.meal[state.meal]);
-  if (state.people !== 'any') parts.push(SUMMARY_PEOPLE[state.people]);
   return parts.join(' · ');
 }
 
@@ -360,9 +307,6 @@ function isMealChoice(value: unknown): value is RecipesTabMealChoice {
 function isShopChoice(value: unknown): value is RecipesTabShopChoice {
   return typeof value === 'string' && RECIPES_TAB_SHOP_CHOICES.includes(value as RecipesTabShopChoice);
 }
-function isPeopleChoice(value: unknown): value is RecipesTabPeopleChoice {
-  return typeof value === 'string' && RECIPES_TAB_PEOPLE_CHOICES.includes(value as RecipesTabPeopleChoice);
-}
 
 export function parseStoredRecipesTabFilterState(raw: unknown): RecipesTabFilterState {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_RECIPES_TAB_FILTER_STATE };
@@ -372,7 +316,6 @@ export function parseStoredRecipesTabFilterState(raw: unknown): RecipesTabFilter
     difficulty: isDifficultyChoice(record.difficulty) ? record.difficulty : 'any',
     meal: isMealChoice(record.meal) ? record.meal : 'any',
     shop: isShopChoice(record.shop) ? record.shop : 'any',
-    people: isPeopleChoice(record.people) ? record.people : 'any',
   };
 }
 

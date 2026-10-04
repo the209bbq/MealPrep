@@ -240,7 +240,6 @@ create policy grocery_owner on public.grocery_list_items
 -- Optional global feature-flag defaults (matches mobile/app config keys)
 insert into public.feature_flags (key, enabled) values
   ('photoScan', true),
-  ('batchCalculator', true),
   ('grocerySync', true),
   ('maintenanceMode', false),
   ('recipeMasterEdit', true)

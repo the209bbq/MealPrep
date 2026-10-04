@@ -62,7 +62,6 @@ const filtered = applyRecipesTabFilters(sparseCatalog, {
   difficulty: 'any',
   meal: 'any',
   shop: 'any',
-  people: 'any',
 });
 assert.ok(filtered.length < sparseCatalog.length, 'filters should narrow the full catalog');
 assert.ok(filtered.length > 0, 'some catalog recipes should match a 30 min filter');

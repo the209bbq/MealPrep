@@ -333,8 +333,6 @@ interface AppContextValue {
   notifySavedToMyRecipes: (onViewMyRecipes: () => void) => void;
   notifyRemovedFromMyRecipes: (onUndo: () => void) => void;
   notifyMyRecipesSaveFailed: () => void;
-  setServingOverride: (recipeId: string, servings: number) => void;
-  applyServingOverridesBatch: (updates: Record<string, number>) => void;
   toggleGroceryItem: (id: string) => void;
   addManualGroceryItem: (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => void;
   clearCheckedGroceryItems: () => void;
@@ -1474,26 +1472,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [addMealPlanEntry, mealPlan, recipes, removeMealPlanItem],
   );
 
-  const setServingOverride = useCallback((recipeId: string, servings: number) => {
-    setServingOverrides((prev) => {
-      if (prev[recipeId] === servings) return prev;
-      return { ...prev, [recipeId]: servings };
-    });
-  }, []);
-
-  const applyServingOverridesBatch = useCallback((updates: Record<string, number>) => {
-    setServingOverrides((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const [recipeId, servings] of Object.entries(updates)) {
-        if (next[recipeId] === servings) continue;
-        next[recipeId] = servings;
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, []);
-
   const restockGroceriesToPantry = useCallback(
     async (items: GroceryListItem[]) => {
       if (!userPreferences.addCheckedItemsToPantry || items.length === 0) return;
@@ -2279,8 +2257,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifySavedToMyRecipes,
       notifyRemovedFromMyRecipes,
       notifyMyRecipesSaveFailed,
-      setServingOverride,
-      applyServingOverridesBatch,
       toggleGroceryItem,
       addManualGroceryItem,
       clearCheckedGroceryItems,
@@ -2359,8 +2335,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       seedPantry,
       setDemoRole,
       setFeatureFlag,
-      setServingOverride,
-      applyServingOverridesBatch,
       signInWithMagicLink,
       signInWithPassword,
       signOut,

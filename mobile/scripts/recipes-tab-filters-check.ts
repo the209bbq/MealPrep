@@ -6,8 +6,6 @@ import {
   DEFAULT_RECIPES_TAB_FILTER_STATE,
   inferKitchenMealChoice,
   recipesTabFilterSummary,
-  recipesTabNarrowingFiltersActive,
-  recipesTabPeopleTargetServings,
   type RecipesTabDiscoveryRow,
   type RecipesTabFilterState,
   type RecipesTabKitchenRow,
@@ -128,7 +126,6 @@ assert.equal(
 );
 
 assert.equal(countRecipesTabFilterOption(rows, DEFAULT_RECIPES_TAB_FILTER_STATE, 'time', '30'), 2);
-assert.equal(recipesTabPeopleTargetServings('three_four'), 4);
 assert.equal(
   recipesTabFilterSummary({ ...DEFAULT_RECIPES_TAB_FILTER_STATE, time: '30', difficulty: 'easy' }),
   '30 min · Easy',
@@ -139,12 +136,10 @@ assert.equal(
     time: '30',
     difficulty: 'easy',
     meal: 'dinner',
-    people: 'two',
     shop: 'grab_1_2',
   }),
-  '30 min · 1–2 to buy · Easy · Dinner · 2 people',
+  '30 min · 1–2 to buy · Easy · Dinner',
 );
-assert.equal(recipesTabNarrowingFiltersActive({ ...DEFAULT_RECIPES_TAB_FILTER_STATE, people: 'two' }), false);
 
 assert.equal(inferKitchenMealChoice({ ...baseRecipe, name: 'Sunday Pancakes', description: '' }), 'breakfast');
 assert.equal(
