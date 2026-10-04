@@ -13,18 +13,37 @@ const COOKING_FRACTIONS: ReadonlyArray<{ value: number; char: string }> = [
   { value: 7 / 8, char: '⅞' },
 ];
 
-const METRIC_OR_WEIGHT_OZ =
-  /^(g|gram|grams|kg|kilogram|kilograms|mg|milligram|milligrams|ml|milliliter|milliliters|l|liter|liters|oz)$/i;
+const CURRENCY_SYMBOLS = '$£€¥₹¢';
 
-function isMetricOrWeightOzUnit(unit: string): boolean {
-  const normalized = unit.trim().toLowerCase().replace(/\.$/, '');
-  return METRIC_OR_WEIGHT_OZ.test(normalized);
+function normalizeUnit(unit: string): string {
+  return unit.trim().toLowerCase().replace(/\.$/, '');
+}
+
+function isMetricWholeUnit(unit: string): boolean {
+  const u = normalizeUnit(unit);
+  return /^(g|gram|grams|mg|milligram|milligrams|ml|milliliter|milliliters|l|liter|liters)$/.test(u);
+}
+
+function isMetricKgUnit(unit: string): boolean {
+  const u = normalizeUnit(unit);
+  return /^(kg|kilogram|kilograms)$/.test(u);
+}
+
+function formatMetricKg(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  const nearestWhole = Math.round(rounded);
+  if (Math.abs(rounded - nearestWhole) <= WHOLE_TOLERANCE) {
+    return String(nearestWhole);
+  }
+  return String(rounded);
 }
 
 function shouldUseWholeNumberDisplay(value: number, unit?: string): boolean {
-  if (Math.abs(value) >= 10) return true;
-  if (unit && isMetricOrWeightOzUnit(unit)) return true;
-  return false;
+  const trimmed = unit?.trim();
+  if (!trimmed) {
+    return Math.abs(value) >= 10;
+  }
+  return isMetricWholeUnit(trimmed);
 }
 
 function nearestFractionChar(remainder: number): string | null {
@@ -40,19 +59,7 @@ function nearestFractionChar(remainder: number): string | null {
   return bestChar;
 }
 
-/** Format a numeric amount as a kitchen-friendly fraction (display only). */
-export function formatQuantity(value: number, options?: { unit?: string }): string {
-  if (!Number.isFinite(value)) return String(value);
-
-  const unit = options?.unit?.trim();
-  if (shouldUseWholeNumberDisplay(value, unit)) {
-    return String(Math.round(value));
-  }
-
-  if (value < 0) {
-    return `-${formatQuantity(-value, options)}`;
-  }
-
+function formatQuantityAsFraction(value: number): string {
   if (value === 0) return '0';
 
   if (value > 0 && value < PINCH_THRESHOLD) return 'pinch';
@@ -85,6 +92,26 @@ export function formatQuantity(value: number, options?: { unit?: string }): stri
   return `${whole}${fracChar}`;
 }
 
+/** Format a numeric amount as a kitchen-friendly fraction (display only). */
+export function formatQuantity(value: number, options?: { unit?: string }): string {
+  if (!Number.isFinite(value)) return String(value);
+
+  const unit = options?.unit?.trim();
+  if (unit && isMetricKgUnit(unit)) {
+    return formatMetricKg(value);
+  }
+
+  if (shouldUseWholeNumberDisplay(value, unit)) {
+    return String(Math.round(value));
+  }
+
+  if (value < 0) {
+    return `-${formatQuantity(-value, options)}`;
+  }
+
+  return formatQuantityAsFraction(value);
+}
+
 /** Quantity plus unit, e.g. `¾ cup` or `250 g`. */
 export function formatQuantityWithUnit(quantity: number, unit: string): string {
   const trimmedUnit = unit.trim();
@@ -107,13 +134,30 @@ export function formatIngredientAmount(quantity: number, unit: string, name?: st
   return trimmedName ? formatIngredientText(trimmedName) : '';
 }
 
+function shouldFormatDecimalInIngredientText(match: string, offset: number, full: string): boolean {
+  const before = full.slice(0, offset);
+  const after = full.slice(offset + match.length);
+
+  const charBefore = before.slice(-1);
+  if (charBefore && CURRENCY_SYMBOLS.includes(charBefore)) return false;
+  if (/[a-zA-Zv]$/.test(before)) return false;
+  if (/[\d.]$/.test(before)) return false;
+
+  if (/^\.\d/.test(after)) return false;
+
+  if (/^\s*(degrees|degree|°\s*[fFcC]?|℉|℃|\b[fFcC]\b)/i.test(after)) return false;
+
+  return true;
+}
+
 /**
  * Replace decimal numbers embedded in free-text ingredient lines (imports), e.g.
- * `0.75 cup flour` → `¾ cup flour`. Leaves text without decimals unchanged.
+ * `0.75 cup flour` → `¾ cup flour`. Leaves prices, versions, and temperatures unchanged.
  */
 export function formatIngredientText(text: string): string {
   if (!text || !/\d+\.\d+/.test(text)) return text;
-  return text.replace(/(?<![\d/.])\d+\.\d+(?![\d/])/g, (match) => {
+  return text.replace(/\d+\.\d+/g, (match, offset, full) => {
+    if (!shouldFormatDecimalInIngredientText(match, offset, full)) return match;
     const n = Number.parseFloat(match);
     if (!Number.isFinite(n)) return match;
     return formatQuantity(n);
