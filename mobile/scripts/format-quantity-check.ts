@@ -29,6 +29,7 @@ assert.equal(formatIngredientText('v1.2'), 'v1.2');
 assert.equal(formatIngredientText('Bake at 350.5 degrees for 20 min'), 'Bake at 350.5 degrees for 20 min');
 assert.equal(formatIngredientText('Bake at 350.5 °F'), 'Bake at 350.5 °F');
 assert.equal(formatIngredientText('1.5-inch thick steak'), '1½-inch thick steak');
+assert.equal(formatIngredientText('12.5 oz can'), '12½ oz can');
 
 assert.equal(formatIngredientAmount(0.5, 'cup', 'flour'), '½ cup flour');
 assert.equal(formatIngredientAmount(0, '', '0.5 cup sugar'), '½ cup sugar');

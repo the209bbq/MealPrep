@@ -134,6 +134,39 @@ export function formatIngredientAmount(quantity: number, unit: string, name?: st
   return trimmedName ? formatIngredientText(trimmedName) : '';
 }
 
+/** Unit token immediately after a quantity in free-text ingredient lines. */
+const INGREDIENT_UNIT_AFTER_QTY =
+  /^\s+(fl\s+oz|fluid\s+ounces?|tablespoons?|teaspoons?|cups?|ounces?|pounds?|grams?|kilograms?|milliliters?|liters?|cloves?|cans?|jars?|bunches?|slices?|sticks?|heads?|packages?|pinch|tbsp|tsp|oz|lb|g|kg|ml|l|cup|can|jar|each)\b/i;
+
+function canonicalIngredientUnit(raw: string): string {
+  const u = raw.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (u === 'fl oz' || u === 'fluid ounce' || u === 'fluid ounces') return 'fl oz';
+  if (u === 'tablespoon' || u === 'tablespoons') return 'tbsp';
+  if (u === 'teaspoon' || u === 'teaspoons') return 'tsp';
+  if (u === 'cup' || u === 'cups') return 'cup';
+  if (u === 'ounce' || u === 'ounces') return 'oz';
+  if (u === 'pound' || u === 'pounds' || u === 'lbs' || u === 'lb.') return 'lb';
+  if (u === 'gram' || u === 'grams') return 'g';
+  if (u === 'kilogram' || u === 'kilograms') return 'kg';
+  if (u === 'milliliter' || u === 'milliliters') return 'ml';
+  if (u === 'liter' || u === 'liters') return 'l';
+  if (u === 'clove' || u === 'cloves') return 'clove';
+  if (u === 'can' || u === 'cans') return 'can';
+  if (u === 'jar' || u === 'jars') return 'jar';
+  if (u === 'bunch' || u === 'bunches') return 'bunch';
+  if (u === 'slice' || u === 'slices') return 'slice';
+  if (u === 'stick' || u === 'sticks') return 'stick';
+  if (u === 'head' || u === 'heads') return 'head';
+  if (u === 'package' || u === 'packages' || u === 'pkg') return 'package';
+  return u.replace(/\.$/, '');
+}
+
+function ingredientUnitAfterDecimal(after: string): string | undefined {
+  const m = after.match(INGREDIENT_UNIT_AFTER_QTY);
+  if (!m?.[1]) return undefined;
+  return canonicalIngredientUnit(m[1]);
+}
+
 function shouldFormatDecimalInIngredientText(match: string, offset: number, full: string): boolean {
   const before = full.slice(0, offset);
   const after = full.slice(offset + match.length);
@@ -160,6 +193,8 @@ export function formatIngredientText(text: string): string {
     if (!shouldFormatDecimalInIngredientText(match, offset, full)) return match;
     const n = Number.parseFloat(match);
     if (!Number.isFinite(n)) return match;
-    return formatQuantity(n);
+    const after = full.slice(offset + match.length);
+    const unit = ingredientUnitAfterDecimal(after);
+    return formatQuantity(n, unit ? { unit } : undefined);
   });
 }
