@@ -2,6 +2,7 @@ import { SMART_SHOP } from '../../config/appConfig';
 import { SMART_SHOP_COPY } from '../../config/smartShop';
 import { mergeKrogerLocations } from '../stores/krogerMerge';
 import { applyOriginDistancesAndSort } from '../stores/storeDistance';
+import { sortAndLimitStoresForStoresTab } from '../stores/storesNearbyPipeline';
 import { previewNearbyGroceryStores, searchNearbyGroceryStores, type StoreRecord } from '../stores';
 import { assembleDealsResult, remapKrogerDealsToStores, storeRecordToLocation } from './buildShopResult';
 import { KROGER_NOT_CONFIGURED_NOTE, isKrogerProxyAvailable } from './krogerAvailability';
@@ -36,6 +37,9 @@ export function nearbyStoresInstantPreview(params: NearbyStoresParams): {
     lng: params.lng,
     zip: params.zip,
     radiusMiles: params.radiusMiles ?? SMART_SHOP.defaultRadiusMiles,
+    isGpsOrigin: params.isGpsOrigin,
+    radiusMultiplier: params.radiusMultiplier,
+    displayLimit: params.displayLimit,
   });
   if (!preview) return null;
   return {
@@ -58,6 +62,7 @@ export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
     radiusMiles: params.radiusMiles ?? SMART_SHOP.defaultRadiusMiles,
     isGpsOrigin: params.isGpsOrigin,
     radiusMultiplier: params.radiusMultiplier,
+    displayLimit: params.displayLimit,
   });
 
   let merged: StoreRecord[] = stores;
@@ -81,7 +86,10 @@ export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
     }
   }
 
-  const withDistance = applyOriginDistancesAndSort(merged, origin);
+  const withDistance =
+    params.displayLimit != null
+      ? sortAndLimitStoresForStoresTab(merged, origin, params.displayLimit)
+      : applyOriginDistancesAndSort(merged, origin);
 
   return {
     originLabel: origin.label,

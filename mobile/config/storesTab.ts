@@ -3,6 +3,9 @@
 /** Default ZIP when the user has not set a home location (built-in geocode table). */
 export const STORES_TAB_DEFAULT_ZIP = '95361';
 
+/** Max stores shown on the Stores tab (closest first after merge). */
+export const STORES_TAB_DISPLAY_LIMIT = 15;
+
 export const STORES_TAB_COPY = {
   title: 'Stores',
   searchPlaceholder: 'Search nearby stores',

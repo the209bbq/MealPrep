@@ -37,6 +37,8 @@ export interface NearbyStoreSearchParams {
   isGpsOrigin?: boolean;
   /** 1 = default; 2 = one-time wider search. */
   radiusMultiplier?: 1 | 2;
+  /** Stores tab: cap list length after closest-first sort. */
+  displayLimit?: number;
 }
 
 export interface ResolvedGeo {

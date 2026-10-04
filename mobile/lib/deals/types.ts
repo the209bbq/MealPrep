@@ -78,6 +78,8 @@ export interface NearbyStoresParams {
   radiusMiles?: number;
   isGpsOrigin?: boolean;
   radiusMultiplier?: 1 | 2;
+  /** Stores tab: cap list length after closest-first sort (RPC still fetches ~40). */
+  displayLimit?: number;
 }
 
 export interface FetchDealsParams {

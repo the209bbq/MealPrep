@@ -79,5 +79,5 @@ export function mergeKrogerLocations(osmStores: StoreRecord[], krogerStores: Kro
     });
   }
 
-  return enriched.sort((a, b) => (a.distanceMiles ?? 50) - (b.distanceMiles ?? 50));
+  return enriched;
 }

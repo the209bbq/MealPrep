@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import * as ExpoLocation from 'expo-location';
 import { readJson, writeJson } from '../storage';
 
 const DENIED_KEY = 'stores:geolocation:denied';
@@ -28,4 +29,26 @@ export async function queryStoresGeolocationPermission(): Promise<GeolocationPer
   } catch {
     return 'prompt';
   }
+}
+
+/** Native: read foreground location permission without prompting. */
+export async function queryNativeStoresGeolocationPermission(): Promise<GeolocationPermissionState | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const { status, canAskAgain } = await ExpoLocation.getForegroundPermissionsAsync();
+    if (status === ExpoLocation.PermissionStatus.GRANTED) return 'granted';
+    if (status === ExpoLocation.PermissionStatus.DENIED && canAskAgain === false) {
+      markStoresGeolocationDenied();
+      return 'denied';
+    }
+    if (status === ExpoLocation.PermissionStatus.DENIED) return 'denied';
+    return 'prompt';
+  } catch {
+    return 'prompt';
+  }
+}
+
+export async function queryStoresGeolocationPermissionForPlatform(): Promise<GeolocationPermissionState | null> {
+  if (Platform.OS === 'web') return queryStoresGeolocationPermission();
+  return queryNativeStoresGeolocationPermission();
 }
