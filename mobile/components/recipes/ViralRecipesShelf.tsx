@@ -27,6 +27,7 @@ import type { ViralRecipeLinkItem } from '../../lib/viralRecipes/types';
 import { openExternalUrl } from '../../lib/smartShop/openExternalUrl';
 import { RecipeImportReviewSheet } from './RecipeImportReviewSheet';
 import type { RecipeImportExtractedDto } from '../../lib/recipeImport/types';
+import { AnchoredDropdownOverlay, useAnchoredDropdownTrigger } from '../AnchoredDropdownOverlay';
 
 const CARD_WIDTH = 148;
 
@@ -37,12 +38,12 @@ function CategoryDropdown({
   value: ViralRecipesCategory;
   onChange: (next: ViralRecipesCategory) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const { triggerRef, open, anchor, toggleMenu, closeMenu, onTriggerLayout } = useAnchoredDropdownTrigger();
 
   return (
-    <View className="relative" style={{ zIndex: open ? 10 : 1 }}>
+    <View ref={triggerRef} collapsable={false} onLayout={onTriggerLayout}>
       <Pressable
-        onPress={() => setOpen((prev) => !prev)}
+        onPress={toggleMenu}
         accessibilityRole="button"
         accessibilityLabel={VIRAL_RECIPES_COPY.categoryAccessibility}
         accessibilityState={{ expanded: open }}
@@ -51,29 +52,27 @@ function CategoryDropdown({
         <Text className="text-xs font-semibold text-ink">{VIRAL_RECIPES_CATEGORY_LABELS[value]}</Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={THEME.muted} />
       </Pressable>
-      {open ? (
-        <View className="absolute right-0 top-full z-20 mt-1 min-w-[120px] overflow-hidden rounded-xl border border-border bg-paper shadow-sm">
-          {VIRAL_RECIPES_CATEGORIES.map((choice) => {
-            const selected = choice === value;
-            return (
-              <Pressable
-                key={choice}
-                onPress={() => {
-                  onChange(choice);
-                  setOpen(false);
-                }}
-                className={`px-3 py-2 ${selected ? 'bg-primary-light' : 'bg-paper'}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-              >
-                <Text className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}>
-                  {VIRAL_RECIPES_CATEGORY_LABELS[choice]}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
+      <AnchoredDropdownOverlay visible={open} anchor={anchor} onClose={closeMenu} minWidth={120}>
+        {VIRAL_RECIPES_CATEGORIES.map((choice) => {
+          const selected = choice === value;
+          return (
+            <Pressable
+              key={choice}
+              onPress={() => {
+                onChange(choice);
+                closeMenu();
+              }}
+              className={`px-3 py-2 ${selected ? 'bg-primary-light' : 'bg-paper'}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+            >
+              <Text className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}>
+                {VIRAL_RECIPES_CATEGORY_LABELS[choice]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </AnchoredDropdownOverlay>
     </View>
   );
 }
