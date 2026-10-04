@@ -30,6 +30,8 @@ export interface BasePriceEntry {
   packagePrice: number;
   /** Grams per US cup when converting volume measures (optional). */
   gramsPerCup?: number;
+  /** Typical grams per count item (onion, egg, etc.). */
+  gramsEach?: number;
 }
 
 export interface RecipeCostPricingContext {

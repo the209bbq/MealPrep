@@ -4,11 +4,14 @@
  */
 
 import { calculateRecipeCostPerServing, formatUsd } from '../lib/costPerServing';
+import { normalizeIngredientAmount } from '../lib/costPerServing/parseIngredientAmount';
 import type { Recipe } from '../types/mealprep';
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error(msg);
 }
+
+const ctx = { ownerId: 'demo-user', communityDeals: [] as const };
 
 const sampleRecipe: Recipe = {
   id: 'test-recipe',
@@ -33,20 +36,76 @@ const sampleRecipe: Recipe = {
   createdAt: '',
 };
 
-const estimate = calculateRecipeCostPerServing(sampleRecipe, {
-  ownerId: 'demo-user',
-  communityDeals: [],
-});
+const estimate = calculateRecipeCostPerServing(sampleRecipe, ctx);
 
 assert(estimate.pricedCount >= 3, 'should price pasta, oil, and garlic');
 assert(estimate.unpricedCount >= 1, 'salt or water should be unpriced/skipped');
 assert(estimate.costPerServing != null && estimate.costPerServing > 0, 'cost per serving should be positive');
 assert(formatUsd(estimate.costPerServing!) === `$${estimate.costPerServing!.toFixed(2)}`, 'formatUsd uses decimals');
 
-const noServings = calculateRecipeCostPerServing(
-  { ...sampleRecipe, servings: 0 },
-  { ownerId: 'demo-user', communityDeals: [] },
+const unitFixtures: Array<{ name: string; quantity: number; unit: string }> = [
+  { name: 'onion', quantity: 1, unit: '' },
+  { name: 'broccoli', quantity: 2, unit: 'cup' },
+  { name: 'soy sauce', quantity: 3, unit: 'tbsp' },
+];
+
+for (const row of unitFixtures) {
+  const one = calculateRecipeCostPerServing(
+    {
+      servings: 4,
+      ingredients: [{ ingredientId: 'x', name: row.name, quantity: row.quantity, unit: row.unit }],
+    },
+    ctx,
+  );
+  assert(one.pricedCount === 1, `${row.name} should price with qty/unit ${row.quantity}/${row.unit}`);
+}
+
+const mealDbMeasures: Array<{ quantity: number; unit: string; expectUnit: string }> = [
+  { quantity: 0, unit: '1 large', expectUnit: 'each' },
+  { quantity: 0, unit: '1/2 tsp', expectUnit: 'tsp' },
+  { quantity: 0, unit: '200g', expectUnit: 'g' },
+  { quantity: 1, unit: 'can', expectUnit: 'can' },
+  { quantity: 2, unit: 'chopped', expectUnit: 'cup' },
+];
+
+for (const row of mealDbMeasures) {
+  const norm = normalizeIngredientAmount(row.quantity, row.unit);
+  assert(norm.unit === row.expectUnit, `normalize ${row.unit} -> ${norm.unit}, expected ${row.expectUnit}`);
+}
+
+const largeOnion = calculateRecipeCostPerServing(
+  {
+    servings: 4,
+    ingredients: [{ ingredientId: 'o', name: 'onion', quantity: 1, unit: 'large' }],
+  },
+  ctx,
 );
+assert(largeOnion.pricedCount === 1, 'large onion should price');
+
+const chickenBowl = calculateRecipeCostPerServing(
+  {
+    servings: 4,
+    ingredients: [
+      { ingredientId: '1', name: 'chicken breast', quantity: 1, unit: 'lb' },
+      { ingredientId: '2', name: 'rice', quantity: 1, unit: 'cup' },
+      { ingredientId: '3', name: 'broccoli', quantity: 2, unit: 'cup' },
+      { ingredientId: '4', name: 'onion', quantity: 1, unit: '' },
+      { ingredientId: '5', name: 'garlic', quantity: 3, unit: 'clove' },
+      { ingredientId: '6', name: 'soy sauce', quantity: 2, unit: 'tbsp' },
+      { ingredientId: '7', name: 'olive oil', quantity: 1, unit: 'tbsp' },
+      { ingredientId: '8', name: 'bell pepper', quantity: 1, unit: 'medium' },
+      { ingredientId: '9', name: 'carrot', quantity: 2, unit: 'each' },
+    ],
+  },
+  ctx,
+);
+
+assert(
+  chickenBowl.pricedCount >= 7,
+  `typical 9-ingredient dinner should price at least 7; got ${chickenBowl.pricedCount}`,
+);
+
+const noServings = calculateRecipeCostPerServing({ ...sampleRecipe, servings: 0 }, ctx);
 assert(noServings.servingsAssumedDefault, 'missing servings should default to 4');
 assert(noServings.servings === 4, 'default servings is 4');
 

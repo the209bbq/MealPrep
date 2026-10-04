@@ -71,7 +71,7 @@ function costFromCommunityDeal(
       packageAmount: base.packageAmount,
       packageUnit: base.packageUnit,
       packagePrice: deal.price,
-      gramsPerCup: base.gramsPerCup,
+      baseEntry: base,
       rememberedSizeUnit: remembered,
     });
   }
@@ -134,11 +134,13 @@ export function resolveIngredientPrice(input: {
   name: string;
   quantity: number;
   unit: string;
+  sizeScale?: number;
   ownerId: string;
   communityDeals: CommunityStoreDeal[];
   krogerDealsByIngredientKey?: Map<string, ItemStoreDeal>;
 }): { cost: number; source: CostPriceSource } | null {
-  const { name, quantity, unit, ownerId, communityDeals, krogerDealsByIngredientKey } = input;
+  const { name, quantity, unit, sizeScale = 1, ownerId, communityDeals, krogerDealsByIngredientKey } =
+    input;
   const remembered = readRememberedSizeUnit(ownerId, name);
 
   const community = bestCommunityDeal(name, communityDeals, ownerId);
@@ -165,7 +167,8 @@ export function resolveIngredientPrice(input: {
       packageAmount: base.packageAmount,
       packageUnit: base.packageUnit,
       packagePrice: base.packagePrice,
-      gramsPerCup: base.gramsPerCup,
+      baseEntry: base,
+      sizeScale,
       rememberedSizeUnit: remembered,
     });
     if (cost != null && cost > 0) {

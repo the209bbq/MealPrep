@@ -1,4 +1,5 @@
 import type { Recipe, RecipeIngredient } from '../../types/mealprep';
+import { normalizeIngredientAmount } from './parseIngredientAmount';
 import { isUnpriceableIngredient } from './unpriceable';
 import { resolveIngredientPrice } from './resolveIngredientPrice';
 import type { RecipeCostEstimate, RecipeCostPricingContext } from './types';
@@ -58,10 +59,11 @@ function lineForIngredient(
   pricing: RecipeCostPricingContext,
 ): RecipeCostEstimate['lines'][number] {
   const name = ingredient.name.replace(/\s*\(optional\)\s*/i, '').trim();
-  const quantity = ingredient.quantity;
-  const unit = ingredient.unit ?? '';
+  const normalized = normalizeIngredientAmount(ingredient.quantity, ingredient.unit ?? '');
+  const quantity = normalized.quantity;
+  const unit = normalized.unit;
 
-  if (isUnpriceableIngredient(name, quantity, unit)) {
+  if (isUnpriceableIngredient(name, ingredient.quantity, ingredient.unit ?? '')) {
     return { ingredient, cost: null, skippedReason: 'unpriceable' };
   }
 
@@ -73,6 +75,7 @@ function lineForIngredient(
     name,
     quantity,
     unit,
+    sizeScale: normalized.sizeScale,
     ownerId: pricing.ownerId,
     communityDeals: pricing.communityDeals,
     krogerDealsByIngredientKey: pricing.krogerDealsByIngredientKey,
