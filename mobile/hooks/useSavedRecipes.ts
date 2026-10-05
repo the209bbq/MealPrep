@@ -230,12 +230,13 @@ export function useSavedRecipes(options: {
 
   const toggleKitchenRecipe = useCallback(
     (recipe: Recipe) => {
+      const refKey = refKeyForKitchenRecipe(recipe);
       const record =
         isMealDbRecipeId(recipe.id) || recipe.sourceType === 'themealdb'
           ? savedRecordFromMealDbRecipe(recipe)
           : savedRecordFromKitchenRecipe(recipe);
-      const saved = isSavedRef(record.refKey);
-      void toggleRefKey(record.refKey, saved ? null : record);
+      const saved = isSavedRef(refKey);
+      void toggleRefKey(refKey, saved ? null : { ...record, refKey });
     },
     [isSavedRef, toggleRefKey],
   );

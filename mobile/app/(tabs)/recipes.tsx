@@ -96,7 +96,6 @@ export default function RecipesScreen() {
     userDietPrefs,
     notifySavedToMyRecipes,
     notifyRemovedFromMyRecipes,
-    notifyMyRecipesSaveFailed,
     savedRecipes,
     registerSavedRecipeToggleOutcome,
   } = useApp();
@@ -126,11 +125,9 @@ export default function RecipesScreen() {
         notifySavedToMyRecipes(() => setMyRecipesOpen(true));
       } else if (outcome.status === 'removed') {
         notifyRemovedFromMyRecipes(outcome.undo);
-      } else if (outcome.status === 'error') {
-        notifyMyRecipesSaveFailed();
       }
     },
-    [notifyMyRecipesSaveFailed, notifyRemovedFromMyRecipes, notifySavedToMyRecipes],
+    [notifyRemovedFromMyRecipes, notifySavedToMyRecipes],
   );
 
   useEffect(() => {

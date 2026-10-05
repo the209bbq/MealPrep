@@ -946,7 +946,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pantry,
     pantryMatches: pantryRecipeMatches,
     liveDataLoaded: demoMode || isGuest || liveDataLoaded,
-    onToggleOutcome: (outcome) => savedRecipeToggleOutcomeRef.current?.(outcome),
+    onToggleOutcome: (outcome) => {
+      if (outcome.status === 'error') {
+        setUndoToast({
+          message: SAVED_RECIPES_COPY.toastSaveFailed,
+          showUndo: false,
+          onUndo: () => setUndoToast(null),
+        });
+      }
+      savedRecipeToggleOutcomeRef.current?.(outcome);
+    },
   });
 
   const setDemoRole = useCallback((next: UserRole) => {

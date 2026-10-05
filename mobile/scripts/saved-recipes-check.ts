@@ -6,7 +6,8 @@ import { VIRAL_RECIPES_FEED_MODES } from '../config/viralRecipes';
 import { savedRefKeyCreator, savedRefKeyKitchen, savedRefKeyMealDb } from '../lib/savedRecipes/keys';
 import { kitchenRecipeIdForDb } from '../lib/savedRecipes/kitchenRecipeIdForDb';
 import { applySavedToggle, isRefKeySaved } from '../lib/savedRecipes/optimistic';
-import { savedRecordFromKitchenRecipe, savedRecordFromViralItem } from '../lib/savedRecipes/payloads';
+import { savedRecordFromKitchenRecipe, savedRecordFromMealDbRecipe, savedRecordFromViralItem } from '../lib/savedRecipes/payloads';
+import { refKeyForKitchenRecipe } from '../lib/savedRecipes/refKey';
 import { buildSavedRecipeFeedRows } from '../lib/savedRecipes/resolveRows';
 import { buildPantryMatchIndex } from '../lib/recipeMatch';
 import type { Recipe } from '../types/mealprep';
@@ -41,6 +42,22 @@ const recipe: Recipe = {
 const record = savedRecordFromKitchenRecipe(recipe);
 assert.equal(record.refKey, savedRefKeyMealDb('52772'));
 assert.equal(record.sourceType, 'mealdb');
+assert.equal(record.kitchenRecipeId, undefined);
+assert.equal(record.preview.kind, 'mealdb');
+assert.equal(kitchenRecipeIdForDb(record, new Set(['mealdb-52772'])), null);
+
+const mealDbToggleRecord = savedRecordFromMealDbRecipe(recipe);
+assert.equal(mealDbToggleRecord.refKey, savedRefKeyMealDb('52772'));
+assert.equal(mealDbToggleRecord.kitchenRecipeId, undefined);
+assert.equal(mealDbToggleRecord.preview.kind, 'mealdb');
+assert.equal(refKeyForKitchenRecipe(recipe), mealDbToggleRecord.refKey);
+
+const matches = buildPantryMatchIndex([recipe], []);
+
+const previewOnlyMealDbRows = buildSavedRecipeFeedRows([mealDbToggleRecord], [], [], matches);
+assert.equal(previewOnlyMealDbRows.length, 1);
+assert.equal(previewOnlyMealDbRows[0]?.recipe.name, 'Teriyaki Chicken');
+assert.equal(previewOnlyMealDbRows[0]?.recipe.id, 'mealdb-52772');
 
 const viral = savedRecordFromViralItem({
   videoId: 'abc123',
@@ -55,6 +72,10 @@ const viral = savedRecordFromViralItem({
   publishedAt: null,
 });
 assert.equal(viral.refKey, savedRefKeyCreator('abc123'));
+assert.equal(viral.preview.kind, 'creator');
+const previewOnlyCreatorRows = buildSavedRecipeFeedRows([viral], [], [], buildPantryMatchIndex([], []));
+assert.equal(previewOnlyCreatorRows.length, 1);
+assert.equal(previewOnlyCreatorRows[0]?.recipe.id, 'viral-preview-abc123');
 
 const kitchenOnly: Recipe = { ...recipe, id: 'link-import-1', sourceType: 'web', sourceUrl: 'https://x.com/r' };
 const kitchenRecord = savedRecordFromKitchenRecipe(kitchenOnly);
@@ -67,7 +88,9 @@ const accountUuid = '11111111-1111-4111-8111-111111111111';
 const accountRecord = savedRecordFromKitchenRecipe({ ...kitchenOnly, id: accountUuid });
 assert.equal(kitchenRecipeIdForDb(accountRecord, new Set([accountUuid])), accountUuid);
 
-const matches = buildPantryMatchIndex([recipe], []);
+const previewOnlyKitchenRows = buildSavedRecipeFeedRows([kitchenRecord], [], [], matches);
+assert.equal(previewOnlyKitchenRows.length, 1);
+assert.equal(previewOnlyKitchenRows[0]?.recipe.id, 'link-import-1');
 
 const catalogRecord = savedRecordFromKitchenRecipe({
   ...kitchenOnly,
