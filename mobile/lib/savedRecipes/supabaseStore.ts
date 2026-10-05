@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SAVED_RECIPES } from '../../config/savedRecipes';
+import { kitchenRecipeIdForDb } from './kitchenRecipeIdForDb';
 import { encodePreview, previewFromUserRow } from './preview';
 import type { SavedRecipeRecord, UserSavedRecipeRow } from './types';
 
@@ -38,12 +39,14 @@ export async function upsertUserSavedRecipe(
   client: SupabaseClient,
   userId: string,
   record: SavedRecipeRecord,
+  options?: { accountRecipeIds?: ReadonlySet<string> },
 ): Promise<SavedRecipeRecord> {
+  const accountRecipeIds = options?.accountRecipeIds ?? new Set<string>();
   const payload = {
     user_id: userId,
     ref_key: record.refKey,
     source_type: record.sourceType,
-    kitchen_recipe_id: record.kitchenRecipeId ?? null,
+    kitchen_recipe_id: kitchenRecipeIdForDb(record, accountRecipeIds),
     creator_video_id: record.creatorVideoId ?? null,
     creator_watch_url: record.creatorWatchUrl ?? null,
     mealdb_id: record.mealdbId ?? null,
@@ -77,8 +80,9 @@ export async function mergeGuestSavedRecipesIntoAccount(
   client: SupabaseClient,
   userId: string,
   guestRecords: SavedRecipeRecord[],
+  options?: { accountRecipeIds?: ReadonlySet<string> },
 ): Promise<void> {
   for (const record of guestRecords) {
-    await upsertUserSavedRecipe(client, userId, record);
+    await upsertUserSavedRecipe(client, userId, record, options);
   }
 }

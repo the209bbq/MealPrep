@@ -37,7 +37,7 @@ import {
 } from '../../lib/diet/filterRows';
 import { buildCreatorFeedCardModels } from '../../lib/recipes/creatorFeedRows';
 import { findKitchenRecipeBySourceUrl } from '../../lib/recipes/recipeSourceUrl';
-import { useSavedRecipes, type SavedRecipeToggleOutcome } from '../../hooks/useSavedRecipes';
+import type { SavedRecipeToggleOutcome } from '../../hooks/useSavedRecipes';
 import { MyRecipesSheet } from '../../components/recipes/MyRecipesSheet';
 import { savedCreatorItemFromRecord } from '../../lib/savedRecipes/resolveRows';
 import { RECIPE_SOURCES } from '../../config/recipeSources';
@@ -103,6 +103,8 @@ export default function RecipesScreen() {
     notifyRemovedFromMyRecipes,
     notifyMyRecipesSaveFailed,
     profile,
+    savedRecipes,
+    registerSavedRecipeToggleOutcome,
   } = useApp();
   const ownerId =
     session?.user?.id ?? (demoMode ? profile.id || 'demo-user' : GUEST_OWNER_ID);
@@ -162,15 +164,10 @@ export default function RecipesScreen() {
     [logSave, notifyMyRecipesSaveFailed, notifyRemovedFromMyRecipes, notifySavedToMyRecipes],
   );
 
-  const savedRecipes = useSavedRecipes({
-    session,
-    demoMode,
-    isGuest,
-    kitchenRecipes: feedKitchenRecipes,
-    pantry,
-    pantryMatches: pantryRecipeMatches,
-    onToggleOutcome: handleSavedRecipeToggleOutcome,
-  });
+  useEffect(() => {
+    registerSavedRecipeToggleOutcome(handleSavedRecipeToggleOutcome);
+    return () => registerSavedRecipeToggleOutcome(null);
+  }, [handleSavedRecipeToggleOutcome, registerSavedRecipeToggleOutcome]);
 
   const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
     enabled: creatorFeedEnabled && !searchQuery.trim() && !selectedCreator,
