@@ -110,17 +110,17 @@ async function runPlaywrightLayoutCheck(): Promise<void> {
 
       await feedButton.click({ force: true });
       await page.waitForTimeout(200);
-      const budgetItem = page.getByText('Budget', { exact: true }).first();
-      await budgetItem.waitFor({ state: 'visible', timeout: 5000 });
-      const menuItem = page.getByText('Classic recipes', { exact: true }).first();
+      const newItem = page.getByText('New', { exact: true }).first();
+      await newItem.waitFor({ state: 'visible', timeout: 5000 });
+      const menuItem = page.getByText('Quick', { exact: true }).first();
       const menuBox = await menuItem.boundingBox();
       assert.ok(menuBox, 'feed menu should open');
       assert.ok(
         menuBox.x >= -1 && menuBox.x + menuBox.width <= width + 1,
         `feed menu should stay on-screen at ${width}px`,
       );
-      const budgetVisible = await budgetItem.isVisible();
-      assert.equal(budgetVisible, true, `Budget option should not be hidden behind import UI at ${width}px`);
+      const budgetVisible = await newItem.isVisible();
+      assert.equal(budgetVisible, true, `New option should not be hidden behind import UI at ${width}px`);
       await page.close();
     }
   } finally {
