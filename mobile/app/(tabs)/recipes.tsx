@@ -51,13 +51,18 @@ import { MAIN_INGREDIENT_COPY } from '../../config/mainIngredient';
 import {
   creatorFeedModelMatchesMainPick,
   mainIngredientPickFromLabel,
-  recipeFromRecipesTabRow,
   recipesTabRowMatchesMainPick,
-  sortRowsByMainIngredientRanking,
   suggestMainIngredientChips,
   type MainIngredientPick,
 } from '../../lib/mainIngredient';
 import type { RecipesSearchResultItem } from '../../lib/recipes/mergeSearchResults';
+import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
+import { GUEST_OWNER_ID } from '../../config/guestMode';
+import { useRecipeRanking } from '../../hooks/useRecipeRanking';
+import {
+  refKeyFromCreatorModel,
+  refKeyFromRecipesTabRow,
+} from '../../lib/recipeRanking/recipeInputs';
 
 function RecipesFeedSectionLabel({ title, className }: { title: string; className?: string }) {
   return (
@@ -97,7 +102,10 @@ export default function RecipesScreen() {
     notifySavedToMyRecipes,
     notifyRemovedFromMyRecipes,
     notifyMyRecipesSaveFailed,
+    profile,
   } = useApp();
+  const ownerId =
+    session?.user?.id ?? (demoMode ? profile.id || 'demo-user' : GUEST_OWNER_ID);
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
   const [pickedDetailRow, setPickedDetailRow] = useState<RecipesTabRow | null>(null);
@@ -117,10 +125,33 @@ export default function RecipesScreen() {
   const browseMode: CreatorRecipesBrowseMode = feedMode;
   const showCreatorCatalogSections = creatorFeedEnabled && !searchQuery.trim();
   const [myRecipesOpen, setMyRecipesOpen] = useState(false);
+  const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
+  const [selectedMainIngredient, setSelectedMainIngredient] = useState<MainIngredientPick | null>(null);
+  const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
+  const recipeRanking = useRecipeRanking({
+    ownerId,
+    dietPrefs: userDietPrefs,
+    householdSize: profile.householdSize,
+    tabFilters: filters,
+    pricing: { ownerId, communityDeals: [] },
+  });
+  const {
+    logImpression,
+    logOpen,
+    logCook,
+    logSave,
+    rankTabRows,
+    rankCreatorModels,
+    rankSearchResults,
+    markWontCook,
+    undoWontCook,
+    isWontCook,
+  } = recipeRanking;
 
   const handleSavedRecipeToggleOutcome = useCallback(
     (outcome: SavedRecipeToggleOutcome) => {
       if (outcome.status === 'saved') {
+        logSave(outcome.refKey);
         notifySavedToMyRecipes(() => setMyRecipesOpen(true));
       } else if (outcome.status === 'removed') {
         notifyRemovedFromMyRecipes(outcome.undo);
@@ -128,7 +159,7 @@ export default function RecipesScreen() {
         notifyMyRecipesSaveFailed();
       }
     },
-    [notifyMyRecipesSaveFailed, notifyRemovedFromMyRecipes, notifySavedToMyRecipes],
+    [logSave, notifyMyRecipesSaveFailed, notifyRemovedFromMyRecipes, notifySavedToMyRecipes],
   );
 
   const savedRecipes = useSavedRecipes({
@@ -194,9 +225,6 @@ export default function RecipesScreen() {
     [params.import, sharedImportText],
   );
 
-  const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
-  const [selectedMainIngredient, setSelectedMainIngredient] = useState<MainIngredientPick | null>(null);
-  const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const pantryEmpty = pantry.length === 0;
 
   const cookWithParam = typeof params.cookWith === 'string' ? params.cookWith.trim() : '';
@@ -214,12 +242,7 @@ export default function RecipesScreen() {
   const applyMainIngredientToTabRows = useCallback(
     (rows: RecipesTabRow[]) => {
       if (!selectedMainIngredient) return rows;
-      const filtered = rows.filter((row) => recipesTabRowMatchesMainPick(row, selectedMainIngredient));
-      return sortRowsByMainIngredientRanking(
-        filtered,
-        recipeFromRecipesTabRow,
-        (row) => row.match,
-      );
+      return rows.filter((row) => recipesTabRowMatchesMainPick(row, selectedMainIngredient));
     },
     [selectedMainIngredient],
   );
@@ -227,38 +250,8 @@ export default function RecipesScreen() {
   const applyMainIngredientToCreatorModels = useCallback(
     (models: ReturnType<typeof buildCreatorFeedCardModels>) => {
       if (!selectedMainIngredient) return models;
-      const filtered = models.filter((model) =>
+      return models.filter((model) =>
         creatorFeedModelMatchesMainPick(model, selectedMainIngredient),
-      );
-      return sortRowsByMainIngredientRanking(
-        filtered,
-        (model) =>
-          model.importedRecipe ?? {
-            id: model.videoId,
-            name: model.item.title,
-            tag: 'Creator',
-            description: '',
-            servings: 4,
-            minutes: 30,
-            calories: 0,
-            protein: 0,
-            carbs: 0,
-            fat: 0,
-            ingredients: [],
-            steps: [],
-            isMaster: false,
-            createdAt: '',
-          },
-        (model) => model.match ?? {
-          recipeId: model.videoId,
-          recipeName: model.item.title,
-          totalIngredients: 0,
-          matchedCount: 0,
-          missingCount: 0,
-          percentMatch: 0,
-          matched: [],
-          missing: [],
-        },
       );
     },
     [selectedMainIngredient],
@@ -267,47 +260,12 @@ export default function RecipesScreen() {
   const applyMainIngredientToSearchResults = useCallback(
     (results: RecipesSearchResultItem[]) => {
       if (!selectedMainIngredient) return results;
-      const filtered = results.filter((result) => {
+      return results.filter((result) => {
         if (result.kind === 'classic') {
           return recipesTabRowMatchesMainPick(result.row, selectedMainIngredient);
         }
         return creatorFeedModelMatchesMainPick(result.model, selectedMainIngredient);
       });
-      return sortRowsByMainIngredientRanking(
-        filtered,
-        (result) =>
-          result.kind === 'classic'
-            ? recipeFromRecipesTabRow(result.row)
-            : result.model.importedRecipe ?? {
-                id: result.model.videoId,
-                name: result.model.item.title,
-                tag: 'Creator',
-                description: '',
-                servings: 4,
-                minutes: 30,
-                calories: 0,
-                protein: 0,
-                carbs: 0,
-                fat: 0,
-                ingredients: [],
-                steps: [],
-                isMaster: false,
-                createdAt: '',
-              },
-        (result) =>
-          result.kind === 'classic'
-            ? result.row.match
-            : result.model.match ?? {
-                recipeId: result.model.videoId,
-                recipeName: result.model.item.title,
-                totalIngredients: 0,
-                matchedCount: 0,
-                missingCount: 0,
-                percentMatch: 0,
-                matched: [],
-                missing: [],
-              },
-      );
     },
     [selectedMainIngredient],
   );
@@ -326,7 +284,8 @@ export default function RecipesScreen() {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
     const fed = buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
     const diet = filterRecipesTabRowsForDietPrefs(fed, userDietPrefs);
-    return applyMainIngredientToTabRows(diet);
+    const main = applyMainIngredientToTabRows(diet);
+    return rankTabRows(main);
   }, [
     applyMainIngredientToTabRows,
     filterBaseRows,
@@ -334,17 +293,20 @@ export default function RecipesScreen() {
     searchQuery,
     feedDiversitySeed,
     userDietPrefs,
+    rankTabRows,
   ]);
 
   const classicRecipeRows = useMemo(() => {
     if (!showCreatorCatalogSections) return [];
     const diet = filterRecipesTabRowsForDietPrefs(mealDbRows, userDietPrefs);
-    return applyMainIngredientToTabRows(diet);
+    const main = applyMainIngredientToTabRows(diet);
+    return rankTabRows(main);
   }, [
     applyMainIngredientToTabRows,
     mealDbRows,
     showCreatorCatalogSections,
     userDietPrefs,
+    rankTabRows,
   ]);
 
   const browseVideoModels = useMemo(() => {
@@ -352,7 +314,8 @@ export default function RecipesScreen() {
     const videos = selectedCreator ? channelVideos : feedVideos;
     const models = buildCreatorFeedCardModels(videos, kitchenRecipes, pantryRecipeMatches);
     const diet = filterCreatorFeedModelsForDietPrefs(models, userDietPrefs);
-    return applyMainIngredientToCreatorModels(diet);
+    const main = applyMainIngredientToCreatorModels(diet);
+    return rankCreatorModels(main);
   }, [
     channelVideos,
     creatorFeedEnabled,
@@ -363,6 +326,7 @@ export default function RecipesScreen() {
     selectedCreator,
     userDietPrefs,
     applyMainIngredientToCreatorModels,
+    rankCreatorModels,
   ]);
 
   const { results: searchResults, loading: searchLoading, error: searchError } =
@@ -374,12 +338,21 @@ export default function RecipesScreen() {
       pantryMatches: pantryRecipeMatches,
     });
 
+  const searching = searchQuery.trim().length >= 2;
+
   const searchResultsFiltered = useMemo(() => {
     const diet = filterRecipeSearchResultsForDietPrefs(searchResults, userDietPrefs);
-    return applyMainIngredientToSearchResults(diet);
-  }, [applyMainIngredientToSearchResults, searchResults, userDietPrefs]);
+    const main = applyMainIngredientToSearchResults(diet);
+    return rankSearchResults(main);
+  }, [
+    applyMainIngredientToSearchResults,
+    searchResults,
+    userDietPrefs,
+    rankSearchResults,
+  ]);
 
   function openDetail(row: RecipesTabRow) {
+    logOpen(refKeyFromRecipesTabRow(row));
     setPickedDetailRow(row);
   }
 
@@ -415,7 +388,6 @@ export default function RecipesScreen() {
   }, [detailRow, feedKitchenRecipes, pantryRecipeMatches.byRecipeId, viralOpenState]);
 
   const showLegacyKitchenFeed = !creatorFeedEnabled;
-  const searching = searchQuery.trim().length >= 2;
 
   const hasUnfilteredResults = showCreatorCatalogSections
     ? mealDbRows.length > 0 || browseVideoModels.length > 0 || creators.length > 0
@@ -457,6 +429,70 @@ export default function RecipesScreen() {
         ? classicRecipeRows.length === 0 && browseVideoModels.length === 0
         : filteredRows.length === 0);
 
+  const refKeyForCreatorOpen = useCallback(
+    (videoId: string) => {
+      const model = browseVideoModels.find((entry) => entry.videoId === videoId);
+      if (model) return refKeyFromCreatorModel(model);
+      const channelModel = channelVideos.find((v) => v.videoId === videoId);
+      if (channelModel) {
+        const built = buildCreatorFeedCardModels(
+          [channelModel],
+          kitchenRecipes,
+          pantryRecipeMatches,
+        )[0];
+        if (built) return refKeyFromCreatorModel(built);
+      }
+      return `creator:${videoId}`;
+    },
+    [browseVideoModels, channelVideos, kitchenRecipes, pantryRecipeMatches],
+  );
+
+  const openCreatorVideo = useCallback(
+    (item: Parameters<typeof openViralItem>[0]) => {
+      logOpen(refKeyForCreatorOpen(item.videoId));
+      openViralItem(item);
+    },
+    [logOpen, openViralItem, refKeyForCreatorOpen],
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searching) {
+        for (const result of searchResultsFiltered) {
+          if (result.kind === 'classic') {
+            logImpression(refKeyFromRecipesTabRow(result.row));
+          } else {
+            logImpression(refKeyFromCreatorModel(result.model));
+          }
+        }
+        return;
+      }
+      if (!showCreatorCatalogSections || showMainIngredientEmpty) return;
+      for (const row of classicRecipeRows) {
+        logImpression(refKeyFromRecipesTabRow(row));
+      }
+      for (const model of browseVideoModels) {
+        logImpression(refKeyFromCreatorModel(model));
+      }
+      if (showLegacyKitchenFeed) {
+        for (const row of filteredRows) {
+          logImpression(refKeyFromRecipesTabRow(row));
+        }
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [
+    browseVideoModels,
+    classicRecipeRows,
+    filteredRows,
+    logImpression,
+    searchResultsFiltered,
+    searching,
+    showCreatorCatalogSections,
+    showLegacyKitchenFeed,
+    showMainIngredientEmpty,
+  ]);
+
   const showSignInOnImportError =
     Boolean(viralOpenState?.importError) &&
     viralOpenState?.importError === RECIPE_IMPORT_COPY.guestSignInMessage &&
@@ -496,6 +532,47 @@ export default function RecipesScreen() {
     return savedRecipes.isKitchenSavePending(detailRow.recipe);
   }, [detailRow, feedKitchenRecipes, savedRecipes, viralOpenState]);
 
+  const detailRankingRefKey = useMemo(() => {
+    if (!detailRow) return null;
+    if (viralOpenState) return refKeyForCreatorOpen(viralOpenState.item.videoId);
+    return refKeyFromRecipesTabRow(detailRow);
+  }, [detailRow, refKeyForCreatorOpen, viralOpenState]);
+
+  const detailWontCook = detailRankingRefKey ? isWontCook(detailRankingRefKey) : false;
+
+  const handleToggleDetailWontCook = useCallback(() => {
+    if (!detailRankingRefKey) return;
+    if (detailWontCook) {
+      undoWontCook(detailRankingRefKey);
+      return;
+    }
+    markWontCook(detailRankingRefKey);
+    closeViral();
+    setPickedDetailRow(null);
+  }, [closeViral, detailRankingRefKey, detailWontCook, markWontCook, undoWontCook]);
+
+  const handleToggleKitchenMealPlan = useCallback(
+    async (recipeId: string) => {
+      const onPlan = isOnMealPlan({ recipeSlug: recipeId });
+      await toggleMealPlanKitchenRecipe(recipeId);
+      if (!onPlan && detailRankingRefKey) {
+        logCook(detailRankingRefKey);
+      }
+    },
+    [detailRankingRefKey, isOnMealPlan, logCook, toggleMealPlanKitchenRecipe],
+  );
+
+  const handleToggleDiscoveryMealPlan = useCallback(
+    async (recipe: RecipeDiscoveryListItem) => {
+      const onPlan = isOnMealPlan({ recipeApiId: recipe.id });
+      await toggleMealPlanDiscoveryRecipe(recipe);
+      if (!onPlan && detailRankingRefKey) {
+        logCook(detailRankingRefKey);
+      }
+    },
+    [detailRankingRefKey, isOnMealPlan, logCook, toggleMealPlanDiscoveryRecipe],
+  );
+
   function toggleDetailRecipeSave() {
     if (!detailRow || detailRow.kind !== 'kitchen') return;
     if (detailRow.recipe.id.startsWith('viral-preview-') && viralOpenState) {
@@ -517,7 +594,7 @@ export default function RecipesScreen() {
       });
       const item = record ? savedCreatorItemFromRecord(record) : null;
       if (item) {
-        openViralItem(item);
+        openCreatorVideo(item);
         return;
       }
     }
@@ -695,7 +772,7 @@ export default function RecipesScreen() {
                   result.model.importedRecipe,
                 )}
                 onOpen={() => {
-                  openViralItem(result.model.item);
+                  openCreatorVideo(result.model.item);
                 }}
               />
             ),
@@ -754,7 +831,7 @@ export default function RecipesScreen() {
               onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
               saveDisabled={savedRecipes.isCreatorSavePending(model.videoId, model.importedRecipe)}
               onOpen={() => {
-                openViralItem(model.item);
+                openCreatorVideo(model.item);
               }}
             />
           ))}
@@ -815,8 +892,10 @@ export default function RecipesScreen() {
         onAddMissingKitchen={addMissingRecipeIngredientsToGrocery}
         onAddMissingDiscovery={addMissingDiscoveryRecipeIngredientsToGrocery}
         isOnMealPlan={isOnMealPlan}
-        onToggleKitchen={(recipeId) => void toggleMealPlanKitchenRecipe(recipeId)}
-        onToggleDiscovery={(recipe) => void toggleMealPlanDiscoveryRecipe(recipe)}
+        onToggleKitchen={(recipeId) => void handleToggleKitchenMealPlan(recipeId)}
+        onToggleDiscovery={(recipe) => void handleToggleDiscoveryMealPlan(recipe)}
+        wontCookAgain={detailWontCook}
+        onToggleWontCook={detailRankingRefKey ? handleToggleDetailWontCook : undefined}
         onClearRecipeSource={(recipeId) => void clearImportedRecipeSource(recipeId)}
         recipeSaved={detailRecipeSaved}
         onToggleSaveRecipe={detailRow?.kind === 'kitchen' ? toggleDetailRecipeSave : undefined}
