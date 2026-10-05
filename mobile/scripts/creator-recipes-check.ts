@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   CREATOR_RECIPES_FEED_MODES,
-  CREATOR_RECIPES_FEED_MODE_LABELS,
   CREATOR_RECIPES_FEED_MODE_SHORT_LABELS,
-  isClassicRecipesFeedMode,
-  isCreatorBrowseMode,
 } from '../config/creatorRecipes';
 import { RECIPE_SOURCES } from '../config/recipeSources';
 import { getCreatorVideosUrl, isCreatorRecipesConfigured } from '../config/appConfig';
@@ -18,11 +15,8 @@ import path from 'node:path';
 assert.equal(RECIPE_SOURCES.creatorRecipesPrimaryFeed, true);
 assert.equal(RECIPE_SOURCES.viralRecipesPrimaryFeed, false);
 assert.equal(CREATOR_RECIPES_FEED_MODES.includes('popular'), true);
-assert.equal(CREATOR_RECIPES_FEED_MODE_LABELS.classic_recipes, 'Classic recipes');
-assert.equal(CREATOR_RECIPES_FEED_MODE_SHORT_LABELS.classic_recipes, 'Classic');
+assert.equal(CREATOR_RECIPES_FEED_MODES.includes('classic_recipes' as never), false);
 assert.equal(CREATOR_RECIPES_FEED_MODE_SHORT_LABELS.popular, 'Popular');
-assert.equal(isCreatorBrowseMode('quick'), true);
-assert.equal(isClassicRecipesFeedMode('classic_recipes'), true);
 assert.equal(CREATOR_RECIPES_FEED_MODES.includes('my_recipes' as never), false);
 assert.equal(typeof isCreatorRecipesConfigured(), 'boolean');
 assert.equal(typeof getCreatorVideosUrl(), 'string');

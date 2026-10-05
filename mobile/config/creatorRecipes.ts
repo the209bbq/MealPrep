@@ -2,27 +2,11 @@
  * Trusted creator recipe shelf — cached YouTube metadata from enabled channels.
  */
 
-import { MEALDB_COPY } from './mealdb';
-
-export const CREATOR_RECIPES_FEED_MODES = [
-  'popular',
-  'new',
-  'quick',
-  'budget',
-  'classic_recipes',
-] as const;
+export const CREATOR_RECIPES_FEED_MODES = ['popular', 'new', 'quick', 'budget'] as const;
 
 export type CreatorRecipesFeedMode = (typeof CREATOR_RECIPES_FEED_MODES)[number];
 
-export type CreatorRecipesBrowseMode = Exclude<CreatorRecipesFeedMode, 'classic_recipes'>;
-
-export function isCreatorBrowseMode(mode: CreatorRecipesFeedMode): mode is CreatorRecipesBrowseMode {
-  return mode !== 'classic_recipes';
-}
-
-export function isClassicRecipesFeedMode(mode: CreatorRecipesFeedMode): boolean {
-  return mode === 'classic_recipes';
-}
+export type CreatorRecipesBrowseMode = CreatorRecipesFeedMode;
 
 export const CREATOR_RECIPES = {
   enabled: true,
@@ -37,7 +21,6 @@ export const CREATOR_RECIPES_FEED_MODE_LABELS: Record<CreatorRecipesFeedMode, st
   new: 'New',
   quick: 'Quick',
   budget: 'Budget',
-  classic_recipes: MEALDB_COPY.feedModeLabel,
 };
 
 /** Compact labels for the feed dropdown trigger on narrow toolbars. */
@@ -46,12 +29,12 @@ export const CREATOR_RECIPES_FEED_MODE_SHORT_LABELS: Record<CreatorRecipesFeedMo
   new: 'New',
   quick: 'Quick',
   budget: 'Budget',
-  classic_recipes: 'Classic',
 };
 
 export const CREATOR_RECIPES_COPY = {
   feedTitle: 'Recipes from creators you trust',
-  feedSubtitle: 'Cook from real video recipes — tap to import and match your pantry',
+  feedSubtitle: 'Classic ideas and creator videos — match what’s in your pantry',
+  creatorsSectionTitle: 'From creators',
   cardTapToImport: 'Tap to import & match your pantry',
   sourceClassic: 'Classic',
   loading: 'Loading recipes…',
