@@ -14,7 +14,6 @@ export function savedRecordFromKitchenRecipe(recipe: Recipe, savedAt = new Date(
       refKey: savedRefKeyMealDb(mealdbId),
       sourceType: 'mealdb',
       mealdbId,
-      kitchenRecipeId: recipe.id,
       title: recipe.name,
       imageUrl: recipe.imageUrl ?? null,
       preview: { kind: 'mealdb', shape: appRecipeToNormalizedSnapshot(recipe) },
@@ -27,7 +26,7 @@ export function savedRecordFromKitchenRecipe(recipe: Recipe, savedAt = new Date(
     kitchenRecipeId: recipe.id,
     title: recipe.name,
     imageUrl: recipe.imageUrl ?? null,
-    preview: { kind: 'none' },
+    preview: { kind: 'mealdb', shape: appRecipeToNormalizedSnapshot(recipe) },
     savedAt,
   };
 }

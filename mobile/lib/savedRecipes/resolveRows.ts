@@ -3,8 +3,37 @@ import { compareRecipePantryMatches, scoreRecipeAgainstPantry, type PantryMatchI
 import { mapNormalizedRecipeToAppRecipe } from '../recipes/normalizedRecipeShape';
 import { findKitchenRecipeBySourceUrl } from '../recipes/recipeSourceUrl';
 import { stubKitchenRecipeFromViralItem } from '../recipes/viralFeedRows';
+import { mealDbRecipeId } from '../mealdb/slug';
 import type { PantryItem, Recipe } from '../../types/mealprep';
+import { parseSavedRefKey } from './keys';
 import type { SavedRecipeRecord } from './types';
+
+function stubKitchenFromRecord(record: SavedRecipeRecord, recipeId: string): Recipe {
+  return {
+    id: recipeId,
+    name: record.title,
+    tag: '',
+    description: '',
+    servings: 4,
+    minutes: 30,
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    ingredients: [],
+    steps: [],
+    isMaster: false,
+    createdAt: record.savedAt,
+    imageUrl: record.imageUrl ?? undefined,
+  };
+}
+
+function kitchenIdFromRecord(record: SavedRecipeRecord): string | null {
+  if (record.kitchenRecipeId) return record.kitchenRecipeId;
+  const parsed = parseSavedRefKey(record.refKey);
+  if (parsed?.type === 'kitchen') return parsed.id;
+  return null;
+}
 
 function zeroMatch(recipe: Recipe) {
   return scoreRecipeAgainstPantry(recipe, []);
@@ -16,29 +45,23 @@ export function resolveSavedRecipeToRow(
   pantry: PantryItem[],
   pantryMatches: PantryMatchIndex,
 ): RecipesTabRow | null {
-  if (record.sourceType === 'kitchen' && record.kitchenRecipeId) {
-    const recipe =
-      kitchenRecipes.find((row) => row.id === record.kitchenRecipeId) ??
-      ({
-        id: record.kitchenRecipeId,
-        name: record.title,
-        tag: '',
-        description: '',
-        servings: 4,
-        minutes: 30,
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fat: 0,
-        ingredients: [],
-        steps: [],
-        isMaster: false,
-        createdAt: record.savedAt,
-        imageUrl: record.imageUrl ?? undefined,
-      } satisfies Recipe);
-    const match =
-      pantryMatches.byRecipeId.get(recipe.id) ?? scoreRecipeAgainstPantry(recipe, pantry);
-    return { kind: 'kitchen', recipe, match };
+  if (record.sourceType === 'kitchen') {
+    if (record.preview.kind === 'mealdb') {
+      const recipe = mapNormalizedRecipeToAppRecipe(record.preview.shape);
+      const match =
+        pantryMatches.byRecipeId.get(recipe.id) ?? scoreRecipeAgainstPantry(recipe, pantry);
+      return { kind: 'kitchen', recipe, match };
+    }
+    const kitchenId = kitchenIdFromRecord(record);
+    if (kitchenId) {
+      const recipe =
+        kitchenRecipes.find((row) => row.id === kitchenId) ??
+        stubKitchenFromRecord(record, kitchenId);
+      const match =
+        pantryMatches.byRecipeId.get(recipe.id) ?? scoreRecipeAgainstPantry(recipe, pantry);
+      return { kind: 'kitchen', recipe, match };
+    }
+    return null;
   }
 
   if (record.sourceType === 'mealdb') {
@@ -54,6 +77,15 @@ export function resolveSavedRecipeToRow(
           pantryMatches.byRecipeId.get(recipe.id) ?? scoreRecipeAgainstPantry(recipe, pantry);
         return { kind: 'kitchen', recipe, match };
       }
+    }
+    if (record.mealdbId) {
+      const recipeId = mealDbRecipeId(record.mealdbId);
+      const recipe =
+        kitchenRecipes.find((row) => row.id === recipeId) ??
+        stubKitchenFromRecord(record, recipeId);
+      const match =
+        pantryMatches.byRecipeId.get(recipe.id) ?? scoreRecipeAgainstPantry(recipe, pantry);
+      return { kind: 'kitchen', recipe, match };
     }
     return null;
   }

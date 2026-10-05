@@ -7,7 +7,6 @@ import { THEME } from '../../config/appConfig';
 import { SAVED_RECIPES_COPY } from '../../config/savedRecipes';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import { useApp } from '../../context/AppContext';
-import { useSavedRecipes } from '../../hooks/useSavedRecipes';
 import { MyRecipesSheet } from '../recipes/MyRecipesSheet';
 import { savedCreatorItemFromRecord } from '../../lib/savedRecipes/resolveRows';
 
@@ -23,17 +22,8 @@ function recipeImageUrl(row: RecipesTabRow): string | null {
 }
 
 export function HomeMyRecipesStrip() {
-  const { session, demoMode, isGuest, feedKitchenRecipes, pantry, pantryRecipeMatches } = useApp();
+  const { demoMode, isGuest, savedRecipes } = useApp();
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  const savedRecipes = useSavedRecipes({
-    session,
-    demoMode,
-    isGuest,
-    kitchenRecipes: feedKitchenRecipes,
-    pantry,
-    pantryMatches: pantryRecipeMatches,
-  });
 
   const previewRows = savedRecipes.feedRows.slice(0, PREVIEW_LIMIT);
 

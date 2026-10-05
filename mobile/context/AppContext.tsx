@@ -1,6 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useHydrated } from '../hooks/useHydrated';
 import { useHydrationGatedPersist } from '../hooks/useHydrationGatedPersist';
+import {
+  useSavedRecipes,
+  type SavedRecipeToggleOutcome,
+  type SavedRecipesController,
+} from '../hooks/useSavedRecipes';
 import type { Session } from '@supabase/supabase-js';
 import {
   APP_NAME,
@@ -334,6 +339,8 @@ interface AppContextValue {
   notifySavedToMyRecipes: (onViewMyRecipes: () => void) => void;
   notifyRemovedFromMyRecipes: (onUndo: () => void) => void;
   notifyMyRecipesSaveFailed: () => void;
+  savedRecipes: SavedRecipesController;
+  registerSavedRecipeToggleOutcome: (handler: ((outcome: SavedRecipeToggleOutcome) => void) | null) => void;
   toggleGroceryItem: (id: string) => void;
   addManualGroceryItem: (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => void;
   clearCheckedGroceryItems: () => void;
@@ -581,7 +588,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const guestSavedRecipes = readGuestSavedRecipes();
     if (guestSavedRecipes.length > 0) {
-      await mergeGuestSavedRecipesIntoAccount(supabase, userId, guestSavedRecipes);
+      const accountRecipeIds = new Set(nextRecipes.map((row) => row.id));
+      await mergeGuestSavedRecipesIntoAccount(supabase, userId, guestSavedRecipes, {
+        accountRecipeIds,
+      });
       clearGuestSavedRecipes();
     }
 
@@ -913,6 +923,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ).slice(0, RECIPE_MATCHING.homeRecommendationsLimit);
     return ranked;
   }, [pantry.length, pantryRecipeMatchesRankedFiltered]);
+
+  const accountRecipeIds = useMemo(() => new Set(recipes.map((row) => row.id)), [recipes]);
+
+  const savedRecipeToggleOutcomeRef = useRef<((outcome: SavedRecipeToggleOutcome) => void) | null>(
+    null,
+  );
+
+  const registerSavedRecipeToggleOutcome = useCallback(
+    (handler: ((outcome: SavedRecipeToggleOutcome) => void) | null) => {
+      savedRecipeToggleOutcomeRef.current = handler;
+    },
+    [],
+  );
+
+  const savedRecipes = useSavedRecipes({
+    session,
+    demoMode,
+    isGuest,
+    accountRecipeIds,
+    kitchenRecipes: feedKitchenRecipes,
+    pantry,
+    pantryMatches: pantryRecipeMatches,
+    liveDataLoaded: demoMode || isGuest || liveDataLoaded,
+    onToggleOutcome: (outcome) => {
+      if (outcome.status === 'error') {
+        setUndoToast({
+          message: SAVED_RECIPES_COPY.toastSaveFailed,
+          showUndo: false,
+          onUndo: () => setUndoToast(null),
+        });
+      }
+      savedRecipeToggleOutcomeRef.current?.(outcome);
+    },
+  });
 
   const setDemoRole = useCallback((next: UserRole) => {
     setRole(next);
@@ -2298,6 +2342,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifySavedToMyRecipes,
       notifyRemovedFromMyRecipes,
       notifyMyRecipesSaveFailed,
+      savedRecipes,
+      registerSavedRecipeToggleOutcome,
       toggleGroceryItem,
       addManualGroceryItem,
       clearCheckedGroceryItems,
@@ -2412,6 +2458,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifySavedToMyRecipes,
       notifyRemovedFromMyRecipes,
       notifyMyRecipesSaveFailed,
+      savedRecipes,
+      registerSavedRecipeToggleOutcome,
       updateRecipe,
       importDiscoveredRecipe,
       saveLinkImportedRecipe,

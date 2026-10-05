@@ -37,7 +37,7 @@ import {
 } from '../../lib/diet/filterRows';
 import { buildCreatorFeedCardModels } from '../../lib/recipes/creatorFeedRows';
 import { findKitchenRecipeBySourceUrl } from '../../lib/recipes/recipeSourceUrl';
-import { useSavedRecipes, type SavedRecipeToggleOutcome } from '../../hooks/useSavedRecipes';
+import type { SavedRecipeToggleOutcome } from '../../hooks/useSavedRecipes';
 import { MyRecipesSheet } from '../../components/recipes/MyRecipesSheet';
 import { savedCreatorItemFromRecord } from '../../lib/savedRecipes/resolveRows';
 import { RECIPE_SOURCES } from '../../config/recipeSources';
@@ -96,7 +96,8 @@ export default function RecipesScreen() {
     userDietPrefs,
     notifySavedToMyRecipes,
     notifyRemovedFromMyRecipes,
-    notifyMyRecipesSaveFailed,
+    savedRecipes,
+    registerSavedRecipeToggleOutcome,
   } = useApp();
   const routeRecipeId =
     typeof params.recipeId === 'string' && params.recipeId ? params.recipeId : null;
@@ -124,22 +125,15 @@ export default function RecipesScreen() {
         notifySavedToMyRecipes(() => setMyRecipesOpen(true));
       } else if (outcome.status === 'removed') {
         notifyRemovedFromMyRecipes(outcome.undo);
-      } else if (outcome.status === 'error') {
-        notifyMyRecipesSaveFailed();
       }
     },
-    [notifyMyRecipesSaveFailed, notifyRemovedFromMyRecipes, notifySavedToMyRecipes],
+    [notifyRemovedFromMyRecipes, notifySavedToMyRecipes],
   );
 
-  const savedRecipes = useSavedRecipes({
-    session,
-    demoMode,
-    isGuest,
-    kitchenRecipes: feedKitchenRecipes,
-    pantry,
-    pantryMatches: pantryRecipeMatches,
-    onToggleOutcome: handleSavedRecipeToggleOutcome,
-  });
+  useEffect(() => {
+    registerSavedRecipeToggleOutcome(handleSavedRecipeToggleOutcome);
+    return () => registerSavedRecipeToggleOutcome(null);
+  }, [handleSavedRecipeToggleOutcome, registerSavedRecipeToggleOutcome]);
 
   const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
     enabled: creatorFeedEnabled && !searchQuery.trim() && !selectedCreator,
