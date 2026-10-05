@@ -38,6 +38,8 @@ export interface VideoRecipeDetailViewProps {
   previewLoading?: boolean;
   /** Controlled tab for screenshots. */
   initialSection?: DetailSection;
+  wontCookAgain?: boolean;
+  onToggleWontCook?: () => void;
 }
 
 function SectionToggle({
@@ -167,6 +169,8 @@ export function VideoRecipeDetailView({
   saveDisabled = false,
   previewLoading = false,
   initialSection = 'ingredients',
+  wontCookAgain = false,
+  onToggleWontCook,
 }: VideoRecipeDetailViewProps) {
   const insets = useSafeAreaInsets();
   const [section, setSection] = useState<DetailSection>(initialSection);
@@ -251,6 +255,25 @@ export function VideoRecipeDetailView({
             <RecipeDietNotice
               ingredientLines={ingredientLinesForKitchenRecipe(recipe, viralItem?.title ?? recipe.name)}
             />
+          ) : null}
+
+          {!showLoading && !importError && onToggleWontCook ? (
+            <Pressable
+              onPress={onToggleWontCook}
+              className="mt-3 self-start"
+              accessibilityRole="button"
+              accessibilityLabel={
+                wontCookAgain
+                  ? RECIPES_COPY.recipeDetail.wontCookAgainUndo
+                  : RECIPES_COPY.recipeDetail.wontCookAgain
+              }
+            >
+              <Text className="text-xs font-semibold text-muted">
+                {wontCookAgain
+                  ? RECIPES_COPY.recipeDetail.wontCookAgainUndo
+                  : RECIPES_COPY.recipeDetail.wontCookAgain}
+              </Text>
+            </Pressable>
           ) : null}
 
           {showLoading ? <LoadingSkeleton /> : null}

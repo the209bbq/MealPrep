@@ -56,6 +56,8 @@ export interface RecipeDetailSheetProps {
   onClearRecipeSource?: (recipeId: string) => void;
   viralItem?: ViralRecipeLinkItem | null;
   creatorAvatarUrl?: string | null;
+  wontCookAgain?: boolean;
+  onToggleWontCook?: () => void;
 }
 
 type DetailSection = 'ingredients' | 'steps';
@@ -142,6 +144,8 @@ function ClassicRecipeDetailBody({
   onToggleSaveRecipe,
   saveDisabled = false,
   onClearRecipeSource,
+  wontCookAgain = false,
+  onToggleWontCook,
 }: {
   row: RecipesTabRow;
   match: RecipePantryMatch | null | undefined;
@@ -161,6 +165,8 @@ function ClassicRecipeDetailBody({
   onToggleSaveRecipe?: () => void;
   saveDisabled?: boolean;
   onClearRecipeSource?: (recipeId: string) => void;
+  wontCookAgain?: boolean;
+  onToggleWontCook?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const [section, setSection] = useState<DetailSection>('ingredients');
@@ -289,6 +295,24 @@ function ClassicRecipeDetailBody({
               </Pressable>
             ) : null}
             <AddToCalendarButton target={scheduleTarget} size={20} className="rounded-full border border-border bg-card p-2" />
+            {onToggleWontCook ? (
+              <Pressable
+                onPress={onToggleWontCook}
+                className={`rounded-full px-3 py-1.5 ${wontCookAgain ? 'bg-border' : 'border border-border bg-card'}`}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  wontCookAgain
+                    ? RECIPES_COPY.recipeDetail.wontCookAgainUndo
+                    : RECIPES_COPY.recipeDetail.wontCookAgain
+                }
+              >
+                <Text className={`text-xs font-bold ${wontCookAgain ? 'text-muted' : 'text-ink'}`}>
+                  {wontCookAgain
+                    ? RECIPES_COPY.recipeDetail.wontCookAgainUndo
+                    : RECIPES_COPY.recipeDetail.wontCookAgain}
+                </Text>
+              </Pressable>
+            ) : null}
             {!importing && missingCount > 0 ? (
               <Pressable
                 onPress={() => {
@@ -400,6 +424,8 @@ export function RecipeDetailSheet({
   onClearRecipeSource,
   viralItem = null,
   creatorAvatarUrl = null,
+  wontCookAgain = false,
+  onToggleWontCook,
 }: RecipeDetailSheetProps) {
   const kitchenRecipe = useMemo(() => {
     if (!row) return null;
@@ -436,6 +462,8 @@ export function RecipeDetailSheet({
             if (row.kind === 'kitchen') onAddMissingKitchen(row.recipe.id, match ?? undefined);
             else onAddMissingDiscovery(row.recipe);
           }}
+          wontCookAgain={wontCookAgain}
+          onToggleWontCook={onToggleWontCook}
         />
       ) : (
         <ClassicRecipeDetailBody
@@ -457,6 +485,8 @@ export function RecipeDetailSheet({
           onToggleSaveRecipe={onToggleSaveRecipe}
           saveDisabled={saveDisabled}
           onClearRecipeSource={onClearRecipeSource}
+          wontCookAgain={wontCookAgain}
+          onToggleWontCook={onToggleWontCook}
         />
       )}
     </Modal>

@@ -129,6 +129,8 @@ export const RECIPES_COPY = {
   },
 
   recipeDetail: {
+    wontCookAgain: "Won't cook again",
+    wontCookAgainUndo: 'Undo hide',
     ingredientsTab: 'Ingredients',
     stepsTab: 'Steps',
     servingsAndTime: (servings: number, minutes: number) =>

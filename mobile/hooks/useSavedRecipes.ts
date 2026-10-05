@@ -33,7 +33,7 @@ import type { SavedRecipeRecord } from '../lib/savedRecipes/types';
 import { isMealDbRecipeId } from '../lib/mealdb/normalize';
 
 export type SavedRecipeToggleOutcome =
-  | { status: 'saved' }
+  | { status: 'saved'; refKey: string }
   | { status: 'removed'; undo: () => void }
   | { status: 'error' }
   | { status: 'skipped' };
@@ -146,6 +146,7 @@ export function useSavedRecipes(options: {
             setRecords(upsertGuestSavedRecipe(nextRecord));
             finish({
               status: 'saved',
+              refKey,
             });
           } else {
             setRecords(removeGuestSavedRecipe(refKey));
@@ -171,7 +172,7 @@ export function useSavedRecipes(options: {
       try {
         if (nextRecord) {
           await upsertUserSavedRecipe(supabase, userId, nextRecord, { accountRecipeIds });
-          finish({ status: 'saved' });
+          finish({ status: 'saved', refKey });
         } else {
           await deleteUserSavedRecipe(supabase, userId, refKey);
           finish({
