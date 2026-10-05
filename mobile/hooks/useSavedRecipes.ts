@@ -38,17 +38,30 @@ export type SavedRecipeToggleOutcome =
   | { status: 'error' }
   | { status: 'skipped' };
 
+export type SavedRecipesController = ReturnType<typeof useSavedRecipes>;
+
 export function useSavedRecipes(options: {
   session: Session | null;
   demoMode: boolean;
   isGuest: boolean;
+  accountRecipeIds: ReadonlySet<string>;
   kitchenRecipes: readonly Recipe[];
   pantry: PantryItem[];
   pantryMatches: PantryMatchIndex;
+  liveDataLoaded?: boolean;
   onToggleOutcome?: (outcome: SavedRecipeToggleOutcome) => void;
 }) {
-  const { session, demoMode, isGuest, kitchenRecipes, pantry, pantryMatches, onToggleOutcome } =
-    options;
+  const {
+    session,
+    demoMode,
+    isGuest,
+    accountRecipeIds,
+    kitchenRecipes,
+    pantry,
+    pantryMatches,
+    liveDataLoaded = true,
+    onToggleOutcome,
+  } = options;
   const userId = session?.user?.id ?? null;
   const supabase = getSupabase();
   const [records, setRecords] = useState<SavedRecipeRecord[]>([]);
@@ -81,7 +94,7 @@ export function useSavedRecipes(options: {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, liveDataLoaded]);
 
   const persistRef = useRef(0);
   const recordsRef = useRef(records);
@@ -157,7 +170,7 @@ export function useSavedRecipes(options: {
 
       try {
         if (nextRecord) {
-          await upsertUserSavedRecipe(supabase, userId, nextRecord);
+          await upsertUserSavedRecipe(supabase, userId, nextRecord, { accountRecipeIds });
           finish({ status: 'saved' });
         } else {
           await deleteUserSavedRecipe(supabase, userId, refKey);
@@ -175,7 +188,7 @@ export function useSavedRecipes(options: {
         finish({ status: 'error' });
       }
     },
-    [demoMode, emitOutcome, isGuest, pendingRefKeys, setPending, supabase, userId],
+    [accountRecipeIds, demoMode, emitOutcome, isGuest, pendingRefKeys, setPending, supabase, userId],
   );
 
   toggleRefKeyRef.current = toggleRefKey;
