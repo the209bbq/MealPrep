@@ -237,6 +237,28 @@ export function ingredientMatchScore(recipeLabel: string, pantryLabel: string): 
     }
   }
 
+  if (
+    recipeTokens.length > 1 &&
+    pantryTokens.length === 1 &&
+    recipeTokens[recipeTokens.length - 1] === pantryTokens[0]
+  ) {
+    const varietyPrefix = recipeTokens.slice(0, -1);
+    if (varietyPrefix.every((t) => VARIETY_MODIFIERS.has(t) || STRIP_TOKENS.has(t))) {
+      return 1;
+    }
+  }
+
+  if (
+    pantryTokens.length > 1 &&
+    recipeTokens.length === 1 &&
+    pantryTokens[pantryTokens.length - 1] === recipeTokens[0]
+  ) {
+    const varietyPrefix = pantryTokens.slice(0, -1);
+    if (varietyPrefix.every((t) => VARIETY_MODIFIERS.has(t) || STRIP_TOKENS.has(t))) {
+      return 1;
+    }
+  }
+
   if (recipeTokens.length > 1 && pantryTokens.length === 1) {
     return INGREDIENT_SUBSTITUTE_MATCH_SCORE;
   }

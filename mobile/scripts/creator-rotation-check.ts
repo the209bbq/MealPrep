@@ -212,6 +212,7 @@ function simulateVisit(
     categories: [
       { category: 'Chicken', thumbUrl: null, passingRecipeCount: 2 },
       { category: 'Pasta', thumbUrl: null, passingRecipeCount: 5 },
+      { category: 'Miscellaneous', thumbUrl: null, passingRecipeCount: 10 },
     ],
     prefs: DEFAULT_USER_DIET_PREFS,
     householdSize: 2,
@@ -226,7 +227,8 @@ function simulateVisit(
     },
     nowMs: Date.now(),
   });
-  assert(!chips.some((c) => c.category === 'Chicken'), 'check 6: <3 recipes hidden');
+  assert(chips.some((c) => c.category === 'Chicken'), 'check 6: home chips ignore loaded-page counts');
+  assert(!chips.some((c) => c.category === 'Miscellaneous'), 'check 6: non-home categories hidden');
   assert(chips.some((c) => c.category === 'Pasta'), 'check 6: pasta remains');
 }
 

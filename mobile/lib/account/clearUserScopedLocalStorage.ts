@@ -8,6 +8,8 @@ import {
 } from '../smartShop/storage';
 import { writeJson } from '../storage';
 import { clearAccountKitchenCache } from './accountKitchenCache';
+import { clearLastAccountUserId } from './lastAccountUser';
+import { clearAccountSavedRecipesCache } from '../savedRecipes/accountCache';
 
 /** Remove per-user prefs from device storage on sign-out (keep recipe catalog caches). */
 export function clearUserScopedLocalStorage(userId: string | null | undefined): void {
@@ -19,5 +21,7 @@ export function clearUserScopedLocalStorage(userId: string | null | undefined): 
   if (userId) {
     clearRecipeEngagementForOwner(userId);
     clearAccountKitchenCache(userId);
+    clearAccountSavedRecipesCache(userId);
   }
+  clearLastAccountUserId();
 }

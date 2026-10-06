@@ -154,7 +154,10 @@ import {
   readAccountKitchenCache,
   writeAccountKitchenCache,
 } from '../lib/account/accountKitchenCache';
+import { clearLastAccountUserId, writeLastAccountUserId } from '../lib/account/lastAccountUser';
+import { resolveOfflineKitchenUserId } from '../lib/account/offlineKitchenUser';
 import { clearUserScopedLocalStorage } from '../lib/account/clearUserScopedLocalStorage';
+import { isOffline } from '../lib/network/isOffline';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
 import { getSupabase } from '../lib/supabase';
 import { recipeApiToAppRecipe } from '../lib/recipeDiscovery/mapToAppRecipe';
@@ -526,7 +529,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [accountSheet, setAccountSheet] = useState<'closed' | 'auth' | 'account'>('closed');
   const [showPostSignupSetup, setShowPostSignupSetup] = useState(false);
   const [demoProfilePatch, setDemoProfilePatch] = useState<Partial<UserProfile>>({});
-  const userId = session?.user.id ?? null;
+  const [offlineKitchenUserId, setOfflineKitchenUserId] = useState<string | null>(null);
+  const sessionUserId = session?.user.id ?? null;
+  const userId = sessionUserId ?? offlineKitchenUserId;
+  const offlineKitchenView = Boolean(!sessionUserId && offlineKitchenUserId);
 
   const profile = useMemo<UserProfile>(() => {
     if (demoMode) {
@@ -701,6 +707,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLiveDataLoaded(true);
 
     if (bundle.profile) {
+      writeLastAccountUserId(userId);
       writeAccountKitchenCache({
         userId,
         savedAt: new Date().toISOString(),
@@ -837,11 +844,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     void supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
-      setSession(data.session);
+      if (data.session?.user?.id) {
+        writeLastAccountUserId(data.session.user.id);
+        setOfflineKitchenUserId(null);
+        setSession(data.session);
+      } else {
+        const offlineId = resolveOfflineKitchenUserId(null);
+        setOfflineKitchenUserId(offlineId);
+        setSession(data.session);
+      }
       setAuthReady(true);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!nextSession?.user?.id && isOffline()) {
+        const offlineId = resolveOfflineKitchenUserId(null);
+        if (offlineId) {
+          setOfflineKitchenUserId(offlineId);
+          setAuthReady(true);
+          return;
+        }
+      }
+      if (nextSession?.user?.id) {
+        writeLastAccountUserId(nextSession.user.id);
+        setOfflineKitchenUserId(null);
+      }
       setSession(nextSession);
       setAuthReady(true);
       const email = nextSession?.user?.email;
@@ -858,6 +885,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       subscription.subscription.unsubscribe();
     };
   }, [demoMode, supabase]);
+
+  useEffect(() => {
+    if (demoMode || !supabase || !authReady) return;
+    const refreshWhenOnline = () => {
+      if (isOffline()) return;
+      setOfflineKitchenUserId(null);
+      void supabase.auth.refreshSession().then(({ data }) => {
+        if (data.session) setSession(data.session);
+      });
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', refreshWhenOnline);
+      return () => window.removeEventListener('online', refreshWhenOnline);
+    }
+    return undefined;
+  }, [authReady, demoMode, supabase]);
 
   useEffect(() => {
     if (!hydrated || demoMode || !authReady) return;
@@ -890,9 +933,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     void loadLiveData().catch((error: unknown) => {
       setLiveDataLoaded(true);
+      if (offlineKitchenView && readAccountKitchenCache(userId)) return;
+      if (isOffline() && readAccountKitchenCache(userId)) return;
       setAuthError(error instanceof Error ? error.message : 'Failed to load kitchen data');
     });
-  }, [demoMode, userId, loadLiveData]);
+  }, [demoMode, offlineKitchenView, userId, loadLiveData]);
 
   useEffect(() => {
     if (demoMode || !userId) return;
@@ -919,12 +964,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         writeGuestGrocery(next);
         return next;
       }
-      if (supabase && userId) {
+      if (supabase && userId && sessionUserId) {
+        if (isOffline()) {
+          if (userId) {
+            const cached = readAccountKitchenCache(userId);
+            if (cached) {
+              writeAccountKitchenCache({ ...cached, grocery: next, savedAt: new Date().toISOString() });
+            }
+          }
+          return next;
+        }
         void enqueueGroceryPersist(() =>
           replaceGroceryList(supabase, userId, next).then((persisted) => {
             setGrocery(persisted);
+            return persisted;
           }),
         ).catch((error: unknown) => {
+          if (isOffline()) return;
           setKitchenError(error instanceof Error ? error.message : 'Failed to save grocery list');
         });
         return next;
@@ -942,6 +998,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     plannedRecipeIds,
     feedKitchenRecipes,
     servingOverrides,
+    sessionUserId,
     supabase,
     userId,
   ]);
@@ -1089,6 +1146,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const savedRecipes = useSavedRecipes({
     session,
+    accountUserId: userId,
     demoMode,
     isGuest,
     accountRecipeIds,
@@ -1165,6 +1223,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAuthError(null);
     const signedOutOwnerId = userId ?? profile.id;
     clearUserScopedLocalStorage(signedOutOwnerId);
+    clearLastAccountUserId();
+    setOfflineKitchenUserId(null);
     setUserDietPrefs(DEFAULT_USER_DIET_PREFS);
     await supabase.auth.signOut();
     if (signedOutOwnerId) {
@@ -1208,18 +1268,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (next: GroceryListItem[]) => {
       if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
       else if (isGuest) writeGuestGrocery(next);
-      if (!demoMode && supabase && userId) {
+      if (!demoMode && supabase && userId && sessionUserId) {
+        if (isOffline()) {
+          const cached = readAccountKitchenCache(userId);
+          if (cached) {
+            writeAccountKitchenCache({ ...cached, grocery: next, savedAt: new Date().toISOString() });
+          }
+          return;
+        }
         void enqueueGroceryPersist(() =>
           replaceGroceryList(supabase, userId, next).then((persisted) => {
             setGrocery(persisted);
             return persisted;
           }),
         ).catch((error: unknown) => {
+          if (isOffline()) return;
           setKitchenError(error instanceof Error ? error.message : 'Failed to save grocery list');
         });
       }
     },
-    [demoMode, isGuest, supabase, userId],
+    [demoMode, isGuest, sessionUserId, supabase, userId],
   );
 
   const showGroceryAddedToast = useCallback(
@@ -1739,7 +1807,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (
           userPreferences.autoAddMissingToGrocery &&
           recipeId &&
-          !normalized.leftoverOfId
+          !normalized.leftoverOfId &&
+          !featureFlags.grocerySync
         ) {
           const missing = pantryRecipeMatches.byRecipeId.get(recipeId)?.missing ?? [];
           appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
@@ -1752,7 +1821,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (
         userPreferences.autoAddMissingToGrocery &&
         recipeId &&
-        !normalized.leftoverOfId
+        !normalized.leftoverOfId &&
+        !featureFlags.grocerySync
       ) {
         const missing = pantryRecipeMatches.byRecipeId.get(recipeId)?.missing ?? [];
         appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
@@ -1768,6 +1838,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       supabase,
       userId,
       userPreferences.autoAddMissingToGrocery,
+      featureFlags.grocerySync,
     ],
   );
 
@@ -1817,7 +1888,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
 
       const maybeAppendMissing = (recipeId: string | null) => {
-        if (!userPreferences.autoAddMissingToGrocery || !recipeId) return;
+        if (!userPreferences.autoAddMissingToGrocery || !recipeId || featureFlags.grocerySync) return;
         const missing = pantryRecipeMatches.byRecipeId.get(recipeId)?.missing ?? [];
         appendMissingIngredientsForRecipe(recipeId, missing, { showToast: true });
       };

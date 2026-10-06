@@ -5,6 +5,7 @@ import {
   ingredientMatchScore,
   normalizeIngredientName,
 } from '../recipeMatch/ingredientNormalize';
+import { convertIngredientQuantity, ingredientUnitsConvertible } from '../units/ingredientUnitBridge';
 
 function roundQty(value: number): number {
   return Math.round(value * 100) / 100;
@@ -22,9 +23,26 @@ export function pantryItemsMatch(existing: PantryItem, incoming: PantryItem): bo
 
 export function mergePantryQuantities(existing: PantryItem, incoming: PantryItem): PantryItem {
   const sameUnit = existing.unit.toLowerCase() === incoming.unit.toLowerCase();
-  const quantity = sameUnit
-    ? roundQty(existing.quantity + incoming.quantity)
-    : Math.max(existing.quantity, incoming.quantity);
+  let quantity: number;
+  if (sameUnit) {
+    quantity = roundQty(existing.quantity + incoming.quantity);
+  } else if (
+    ingredientUnitsConvertible(existing.name, existing.unit, incoming.unit) ||
+    ingredientUnitsConvertible(incoming.name, incoming.unit, existing.unit)
+  ) {
+    const converted = convertIngredientQuantity(
+      incoming.quantity,
+      incoming.unit,
+      existing.unit,
+      incoming.name || existing.name,
+    );
+    quantity =
+      converted === null
+        ? Math.max(existing.quantity, incoming.quantity)
+        : roundQty(existing.quantity + converted);
+  } else {
+    quantity = Math.max(existing.quantity, incoming.quantity);
+  }
   return {
     ...existing,
     quantity,

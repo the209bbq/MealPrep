@@ -35,6 +35,18 @@ export const MEALDB_CATEGORY_ORDER_COLD_START = [
   'Miscellaneous',
 ] as const;
 
+/** Always shown on Home classic row (diet filters may hide some). */
+export const HOME_CLASSIC_CATEGORY_CHIPS: readonly MealDbCatalogCategory[] = [
+  'Chicken',
+  'Beef',
+  'Pork',
+  'Seafood',
+  'Vegetarian',
+  'Vegan',
+  'Breakfast',
+  'Dessert',
+];
+
 export const MEALDB_CATALOG_CATEGORIES = [
   'Beef',
   'Breakfast',
