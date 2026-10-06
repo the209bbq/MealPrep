@@ -20,7 +20,7 @@ export const ACCOUNT_SHEET_COPY = {
   householdLabel: 'Household size',
   householdBlurb: 'Default servings when scaling recipes.',
   homeZipLabel: 'Home ZIP',
-  homeZipBlurb: 'Used for nearby store search.',
+  homeZipBlurb: 'Optional — used for nearby stores and Smart Shop.',
   dietaryNotesLabel: 'Dietary notes',
   displayNameLabel: 'Display name',
   changePhoto: 'Change photo',

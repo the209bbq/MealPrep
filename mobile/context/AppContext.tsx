@@ -460,6 +460,8 @@ interface AppContextValue {
   saveProfileSetup: (patch: {
     name?: string;
     homeZip?: string;
+    homeLat?: number;
+    homeLng?: number;
     householdSize?: number;
     dietaryNotes?: string;
   }) => Promise<void>;
@@ -742,20 +744,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (patch: {
       name?: string;
       homeZip?: string;
+      homeLat?: number;
+      homeLng?: number;
       householdSize?: number;
       dietaryNotes?: string;
     }) => {
+      const { persistHomeLocation } = await import('../lib/smartShop/profileLocation');
+      const zipForLocation =
+        patch.homeZip !== undefined && patch.homeZip.trim() ? patch.homeZip.trim().slice(0, 5) : undefined;
+      const hasCoords = patch.homeLat != null && patch.homeLng != null;
+
       if (demoMode) {
         setDemoProfilePatch((prev) => ({
           ...prev,
           ...(patch.name !== undefined ? { name: patch.name } : {}),
-          ...(patch.homeZip !== undefined ? { homeZip: patch.homeZip } : {}),
+          ...(patch.homeZip !== undefined ? { homeZip: patch.homeZip.trim() || undefined } : {}),
           ...(patch.householdSize !== undefined ? { householdSize: patch.householdSize } : {}),
           ...(patch.dietaryNotes !== undefined ? { dietaryNotes: patch.dietaryNotes } : {}),
+          ...(hasCoords
+            ? {
+                homeLat: patch.homeLat,
+                homeLng: patch.homeLng,
+                homeLocationUpdatedAt: new Date().toISOString(),
+              }
+            : {}),
         }));
-        if (patch.homeZip) {
-          const { persistHomeLocation } = await import('../lib/smartShop/profileLocation');
-          await persistHomeLocation({ zip: patch.homeZip });
+        if (zipForLocation || hasCoords) {
+          await persistHomeLocation({
+            zip: zipForLocation,
+            lat: hasCoords ? patch.homeLat : undefined,
+            lng: hasCoords ? patch.homeLng : undefined,
+          });
         }
         return;
       }
@@ -766,10 +785,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         householdSize: patch.householdSize,
         dietaryNotes: patch.dietaryNotes,
       });
-      setLiveProfile(updated);
-      if (patch.homeZip) {
-        const { persistHomeLocation } = await import('../lib/smartShop/profileLocation');
-        await persistHomeLocation({ zip: patch.homeZip });
+      setLiveProfile(
+        hasCoords
+          ? {
+              ...updated,
+              homeLat: patch.homeLat,
+              homeLng: patch.homeLng,
+              homeLocationUpdatedAt: new Date().toISOString(),
+            }
+          : updated,
+      );
+      if (zipForLocation || hasCoords) {
+        await persistHomeLocation({
+          zip: zipForLocation,
+          lat: hasCoords ? patch.homeLat : undefined,
+          lng: hasCoords ? patch.homeLng : undefined,
+        });
       }
     },
     [demoMode, supabase, userId],

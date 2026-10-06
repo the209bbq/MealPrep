@@ -25,6 +25,8 @@ import type { UserDietPrefs } from '../../lib/diet/types';
 import { AccountPlanSection } from './AccountPlanSection';
 import { ProfileAvatar } from './ProfileAvatar';
 import { pickProfilePhotoFromLibrary } from './pickProfilePhoto';
+import { HomeZipField } from './HomeZipField';
+import { formatHomeZipInput, validateOptionalHomeZip } from '../../lib/profile/homeZip';
 
 type AccountSheetProps = {
   visible: boolean;
@@ -52,7 +54,8 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
   } = useApp();
 
   const [name, setName] = useState(profile.name);
-  const [zip, setZip] = useState(profile.homeZip ?? '');
+  const [zip, setZip] = useState(() => formatHomeZipInput(profile.homeZip ?? ''));
+  const [zipError, setZipError] = useState<string | null>(null);
   const [householdSize, setHouseholdSize] = useState(String(profile.householdSize));
   const [dietaryNotes, setDietaryNotes] = useState(profile.dietaryNotes);
   const [dietPrefs, setDietPrefs] = useState<UserDietPrefs>(userDietPrefs);
@@ -62,14 +65,20 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
   async function persistFields() {
     setBusy(true);
     setStatus(null);
+    setZipError(null);
     try {
+      const zipValidation = validateOptionalHomeZip(zip);
+      if (!zipValidation.ok) {
+        setZipError(zipValidation.message);
+        return;
+      }
       const size = Math.min(
         HOUSEHOLD_SIZE_LIMITS.max,
         Math.max(HOUSEHOLD_SIZE_LIMITS.min, Number.parseInt(householdSize, 10) || 2),
       );
       await saveProfileSetup({
         name: name.trim(),
-        homeZip: zip.trim(),
+        homeZip: zipValidation.zip,
         householdSize: size,
         dietaryNotes,
       });
@@ -173,14 +182,14 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                   className="mt-1 rounded-xl border border-border bg-paper px-3 py-2 text-ink"
                   autoCapitalize="words"
                 />
-                <Text className="mt-3 text-xs font-semibold text-muted">{ACCOUNT_SHEET_COPY.homeZipLabel}</Text>
-                <TextInput
+                <HomeZipField
                   value={zip}
-                  onChangeText={setZip}
-                  keyboardType="number-pad"
-                  maxLength={10}
-                  accessibilityLabel={ACCOUNT_SHEET_COPY.homeZipLabel}
-                  className="mt-1 rounded-xl border border-border bg-paper px-3 py-2 text-ink"
+                  onChange={(next) => {
+                    setZip(next);
+                    setZipError(null);
+                  }}
+                  className="mt-3"
+                  error={zipError}
                 />
                 <Text className="mt-3 text-xs font-semibold text-muted">{ACCOUNT_SHEET_COPY.householdLabel}</Text>
                 <TextInput
