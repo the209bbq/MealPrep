@@ -1,7 +1,7 @@
 import { MEALDB } from '../../config/mealdb';
 import type { PantryItem } from '../../types/mealprep';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
-import { readJson, writeJson } from '../storage';
+import { listStorageKeysWithPrefix, readJson, removeStorageKey, writeJson } from '../storage';
 import { mealDbPantryProteinFilters } from './pantryProteins';
 
 interface CatalogSnapshot {
@@ -36,6 +36,13 @@ export function writeMealDbCatalogSnapshot(pantry: PantryItem[], rows: RecipesTa
   writeJson(`${MEALDB.cacheKeyPrefix}:${key}`, entry);
 }
 
+export function clearAllMealDbCatalogSnapshots(): void {
+  const prefix = `${MEALDB.cacheKeyPrefix}:catalog:`;
+  for (const key of listStorageKeysWithPrefix(prefix)) {
+    removeStorageKey(key);
+  }
+}
+
 export function resetMealDbCatalogSnapshotForTests(): void {
-  // Tests use isolated in-memory storage; no global snapshot registry required.
+  clearAllMealDbCatalogSnapshots();
 }

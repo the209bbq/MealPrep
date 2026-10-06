@@ -9,6 +9,7 @@ import {
   type CreatorRecipesBrowseMode,
 } from '../../config/creatorRecipes';
 import { withTimeout } from '../withTimeout';
+import { listStorageKeysWithPrefix, readJson, removeStorageKey, writeJson } from '../storage';
 import { demoCreatorVideos, demoCreators } from './demoSamples';
 import type {
   CreatorListItem,
@@ -29,27 +30,123 @@ export class CreatorVideosUpstreamError extends Error {
   code = 'UPSTREAM_ERROR';
 }
 
-const memoryCache = new Map<string, { payload: unknown; expiresAt: number }>();
+const CREATOR_VIDEOS_CACHE_PREFIX = 'mealprep.creatorVideos';
+
+interface CreatorCacheEntry {
+  payload: unknown;
+  expiresAt: number;
+  cachedAtMs?: number;
+}
+
+const memoryCache = new Map<string, CreatorCacheEntry>();
+const inFlight = new Map<string, Promise<unknown>>();
+const persistedCreatorKeys = new Set<string>();
 
 function cacheKey(parts: string[]): string {
   return parts.join(':');
 }
 
-function readCache<T>(key: string): T | null {
+function persistentStorageKey(key: string): string {
+  return `${CREATOR_VIDEOS_CACHE_PREFIX}:${key}`;
+}
+
+function readCacheEntry(key: string): CreatorCacheEntry | null {
   const hit = memoryCache.get(key);
-  if (!hit) return null;
-  if (hit.expiresAt < Date.now()) {
-    memoryCache.delete(key);
-    return null;
-  }
-  return hit.payload as T;
+  if (hit) return hit;
+  const persisted = readJson<CreatorCacheEntry | null>(persistentStorageKey(key), null);
+  if (!persisted) return null;
+  memoryCache.set(key, persisted);
+  return persisted;
+}
+
+function cacheFresh(entry: CreatorCacheEntry): boolean {
+  return entry.expiresAt >= Date.now();
 }
 
 function writeCache(key: string, payload: unknown): void {
-  memoryCache.set(key, {
+  const now = Date.now();
+  const entry: CreatorCacheEntry = {
     payload,
-    expiresAt: Date.now() + CREATOR_RECIPES.clientCacheTtlMs,
+    expiresAt: now + CREATOR_RECIPES.clientCacheTtlMs,
+    cachedAtMs: now,
+  };
+  memoryCache.set(key, entry);
+  persistedCreatorKeys.add(key);
+  writeJson(persistentStorageKey(key), entry);
+}
+
+function shouldStaleRevalidateCreator(entry: CreatorCacheEntry): boolean {
+  if (!cacheFresh(entry)) return false;
+  const cachedAt = entry.cachedAtMs ?? entry.expiresAt - CREATOR_RECIPES.clientCacheTtlMs;
+  return Date.now() - cachedAt >= CREATOR_RECIPES.staleRevalidateAfterMs;
+}
+
+async function revalidateCreatorCache<T>(
+  key: string,
+  loader: () => Promise<T>,
+): Promise<T> {
+  const existing = inFlight.get(key);
+  if (existing) return existing as Promise<T>;
+  const promise = loader().finally(() => {
+    inFlight.delete(key);
   });
+  inFlight.set(key, promise);
+  return promise;
+}
+
+/** Clears in-memory creator video caches (for unit tests). */
+export function resetCreatorVideosClientCacheForTests(): void {
+  memoryCache.clear();
+  inFlight.clear();
+  persistedCreatorKeys.clear();
+}
+
+export function invalidateCreatorVideosCaches(): void {
+  memoryCache.clear();
+  inFlight.clear();
+  for (const key of listStorageKeysWithPrefix(`${CREATOR_VIDEOS_CACHE_PREFIX}:`)) {
+    removeStorageKey(key);
+  }
+  for (const key of persistedCreatorKeys) {
+    removeStorageKey(persistentStorageKey(key));
+  }
+  persistedCreatorKeys.clear();
+}
+
+export function revalidateStaleCreatorVideosCachesOnOpen(accessToken: string | null): void {
+  const keys = ['creators', 'feed:popular', 'feed:new', 'feed:quick', 'feed:budget'];
+  for (const key of keys) {
+    const entry = readCacheEntry(key);
+    if (!entry || !shouldStaleRevalidateCreator(entry)) continue;
+    void revalidateCreatorCache(key, async () => {
+      if (key === 'creators') {
+        const json = await postCreatorVideos<{ creators: CreatorListItem[] }>(
+          { action: 'creators' },
+          accessToken,
+        );
+        const creators = json.creators ?? [];
+        writeCache(key, creators);
+        return creators;
+      }
+      const mode = key.replace('feed:', '') as CreatorRecipesBrowseMode;
+      const json = await postCreatorVideos<{ mode: CreatorRecipesBrowseMode; videos: CreatorVideoItem[] }>(
+        { action: 'feed', mode },
+        accessToken,
+      );
+      const result = { mode: json.mode ?? mode, videos: json.videos ?? [] };
+      writeCache(key, result);
+      return result;
+    });
+  }
+}
+
+/** Sync hydration for creator list (stale-while-revalidate). */
+export function readPersistedCreatorList(): CreatorListItem[] {
+  const key = cacheKey(['creators']);
+  const entry = readCacheEntry(key);
+  if (!entry) return [];
+  const creators = entry.payload as CreatorListItem[];
+  return Array.isArray(creators) ? creators : [];
 }
 
 async function parseError(response: Response, text: string): Promise<never> {
@@ -108,16 +205,43 @@ export async function fetchCreatorList(accessToken: string | null): Promise<Crea
   if (isDemoMode()) return demoCreators;
 
   const key = cacheKey(['creators']);
-  const cached = readCache<CreatorListItem[]>(key);
-  if (cached) return cached;
+  const entry = readCacheEntry(key);
+  if (entry && cacheFresh(entry)) {
+    if (shouldStaleRevalidateCreator(entry)) {
+      void revalidateCreatorCache(key, async () => {
+        const json = await postCreatorVideos<{ creators: CreatorListItem[] }>(
+          { action: 'creators' },
+          accessToken,
+        );
+        const creators = json.creators ?? [];
+        writeCache(key, creators);
+        return creators;
+      });
+    }
+    return entry.payload as CreatorListItem[];
+  }
+  if (entry) {
+    void revalidateCreatorCache(key, async () => {
+      const json = await postCreatorVideos<{ creators: CreatorListItem[] }>(
+        { action: 'creators' },
+        accessToken,
+      );
+      const creators = json.creators ?? [];
+      writeCache(key, creators);
+      return creators;
+    });
+    return entry.payload as CreatorListItem[];
+  }
 
-  const json = await postCreatorVideos<{ creators: CreatorListItem[] }>(
-    { action: 'creators' },
-    accessToken,
-  );
-  const creators = json.creators ?? [];
-  writeCache(key, creators);
-  return creators;
+  return revalidateCreatorCache(key, async () => {
+    const json = await postCreatorVideos<{ creators: CreatorListItem[] }>(
+      { action: 'creators' },
+      accessToken,
+    );
+    const creators = json.creators ?? [];
+    writeCache(key, creators);
+    return creators;
+  });
 }
 
 export async function fetchCreatorFeed(
@@ -129,16 +253,43 @@ export async function fetchCreatorFeed(
   }
 
   const key = cacheKey(['feed', mode]);
-  const cached = readCache<CreatorVideosFeedResult>(key);
-  if (cached) return cached;
+  const entry = readCacheEntry(key);
+  if (entry && cacheFresh(entry)) {
+    if (shouldStaleRevalidateCreator(entry)) {
+      void revalidateCreatorCache(key, async () => {
+        const json = await postCreatorVideos<{ mode: CreatorRecipesBrowseMode; videos: CreatorVideoItem[] }>(
+          { action: 'feed', mode },
+          accessToken,
+        );
+        const result = { mode: json.mode ?? mode, videos: json.videos ?? [] };
+        writeCache(key, result);
+        return result;
+      });
+    }
+    return entry.payload as CreatorVideosFeedResult;
+  }
+  if (entry) {
+    void revalidateCreatorCache(key, async () => {
+      const json = await postCreatorVideos<{ mode: CreatorRecipesBrowseMode; videos: CreatorVideoItem[] }>(
+        { action: 'feed', mode },
+        accessToken,
+      );
+      const result = { mode: json.mode ?? mode, videos: json.videos ?? [] };
+      writeCache(key, result);
+      return result;
+    });
+    return entry.payload as CreatorVideosFeedResult;
+  }
 
-  const json = await postCreatorVideos<{ mode: CreatorRecipesBrowseMode; videos: CreatorVideoItem[] }>(
-    { action: 'feed', mode },
-    accessToken,
-  );
-  const result = { mode: json.mode ?? mode, videos: json.videos ?? [] };
-  writeCache(key, result);
-  return result;
+  return revalidateCreatorCache(key, async () => {
+    const json = await postCreatorVideos<{ mode: CreatorRecipesBrowseMode; videos: CreatorVideoItem[] }>(
+      { action: 'feed', mode },
+      accessToken,
+    );
+    const result = { mode: json.mode ?? mode, videos: json.videos ?? [] };
+    writeCache(key, result);
+    return result;
+  });
 }
 
 export async function fetchCreatorChannelVideos(
@@ -152,16 +303,43 @@ export async function fetchCreatorChannelVideos(
   }
 
   const key = cacheKey(['creator', channelId]);
-  const cached = readCache<{ creator: CreatorListItem | null; videos: CreatorVideoItem[] }>(key);
-  if (cached) return cached;
+  const entry = readCacheEntry(key);
+  if (entry && cacheFresh(entry)) {
+    if (shouldStaleRevalidateCreator(entry)) {
+      void revalidateCreatorCache(key, async () => {
+        const json = await postCreatorVideos<{
+          creator: CreatorListItem | null;
+          videos: CreatorVideoItem[];
+        }>({ action: 'creator', channelId }, accessToken);
+        const payload = { creator: json.creator ?? null, videos: json.videos ?? [] };
+        writeCache(key, payload);
+        return payload;
+      });
+    }
+    return entry.payload as { creator: CreatorListItem | null; videos: CreatorVideoItem[] };
+  }
+  if (entry) {
+    void revalidateCreatorCache(key, async () => {
+      const json = await postCreatorVideos<{
+        creator: CreatorListItem | null;
+        videos: CreatorVideoItem[];
+      }>({ action: 'creator', channelId }, accessToken);
+      const payload = { creator: json.creator ?? null, videos: json.videos ?? [] };
+      writeCache(key, payload);
+      return payload;
+    });
+    return entry.payload as { creator: CreatorListItem | null; videos: CreatorVideoItem[] };
+  }
 
-  const json = await postCreatorVideos<{
-    creator: CreatorListItem | null;
-    videos: CreatorVideoItem[];
-  }>({ action: 'creator', channelId }, accessToken);
-  const payload = { creator: json.creator ?? null, videos: json.videos ?? [] };
-  writeCache(key, payload);
-  return payload;
+  return revalidateCreatorCache(key, async () => {
+    const json = await postCreatorVideos<{
+      creator: CreatorListItem | null;
+      videos: CreatorVideoItem[];
+    }>({ action: 'creator', channelId }, accessToken);
+    const payload = { creator: json.creator ?? null, videos: json.videos ?? [] };
+    writeCache(key, payload);
+    return payload;
+  });
 }
 
 export async function searchCreatorVideos(

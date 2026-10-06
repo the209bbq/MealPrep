@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { THEME } from '../../config/appConfig';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import { RECIPE_IMAGE } from '../../config/recipeImages';
 import { recipeListShopLine } from '../../lib/recipes/recipeListShopLine';
@@ -8,10 +9,11 @@ import {
   resolveKitchenRecipeImageUrl,
 } from '../../lib/recipes/recipeImageUrl';
 import { DietAllergenBadge } from '../diet/DietAllergenBadge';
-import { ingredientLinesFromRecipesTabRow } from '../../lib/diet/ingredientLines';
+import { dietCheckLinesFromRecipesTabRow } from '../../lib/diet/ingredientLines';
 import { RecipeThumbnail } from './RecipeThumbnail';
 import { RecipeSaveButton } from './RecipeSaveButton';
 import { CookThisButton } from '../mealCalendar/CookThisButton';
+import { RECIPES_COPY } from '../../config/recipesCopy';
 
 interface RecipesUnifiedFeedCardProps {
   row: RecipesTabRow;
@@ -21,6 +23,7 @@ interface RecipesUnifiedFeedCardProps {
   saved?: boolean;
   onToggleSave?: () => void;
   saveDisabled?: boolean;
+  interactionLoading?: boolean;
 }
 
 function RecipesUnifiedFeedCardInner({
@@ -31,6 +34,7 @@ function RecipesUnifiedFeedCardInner({
   saved,
   onToggleSave,
   saveDisabled = false,
+  interactionLoading = false,
 }: RecipesUnifiedFeedCardProps) {
   const name = row.recipe.name;
   const imageUri = useMemo(
@@ -40,16 +44,21 @@ function RecipesUnifiedFeedCardInner({
         : resolveDiscoveryRecipeImageUrl(row.recipe),
     [row],
   );
-  const shopLine = useMemo(() => recipeListShopLine(row.match), [row.match]);
-  const readyToCook = row.match.missingCount === 0;
-  const ingredientLines = useMemo(() => ingredientLinesFromRecipesTabRow(row), [row]);
+  const matchPending = row.kind === 'kitchen' && Boolean(row.pantryMatchPending);
+  const shopLine = useMemo(() => {
+    if (matchPending) return RECIPES_COPY.recipeCard.checkingPantry;
+    return recipeListShopLine(row.match);
+  }, [matchPending, row.match]);
+  const readyToCook = !matchPending && row.match.missingCount === 0;
+  const ingredientLines = useMemo(() => dietCheckLinesFromRecipesTabRow(row), [row]);
 
   return (
     <Pressable
       onPress={onOpen}
+      disabled={interactionLoading}
       accessibilityRole="button"
       accessibilityLabel={`${name}. ${shopLine}`}
-      className="mb-2 overflow-hidden rounded-xl border border-border bg-card"
+      className="relative mb-2 overflow-hidden rounded-xl border border-border bg-card"
     >
       <View className="relative">
         <RecipeThumbnail
@@ -91,6 +100,14 @@ function RecipesUnifiedFeedCardInner({
           </View>
         ) : null}
       </View>
+      {interactionLoading ? (
+        <View
+          className="absolute inset-0 items-center justify-center rounded-xl bg-paper/70"
+          accessibilityLabel="Loading recipe details"
+        >
+          <ActivityIndicator color={THEME.primary} />
+        </View>
+      ) : null}
     </Pressable>
   );
 }

@@ -79,6 +79,27 @@ export function resolveRecipesTabVisit(
   return { visitId, isNewVisit: true, state };
 }
 
+/** Force a new visit id so creator/category rows reshuffle (keeps fatigue history). */
+export function forceRecipesTabVisitRotation(
+  ownerId: string,
+  nowMs = Date.now(),
+): RecipesTabVisitSession {
+  const prior = readRecipesTabVisitState(ownerId);
+  const visitId = `visit-${nowMs}-${Math.random().toString(36).slice(2, 8)}`;
+  const state: RecipesTabVisitState = prior
+    ? {
+        ...prior,
+        lastVisitAt: nowMs,
+        lastVisitId: visitId,
+        priorVisitId: prior.lastVisitId,
+      }
+    : emptyState(nowMs);
+  state.lastVisitId = visitId;
+  state.lastVisitAt = nowMs;
+  writeRecipesTabVisitState(ownerId, state);
+  return { visitId, isNewVisit: true, state };
+}
+
 export function commitVisitRowOrder(
   ownerId: string,
   state: RecipesTabVisitState,

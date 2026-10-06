@@ -11,6 +11,9 @@ export const RECIPES_COPY = {
   homeToolbarCard: {
     subtitle:
       'Paste a video link or recipe text — or tap 📷 to snap a cookbook, magazine, or recipe card.',
+    refreshRecipes: 'Refresh recipes',
+    refreshUpdated: 'Updated',
+    refreshOffline: "You're offline, showing saved recipes",
   },
 
   cookNowCard: {
@@ -125,6 +128,7 @@ export const RECIPES_COPY = {
   recipeCard: {
     addMissingCta: 'Add missing to grocery list',
     haveEverything: 'Ready to cook! 🎉',
+    checkingPantry: 'Checking pantry…',
     previewNoIngredients: 'Get the recipe from this video to see ingredients',
     needItems: (count: number) => (count === 1 ? 'Missing 1 item' : `Missing ${count} items`),
   },

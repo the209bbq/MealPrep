@@ -12,6 +12,8 @@ export const MEALDB = {
   lookupCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   /** Filter/search list responses — refresh daily. */
   filterCacheTtlMs: 24 * 60 * 60 * 1000,
+  /** Background revalidate when cached data is older than this (even if hard TTL not expired). */
+  staleRevalidateAfterMs: 24 * 60 * 60 * 1000,
   /** @deprecated use lookupCacheTtlMs / filterCacheTtlMs */
   clientCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   failureCacheTtlMs: 5 * 60 * 1000,
@@ -21,6 +23,14 @@ export const MEALDB = {
   maxPantryFilterQueries: 3,
   /** Max full meal lookups after filtering. */
   maxCatalogMeals: 24,
+  /** Full lookups prefetched per home category chip after first paint. */
+  homeCategoryPrefetchMealCount: 12,
+  /** Max meals loaded when a category chip is opened. */
+  homeCategoryFeedMealCount: 40,
+  /** Concurrent MealDB lookups during home background prefetch. */
+  homePrefetchLookupConcurrency: 3,
+  /** How many home categories to warm at once during prefetch. */
+  homeCategoryPrefetchConcurrency: 2,
   siteUrl: 'https://www.themealdb.com',
 } as const;
 

@@ -22,6 +22,27 @@ export function ingredientLinesFromRecipesTabRow(row: RecipesTabRow): string[] |
   return lines.length > 0 ? lines : null;
 }
 
+/** Title, tag, description, and ingredients — same haystack as creator cards for diet/allergen rules. */
+export function dietCheckLinesFromRecipesTabRow(row: RecipesTabRow): string[] | null {
+  if (row.kind === 'kitchen') {
+    const fromIng = ingredientLinesFromRecipe(row.recipe);
+    const meta: string[] = [];
+    const name = row.recipe.name?.trim();
+    if (name) meta.push(name);
+    const tag = row.recipe.tag?.trim();
+    if (tag) meta.push(tag);
+    const description = row.recipe.description?.trim();
+    if (description) meta.push(description);
+    const merged = [...fromIng, ...meta];
+    const unique = [...new Set(merged.map((line) => line.trim()).filter(Boolean))];
+    return unique.length > 0 ? unique : null;
+  }
+  const lines = ingredientLinesFromDiscovery(row.recipe);
+  if (lines.length > 0) return lines;
+  const name = row.recipe.name?.trim();
+  return name ? [name] : null;
+}
+
 function titleAndDescriptionLines(model: CreatorFeedCardModel): string[] {
   const lines: string[] = [];
   const title = model.video.title?.trim() || model.item.title?.trim();

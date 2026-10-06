@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { CookConfirmBanner } from '../../components/home/CookConfirmBanner';
+import { HomeRecipesRefreshButton } from '../../components/home/HomeRecipesRefreshButton';
 import { HomeHubSheet } from '../../components/home/HomeHubSheet';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
@@ -63,6 +64,17 @@ import { wontCookRefKeys } from '../../lib/recipeRanking/hardFilter';
 import type { CreatorRotationSlot } from '../../lib/recipesTab/creatorRotation';
 import type { MealDbCategoryChip } from '../../lib/recipesTab/categoryRotation';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
+import { useHomeRecipePrefetch } from '../../hooks/useHomeRecipePrefetch';
+import { useHomeRecipesRefresh } from '../../hooks/useHomeRecipesRefresh';
+import { prefetchMealDbCategoryOnIntent } from '../../lib/mealdb/homePrefetch';
+import {
+  clearMealDbCategoryFeedSnapshot,
+  readMealDbCategorySnapshot,
+} from '../../lib/mealdb/categoryFeedCache';
+import {
+  kitchenRowFailsDietPrefs,
+  resolveKitchenRecipesTabRowDetails,
+} from '../../lib/mealdb/resolveKitchenRowDetails';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { CreatorListItem } from '../../lib/creatorVideos/types';
@@ -120,6 +132,7 @@ export default function HomeScreen() {
     notifySavedToMyRecipes,
     notifyRemovedFromMyRecipes,
     notifyMyRecipesSaveFailed,
+    notifyRecipeHiddenForDietSettings,
     profile,
     savedRecipes,
     registerSavedRecipeToggleOutcome,
@@ -167,6 +180,10 @@ export default function HomeScreen() {
   const [detailInitialSection, setDetailInitialSection] = useState<'ingredients' | 'steps'>('ingredients');
   const { openScheduleRecipe } = useScheduleRecipeSheet();
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
+  const [manualRotationEpoch, setManualRotationEpoch] = useState(0);
+  const [classicCategoryRefreshSeed, setClassicCategoryRefreshSeed] = useState(0);
+  const [homeMetaRefreshSeed, setHomeMetaRefreshSeed] = useState(0);
+  const [rowDetailLoadingId, setRowDetailLoadingId] = useState<string | null>(null);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const recipeRanking = useRecipeRanking({
     ownerId,
@@ -210,11 +227,21 @@ export default function HomeScreen() {
   const creatorsCatalogEnabled =
     creatorFeedEnabled && !searchQuery.trim() && !selectedCreator;
 
-  const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
+  const {
+    creators,
+    loading: creatorsLoading,
+    error: creatorsError,
+    refresh: refreshCreators,
+  } = useCreatorList(session, {
     enabled: creatorsCatalogEnabled,
   });
 
-  const { videos: feedVideos, loading: feedLoading, error: feedError } = useCreatorFeed(
+  const {
+    videos: feedVideos,
+    loading: feedLoading,
+    error: feedError,
+    refresh: refreshCreatorFeed,
+  } = useCreatorFeed(
     session,
     browseMode,
     {
@@ -231,6 +258,7 @@ export default function HomeScreen() {
     videos: channelVideos,
     loading: channelLoading,
     error: channelError,
+    refresh: refreshCreatorChannel,
   } = useCreatorChannelVideos(session, selectedCreator?.youtubeChannelId ?? null, {
     enabled: creatorFeedEnabled && Boolean(selectedCreator) && !searchQuery.trim(),
   });
@@ -270,6 +298,50 @@ export default function HomeScreen() {
     recipeEvents: recipeRanking.events,
     sectionsExpanded,
     onSectionsExpandedChange: setSectionsExpanded,
+    manualRotationEpoch,
+  });
+
+  const creatorBubbleChannelIds = useMemo(
+    () => tabSurface.creatorSlots.map((slot) => slot.creator.youtubeChannelId),
+    [tabSurface.creatorSlots],
+  );
+
+  useHomeRecipePrefetch({
+    enabled: showCreatorCatalogSections,
+    pantry,
+    session,
+    creatorChannelIds: creatorBubbleChannelIds,
+  });
+
+  const handleClassicCatalogRefresh = useCallback(() => {
+    setFeedDiversitySeed((value) => value + 1);
+    setHomeMetaRefreshSeed((value) => value + 1);
+    refreshMealDb();
+  }, [refreshMealDb]);
+
+  const handleCreatorsDataRefresh = useCallback(() => {
+    void refreshCreators();
+    void refreshCreatorFeed();
+    if (selectedCreator) {
+      void refreshCreatorChannel();
+    }
+  }, [refreshCreatorChannel, refreshCreatorFeed, refreshCreators, selectedCreator]);
+
+  const handleCategoryReselectRefresh = useCallback(() => {
+    if (!selectedClassicCategory) return;
+    clearMealDbCategoryFeedSnapshot(selectedClassicCategory, pantry);
+    setClassicCategoryRefreshSeed((value) => value + 1);
+  }, [pantry, selectedClassicCategory]);
+
+  const homeRecipesRefresh = useHomeRecipesRefresh({
+    enabled: showCreatorCatalogSections && !searchQuery.trim(),
+    pantry,
+    session,
+    creatorChannelIds: creatorBubbleChannelIds,
+    onRotationBump: () => setManualRotationEpoch((value) => value + 1),
+    onClassicCatalogRefresh: handleClassicCatalogRefresh,
+    onCreatorsRefresh: handleCreatorsDataRefresh,
+    onCategoryReselect: handleCategoryReselectRefresh,
   });
 
   useEffect(() => {
@@ -286,7 +358,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [showCreatorCatalogSections]);
+  }, [homeMetaRefreshSeed, showCreatorCatalogSections]);
 
   useEffect(() => {
     if (!selectedClassicCategory) {
@@ -295,8 +367,21 @@ export default function HomeScreen() {
       return;
     }
     let cancelled = false;
-    setClassicCategoryLoading(true);
-    void fetchMealDbCategoryFeedRows(selectedClassicCategory, pantry)
+    const snapshot = readMealDbCategorySnapshot(selectedClassicCategory, pantry);
+    if (snapshot.length > 0) {
+      setClassicCategoryRows(snapshot);
+      setClassicCategoryLoading(false);
+    } else {
+      setClassicCategoryRows([]);
+      setClassicCategoryLoading(true);
+    }
+    void fetchMealDbCategoryFeedRows(selectedClassicCategory, pantry, {
+      onRows: (rows) => {
+        if (cancelled || rows.length === 0) return;
+        setClassicCategoryRows(rows);
+        setClassicCategoryLoading(false);
+      },
+    })
       .then((rows) => {
         if (!cancelled) setClassicCategoryRows(rows);
       })
@@ -306,7 +391,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [pantry, selectedClassicCategory]);
+  }, [classicCategoryRefreshSeed, pantry, selectedClassicCategory]);
 
   const {
     viralOpenState,
@@ -409,11 +494,70 @@ export default function HomeScreen() {
     return rankSearchResults(diet, searchQuery.trim());
   }, [searchResults, searchQuery, userDietPrefs, rankSearchResults]);
 
-  function openDetail(row: RecipesTabRow) {
-    logOpen(refKeyFromRecipesTabRow(row));
-    setDetailInitialSection('ingredients');
-    setPickedDetailRow(row);
-  }
+  const syncResolvedClassicRow = useCallback((resolved: RecipesTabRow) => {
+    setClassicCategoryRows((prev) => {
+      const index = prev.findIndex(
+        (candidate) => candidate.kind === 'kitchen' && candidate.recipe.id === resolved.recipe.id,
+      );
+      if (index < 0) return prev;
+      const next = [...prev];
+      next[index] = resolved;
+      return next;
+    });
+  }, []);
+
+  const removeClassicRowById = useCallback((recipeId: string) => {
+    setClassicCategoryRows((prev) =>
+      prev.filter((candidate) => candidate.kind !== 'kitchen' || candidate.recipe.id !== recipeId),
+    );
+  }, []);
+
+  const resolveRowBeforeUserAction = useCallback(
+    async (row: RecipesTabRow): Promise<RecipesTabRow | null> => {
+      let working = row;
+      if (row.kind === 'kitchen' && row.pantryMatchPending) {
+        setRowDetailLoadingId(row.recipe.id);
+        try {
+          const resolved = await resolveKitchenRecipesTabRowDetails(row, pantry);
+          if (!resolved) return null;
+          working = resolved;
+        } finally {
+          setRowDetailLoadingId(null);
+        }
+      }
+      if (kitchenRowFailsDietPrefs(working, userDietPrefs)) {
+        if (working.kind === 'kitchen') {
+          removeClassicRowById(working.recipe.id);
+        }
+        notifyRecipeHiddenForDietSettings();
+        return null;
+      }
+      if (row.kind === 'kitchen' && row.pantryMatchPending && working.kind === 'kitchen') {
+        syncResolvedClassicRow(working);
+      }
+      return working;
+    },
+    [
+      notifyRecipeHiddenForDietSettings,
+      pantry,
+      removeClassicRowById,
+      syncResolvedClassicRow,
+      userDietPrefs,
+    ],
+  );
+
+  const openDetail = useCallback(
+    (row: RecipesTabRow) => {
+      void (async () => {
+        const resolved = await resolveRowBeforeUserAction(row);
+        if (!resolved) return;
+        logOpen(refKeyFromRecipesTabRow(resolved));
+        setDetailInitialSection('ingredients');
+        setPickedDetailRow(resolved);
+      })();
+    },
+    [logOpen, resolveRowBeforeUserAction],
+  );
 
   const openSwapRecipe = useCallback(
     (recipeId: string) => {
@@ -430,24 +574,28 @@ export default function HomeScreen() {
 
   const openCookSheetForRow = useCallback(
     (row: RecipesTabRow) => {
-      const refKey = refKeyFromRecipesTabRow(row);
-      openScheduleRecipe(
-        scheduleTargetFromRecipesTabRow(row, {
-          onOpenCookView: () => {
-            logCook(refKey);
-            setDetailInitialSection('steps');
-            setPickedDetailRow(row);
-          },
-          onJustSave: () => {
-            if (row.kind !== 'kitchen') return;
-            savedRecipes.toggleKitchenRecipe(row.recipe);
-            logSave(refKey);
-          },
-          onOpenSwapRecipe: openSwapRecipe,
-        }),
-      );
+      void (async () => {
+        const resolved = await resolveRowBeforeUserAction(row);
+        if (!resolved) return;
+        const refKey = refKeyFromRecipesTabRow(resolved);
+        openScheduleRecipe(
+          scheduleTargetFromRecipesTabRow(resolved, {
+            onOpenCookView: () => {
+              logCook(refKey);
+              setDetailInitialSection('steps');
+              setPickedDetailRow(resolved);
+            },
+            onJustSave: () => {
+              if (resolved.kind !== 'kitchen') return;
+              savedRecipes.toggleKitchenRecipe(resolved.recipe);
+              logSave(refKey);
+            },
+            onOpenSwapRecipe: openSwapRecipe,
+          }),
+        );
+      })();
     },
-    [logCook, logSave, openScheduleRecipe, openSwapRecipe, savedRecipes],
+    [logCook, logSave, openScheduleRecipe, openSwapRecipe, resolveRowBeforeUserAction, savedRecipes],
   );
 
   function showDifferentIdeas() {
@@ -740,6 +888,13 @@ export default function HomeScreen() {
     [tabSurface],
   );
 
+  const handleCategoryChipPressIn = useCallback(
+    (chip: MealDbCategoryChip) => {
+      prefetchMealDbCategoryOnIntent(chip.category, pantry);
+    },
+    [pantry],
+  );
+
   function openSavedRecipeRow(row: RecipesTabRow) {
     if (row.kind === 'kitchen' && row.recipe.id.startsWith('viral-preview-')) {
       const record = savedRecipes.records.find((entry) => {
@@ -756,7 +911,21 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-paper px-4 pb-8">
+    <ScrollView
+      className="flex-1 bg-paper px-4 pb-8"
+      refreshControl={
+        showCreatorCatalogSections && !searching
+          ? (
+              <RefreshControl
+                refreshing={homeRecipesRefresh.refreshing}
+                onRefresh={homeRecipesRefresh.onRefresh}
+                colors={[THEME.primary]}
+                tintColor={THEME.primary}
+              />
+            )
+          : undefined
+      }
+    >
       <InstallAppBanner />
       <GuestSaveNudge />
       {cookConfirmPrompt ? (
@@ -901,6 +1070,9 @@ export default function HomeScreen() {
                     ? savedRecipes.isKitchenSavePending(result.row.recipe)
                     : false
                 }
+                interactionLoading={
+                  result.row.kind === 'kitchen' && result.row.recipe.id === rowDetailLoadingId
+                }
                 onOpen={() => openDetail(result.row)}
                 onCook={() => openCookSheetForRow(result.row)}
               />
@@ -930,6 +1102,12 @@ export default function HomeScreen() {
 
       {showCreatorCatalogSections && !searching ? (
         <>
+          <HomeRecipesRefreshButton
+            visible
+            refreshing={homeRecipesRefresh.refreshing}
+            statusMessage={homeRecipesRefresh.statusMessage}
+            onPress={homeRecipesRefresh.onRefresh}
+          />
           <RecipesTabCollapsibleSection
             title={RECIPES_TAB_SURFACE_COPY.classicSectionTitle}
             expanded={tabSurface.sections.classic}
@@ -939,6 +1117,7 @@ export default function HomeScreen() {
               <CategoryAvatarsRow
                 chips={tabSurface.categoryChips}
                 onSelect={handleCategoryChipPress}
+                onPressIn={handleCategoryChipPressIn}
                 onImpression={(chip) =>
                   tabSurface.logCategoryImpression(chip.category, chip.position)
                 }
@@ -957,7 +1136,9 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            {mealDbBlockingLoad || classicCategoryLoading ? <RecipesFeedCardSkeleton count={4} /> : null}
+            {(mealDbBlockingLoad || classicCategoryLoading) && classicRecipeRows.length === 0 ? (
+              <RecipesFeedCardSkeleton count={4} />
+            ) : null}
             {classicRecipeRows.map((row) => (
               <RecipesUnifiedFeedCard
                 key={row.recipe.id}
@@ -974,6 +1155,7 @@ export default function HomeScreen() {
                 saveDisabled={
                   row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false
                 }
+                interactionLoading={row.kind === 'kitchen' && row.recipe.id === rowDetailLoadingId}
                 onOpen={() => openDetail(row)}
                 onCook={() => openCookSheetForRow(row)}
               />

@@ -8,6 +8,10 @@ function memory(): StorageLike {
     removeItem: (key) => {
       map.delete(key);
     },
+    get length() {
+      return map.size;
+    },
+    key: (index: number) => [...map.keys()][index] ?? null,
   };
 }
 
@@ -15,6 +19,8 @@ interface StorageLike {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
   removeItem: (key: string) => void;
+  length?: number;
+  key?: (index: number) => string | null;
 }
 
 let cached: StorageLike | null = null;
@@ -53,4 +59,21 @@ export function removeStorageKey(key: string): void {
   } catch {
     // Best-effort.
   }
+}
+
+export function listStorageKeysWithPrefix(prefix: string): string[] {
+  const store = getStore();
+  const keys: string[] = [];
+  try {
+    if (typeof store.length === 'number' && typeof store.key === 'function') {
+      for (let index = 0; index < store.length; index += 1) {
+        const key = store.key(index);
+        if (key?.startsWith(prefix)) keys.push(key);
+      }
+      return keys;
+    }
+  } catch {
+    return keys;
+  }
+  return keys;
 }

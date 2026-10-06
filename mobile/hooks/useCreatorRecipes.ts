@@ -8,6 +8,7 @@ import {
   fetchCreatorChannelVideos,
   fetchCreatorFeed,
   fetchCreatorList,
+  readPersistedCreatorList,
 } from '../lib/creatorVideos/client';
 import { compareCreatorsByFitAndSubscribers } from '../lib/creatorVideos/fitOrder';
 import type { CreatorListItem, CreatorVideoItem } from '../lib/creatorVideos/types';
@@ -15,7 +16,9 @@ import type { CreatorListItem, CreatorVideoItem } from '../lib/creatorVideos/typ
 export function useCreatorList(session: Session | null, options?: { enabled?: boolean }) {
   const configured = isCreatorRecipesConfigured();
   const enabled = configured && (options?.enabled ?? true);
-  const [creators, setCreators] = useState<CreatorListItem[]>([]);
+  const [creators, setCreators] = useState<CreatorListItem[]>(() =>
+    enabled ? readPersistedCreatorList() : [],
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
