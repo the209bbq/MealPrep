@@ -68,7 +68,7 @@ export const MEALDB_CATALOG_CATEGORIES = [
 export type MealDbCatalogCategory = (typeof MEALDB_CATALOG_CATEGORIES)[number];
 
 export const RECIPES_TAB_SURFACE_COPY = {
-  classicSectionTitle: 'Classic recipes',
-  creatorsSectionTitle: 'From creators',
+  classicSectionTitle: 'See more curated recipes!',
+  creatorsSectionTitle: 'See more creator recipes!',
   categoryRowAccessibility: 'Browse classic recipes by category',
 } as const;

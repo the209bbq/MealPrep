@@ -60,12 +60,6 @@ export const RECIPES_COPY = {
     add: 'Add to meals',
   },
 
-  emptyState: {
-    title: 'No recipes yet',
-    body:
-      'Add a few pantry staples or loosen the filters above. We show meals you can make with what you already have.',
-  },
-
   pantryEmptyCard: {
     title: 'Add pantry items first',
     subtitle: 'Recipes show up once we know what you have on hand',

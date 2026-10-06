@@ -16,7 +16,6 @@ import { CreatorRecipesFeedModeDropdown } from '../../components/recipes/Creator
 import { RecipesFeedCardSkeleton } from '../../components/recipes/RecipesFeedCardSkeleton';
 import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedFeedCard';
 import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
-import { RecipesEmptyState } from '../../components/RecipesEmptyState';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { THEME, isCreatorRecipesConfigured } from '../../config/appConfig';
 import {
@@ -488,20 +487,7 @@ export default function HomeScreen() {
 
   const showLegacyKitchenFeed = !creatorFeedEnabled;
 
-  const catalogBrowsingIdle =
-    showCreatorCatalogSections &&
-    !sectionsExpanded.classic &&
-    !sectionsExpanded.creators &&
-    !selectedCreator &&
-    !selectedClassicCategory;
-
-  const hasUnfilteredResults = showCreatorCatalogSections
-    ? (sectionsExpanded.classic && mealDbRows.length > 0) ||
-      ((sectionsExpanded.creators || Boolean(selectedCreator)) &&
-        (browseVideoModels.length > 0 || creators.length > 0))
-    : showLegacyKitchenFeed
-      ? filterBaseRows.length > 0
-      : false;
+  const hasUnfilteredResults = showLegacyKitchenFeed ? filterBaseRows.length > 0 : false;
 
   const showFilterEmpty =
     showLegacyKitchenFeed &&
@@ -528,14 +514,6 @@ export default function HomeScreen() {
     creatorFeedBlockingLoad ||
     mealDbBlockingLoad ||
     (showLegacyKitchenFeed && mealDbLoading && mealDbRows.length === 0);
-
-  const showCatalogEmpty =
-    !catalogBrowsingIdle &&
-    !showFilterEmpty &&
-    !listLoading &&
-    !hasUnfilteredResults &&
-    !searching &&
-    creatorFeedEnabled;
 
   const showSearchEmpty =
     searching && !searchLoading && searchResultsFiltered.length === 0;
@@ -889,7 +867,6 @@ export default function HomeScreen() {
         <Text className="mt-3 text-sm text-muted">{mealDbError}</Text>
       ) : null}
 
-      {showCatalogEmpty ? <RecipesEmptyState pantryEmpty={false} /> : null}
       {showFilterEmpty ? <RecipesTabFiltersEmptyState onClearAll={clearAllFilters} /> : null}
       {showSearchEmpty ? (
         <Text className="mt-4 text-sm text-muted">{CREATOR_RECIPES_COPY.emptySearch}</Text>
