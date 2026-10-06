@@ -8,6 +8,7 @@ import { HomeHubSheet } from '../../components/home/HomeHubSheet';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
 import { CreatorAvatarsRow } from '../../components/recipes/CreatorAvatarsRow';
+import { CreatorRecipeWebsiteLink } from '../../components/recipes/CreatorRecipeWebsiteLink';
 import { CategoryAvatarsRow } from '../../components/recipes/CategoryAvatarsRow';
 import { RecipesTabCollapsibleSection } from '../../components/recipes/RecipesTabCollapsibleSection';
 import { CreatorRecipesFeedCard } from '../../components/recipes/CreatorRecipesFeedCard';
@@ -60,6 +61,7 @@ import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { CreatorListItem } from '../../lib/creatorVideos/types';
+import { creatorWebsiteForChannel } from '../../config/creatorWebsites';
 import { MainIngredientChipRow } from '../../components/recipes/MainIngredientChipRow';
 import { MAIN_INGREDIENT_COPY } from '../../config/mainIngredient';
 import {
@@ -678,6 +680,11 @@ export default function HomeScreen() {
 
   const activeCreator = selectedCreator ?? channelCreator;
 
+  const activeCreatorWebsite = useMemo(
+    () => creatorWebsiteForChannel(activeCreator?.youtubeChannelId),
+    [activeCreator?.youtubeChannelId],
+  );
+
   const detailCreatorAvatarUrl = useMemo(() => {
     if (!viralOpenState) return null;
     const videoId = viralOpenState.item.videoId;
@@ -846,6 +853,9 @@ export default function HomeScreen() {
         ) : null}
         {activeCreator && selectedCreator ? (
           <Text className="mb-2 text-sm font-semibold text-ink">{activeCreator.displayName}</Text>
+        ) : null}
+        {activeCreator && selectedCreator && activeCreatorWebsite ? (
+          <CreatorRecipeWebsiteLink website={activeCreatorWebsite} />
         ) : null}
         <View className="mt-2 min-w-0 flex-row items-center gap-1.5">
           <TextInput
