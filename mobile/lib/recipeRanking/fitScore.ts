@@ -9,6 +9,7 @@ import {
   FIT_WEIGHT_SERVINGS,
   FIT_WEIGHT_TIME,
 } from './weights';
+import { servingsFitScore } from './profilePrior';
 
 function clampScore(value: number): number {
   return Math.max(0, Math.min(100, value));
@@ -49,14 +50,8 @@ export function scoreBudgetFit(
 }
 
 export function scoreServingsFit(recipeServings: number, householdSize: number): number {
-  const servings = Math.max(1, recipeServings);
-  const target = Math.max(1, householdSize);
-  const diff = Math.abs(servings - target);
-  if (diff === 0) return 100;
-  if (diff === 1) return 88;
-  if (diff === 2) return 72;
-  if (diff <= 4) return 50;
-  return 30;
+  const fit = servingsFitScore(recipeServings, householdSize);
+  return clampScore(fit * 100);
 }
 
 export function scoreRecipeFit(

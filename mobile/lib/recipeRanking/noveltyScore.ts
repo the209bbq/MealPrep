@@ -1,29 +1,31 @@
-import type { RecipeEngagementEvent } from './types';
+import type { EngagementIndexV2 } from './engagementIndex';
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+export function scoreNoveltyFromIndex(
+  refKey: string,
+  index: EngagementIndexV2,
+  nowMs: number = Date.now(),
+): number {
+  const row = index.impressions14d[refKey];
+  if (!row) return 100;
+  const ageDays = (nowMs - row.lastMs) / (24 * 60 * 60 * 1000);
+  const impressions = ageDays > 14 ? 0 : row.count;
+  const novelty01 = Math.exp(-impressions / 3);
+  return Math.max(0, Math.min(100, novelty01 * 100));
+}
 
+/** @deprecated prefer scoreNoveltyFromIndex */
 export function scoreNovelty(
   refKey: string,
-  events: readonly RecipeEngagementEvent[],
+  events: readonly { refKey: string; type: string; at: string }[],
   nowMs: number = Date.now(),
 ): number {
   let impressions = 0;
-  let lastSeenMs = 0;
+  const windowMs = 14 * 24 * 60 * 60 * 1000;
   for (const event of events) {
-    if (event.refKey !== refKey) continue;
-    if (event.type !== 'impression' && event.type !== 'open') continue;
-    impressions += event.type === 'impression' ? 1 : 0;
+    if (event.refKey !== refKey || event.type !== 'impression') continue;
     const atMs = Date.parse(event.at);
-    if (Number.isFinite(atMs)) {
-      lastSeenMs = Math.max(lastSeenMs, atMs);
-    }
+    if (Number.isFinite(atMs) && nowMs - atMs <= windowMs) impressions += 1;
   }
-  if (impressions === 0 && lastSeenMs === 0) {
-    return 100;
-  }
-  const impressionPenalty = Math.min(70, impressions * 12);
-  const daysSinceSeen =
-    lastSeenMs > 0 ? Math.max(0, (nowMs - lastSeenMs) / MS_PER_DAY) : 30;
-  const recencyBoost = Math.min(40, daysSinceSeen * 3);
-  return Math.max(0, Math.min(100, 100 - impressionPenalty + recencyBoost * 0.25));
+  const novelty01 = Math.exp(-impressions / 3);
+  return Math.max(0, Math.min(100, novelty01 * 100));
 }

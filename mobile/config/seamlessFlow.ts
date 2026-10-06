@@ -12,4 +12,7 @@ export const SEAMLESS_FLOW_COPY = {
     count === 1 ? '1 thing missing' : `${count} things missing`,
   swapSuggestion: (name: string) => `Try ${name} instead`,
   plannedToast: (label: string) => `Planned for ${label}`,
+  ghostCompactPrompt: (dayLabel: string, slotLabel: string) => `${dayLabel} ${slotLabel}?`,
+  ghostConfirm: 'Confirm',
+  ghostChange: 'Change',
 } as const;

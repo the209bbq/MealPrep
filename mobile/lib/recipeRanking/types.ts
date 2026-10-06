@@ -3,18 +3,24 @@ import type { UserDietPrefs } from '../diet/types';
 import type { RecipeCostPricingContext } from '../costPerServing/types';
 import type { RecipePantryMatch } from '../recipeMatch';
 import type { Recipe } from '../../types/mealprep';
+import type { EngagementIndexV2 } from './engagementIndex';
 
 export type RecipeEngagementEventType =
   | 'impression'
   | 'open'
   | 'cook'
+  | 'cook_confirmed'
+  | 'cook_declined'
   | 'save'
   | 'like'
   | 'skip'
   | 'wont_cook'
   | 'plan'
   | 'cook_now'
-  | 'just_save';
+  | 'just_save'
+  | 'import'
+  | 'ghost_confirm'
+  | 'ghost_override';
 
 export type RecipeEngagementSource = 'mealdb' | 'creator' | 'import';
 
@@ -33,6 +39,12 @@ export interface RecipeEngagementEventV2 {
   slot?: PlanSlotCode;
   ghostShown?: boolean;
   missingCount?: number;
+  tags?: string[];
+  suggestedDay?: string;
+  suggestedSlot?: PlanSlotCode;
+  chosenDay?: string;
+  chosenSlot?: PlanSlotCode;
+  via?: 'plan' | 'cook_now';
 }
 
 export interface RecipeEngagementEvent {
@@ -47,6 +59,10 @@ export interface RecipeRankingInput {
   recipe: Recipe;
   match: RecipePantryMatch;
   ingredientLines: string[] | null;
+  /** Category group for personal scoring (optional; derived when missing). */
+  group?: RecipeCategoryGroup;
+  area?: string;
+  tags?: string[];
 }
 
 export interface RecipeRankingContext {
@@ -55,7 +71,8 @@ export interface RecipeRankingContext {
   tabFilters: RecipesTabFilterState;
   events: readonly RecipeEngagementEvent[];
   pricing: RecipeCostPricingContext;
-  /** When false, personal and peer scores are forced to 0 (cold start). */
+  engagementIndex: EngagementIndexV2;
+  /** @deprecated v2 uses smooth blend; kept for callers, ignored by scorer. */
   personalSignalsReady: boolean;
 }
 
@@ -67,4 +84,6 @@ export interface RecipeRankingBreakdown {
   peer: number;
   novelty: number;
   hardExcluded: boolean;
+  repetitionAdjust?: number;
+  reason?: string;
 }

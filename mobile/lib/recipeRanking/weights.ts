@@ -1,10 +1,19 @@
 import type { RecipeEngagementEventType } from './types';
 
-/** Top-level score weights (sum = 1). */
-export const RANK_WEIGHT_FIT = 0.4;
-export const RANK_WEIGHT_PERSONAL = 0.35;
-export const RANK_WEIGHT_PEER = 0.15;
-export const RANK_WEIGHT_NOVELTY = 0.1;
+/** Top-level score weights (spec §2.4, peer reserved at 0). */
+export const RANK_WEIGHT_FIT_COLD = 40;
+export const RANK_WEIGHT_PERSONAL_COLD = 35;
+export const RANK_WEIGHT_FIT_WARM = 30;
+export const RANK_WEIGHT_PERSONAL_WARM = 45;
+export const RANK_WEIGHT_PEER = 0;
+export const RANK_WEIGHT_NOVELTY = 10;
+export const RANK_WEIGHT_SUM =
+  RANK_WEIGHT_FIT_COLD + RANK_WEIGHT_PERSONAL_COLD + RANK_WEIGHT_PEER + RANK_WEIGHT_NOVELTY;
+
+/** Legacy exports (normalized fractions for cold profile). */
+export const RANK_WEIGHT_FIT = RANK_WEIGHT_FIT_COLD / RANK_WEIGHT_SUM;
+export const RANK_WEIGHT_PERSONAL = RANK_WEIGHT_PERSONAL_COLD / RANK_WEIGHT_SUM;
+export const RANK_WEIGHT_NOVELTY_FRAC = RANK_WEIGHT_NOVELTY / RANK_WEIGHT_SUM;
 
 /** Fit sub-weights (sum = 1). */
 export const FIT_WEIGHT_PANTRY = 0.45;
@@ -12,21 +21,7 @@ export const FIT_WEIGHT_TIME = 0.25;
 export const FIT_WEIGHT_BUDGET = 0.2;
 export const FIT_WEIGHT_SERVINGS = 0.1;
 
-/** Peer collaborative signal — v1 stub (near zero). */
+/** Peer collaborative signal — reserved for later. */
 export const PEER_SCORE_STUB = 0;
 
-export const RECENCY_HALF_LIFE_DAYS = 14;
-
-export const SIGNAL_WEIGHTS: Record<
-  Exclude<
-    RecipeEngagementEventType,
-    'impression' | 'wont_cook' | 'plan' | 'cook_now' | 'just_save'
-  >,
-  number
-> = {
-  open: 0.12,
-  cook: 1,
-  save: 0.85,
-  like: 0.9,
-  skip: -0.55,
-};
+export const STRONG_EVENTS_FOR_WARM_WEIGHTS = 20;
