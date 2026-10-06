@@ -32,6 +32,7 @@ export function mergePantryQuantities(existing: PantryItem, incoming: PantryItem
     location: existing.location,
     scanPhotoPath: incoming.scanPhotoPath ?? existing.scanPhotoPath,
     photoUri: incoming.photoUri ?? existing.photoUri,
+    expiresOn: incoming.expiresOn ?? existing.expiresOn,
     updatedAt: incoming.updatedAt,
   };
 }

@@ -27,6 +27,7 @@ export default function RootLayout() {
               <Stack.Screen name="discover-recipes" options={{ presentation: 'card' }} />
               <Stack.Screen name="discover-recipes/[id]" options={{ presentation: 'card' }} />
               <Stack.Screen name="delete-account" options={{ presentation: 'card' }} />
+              <Stack.Screen name="pantry-staples" options={{ presentation: 'card' }} />
             </Stack>
             <RootOverlays />
           </ScheduleRecipeSheetProvider>

@@ -11,6 +11,7 @@ export const APP_ROUTES = {
   admin: '/admin' as Href,
   smartShop: '/smart-shop' as Href,
   discoverRecipes: '/discover-recipes' as Href,
+  pantryStaples: '/pantry-staples' as Href,
 } as const;
 
 export type AppRouteKey = keyof typeof APP_ROUTES;
