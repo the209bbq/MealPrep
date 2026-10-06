@@ -1683,7 +1683,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     logCookEngagement(cookConfirmPrompt, 'cook_declined');
     markCookPromptAsked(ownerId, cookConfirmPrompt.key);
     setCookConfirmPrompt(null);
-  }, [cookConfirmPrompt, logCookEngagement, ownerId]);
+    refreshGroceryNow();
+  }, [cookConfirmPrompt, logCookEngagement, ownerId, refreshGroceryNow]);
 
   const confirmCookConfirmPrompt = useCallback(async () => {
     if (!cookConfirmPrompt) return;
@@ -1761,7 +1762,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   useEffect(() => {
-    if (cookConfirmPrompt) return;
+    if (cookConfirmPrompt) {
+      const stillPlanned = mealPlan.some((row) => row.id === cookConfirmPrompt.mealPlanItemId);
+      if (!stillPlanned) {
+        setCookConfirmPrompt(null);
+      }
+      return;
+    }
     const asked = readCookPromptAskedKeys(ownerId);
     const due = pickDuePlannedMeal(mealPlan, asked);
     if (!due) return;

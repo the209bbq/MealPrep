@@ -83,7 +83,7 @@ function categoryForIngredient(
     { name: ingredientName, ingredientId, quantity: 0, unit: 'each' },
     pantry,
   );
-  return matches[0]?.category ?? 'dry_goods';
+  return matches[0]?.category ?? inferGroceryCategoryFromName(ingredientName);
 }
 
 export interface BuildGroceryListOptions {

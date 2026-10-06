@@ -42,6 +42,18 @@ assert.equal(friedRiceGhost.group, 'main');
 assert.notEqual(friedRiceGhost.slot, 'breakfast', 'Chicken Fried Rice must not ghost breakfast');
 assert.equal(friedRiceGhost.slot, 'dinner', 'evening main should ghost dinner');
 
+const friedRiceMondayMorning = guessGhostDaySlot({
+  category: 'Chinese',
+  title: 'Chicken Fried Rice',
+  mealPlan: [],
+  todayIso: '2026-10-12',
+  now: new Date('2026-10-12T08:00:00'),
+  index: emptyIndex,
+});
+assert.notEqual(friedRiceMondayMorning.slot, 'breakfast', 'fried rice at 8am must not suggest breakfast');
+
+assert.equal(recipeCategoryGroup({ category: 'Breakfast', title: 'Boxty Breakfast' }), 'breakfast');
+
 const ranked: RecipePantryMatch[] = [
   {
     recipeId: 'current',

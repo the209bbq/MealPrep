@@ -4,7 +4,7 @@ import { normalizeIngredientName } from '../recipeMatch/ingredientNormalize';
 import type { AllergenId } from './types';
 
 export function haystackForLine(line: string): string {
-  return normalizeIngredientName(line);
+  return normalizeIngredientName(line.replace(/-/g, ' '));
 }
 
 function escapeRegex(value: string): string {

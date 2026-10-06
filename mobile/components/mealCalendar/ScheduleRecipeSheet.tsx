@@ -16,6 +16,7 @@ import {
   categoryGroupForTarget,
   type ScheduleRecipeTarget,
 } from '../../lib/mealCalendar/scheduleTarget';
+import { recipeMissingShopCountFromIngredients } from '../../lib/recipeMatch/missingShopCount';
 import { pickSwapPantryMatch } from '../../lib/seamlessFlow/swapSuggestion';
 import { suggestDaySlot, takenSlotCodesForDay } from '../../lib/seamlessFlow/suggestDaySlot';
 import { SEAMLESS_PLAN_SLOTS } from '../../lib/seamlessFlow/planSlots';
@@ -110,6 +111,7 @@ function ScheduleRecipeSheetBody({
     pantryRecipeMatches.byRecipeId.get(target.pantryRecipeId) ??
     null;
   const missing = match?.missing ?? [];
+  const missingShopCount = recipeMissingShopCountFromIngredients(missing);
 
   const [step, setStep] = useState<SheetStep>('choose');
   const [monthOpen, setMonthOpen] = useState(false);
@@ -277,7 +279,7 @@ function ScheduleRecipeSheetBody({
       <>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={handleDismiss}>
           <Pressable className="max-h-[85%] rounded-t-3xl bg-card px-4 pb-8 pt-4" onPress={() => undefined}>
-            <Text className="text-lg font-bold text-ink">{SEAMLESS_FLOW_COPY.missingHeading(missing.length)}</Text>
+            <Text className="text-lg font-bold text-ink">{SEAMLESS_FLOW_COPY.missingHeading(missingShopCount)}</Text>
             <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{target.title}</Text>
             <ScrollView className="mt-3 max-h-40">
               {preview.map((ing) => (

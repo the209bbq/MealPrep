@@ -35,7 +35,7 @@ export const CREATOR_RECIPES_COPY = {
   feedTitle: 'Recipes from creators you trust',
   feedSubtitle: 'Classic ideas and creator videos — match what’s in your pantry',
   creatorsSectionTitle: 'From creators',
-  cardTapToImport: 'Tap to import & match your pantry',
+  cardTapToImport: 'Tap to preview',
   sourceClassic: 'Classic',
   loading: 'Loading recipes…',
   loadingCreators: 'Loading creators…',

@@ -342,6 +342,10 @@ export function suggestStorageLocationForPantryItem(
     return 'spice_rack';
   }
 
+  if (category === 'dairy' || category === 'meats' || category === 'frozen') {
+    return 'fridge';
+  }
+
   if (nameIncludesAnyPhrase(normalized, PANTRY_SHELF_STABLE_PHRASES)) {
     const needsFridgeAfterOpen =
       nameIncludesPhrase(normalized, 'opened') ||
@@ -350,10 +354,6 @@ export function suggestStorageLocationForPantryItem(
     if (!needsFridgeAfterOpen) {
       return DEFAULT_PANTRY_STORAGE_LOCATION;
     }
-  }
-
-  if (category === 'dairy' || category === 'meats' || category === 'produce' || category === 'frozen') {
-    return 'fridge';
   }
 
   if (nameIncludesAnyPhrase(normalized, FRIDGE_PHRASES)) {

@@ -40,13 +40,18 @@ export function ingredientLinesFromCreatorVideo(video: CreatorVideoItem): string
   return lines.length > 0 ? lines : null;
 }
 
+/** Diet/allergen haystack for creator cards — always include title, description, and tags. */
+export function dietCheckLinesFromCreatorModel(model: CreatorFeedCardModel): string[] | null {
+  const meta = titleAndDescriptionLines(model);
+  const tagLines = (model.importedRecipe?.tag ? [model.importedRecipe.tag] : []).filter(Boolean);
+  const fromRecipe = model.importedRecipe ? ingredientLinesFromRecipe(model.importedRecipe) : [];
+  const merged = [...fromRecipe, ...meta, ...tagLines];
+  const unique = [...new Set(merged.map((line) => line.trim()).filter(Boolean))];
+  return unique.length > 0 ? unique : null;
+}
+
 export function ingredientLinesFromCreatorModel(model: CreatorFeedCardModel): string[] | null {
-  if (model.importedRecipe) {
-    const lines = ingredientLinesFromRecipe(model.importedRecipe);
-    if (lines.length > 0) return lines;
-  }
-  const fallback = titleAndDescriptionLines(model);
-  return fallback.length > 0 ? fallback : null;
+  return dietCheckLinesFromCreatorModel(model);
 }
 
 export function ingredientLinesForKitchenRecipe(
