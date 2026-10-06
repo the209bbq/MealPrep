@@ -4,7 +4,11 @@ import { listStorageKeysWithPrefix, removeStorageKey } from '../storage';
 import { clearAllMealDbCatalogSnapshots } from './catalogCache';
 import { clearAllMealDbCategoryFeedSnapshots } from './categoryFeedCache';
 import { clearAllMealDbCategoryListSnapshots } from './categoryListCache';
-import { invalidateMealDbClientCacheForHomeRefresh, revalidateStaleMealDbPaths } from './client';
+import {
+  invalidateMealDbClientCacheForHomeRefresh,
+  invalidateMealDbListClientCacheForHomeRefresh,
+  revalidateStaleMealDbPaths,
+} from './client';
 
 export function clearMealDbHomeRecipeStorageCaches(): void {
   clearAllMealDbCategoryListSnapshots();
@@ -29,6 +33,11 @@ export function clearMealDbHomeRecipeStorageCaches(): void {
 export function invalidateMealDbHomeRecipeCaches(): void {
   clearMealDbHomeRecipeStorageCaches();
   invalidateMealDbClientCacheForHomeRefresh();
+}
+
+export function clearMealDbHomeCategoryListCachesOnly(): void {
+  clearAllMealDbCategoryListSnapshots();
+  invalidateMealDbListClientCacheForHomeRefresh();
 }
 
 export function mealDbHomeStaleRevalidatePaths(): string[] {

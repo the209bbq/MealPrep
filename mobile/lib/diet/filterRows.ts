@@ -5,6 +5,7 @@ import type { RecipePantryMatch } from '../recipeMatch';
 import { shouldHideRecipeForDietPrefs } from './conflicts';
 import { dietCheckLinesFromCreatorModel, dietCheckLinesFromRecipesTabRow } from './ingredientLines';
 import type { UserDietPrefs } from './types';
+import { userNeedsResolvedMealDbRowsBeforeDisplay } from './stubSafety';
 
 export function filterRecipesTabRowsForDietPrefs(
   rows: readonly RecipesTabRow[],
@@ -12,6 +13,13 @@ export function filterRecipesTabRowsForDietPrefs(
 ): RecipesTabRow[] {
   if (!prefs.hideConflicts) return [...rows];
   return rows.filter((row) => {
+    if (
+      userNeedsResolvedMealDbRowsBeforeDisplay(prefs) &&
+      row.kind === 'kitchen' &&
+      row.pantryMatchPending
+    ) {
+      return true;
+    }
     const lines = dietCheckLinesFromRecipesTabRow(row);
     return !shouldHideRecipeForDietPrefs(prefs, lines);
   });

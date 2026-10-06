@@ -271,10 +271,21 @@ export const STAPLE_CATALOG: StapleCatalogEntry[] = [
   { id: 'bagels', name: 'Bagels', emoji: '🥯', category: 'dry_goods', section: 'bakery', defaultQuantity: 6, defaultUnit: 'each', perishable: true, shelfLifeDays: 5 },
 ];
 
+/** Popular staples shown beside the Pantry “Add staples” chip (emoji pulled from catalog). */
+export const PANTRY_STAPLES_LINK_PREVIEW_IDS = ['eggs', 'milk', 'onions', 'rice', 'bread'] as const;
+
 const catalogById = new Map(STAPLE_CATALOG.map((entry) => [entry.id, entry]));
 
 export function getStapleById(id: string): StapleCatalogEntry | undefined {
   return catalogById.get(id);
+}
+
+export function stapleLinkPreviewEntries(
+  ids: readonly string[] = PANTRY_STAPLES_LINK_PREVIEW_IDS,
+): StapleCatalogEntry[] {
+  return ids
+    .map((id) => getStapleById(id))
+    .filter((entry): entry is StapleCatalogEntry => entry != null);
 }
 
 export function staplesBySection(): { section: StapleStoreSection; label: string; items: StapleCatalogEntry[] }[] {

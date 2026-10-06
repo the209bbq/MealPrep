@@ -1,5 +1,8 @@
 import { invalidateCreatorVideosCaches } from '../creatorVideos/client';
-import { invalidateMealDbHomeRecipeCaches } from '../mealdb/homeCacheControl';
+import {
+  clearMealDbHomeCategoryListCachesOnly,
+  invalidateMealDbHomeRecipeCaches,
+} from '../mealdb/homeCacheControl';
 import { resetHomeRecipePrefetchForTests } from '../mealdb/homePrefetch';
 
 export const HOME_RECIPES_REFRESH_DEBOUNCE_MS = 2_500;
@@ -19,6 +22,13 @@ export function shouldDebounceHomeRecipesRefresh(
 
 export function invalidateHomeRecipesCaches(): void {
   invalidateMealDbHomeRecipeCaches();
+  invalidateCreatorVideosCaches();
+  resetHomeRecipePrefetchForTests();
+}
+
+/** Toolbar refresh: reshuffle from existing detail cache; refetch lists + creators only. */
+export function invalidateHomeRecipesCachesLight(): void {
+  clearMealDbHomeCategoryListCachesOnly();
   invalidateCreatorVideosCaches();
   resetHomeRecipePrefetchForTests();
 }
