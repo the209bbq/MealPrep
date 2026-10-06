@@ -4,7 +4,7 @@ import { CATEGORY_LABELS } from '../config/appConfig';
 import { PANTRY_LIST_COPY, type PantryStorageLocation } from '../config/pantryStorage';
 import { groupPantryIntoLocationSections } from '../lib/pantryGrouping';
 import { formatQuantityWithUnit } from '../lib/formatQuantity';
-import { formatPantryExpiryShort, isExpiringSoon } from '../lib/pantry/expiry';
+import { formatPantryExpiryShort, isExpiringSoon, isPantryItemExpired } from '../lib/pantry/expiry';
 import type { PantryCategory, PantryItem } from '../types/mealprep';
 
 interface PantryFilteredItemListProps {
@@ -17,7 +17,8 @@ interface PantryFilteredItemListProps {
 
 function PantryItemRow({ item, onPress }: { item: PantryItem; onPress: () => void }) {
   const expiryLabel = formatPantryExpiryShort(item.expiresOn);
-  const soon = isExpiringSoon(item);
+  const expired = isPantryItemExpired(item);
+  const soon = !expired && isExpiringSoon(item);
   return (
     <Pressable
       onPress={onPress}
@@ -30,7 +31,9 @@ function PantryItemRow({ item, onPress }: { item: PantryItem; onPress: () => voi
             {CATEGORY_LABELS[item.category]} · {formatQuantityWithUnit(item.quantity, item.unit)}
             {expiryLabel ? ` · ${expiryLabel}` : ''}
           </Text>
-          {soon && expiryLabel ? (
+          {expired && expiryLabel ? (
+            <Text className="mt-0.5 text-xs font-semibold text-danger">Expired</Text>
+          ) : soon && expiryLabel ? (
             <Text className="mt-0.5 text-xs font-semibold text-danger">Expiring soon</Text>
           ) : null}
         </View>

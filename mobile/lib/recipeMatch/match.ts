@@ -6,8 +6,17 @@ import {
   RECIPES_TAB_PARTIAL_MATCH_LIMIT,
   RECIPES_TAB_PARTIAL_MIN_MATCHED_COUNT,
 } from '../../config/recipeMatching';
-import { FUZZY_MATCH_THRESHOLD, PANTRY_STAPLES } from '../../config/recipeMatchingConfig';
-import { fuzzyNameScore, ingredientMatchScore, normalizeIngredientName } from './normalize';
+import {
+  FUZZY_MATCH_THRESHOLD,
+  INGREDIENT_STRIP_TOKENS,
+  PANTRY_STAPLES,
+} from '../../config/recipeMatchingConfig';
+import {
+  fuzzyNameScore,
+  ingredientMatchScore,
+  normalizeIngredientName,
+  tokenizeIngredientName,
+} from './normalize';
 import {
   fuzzyNameScoreWithPantryTokens,
   getPantryMatchContext,
@@ -40,13 +49,39 @@ export interface PantryMatchIndex {
   ranked: RecipePantryMatch[];
 }
 
+function isWaterIngredient(name: string, ingredientId: string): boolean {
+  const tokens = tokenizeIngredientName(name);
+  const idTokens = tokenizeIngredientName(ingredientId.replace(/-/g, ' '));
+  const hasWater = tokens.includes('water') || idTokens.includes('water');
+  const iceOnly =
+    (tokens.length === 1 && tokens[0] === 'ice') || (idTokens.length === 1 && idTokens[0] === 'ice');
+  if (iceOnly) return true;
+  if (!hasWater) return false;
+  const strip = new Set<string>(INGREDIENT_STRIP_TOKENS);
+  const nonWater = tokens.filter((t) => t !== 'water' && !strip.has(t));
+  return nonWater.length === 0;
+}
+
 function isConfiguredStaple(name: string, ingredientId: string): boolean {
+  if (isWaterIngredient(name, ingredientId)) return true;
+
   const normalized = normalizeIngredientName(name);
   const idNorm = normalizeIngredientName(ingredientId.replace(/-/g, ' '));
 
   for (const staple of PANTRY_STAPLES) {
     const sNorm = normalizeIngredientName(staple);
     if (normalized === sNorm || idNorm === sNorm) return true;
+    const stapleTokens = tokenizeIngredientName(staple);
+    const nameTokens = tokenizeIngredientName(name);
+    if (
+      stapleTokens.length === 1 &&
+      nameTokens.length > 1 &&
+      nameTokens[nameTokens.length - 1] === stapleTokens[0]
+    ) {
+      const extra = nameTokens.slice(0, -1);
+      const strip = new Set<string>(INGREDIENT_STRIP_TOKENS);
+      if (extra.every((t) => strip.has(t))) return true;
+    }
   }
   return false;
 }

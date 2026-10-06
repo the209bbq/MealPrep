@@ -96,10 +96,17 @@ export function mapExtractedImportToRecipe(
   return mapNormalizedRecipeToAppRecipe(importExtractedToNormalizedShape(extracted, userId));
 }
 
-export function isUserOwnedKitchenRecipe(recipe: Recipe): boolean {
+/** User-saved imports (link, photo, video, cookbook scan) — not catalog or MealDB clones. */
+export function isUserImportedKitchenRecipe(recipe: Recipe): boolean {
   if (recipe.isMaster) return false;
   if (recipe.id.startsWith('recipeapi-')) return false;
   if (recipe.id.startsWith('mealdb-')) return false;
+  if (recipe.id.startsWith('link-import-') || recipe.id.startsWith('photo-import-')) return true;
+  if (recipe.sourceType === 'photo' || recipe.sourceType === 'video') return true;
   if (recipe.sourceUrl) return true;
-  return recipe.id.startsWith('link-import-');
+  return false;
+}
+
+export function isUserOwnedKitchenRecipe(recipe: Recipe): boolean {
+  return isUserImportedKitchenRecipe(recipe);
 }

@@ -218,7 +218,10 @@ export function mapRecipe(row: RecipeRow): Recipe {
       row.source_type === 'web' ||
       row.source_type === 'tiktok' ||
       row.source_type === 'instagram' ||
-      row.source_type === 'facebook'
+      row.source_type === 'facebook' ||
+      row.source_type === 'reddit' ||
+      row.source_type === 'photo' ||
+      row.source_type === 'video'
         ? row.source_type
         : undefined,
     sourceTitle: row.source_title ?? undefined,

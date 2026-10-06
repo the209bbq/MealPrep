@@ -46,9 +46,23 @@ export function estimateExpiryFromShelfLife(shelfLifeDays: number, now = new Dat
   return addDaysToIsoDate(todayIsoDate(now), shelfLifeDays);
 }
 
-/** True when `expiresOn` is on or before `now + days` (inclusive). */
+/** True when `expiresOn` is strictly before today (UTC calendar day). */
+export function isPantryItemExpired(
+  item: Pick<PantryItem, 'expiresOn'>,
+  now = new Date(),
+): boolean {
+  if (!item.expiresOn) return false;
+  const exp = parseIsoDateOnly(item.expiresOn.slice(0, 10));
+  if (!exp) return false;
+  const today = parseIsoDateOnly(todayIsoDate(now));
+  if (!today) return false;
+  return exp.getTime() < today.getTime();
+}
+
+/** True when `expiresOn` is today or later but on or before `now + days` (inclusive). */
 export function isExpiringSoon(item: Pick<PantryItem, 'expiresOn'>, days = 7, now = new Date()): boolean {
   if (!item.expiresOn) return false;
+  if (isPantryItemExpired(item, now)) return false;
   const exp = parseIsoDateOnly(item.expiresOn.slice(0, 10));
   if (!exp) return false;
   const today = parseIsoDateOnly(todayIsoDate(now));

@@ -1,5 +1,5 @@
 import { RECIPE_RANKING } from '../../config/recipeRanking';
-import { readJson, writeJson } from '../storage';
+import { readJson, removeStorageKey, writeJson } from '../storage';
 import {
   applyEngagementEventToIndex,
   readEngagementIndex,
@@ -145,4 +145,10 @@ export function clearWontCookForRef(
   const next = base.filter((event) => !(event.refKey === refKey && event.type === 'wont_cook'));
   writeRecipeEngagementEvents(ownerId, next);
   return next;
+}
+
+export function clearRecipeEngagementForOwner(ownerId: string): void {
+  if (!ownerId) return;
+  removeStorageKey(storageKey(ownerId));
+  removeStorageKey(`${RECIPE_RANKING.eventsStoragePrefix}.${ownerId}.indexV2`);
 }
