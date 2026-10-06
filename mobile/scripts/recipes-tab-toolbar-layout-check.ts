@@ -32,6 +32,19 @@ for (const viewportWidth of [360, 412]) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mobileRoot = path.resolve(__dirname, '..');
+
+const homeSource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/index.tsx'), 'utf8');
+assert.doesNotMatch(
+  homeSource,
+  /CREATOR_RECIPES_COPY\.feedTitle/,
+  'Home toolbar card should not show the removed feed title heading',
+);
+assert.doesNotMatch(homeSource, /MainIngredientChipRow/, 'Home should not render Cook-with chips');
+assert.match(
+  homeSource,
+  /CREATOR_RECIPES_COPY\.feedSubtitle/,
+  'Home toolbar card should keep the feed subtitle',
+);
 const distDir = path.join(mobileRoot, 'dist');
 const serveRoot = path.join(mobileRoot, '.toolbar-layout-serve-root');
 
