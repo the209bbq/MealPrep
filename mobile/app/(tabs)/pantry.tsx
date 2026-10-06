@@ -76,6 +76,15 @@ import { TabEmptyState } from '../../components/TabEmptyState';
 import { ViewScanPhotoButton } from '../../components/ViewScanPhotoButton';
 import { PANTRY_CATEGORIES, type PantryCategory, type PantryItem } from '../../types/mealprep';
 import { MAIN_INGREDIENT_COPY } from '../../config/mainIngredient';
+import { APP_ROUTES } from '../../config/appRoutes';
+import {
+  PANTRY_STAPLES_COPY,
+  readPantryStaplesPromptDismissed,
+  writePantryStaplesPromptDismissed,
+} from '../../config/pantryStaples';
+import { PantryStaplesInviteCard } from '../../components/pantry/PantryStaplesInviteCard';
+import { addDaysToIsoDate, todayIsoDate } from '../../lib/pantry/expiry';
+import { STAPLE_EXPIRY_QUICK_CHIPS } from '../../lib/pantry/stapleCatalog';
 
 type ScanPhase = 'idle' | 'loading' | 'review';
 
@@ -151,11 +160,16 @@ export default function PantryScreen() {
   const [confirmAction, setConfirmAction] = useState<PantryConfirmAction | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [manualExpiresOn, setManualExpiresOn] = useState<string | null>(null);
+  const [manualExpiryInputOpen, setManualExpiryInputOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [scanLocationHint, setScanLocationHint] = useState<PantryStorageLocation>(
     readLastPantryScanLocation(),
   );
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [staplesInviteDismissed, setStaplesInviteDismissed] = useState(() =>
+    readPantryStaplesPromptDismissed(),
+  );
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
   const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
   const pantryScanUploadRef = useRef<Promise<string | null> | null>(null);
@@ -615,6 +629,8 @@ export default function PantryScreen() {
     setManualUnit('each');
     setManualCategory('produce');
     setManualLocation(suggestStorageLocationForCategory('produce'));
+    setManualExpiresOn(null);
+    setManualExpiryInputOpen(false);
   }
 
   function openAddModal() {
@@ -638,7 +654,18 @@ export default function PantryScreen() {
     setManualUnit(item.unit);
     setManualCategory(item.category);
     setManualLocation(item.location);
+    setManualExpiresOn(item.expiresOn);
+    setManualExpiryInputOpen(Boolean(item.expiresOn));
     setAddOpen(true);
+  }
+
+  function openPantryStaples() {
+    router.push(APP_ROUTES.pantryStaples);
+  }
+
+  function dismissStaplesInvite() {
+    writePantryStaplesPromptDismissed(true);
+    setStaplesInviteDismissed(true);
   }
 
   function closeManualModal() {
@@ -667,6 +694,7 @@ export default function PantryScreen() {
           unit: manualUnit.trim() || 'each',
           category: manualCategory,
           location: manualLocation,
+          expiresOn: manualExpiresOn,
         });
       } else {
         const trimmedName = manualName.trim();
@@ -678,6 +706,7 @@ export default function PantryScreen() {
           unit: manualUnit.trim() || 'each',
           category: inferredCategory,
           location: inferredLocation,
+          expiresOn: manualExpiresOn,
         });
       }
       closeManualModal();
@@ -760,6 +789,7 @@ export default function PantryScreen() {
 
   const showSetupHint = !visionReady && !demoMode;
   const scanControlsVisible = phase !== 'review';
+  const showStaplesInvite = pantry.length === 0 && !staplesInviteDismissed && phase !== 'review';
 
   return (
     <>
@@ -769,6 +799,9 @@ export default function PantryScreen() {
           <View className="flex-1">
             <Text className="text-lg font-bold text-ink">Pantry</Text>
             <Text className="text-sm text-muted">Track what you own — fewer duplicate buys</Text>
+            <Pressable onPress={openPantryStaples} className="mt-2 self-start">
+              <Text className="text-xs font-bold text-primary-dark">{PANTRY_STAPLES_COPY.addStaplesLink}</Text>
+            </Pressable>
           </View>
           {pantry.length > 0 ? (
             <Pressable onPress={() => setOverflowOpen(true)} className="rounded-full border border-border bg-card p-2">
@@ -776,6 +809,10 @@ export default function PantryScreen() {
             </Pressable>
           ) : null}
         </View>
+
+        {showStaplesInvite ? (
+          <PantryStaplesInviteCard onPick={openPantryStaples} onDismiss={dismissStaplesInvite} />
+        ) : null}
 
         {scanRecipeCount != null && scanRecipeCount > 0 ? (
           <View className="mt-4 rounded-2xl border border-primary bg-primary-light px-4 py-4">
@@ -1033,6 +1070,60 @@ export default function PantryScreen() {
                 onSelect={setManualLocation}
               />
             </View>
+            <Text className="mt-4 text-xs font-bold uppercase tracking-wide text-muted">Expiration</Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {STAPLE_EXPIRY_QUICK_CHIPS.map((chip) => {
+                const target = addDaysToIsoDate(todayIsoDate(), chip.days);
+                const selected = manualExpiresOn === target;
+                return (
+                  <Pressable
+                    key={chip.id}
+                    onPress={() => {
+                      setManualExpiresOn(target);
+                      setManualExpiryInputOpen(false);
+                    }}
+                    className={`rounded-full px-3 py-2 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
+                  >
+                    <Text className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-slate'}`}>
+                      {chip.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                onPress={() => setManualExpiryInputOpen((open) => !open)}
+                className={`rounded-full px-3 py-2 ${manualExpiryInputOpen ? 'bg-primary' : 'border border-border bg-card'}`}
+              >
+                <Text
+                  className={`text-xs font-semibold ${manualExpiryInputOpen ? 'text-on-primary' : 'text-slate'}`}
+                >
+                  {PANTRY_STAPLES_COPY.pickDate}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setManualExpiresOn(null);
+                  setManualExpiryInputOpen(false);
+                }}
+                className={`rounded-full px-3 py-2 ${manualExpiresOn === null ? 'bg-primary' : 'border border-border bg-card'}`}
+              >
+                <Text
+                  className={`text-xs font-semibold ${manualExpiresOn === null ? 'text-on-primary' : 'text-slate'}`}
+                >
+                  No date
+                </Text>
+              </Pressable>
+            </View>
+            {manualExpiryInputOpen ? (
+              <TextInput
+                value={manualExpiresOn ?? ''}
+                onChangeText={(text) => setManualExpiresOn(text.trim() || null)}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={THEME.muted}
+                autoCapitalize="none"
+                className="mt-2 rounded-xl border border-border bg-card px-4 py-3 text-base text-ink"
+              />
+            ) : null}
             {editItem?.scanPhotoPath ? (
               <ViewScanPhotoButton scanPhotoPath={editItem.scanPhotoPath} />
             ) : null}

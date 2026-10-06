@@ -83,6 +83,7 @@
     "test:package-pricing": "npx tsx scripts/package-pricing-check.mjs",
     "test:community-prices": "npx tsx scripts/community-price-comparison-check.mjs",
     "test:add-price": "npx tsx scripts/add-price-suggestions-check.ts",
+    "test:pantry-staples": "npx tsx scripts/pantry-staples-check.ts",
     "test:pantry-scan-restock": "npx tsx scripts/pantry-scan-restock-regression.ts",
     "test:pantry-scan-review": "npx tsx scripts/pantry-scan-review-dedupe-check.ts",
     "test:pantry-vision": "npx tsx scripts/pantry-vision-postprocess-check.ts",

@@ -6,6 +6,7 @@ import { AUTH_EMAIL_REDIRECT_PATH, APP_ROUTES } from '../config/appRoutes.ts';
 import { TABS } from '../config/appConfig.ts';
 
 assert.equal(APP_ROUTES.home, '/');
+assert.equal(APP_ROUTES.pantryStaples, '/pantry-staples');
 assert.equal(APP_ROUTES.profile, '/profile');
 assert.equal(APP_ROUTES.admin, '/admin');
 assert.equal(AUTH_EMAIL_REDIRECT_PATH, APP_ROUTES.home);

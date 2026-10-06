@@ -126,6 +126,8 @@ import {
 import { syncPantryToSnapshot } from '../lib/pantry/syncPantrySnapshot';
 import { PANTRY_RESTOCK_COPY } from '../config/pantryRestock';
 import { PANTRY_SCAN_UI_COPY, writeLastPantryScanLocation } from '../config/pantryScan';
+import { PANTRY_STAPLES_COPY } from '../config/pantryStaples';
+import { stapleSelectionsToPantryItems, type StapleSelectionState } from '../lib/pantry/stapleCatalog';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
 import { runScanPhotoRetentionCleanupIfDue } from '../lib/scanPhotos/cleanup';
 import type { PantryScanReviewItem } from '../lib/pantryVision/types';
@@ -407,6 +409,7 @@ interface AppContextValue {
     unit: string;
     category: PantryCategory;
     location: PantryStorageLocation;
+    expiresOn?: string | null;
   }) => Promise<void>;
   updatePantryItemEntry: (item: PantryItem) => Promise<void>;
   deletePantryItemEntry: (id: string) => Promise<void>;
@@ -419,6 +422,7 @@ interface AppContextValue {
     scanPhotoPath?: string | null,
     scanLocation?: PantryStorageLocation,
   ) => Promise<void>;
+  addPantryStaples: (selections: StapleSelectionState[]) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
   appendMissingIngredientsForPlannedMeal: (
@@ -2380,6 +2384,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unit: string;
       category: PantryCategory;
       location: PantryStorageLocation;
+      expiresOn?: string | null;
     }) => {
       const slug = input.name.toLowerCase().replace(/\s+/g, '-');
       const item: PantryItem = {
@@ -2391,7 +2396,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         unit: input.unit.trim() || 'each',
         location: input.location,
         photoUri: null,
-        expiresOn: null,
+        expiresOn: input.expiresOn ?? null,
         updatedAt: new Date().toISOString(),
       };
       if (demoMode || isGuest) {
@@ -2538,6 +2543,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       setUndoToast({
         message: PANTRY_SCAN_UI_COPY.addedToPantry(toSave.length),
+        onUndo: () => {
+          setPantry(pantrySnapshot);
+          setUndoToast(null);
+          if (!demoMode && !isGuest && supabase && userId) {
+            void syncPantryToSnapshot(supabase, userId, nextPantry, pantrySnapshot).catch((error: unknown) => {
+              setAuthError(error instanceof Error ? error.message : 'Failed to undo pantry update');
+            });
+          }
+        },
+      });
+    },
+    [demoMode, isGuest, pantry, supabase, userId],
+  );
+
+  const addPantryStaples = useCallback(
+    async (selections: StapleSelectionState[]) => {
+      const toSave = stapleSelectionsToPantryItems(selections);
+      if (toSave.length === 0) return;
+
+      const pantrySnapshot = pantry.map((row) => ({ ...row }));
+      const { pantry: nextPantry, inserted, updated } = mergePantryStock(pantry, toSave);
+
+      setPantry(nextPantry);
+
+      if (!demoMode && !isGuest) {
+        if (!supabase || !userId) {
+          throw new Error('Sign in to save pantry items.');
+        }
+        for (const row of updated) {
+          await updatePantryItem(supabase, userId, row);
+        }
+        if (inserted.length > 0) {
+          const savedInserts = await insertPantryItems(supabase, userId, inserted);
+          setPantry((prev) => {
+            const insertIds = new Set(inserted.map((row) => row.id));
+            const without = prev.filter((row) => !insertIds.has(row.id));
+            return [...savedInserts, ...without];
+          });
+        }
+      }
+
+      setUndoToast({
+        message: PANTRY_STAPLES_COPY.addedToast(toSave.length),
+        showUndo: false,
         onUndo: () => {
           setPantry(pantrySnapshot);
           setUndoToast(null);
@@ -2747,6 +2796,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       previewPantryResort,
       resortPantryItemsInDefaultLocation,
       savePantryScanReview,
+      addPantryStaples,
       setFeatureFlag,
       refreshGrocery,
       appendMissingIngredientsForPlannedMeal,
@@ -2785,6 +2835,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       previewPantryResort,
       resortPantryItemsInDefaultLocation,
       savePantryScanReview,
+      addPantryStaples,
       analytics,
       authError,
       kitchenError,
