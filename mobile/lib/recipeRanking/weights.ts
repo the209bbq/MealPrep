@@ -18,7 +18,10 @@ export const PEER_SCORE_STUB = 0;
 export const RECENCY_HALF_LIFE_DAYS = 14;
 
 export const SIGNAL_WEIGHTS: Record<
-  Exclude<RecipeEngagementEventType, 'impression' | 'wont_cook'>,
+  Exclude<
+    RecipeEngagementEventType,
+    'impression' | 'wont_cook' | 'plan' | 'cook_now' | 'just_save'
+  >,
   number
 > = {
   open: 0.12,

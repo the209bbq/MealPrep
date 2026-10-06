@@ -11,12 +11,35 @@ export type RecipeEngagementEventType =
   | 'save'
   | 'like'
   | 'skip'
-  | 'wont_cook';
+  | 'wont_cook'
+  | 'plan'
+  | 'cook_now'
+  | 'just_save';
+
+export type RecipeEngagementSource = 'mealdb' | 'creator' | 'import';
+
+export type RecipeCategoryGroup = 'breakfast' | 'light' | 'dessert' | 'main' | 'unknown';
+
+export type PlanSlotCode = 'B' | 'L' | 'D';
+
+/** Extra fields for seamless-flow events (personalization v2). */
+export interface RecipeEngagementEventV2 {
+  ts: number;
+  recipeId: string;
+  source: RecipeEngagementSource;
+  group: RecipeCategoryGroup;
+  sheetId: string;
+  day?: string;
+  slot?: PlanSlotCode;
+  ghostShown?: boolean;
+  missingCount?: number;
+}
 
 export interface RecipeEngagementEvent {
   refKey: string;
   type: RecipeEngagementEventType;
   at: string;
+  v2?: RecipeEngagementEventV2;
 }
 
 export interface RecipeRankingInput {

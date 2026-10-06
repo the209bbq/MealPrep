@@ -69,6 +69,7 @@
     "test:recipes-tab-catalog": "npx tsx scripts/recipes-tab-catalog-check.ts",
     "test:grocery": "npx tsx scripts/grocery-regression.ts && npx tsx scripts/grocery-grouping-check.ts && npx tsx scripts/grocery-categorize-check.ts && npx tsx scripts/grocery-recipe-smartshop-flow-check.ts && npx tsx scripts/grocery-replace-supabase-check.ts && npx tsx scripts/grocery-remove-persist-check.tsx && npx tsx scripts/stores-search-check.ts && python3 scripts/stores-ingest/ingest_filter_check.py && npx tsx scripts/qa-bugfix-regression.ts",
     "test:grocery-grouping": "npx tsx scripts/grocery-grouping-check.ts",
+    "test:seamless-flow": "npx tsx scripts/seamless-flow-check.ts",
     "test:grocery-remove-persist": "npx tsx scripts/grocery-remove-persist-check.tsx",
     "test:qa-bugfixes": "npx tsx scripts/qa-bugfix-regression.ts && npx tsx scripts/viral-recipe-open-check.ts",
     "test:smart-shop": "npx tsx scripts/smart-shop-filter-examples.ts && npx tsx scripts/smart-shop-retailer-tests.ts && npx tsx scripts/smart-shop-honesty-tests.ts && npx tsx scripts/overpass-store-search-check.ts",

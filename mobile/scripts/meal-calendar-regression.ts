@@ -143,7 +143,7 @@ function main(): void {
   assert(quickDays[2].label.includes('Oct'), 'quick labeled weekday');
 
   assert(
-    Boolean(formatAddedToCalendarMessage('2026-10-02', 'dinner').match(/Added to .* dinner/)),
+    Boolean(formatAddedToCalendarMessage('2026-10-02', 'dinner').match(/Planned for .* dinner/)),
     'toast message',
   );
   assert(MEAL_SLOTS.includes('snack'), 'snack slot');

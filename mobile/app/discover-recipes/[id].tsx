@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card } from '../../components/Card';
-import { AddToCalendarButton } from '../../components/mealCalendar/AddToCalendarButton';
+import { CookThisButton } from '../../components/mealCalendar/CookThisButton';
+import { useScheduleRecipeSheet } from '../../context/ScheduleRecipeSheetContext';
 import { RecipePantryMatchBadge } from '../../components/RecipePantryMatch';
 import { THEME } from '../../config/appConfig';
 import { RECIPES_COPY } from '../../config/recipesCopy';
@@ -31,6 +32,7 @@ import { RecipeDietNotice } from '../../components/diet/RecipeDietNotice';
 import { ingredientLinesFromDiscovery } from '../../lib/diet/ingredientLines';
 import { RecipeCostPerServingForRecipe } from '../../components/recipes/RecipeCostPerServingForRecipe';
 export default function DiscoverRecipeDetailScreen() {
+  const { openScheduleRecipe } = useScheduleRecipeSheet();
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const recipeId = Number.parseInt(String(idParam), 10);
   const insets = useSafeAreaInsets();
@@ -165,8 +167,20 @@ export default function DiscoverRecipeDetailScreen() {
           ) : null}
           <Text className="mt-2 text-xs font-semibold uppercase text-primary">{recipe.cuisine}</Text>
           <Text className="text-2xl font-bold text-ink">{recipe.name}</Text>
-          <View className="mt-1 flex-row items-center">
-            <AddToCalendarButton target={scheduleTargetFromDiscoveryRecipe(recipe)} size={24} className="p-1" />
+          <View className="mt-3">
+            <CookThisButton
+              onPress={() =>
+                openScheduleRecipe(
+                  scheduleTargetFromDiscoveryRecipe(recipe, pantryMatch, {
+                    onOpenCookView: () =>
+                      router.push({
+                        pathname: '/recipes',
+                        params: { recipeId: `recipeapi-${recipeId}` },
+                      }),
+                  }),
+                )
+              }
+            />
           </View>
           <Text className="mt-2 text-sm text-muted">{recipe.description}</Text>
           <Text className="mt-3 text-sm text-ink">

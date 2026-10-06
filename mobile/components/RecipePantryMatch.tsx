@@ -12,7 +12,8 @@ import { Ionicons } from '../lib/icons/Ionicons';
 
 import type { Recipe } from '../types/mealprep';
 import { scheduleTargetFromRecipeId } from '../lib/mealCalendar/scheduleTarget';
-import { AddToCalendarButton } from './mealCalendar/AddToCalendarButton';
+import { CookThisButton } from './mealCalendar/CookThisButton';
+import { useScheduleRecipeSheet } from '../context/ScheduleRecipeSheetContext';
 
 interface CookFromPantryCardProps {
   recommendations: RecipePantryMatch[];
@@ -22,6 +23,7 @@ interface CookFromPantryCardProps {
 }
 
 export function CookFromPantryCard({ recommendations, recipes, onOpenRecipe, onAddMissing }: CookFromPantryCardProps) {
+  const { openScheduleRecipe } = useScheduleRecipeSheet();
   if (recommendations.length === 0) return null;
 
   return (
@@ -45,10 +47,18 @@ export function CookFromPantryCard({ recommendations, recipes, onOpenRecipe, onA
               </Text>
             </View>
             <View className="flex-row items-center gap-1">
-              <AddToCalendarButton
-                target={{
-                  ...scheduleTargetFromRecipeId(match.recipeId, recipes),
-                  title: match.recipeName,
+              <CookThisButton
+                compact
+                onPress={() => {
+                  const target = {
+                    ...scheduleTargetFromRecipeId(match.recipeId, recipes),
+                    title: match.recipeName,
+                    match,
+                  };
+                  openScheduleRecipe({
+                    ...target,
+                    onOpenCookView: () => onOpenRecipe(match.recipeId),
+                  });
                 }}
               />
               <Ionicons name="chevron-forward" size={18} color={THEME.muted} />
