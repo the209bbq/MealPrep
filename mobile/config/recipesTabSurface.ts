@@ -41,6 +41,7 @@ export const HOME_CLASSIC_CATEGORY_CHIPS: readonly MealDbCatalogCategory[] = [
   'Beef',
   'Pork',
   'Seafood',
+  'Pasta',
   'Vegetarian',
   'Vegan',
   'Breakfast',

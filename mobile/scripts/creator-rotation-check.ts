@@ -230,7 +230,7 @@ function simulateVisit(
   });
   assert(chips.some((c) => c.category === 'Chicken'), 'check 6: home chips ignore loaded-page counts');
   assert(!chips.some((c) => c.category === 'Miscellaneous'), 'check 6: non-home categories hidden');
-  assert(!chips.some((c) => c.category === 'Pasta'), 'check 6: pasta excluded from HOME_CLASSIC_CATEGORY_CHIPS');
+  assert(chips.some((c) => c.category === 'Pasta'), 'check 6: pasta is a home category chip');
   assert(chips.some((c) => c.category === 'Beef'), 'check 6: home-listed categories remain');
 }
 
