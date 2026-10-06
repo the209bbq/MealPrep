@@ -20,6 +20,7 @@ function pseudoGroceryItem(name: string, quantity: number, unit: string): Grocer
     checked: false,
     sourceRecipeIds: [],
     origin: 'manual',
+    plannedMealLinks: [],
   };
 }
 

@@ -38,6 +38,7 @@ import { applyGroceryCheckRestock, reverseGroceryCheckRestock } from '../lib/gro
 import { bumpGroceryPersistGeneration, enqueueGroceryPersist } from '../lib/grocery/persistQueue';
 import { groceryListsEqual } from '../lib/grocery/fingerprint';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
+import { pruneGroceryForRemovedMeals } from '../lib/grocery/grouping';
 import { GROCERY_LIST_REFRESH_DEBOUNCE_MS } from '../config/grocerySync';
 import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
@@ -342,6 +343,7 @@ interface AppContextValue {
   savedRecipes: SavedRecipesController;
   registerSavedRecipeToggleOutcome: (handler: ((outcome: SavedRecipeToggleOutcome) => void) | null) => void;
   toggleGroceryItem: (id: string) => void;
+  toggleGroceryItemsChecked: (ids: string[], checked?: boolean) => void;
   addManualGroceryItem: (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => void;
   clearCheckedGroceryItems: () => void;
   removeGroceryItem: (id: string) => void;
@@ -760,6 +762,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setGrocery((prev) => {
       const next = buildGroceryList(groceryRecipes, plannedRecipeIds, pantry, servingOverrides, prev, {
         groceryDismissals: dismissals,
+        mealPlan,
+        userId: ownerId,
       });
       if (groceryListsEqual(prev, next)) return prev;
       if (demoMode) {
@@ -787,6 +791,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isGuest,
     featureFlags.grocerySync,
     liveDataLoaded,
+    mealPlan,
     ownerId,
     pantry,
     plannedRecipeIds,
@@ -1155,6 +1160,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const target = mealPlan.find((row) => row.id === id);
       const deleteIds = idsRemovedByMealPlanDelete(mealPlan, id);
       setMealPlan((prev) => applyMealPlanRemoval(prev, id));
+      setGrocery((prev) => {
+        const next = pruneGroceryForRemovedMeals(prev, deleteIds);
+        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        else if (isGuest) writeGuestGrocery(next);
+        else if (supabase && userId) {
+          void enqueueGroceryPersist(() => replaceGroceryList(supabase, userId, next)).catch((error: unknown) => {
+            setKitchenError(error instanceof Error ? error.message : 'Failed to update grocery list');
+          });
+        }
+        return next;
+      });
       if (!demoMode && supabase && userId) {
         try {
           if (target?.leftoverOfId) {
@@ -1168,7 +1184,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [demoMode, mealPlan, supabase, userId],
+    [demoMode, isGuest, mealPlan, supabase, userId],
   );
 
   const openMealMadeReview = useCallback(
@@ -1622,6 +1638,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [demoMode, grocery, isGuest, pantry, restockGroceriesToPantry, supabase, userId, userPreferences.addCheckedItemsToPantry],
+  );
+
+  const toggleGroceryItemsChecked = useCallback(
+    (ids: string[], checked?: boolean) => {
+      if (ids.length === 0) return;
+      const idSet = new Set(ids);
+      const targets = grocery.filter((item) => idSet.has(item.id));
+      if (targets.length === 0) return;
+
+      const nextChecked = checked ?? !targets.every((item) => item.checked);
+      const toCheck = targets.filter((item) => (nextChecked ? !item.checked : item.checked));
+      if (toCheck.length === 0) return;
+
+      setGrocery((prev) => {
+        const next = prev.map((item) => (idSet.has(item.id) ? { ...item, checked: nextChecked } : item));
+        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        else if (isGuest) writeGuestGrocery(next);
+        if (supabase && userId) {
+          for (const item of next.filter((row) => idSet.has(row.id) && !row.id.startsWith('groc-'))) {
+            void updateGroceryChecked(supabase, item.id, item.checked).catch((error: unknown) => {
+              setKitchenError(error instanceof Error ? error.message : 'Failed to update grocery item');
+            });
+          }
+        }
+        return next;
+      });
+
+      if (nextChecked) {
+        void restockGroceriesToPantry(toCheck);
+      } else if (userPreferences.addCheckedItemsToPantry) {
+        const pantrySnapshot = pantry.map((row) => ({ ...row }));
+        setPantry((prev) => {
+          let updated = prev;
+          for (const item of toCheck) {
+            updated = reverseGroceryCheckRestock(updated, item.id, groceryRestockLedgerRef.current);
+          }
+          return updated;
+        });
+        if (!demoMode && !isGuest && supabase && userId) {
+          void syncPantryToSnapshot(supabase, userId, pantry, pantrySnapshot).catch((error: unknown) => {
+            setKitchenError(error instanceof Error ? error.message : 'Failed to update pantry');
+          });
+        }
+      }
+    },
+    [
+      demoMode,
+      grocery,
+      isGuest,
+      pantry,
+      restockGroceriesToPantry,
+      supabase,
+      userId,
+      userPreferences.addCheckedItemsToPantry,
+    ],
   );
 
   const addManualGroceryItem = useCallback(
@@ -2345,6 +2416,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       savedRecipes,
       registerSavedRecipeToggleOutcome,
       toggleGroceryItem,
+      toggleGroceryItemsChecked,
       addManualGroceryItem,
       clearCheckedGroceryItems,
       removeGroceryItem,
@@ -2428,6 +2500,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       signUpWithPassword,
       summary,
       toggleGroceryItem,
+      toggleGroceryItemsChecked,
       addManualGroceryItem,
       clearCheckedGroceryItems,
       removeGroceryItem,

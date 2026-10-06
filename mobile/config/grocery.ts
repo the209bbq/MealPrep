@@ -37,4 +37,6 @@ export const GROCERY_COPY = {
   viewGroceryListAction: 'View list',
   plannedMealsLine: (count: number) => `${count} planned meal(s) · only buy what recipes still need`,
   toBuyInCartLine: (open: number, checked: number) => `${open} to buy · ${checked} in cart`,
+  combineList: 'Combine',
+  combinedForMeals: (hint: string) => hint,
 } as const;

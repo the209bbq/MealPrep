@@ -5,7 +5,10 @@ export function groceryListFingerprint(items: readonly GroceryListItem[]): strin
   return items
     .map(
       (item) =>
-        `${item.id}|${item.ingredientId}|${item.unit}|${item.name}|${item.quantity}|${item.checked}|${item.category}|${item.origin}|${item.sourceRecipeIds.slice().sort().join(',')}`,
+        `${item.id}|${item.ingredientId}|${item.unit}|${item.name}|${item.quantity}|${item.checked}|${item.category}|${item.origin}|${item.sourceRecipeIds.slice().sort().join(',')}|${(item.plannedMealLinks ?? [])
+          .map((link) => `${link.mealPlanItemId}:${link.scheduledOn ?? ''}:${link.mealSlot ?? ''}`)
+          .sort()
+          .join(',')}`,
     )
     .sort()
     .join('\n');
