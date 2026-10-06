@@ -143,14 +143,18 @@ export function useViralRecipeOpen(options: {
       };
       setOpenState({
         item,
-        importing: true,
+        importing: false,
         importError: null,
         row: viralItemToKitchenRow(item, stub, stubMatch),
       });
-      void runImport(item);
     },
-    [resolveRowForItem, runImport],
+    [resolveRowForItem],
   );
+
+  const startImport = useCallback(() => {
+    if (!openState) return;
+    void runImport(openState.item);
+  }, [openState, runImport]);
 
   const closeViral = useCallback(() => setOpenState(null), []);
 
@@ -181,6 +185,7 @@ export function useViralRecipeOpen(options: {
     openViralItem,
     closeViral,
     retryImport,
+    startImport,
     openAuthSheet,
   };
 }

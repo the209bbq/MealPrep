@@ -51,7 +51,9 @@ export const VIRAL_RECIPES_CATEGORY_QUERIES: Record<ViralRecipesCategory, readon
 export const VIRAL_RECIPES_COPY = {
   feedTitle: 'Viral recipes',
   feedSubtitle: 'Trending videos — tap to import, cook with what you already have',
-  cardTapToImport: 'Tap to import & match your pantry',
+  cardTapToImport: 'Tap to preview — get recipe when you are ready',
+  getRecipeCta: 'Get recipe from video',
+  getRecipeHint: 'Pulls ingredients and steps from the video (uses AI).',
   detailImporting: 'Pulling ingredients and steps from the video…',
   saveToMyRecipes: 'Save to My Recipes',
   detailImportErrorTitle: 'Couldn’t pull this recipe',

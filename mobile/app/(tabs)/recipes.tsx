@@ -211,6 +211,7 @@ export default function RecipesScreen() {
     openViralItem,
     closeViral,
     retryImport,
+    startImport,
   } = useViralRecipeOpen({
     session,
     demoMode,
@@ -411,12 +412,16 @@ export default function RecipesScreen() {
     if (viralOpenState) return viralOpenState.row;
     if (pickedDetailRow) return pickedDetailRow;
     if (!routeRecipeId) return null;
-    return (
-      filterBaseRows.find(
-        (candidate) => candidate.kind === 'kitchen' && candidate.recipe.id === routeRecipeId,
-      ) ?? null
+    const fromFeed = filterBaseRows.find(
+      (candidate) => candidate.kind === 'kitchen' && candidate.recipe.id === routeRecipeId,
     );
-  }, [filterBaseRows, pickedDetailRow, routeRecipeId, viralOpenState]);
+    if (fromFeed) return fromFeed;
+    const kitchen = feedKitchenRecipes.find((recipe) => recipe.id === routeRecipeId);
+    if (!kitchen) return null;
+    const match = pantryRecipeMatches.byRecipeId.get(kitchen.id);
+    if (!match) return null;
+    return { kind: 'kitchen' as const, recipe: kitchen, match };
+  }, [feedKitchenRecipes, filterBaseRows, pantryRecipeMatches.byRecipeId, pickedDetailRow, routeRecipeId, viralOpenState]);
 
   const detailMatch = useMemo(() => {
     if (!detailRow) return undefined;
@@ -995,6 +1000,7 @@ export default function RecipesScreen() {
         onRetryImport={
           viralOpenState?.importError && !showSignInOnImportError ? retryImport : undefined
         }
+        onStartImport={viralOpenState ? startImport : undefined}
         onSignInForImport={showSignInOnImportError ? openAuthSheet : undefined}
         onClose={() => {
           finishCookViewSession();
