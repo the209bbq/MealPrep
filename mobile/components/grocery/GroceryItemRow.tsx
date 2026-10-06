@@ -35,6 +35,10 @@ export function GroceryItemRow({
   onRowBodyPress,
 }: GroceryItemRowProps) {
   const qtyLabel = quantityLabel ?? formatQuantityWithUnit(item.quantity, item.unit);
+  const bodyOpensMealHint = onRowBodyPress != null;
+  const bodyAccessibilityLabel = bodyOpensMealHint
+    ? `Show which meals need ${item.name}`
+    : `${item.checked ? 'Uncheck' : 'Check'} ${item.name}`;
 
   return (
     <View
@@ -54,7 +58,7 @@ export function GroceryItemRow({
       <Pressable
         onPress={onRowBodyPress ?? onToggle}
         accessibilityRole="button"
-        accessibilityLabel={`${item.checked ? 'Uncheck' : 'Check'} ${item.name}`}
+        accessibilityLabel={bodyAccessibilityLabel}
         className="min-w-0 flex-1 active:opacity-90"
       >
         <Text className={`text-base font-bold ${item.checked ? 'text-muted line-through' : 'text-ink'}`}>{item.name}</Text>
