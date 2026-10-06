@@ -19,7 +19,7 @@ insert into public.recipe_creators (
   '@oldscoolkevmo',
   'https://www.youtube.com/@oldscoolkevmo',
   1660000,
-  1847263910,
+  724570673,
   0,
   0,
   null,
