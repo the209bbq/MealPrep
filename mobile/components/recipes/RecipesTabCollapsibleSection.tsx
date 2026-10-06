@@ -6,17 +6,20 @@ export function RecipesTabCollapsibleSection({
   title,
   expanded,
   onToggle,
+  bubbleRow,
   children,
   loading,
 }: {
   title: string;
   expanded: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  /** Horizontally scrollable chips/avatars; always visible above expandable body. */
+  bubbleRow?: React.ReactNode;
+  children?: React.ReactNode;
   loading?: boolean;
 }) {
   return (
-    <View className="mt-4">
+    <View className="mt-2">
       <Pressable
         onPress={onToggle}
         accessibilityRole="button"
@@ -34,7 +37,8 @@ export function RecipesTabCollapsibleSection({
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={THEME.muted} />
         </View>
       </Pressable>
-      {expanded ? <View className="mt-2">{children}</View> : null}
+      {bubbleRow ? <View className="mt-2">{bubbleRow}</View> : null}
+      {expanded && children ? <View className="mt-2">{children}</View> : null}
     </View>
   );
 }

@@ -51,7 +51,10 @@ import { MEALDB_COPY } from '../../config/mealdb';
 import { RECIPES_TAB_SURFACE_COPY } from '../../config/recipesTabSurface';
 import type { MealDbCatalogCategory } from '../../config/recipesTabSurface';
 import { useRecipesTabSurface } from '../../hooks/useRecipesTabSurface';
-import { readRecipesTabSectionExpanded } from '../../lib/recipesTab/sectionExpanded';
+import {
+  defaultRecipesTabSectionExpanded,
+  type RecipesTabSectionExpanded,
+} from '../../lib/recipesTab/sectionExpanded';
 import {
   mealDbListCategories,
   countPassingRecipesForCategoryFromRows,
@@ -156,11 +159,9 @@ export default function HomeScreen() {
   const [mealDbCategoriesLoading, setMealDbCategoriesLoading] = useState(false);
   const [classicCategoryRows, setClassicCategoryRows] = useState<RecipesTabRow[]>([]);
   const [classicCategoryLoading, setClassicCategoryLoading] = useState(false);
-  const [sectionsExpanded, setSectionsExpanded] = useState(() => readRecipesTabSectionExpanded(ownerId));
-
-  useEffect(() => {
-    setSectionsExpanded(readRecipesTabSectionExpanded(ownerId));
-  }, [ownerId]);
+  const [sectionsExpanded, setSectionsExpanded] = useState<RecipesTabSectionExpanded>(() =>
+    defaultRecipesTabSectionExpanded(),
+  );
 
   const handleFeedModeChange = useCallback((mode: CreatorRecipesFeedMode) => {
     setFeedMode(mode);
@@ -219,10 +220,7 @@ export default function HomeScreen() {
   }, [handleSavedRecipeToggleOutcome, registerSavedRecipeToggleOutcome]);
 
   const creatorsCatalogEnabled =
-    creatorFeedEnabled &&
-    !searchQuery.trim() &&
-    !selectedCreator &&
-    sectionsExpanded.creators;
+    creatorFeedEnabled && !searchQuery.trim() && !selectedCreator;
 
   const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
     enabled: creatorsCatalogEnabled,
@@ -236,7 +234,7 @@ export default function HomeScreen() {
         creatorFeedEnabled &&
         !searchQuery.trim() &&
         !selectedCreator &&
-        (sectionsExpanded.creators || Boolean(selectedCreator)),
+        sectionsExpanded.creators,
     },
   );
 
@@ -287,7 +285,7 @@ export default function HomeScreen() {
   });
 
   useEffect(() => {
-    if (!showCreatorCatalogSections || !sectionsExpanded.classic) return;
+    if (!showCreatorCatalogSections) return;
     let cancelled = false;
     setMealDbCategoriesLoading(true);
     void mealDbListCategories()
@@ -300,7 +298,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [sectionsExpanded.classic, showCreatorCatalogSections]);
+  }, [showCreatorCatalogSections]);
 
   useEffect(() => {
     if (!selectedClassicCategory) {
@@ -558,8 +556,17 @@ export default function HomeScreen() {
 
   const showLegacyKitchenFeed = !creatorFeedEnabled;
 
+  const catalogBrowsingIdle =
+    showCreatorCatalogSections &&
+    !sectionsExpanded.classic &&
+    !sectionsExpanded.creators &&
+    !selectedCreator &&
+    !selectedClassicCategory;
+
   const hasUnfilteredResults = showCreatorCatalogSections
-    ? mealDbRows.length > 0 || browseVideoModels.length > 0 || creators.length > 0
+    ? (sectionsExpanded.classic && mealDbRows.length > 0) ||
+      ((sectionsExpanded.creators || Boolean(selectedCreator)) &&
+        (browseVideoModels.length > 0 || creators.length > 0))
     : showLegacyKitchenFeed
       ? filterBaseRows.length > 0
       : false;
@@ -571,22 +578,27 @@ export default function HomeScreen() {
     filteredRows.length === 0 &&
     !searching;
 
-  const mealDbBlockingLoad = mealDbLoading && mealDbRows.length === 0;
+  const mealDbBlockingLoad =
+    showCreatorCatalogSections &&
+    sectionsExpanded.classic &&
+    mealDbLoading &&
+    mealDbRows.length === 0;
   const creatorFeedBlockingLoad =
     showCreatorCatalogSections &&
+    sectionsExpanded.creators &&
     !selectedCreator &&
     feedLoading &&
-    browseVideoModels.length === 0 &&
-    creators.length === 0 &&
-    mealDbBlockingLoad;
+    browseVideoModels.length === 0;
 
   const listLoading =
     (searching && searchLoading) ||
     (showCreatorCatalogSections && selectedCreator && channelLoading) ||
     creatorFeedBlockingLoad ||
-    (showLegacyKitchenFeed && mealDbBlockingLoad);
+    mealDbBlockingLoad ||
+    (showLegacyKitchenFeed && mealDbLoading && mealDbRows.length === 0);
 
   const showCatalogEmpty =
+    !catalogBrowsingIdle &&
     !showFilterEmpty &&
     !listLoading &&
     !hasUnfilteredResults &&
@@ -602,10 +614,13 @@ export default function HomeScreen() {
     !showSearchEmpty &&
     !showFilterEmpty &&
     !showCatalogEmpty &&
+    !catalogBrowsingIdle &&
     (searching
       ? searchResultsFiltered.length === 0
       : showCreatorCatalogSections
-        ? classicRecipeRows.length === 0 && browseVideoModels.length === 0
+        ? (sectionsExpanded.classic || sectionsExpanded.creators || Boolean(selectedCreator)) &&
+          classicRecipeRows.length === 0 &&
+          browseVideoModels.length === 0
         : filteredRows.length === 0);
 
   const refKeyForCreatorOpen = useCallback(
@@ -668,11 +683,15 @@ export default function HomeScreen() {
         return;
       }
       if (!showCreatorCatalogSections || showMainIngredientEmpty) return;
-      for (const row of classicRecipeRows) {
-        logImpression(refKeyFromRecipesTabRow(row));
+      if (sectionsExpanded.classic) {
+        for (const row of classicRecipeRows) {
+          logImpression(refKeyFromRecipesTabRow(row));
+        }
       }
-      for (const model of browseVideoModels) {
-        logImpression(refKeyFromCreatorModel(model));
+      if (sectionsExpanded.creators || selectedCreator) {
+        for (const model of browseVideoModels) {
+          logImpression(refKeyFromCreatorModel(model));
+        }
       }
       if (showLegacyKitchenFeed) {
         for (const row of filteredRows) {
@@ -691,6 +710,9 @@ export default function HomeScreen() {
     showCreatorCatalogSections,
     showLegacyKitchenFeed,
     showMainIngredientEmpty,
+    sectionsExpanded.classic,
+    sectionsExpanded.creators,
+    selectedCreator,
   ]);
 
   const showSignInOnImportError =
@@ -809,6 +831,7 @@ export default function HomeScreen() {
   const handleCreatorSlotPress = useCallback(
     (slot: CreatorRotationSlot) => {
       tabSurface.logCreatorOpen(slot.creator.id, slot.position, slot.slotType);
+      tabSurface.setCreatorsExpanded(true);
       handleSelectCreator(slot.creator);
     },
     [handleSelectCreator, tabSurface],
@@ -817,6 +840,7 @@ export default function HomeScreen() {
   const handleCategoryChipPress = useCallback(
     (chip: MealDbCategoryChip) => {
       tabSurface.logCategoryOpen(chip.category, chip.position);
+      tabSurface.setClassicExpanded(true);
       setSelectedClassicCategory(chip.category);
     },
     [tabSurface],
@@ -1032,6 +1056,15 @@ export default function HomeScreen() {
             expanded={tabSurface.sections.classic}
             onToggle={() => tabSurface.setClassicExpanded(!tabSurface.sections.classic)}
             loading={tabSurface.sections.classic && (mealDbBlockingLoad || mealDbCategoriesLoading)}
+            bubbleRow={
+              <CategoryAvatarsRow
+                chips={tabSurface.categoryChips}
+                onSelect={handleCategoryChipPress}
+                onImpression={(chip) =>
+                  tabSurface.logCategoryImpression(chip.category, chip.position)
+                }
+              />
+            }
           >
             {selectedClassicCategory ? (
               <Pressable
@@ -1045,13 +1078,6 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            <CategoryAvatarsRow
-              chips={tabSurface.categoryChips}
-              onSelect={handleCategoryChipPress}
-              onImpression={(chip) =>
-                tabSurface.logCategoryImpression(chip.category, chip.position)
-              }
-            />
             {mealDbBlockingLoad || classicCategoryLoading ? <RecipesFeedCardSkeleton count={4} /> : null}
             {classicRecipeRows.map((row) => (
               <RecipesUnifiedFeedCard
@@ -1086,9 +1112,8 @@ export default function HomeScreen() {
             expanded={tabSurface.sections.creators}
             onToggle={() => tabSurface.setCreatorsExpanded(!tabSurface.sections.creators)}
             loading={tabSurface.sections.creators && creatorsLoading && creators.length === 0}
-          >
-            {!selectedCreator ? (
-              <>
+            bubbleRow={
+              !selectedCreator ? (
                 <CreatorAvatarsRow
                   slots={tabSurface.creatorSlots}
                   onSelect={handleCreatorSlotPress}
@@ -1100,50 +1125,54 @@ export default function HomeScreen() {
                     )
                   }
                 />
+              ) : null
+            }
+          >
+            {!selectedCreator ? (
+              <>
                 {creatorsLoading ? (
-                  <View className="mt-3 flex-row items-center gap-2">
+                  <View className="flex-row items-center gap-2">
                     <ActivityIndicator color={THEME.primary} size="small" />
                     <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loadingCreators}</Text>
                   </View>
                 ) : null}
                 {!creatorsLoading && creatorsError ? (
-                  <Text className="mt-2 text-xs text-muted">{creatorsError}</Text>
+                  <Text className="text-xs text-muted">{creatorsError}</Text>
                 ) : null}
                 {!creatorsLoading && tabSurface.creatorSlots.length === 0 ? (
-                  <Text className="mt-2 text-xs text-muted">{CREATOR_RECIPES_COPY.emptyCreators}</Text>
+                  <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.emptyCreators}</Text>
                 ) : null}
               </>
             ) : null}
+            {browseVideoModels.map((model) => (
+              <CreatorRecipesFeedCard
+                key={model.videoId}
+                model={model}
+                saved={savedRecipes.isCreatorSaved(model.videoId, model.importedRecipe)}
+                onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
+                saveDisabled={savedRecipes.isCreatorSavePending(model.videoId, model.importedRecipe)}
+                onOpen={() => {
+                  openCreatorVideo(model.item);
+                }}
+                onCook={() => openCookSheetForCreator(model)}
+              />
+            ))}
+            {!selectedCreator &&
+            browseVideoModels.length === 0 &&
+            feedLoading &&
+            !showMainIngredientEmpty ? (
+              <View className="flex-row items-center gap-2">
+                <ActivityIndicator color={THEME.primary} size="small" />
+                <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loading}</Text>
+              </View>
+            ) : null}
+            {!selectedCreator &&
+            browseVideoModels.length === 0 &&
+            !feedLoading &&
+            !showMainIngredientEmpty ? (
+              <Text className="text-sm text-muted">{CREATOR_RECIPES_COPY.emptyVideos}</Text>
+            ) : null}
           </RecipesTabCollapsibleSection>
-
-          {browseVideoModels.map((model) => (
-            <CreatorRecipesFeedCard
-              key={model.videoId}
-              model={model}
-              saved={savedRecipes.isCreatorSaved(model.videoId, model.importedRecipe)}
-              onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
-              saveDisabled={savedRecipes.isCreatorSavePending(model.videoId, model.importedRecipe)}
-              onOpen={() => {
-                openCreatorVideo(model.item);
-              }}
-              onCook={() => openCookSheetForCreator(model)}
-            />
-          ))}
-          {!selectedCreator &&
-          browseVideoModels.length === 0 &&
-          feedLoading &&
-          !showMainIngredientEmpty ? (
-            <View className="mt-2 flex-row items-center gap-2">
-              <ActivityIndicator color={THEME.primary} size="small" />
-              <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loading}</Text>
-            </View>
-          ) : null}
-          {!selectedCreator &&
-          browseVideoModels.length === 0 &&
-          !feedLoading &&
-          !showMainIngredientEmpty ? (
-            <Text className="mt-2 text-sm text-muted">{CREATOR_RECIPES_COPY.emptyVideos}</Text>
-          ) : null}
         </>
       ) : null}
 
