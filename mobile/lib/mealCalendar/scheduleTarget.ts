@@ -86,7 +86,10 @@ export function scheduleTargetFromDiscoveryRecipe(
     pantryRecipeId,
     refKey: `discovery:${recipe.id}`,
     source: 'mealdb',
-    categoryLabel: recipe.cuisine ?? '',
+    categoryLabel:
+      recipe.tags?.find((tag) => /^(breakfast|chicken|beef|pasta|vegetarian|seafood|dessert|pork|side|starter|vegan|lamb|goat|miscellaneous)$/i.test(tag)) ??
+      recipe.cuisine ??
+      '',
     tags: recipe.tags ?? [],
     match,
     onOpenCookView: options?.onOpenCookView,

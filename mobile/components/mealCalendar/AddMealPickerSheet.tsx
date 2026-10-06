@@ -7,6 +7,7 @@ import { buildMealPickerRecipeOptions } from '../../lib/mealCalendar/recipePicke
 import { localDateString } from '../../lib/mealCalendar/dates';
 import { findKitchenRecipeById } from '../../lib/mealPlan/kitchenRecipeLookup';
 import type { PantryMatchIndex } from '../../lib/recipeMatch';
+import type { SavedRecipeRecord } from '../../lib/savedRecipes/types';
 
 interface AddMealPickerSheetProps {
   visible: boolean;
@@ -15,6 +16,7 @@ interface AddMealPickerSheetProps {
   recipes: Recipe[];
   pantryMatches: PantryMatchIndex;
   savedRecipeIds: ReadonlySet<string>;
+  savedRecords?: readonly SavedRecipeRecord[];
   onClose: () => void;
   onPick: (input: {
     recipeId: string;
@@ -58,6 +60,7 @@ export function AddMealPickerSheet({
   recipes,
   pantryMatches,
   savedRecipeIds,
+  savedRecords = [],
   onClose,
   onPick,
 }: AddMealPickerSheetProps) {
@@ -71,6 +74,7 @@ export function AddMealPickerSheet({
           recipes={recipes}
           pantryMatches={pantryMatches}
           savedRecipeIds={savedRecipeIds}
+          savedRecords={savedRecords}
           onClose={onClose}
           onPick={onPick}
         />
@@ -85,6 +89,7 @@ function AddMealPickerSheetForm({
   recipes,
   pantryMatches,
   savedRecipeIds,
+  savedRecords,
   onClose,
   onPick,
 }: Omit<AddMealPickerSheetProps, 'visible'>) {
@@ -99,8 +104,9 @@ function AddMealPickerSheetForm({
         pantryMatches.ranked,
         MEAL_CALENDAR.picker.maxRecipes,
         savedRecipeIds,
+        savedRecords,
       ),
-    [pantryMatches.ranked, recipes, savedRecipeIds],
+    [pantryMatches.ranked, recipes, savedRecipeIds, savedRecords],
   );
 
   const headerDate = formatMealPickerHeaderDate(isoDate, localDateString());

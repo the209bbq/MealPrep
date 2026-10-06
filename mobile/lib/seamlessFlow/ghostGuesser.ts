@@ -33,12 +33,13 @@ const SLOT_PRIOR: Record<RecipeCategoryGroup, Record<PlanSlotCode, number>> = {
   unknown: { B: 0.3, L: 1, D: 1 },
 };
 
+/** Small nudge only — recipe category/title signals dominate via SLOT_PRIOR. */
 function timeOfDayBonus(now: Date): Record<PlanSlotCode, number> {
   const hour = now.getHours();
-  if (hour < 10) return { B: 1, L: 0, D: 0 };
-  if (hour < 14) return { B: 0, L: 1, D: 0 };
-  if (hour < 20) return { B: 0, L: 0, D: 1 };
-  return { B: 0.5, L: 0, D: 0.5 };
+  if (hour < 10) return { B: 0.2, L: 0, D: 0 };
+  if (hour < 14) return { B: 0, L: 0.2, D: 0 };
+  if (hour < 20) return { B: 0, L: 0, D: 0.2 };
+  return { B: 0.1, L: 0, D: 0.1 };
 }
 
 function softmax(values: Record<PlanSlotCode, number>): Record<PlanSlotCode, number> {
@@ -90,10 +91,11 @@ function plannedGroupsAdjacent(
 function priorShare(group: RecipeCategoryGroup, now: Date): Record<PlanSlotCode, number> {
   const bonus = timeOfDayBonus(now);
   const prior = SLOT_PRIOR[group];
+  const timeWeight = group === 'unknown' ? 1 : 0.35;
   const points: Record<PlanSlotCode, number> = {
-    B: prior.B + bonus.B,
-    L: prior.L + bonus.L,
-    D: prior.D + bonus.D,
+    B: prior.B + bonus.B * timeWeight,
+    L: prior.L + bonus.L * timeWeight,
+    D: prior.D + bonus.D * timeWeight,
   };
   return softmax(points);
 }

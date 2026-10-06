@@ -179,6 +179,7 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                 <TextInput
                   value={name}
                   onChangeText={setName}
+                  accessibilityLabel={ACCOUNT_SHEET_COPY.displayNameLabel}
                   className="mt-1 rounded-xl border border-border bg-paper px-3 py-2 text-ink"
                   autoCapitalize="words"
                 />
@@ -204,6 +205,7 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                   value={dietaryNotes}
                   onChangeText={setDietaryNotes}
                   multiline
+                  accessibilityLabel={ACCOUNT_SHEET_COPY.dietaryNotesLabel}
                   className="mt-1 min-h-[72px] rounded-xl border border-border bg-paper px-3 py-2 text-ink"
                 />
                 <DietAllergiesSection value={dietPrefs} onChange={setDietPrefs} />
@@ -231,6 +233,7 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                   <Switch
                     value={userPreferences[key]}
                     onValueChange={(value) => setUserPreference(key, value)}
+                    accessibilityLabel={USER_PREFERENCE_LABELS[key].title}
                     trackColor={{ true: THEME.primary, false: THEME.border }}
                   />
                 </View>

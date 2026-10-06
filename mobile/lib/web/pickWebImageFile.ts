@@ -8,7 +8,7 @@ export type PickWebImageFileOptions = {
 
 const CANCEL_POLL_INTERVAL_MS = 250;
 /** Android Chrome / mobile Safari can populate `input.files` hundreds of ms after focus. */
-const CANCEL_POLL_MAX_ATTEMPTS = 16;
+const CANCEL_POLL_MAX_ATTEMPTS = 40;
 /** If focus never returns (picker dismissed on some mobile browsers), stop waiting. */
 const PICKER_ABSOLUTE_TIMEOUT_MS = 90_000;
 
@@ -31,6 +31,8 @@ export function pickWebImageFile(options: PickWebImageFileOptions = {}): Promise
     let pollTimer: number | undefined;
     let focusTimer: number | undefined;
     let absoluteTimer: number | undefined;
+    let sawWindowBlur = false;
+    let pickerDismissPollStarted = false;
 
     const clearTimers = () => {
       if (pollTimer !== undefined) {
@@ -86,10 +88,32 @@ export function pickWebImageFile(options: PickWebImageFileOptions = {}): Promise
       );
     };
 
+    const startDismissPolling = () => {
+      if (pickerDismissPollStarted || settled) return;
+      pickerDismissPollStarted = true;
+      focusTimer = window.setTimeout(() => pollForSelectionAfterDismiss(0), 150);
+    };
+
+    window.addEventListener(
+      'blur',
+      () => {
+        sawWindowBlur = true;
+      },
+      { once: true },
+    );
+
     window.addEventListener(
       'focus',
       () => {
-        focusTimer = window.setTimeout(() => pollForSelectionAfterDismiss(0), 150);
+        if (sawWindowBlur) startDismissPolling();
+      },
+      { once: true },
+    );
+
+    input.addEventListener(
+      'cancel',
+      () => {
+        finish(null);
       },
       { once: true },
     );
@@ -98,8 +122,5 @@ export function pickWebImageFile(options: PickWebImageFileOptions = {}): Promise
 
     document.body.appendChild(input);
     input.click();
-
-    // Some WebViews never fire window `focus` after the picker closes — poll soon anyway.
-    window.setTimeout(() => pollForSelectionAfterDismiss(0), 400);
   });
 }

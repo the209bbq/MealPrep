@@ -138,14 +138,28 @@ function CreatorCreditRow({
   );
 }
 
-function PantryStatusLine({ missingCount, minutes, servings }: { missingCount: number; minutes: number; servings: number }) {
+function PantryStatusLine({
+  missingCount,
+  minutes,
+  servings,
+  ingredientCount,
+  previewWithoutIngredients,
+}: {
+  missingCount: number;
+  minutes: number;
+  servings: number;
+  ingredientCount: number;
+  previewWithoutIngredients: boolean;
+}) {
   const timePart = RECIPES_COPY.recipeDetail.servingsAndTime(servings, minutes);
-  const ready = missingCount === 0;
+  const ready = missingCount === 0 && ingredientCount > 0;
   return (
     <View className="mt-2 flex-row flex-wrap items-center gap-x-2 gap-y-1">
       <Text className="text-sm text-muted">{timePart}</Text>
       <Text className="text-sm text-muted">·</Text>
-      {ready ? (
+      {previewWithoutIngredients ? (
+        <Text className="text-sm text-muted">{RECIPES_COPY.recipeCard.previewNoIngredients}</Text>
+      ) : ready ? (
         <Text className="text-sm font-bold text-success-accent">{RECIPES_COPY.recipeCard.haveEverything}</Text>
       ) : (
         <Text className="text-sm font-bold text-danger">{RECIPES_COPY.recipeCard.needItems(missingCount)}</Text>
@@ -250,7 +264,13 @@ export function VideoRecipeDetailView({
           <CreatorCreditRow channelTitle={channelTitle} channelUrl={channelUrl} avatarUrl={avatar} />
 
           {!showLoading && !importError ? (
-            <PantryStatusLine missingCount={missingCount} minutes={recipe.minutes} servings={recipe.servings} />
+            <PantryStatusLine
+              missingCount={missingCount}
+              minutes={recipe.minutes}
+              servings={recipe.servings}
+              ingredientCount={recipe.ingredients.length}
+              previewWithoutIngredients={isImportPreview}
+            />
           ) : null}
 
           {!showLoading && !importError ? <RecipeCostPerServingForRecipe recipe={recipe} /> : null}

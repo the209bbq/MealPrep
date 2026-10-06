@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRecipesTabVisitSession } from '../lib/recipesTab/useVisitSessionOnFocus';
 import type { MealDbCatalogCategory } from '../config/recipesTabSurface';
 import type { CreatorListItem } from '../lib/creatorVideos/types';
 import type { CreatorVideoItem } from '../lib/creatorVideos/types';
@@ -27,8 +28,7 @@ import {
 } from '../lib/recipesTab/surfaceEvents';
 import {
   commitVisitRowOrder,
-  resolveRecipesTabVisit,
-  type RecipesTabVisitSession,
+  type RecipesTabVisitState,
 } from '../lib/recipesTab/visitState';
 import type { EngagementIndexV2 } from '../lib/recipeRanking/engagementIndex';
 import type { RecipeEngagementEvent } from '../lib/recipeRanking/types';
@@ -65,18 +65,22 @@ export function useRecipesTabSurface(options: {
   const [surfaceEvents, setSurfaceEvents] = useState<RecipesTabSurfaceEvent[]>(() =>
     readRecipesTabSurfaceEvents(ownerId),
   );
-  const visitSessionRef = useRef<RecipesTabVisitSession | null>(null);
   const committedVisitRef = useRef<string | null>(null);
+  const visitStateForRotationRef = useRef<RecipesTabVisitState | null>(null);
   const impressedCreatorsRef = useRef<Set<string>>(new Set());
   const impressedCategoriesRef = useRef<Set<string>>(new Set());
 
-  const visitSession = useMemo(() => {
-    if (!enabled) return null;
-    if (visitSessionRef.current) return visitSessionRef.current;
-    const session = resolveRecipesTabVisit(ownerId, Date.now());
-    visitSessionRef.current = session;
-    return session;
-  }, [enabled, ownerId]);
+  const { visitSession, visitEpoch } = useRecipesTabVisitSession(ownerId, enabled);
+
+  useEffect(() => {
+    visitStateForRotationRef.current = visitSession?.state ?? null;
+  }, [visitSession]);
+
+  useEffect(() => {
+    committedVisitRef.current = null;
+    impressedCreatorsRef.current = new Set();
+    impressedCategoriesRef.current = new Set();
+  }, [ownerId, visitEpoch]);
 
   const visitId = visitSession?.visitId ?? 'disabled';
 
@@ -99,7 +103,7 @@ export function useRecipesTabSurface(options: {
       recipeEvents,
       surfaceEvents,
       refKeyToCreatorId,
-      visitState: visitSession.state,
+      visitState: visitStateForRotationRef.current ?? visitSession.state,
       nowMs: Date.now(),
     });
   }, [
@@ -110,6 +114,7 @@ export function useRecipesTabSurface(options: {
     refKeyToCreatorId,
     surfaceEvents,
     visitSession,
+    visitEpoch,
   ]);
 
   const categoryChips: MealDbCategoryChip[] = useMemo(() => {
@@ -126,7 +131,7 @@ export function useRecipesTabSurface(options: {
       householdSize,
       index: engagementIndex,
       surfaceEvents,
-      visitState: visitSession.state,
+      visitState: visitStateForRotationRef.current ?? visitSession.state,
       nowMs: Date.now(),
     });
   }, [
@@ -138,6 +143,7 @@ export function useRecipesTabSurface(options: {
     householdSize,
     surfaceEvents,
     visitSession,
+    visitEpoch,
   ]);
 
   useEffect(() => {
@@ -145,12 +151,13 @@ export function useRecipesTabSurface(options: {
     if (committedVisitRef.current === visitSession.visitId) return;
     if (creatorSlots.length === 0 && categoryChips.length === 0) return;
     committedVisitRef.current = visitSession.visitId;
-    commitVisitRowOrder(
+    const nextState = commitVisitRowOrder(
       ownerId,
       visitSession.state,
       first5CreatorIds(creatorSlots),
       first3CategoryNames(categoryChips),
     );
+    visitStateForRotationRef.current = nextState;
   }, [categoryChips, creatorSlots, enabled, ownerId, visitSession]);
 
   useEffect(() => {
