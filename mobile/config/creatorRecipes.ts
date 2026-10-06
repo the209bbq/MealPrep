@@ -46,4 +46,5 @@ export const CREATOR_RECIPES_COPY = {
   feedAccessibility: 'Choose recipe feed',
   creatorRowAccessibility: 'Browse recipes by creator',
   searchPlaceholder: 'Search recipes and creators',
+  fullRecipesAtHost: (host: string) => `Full recipes at ${host}`,
 } as const;
