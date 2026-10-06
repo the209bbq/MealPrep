@@ -643,7 +643,7 @@ export default function PantryScreen() {
     closeManualModal();
     router.push({
       pathname: '/',
-      params: { cookWith: encodeURIComponent(item.name.trim()) },
+      params: { search: item.name.trim() },
     });
   }
 

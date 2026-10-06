@@ -16,10 +16,7 @@ import {
   type MealDbCategoryChip,
 } from '../lib/recipesTab/categoryRotation';
 import { buildRefKeyToCreatorIdMap } from '../lib/recipesTab/refKeyCreatorMap';
-import {
-  writeRecipesTabSectionExpanded,
-  type RecipesTabSectionExpanded,
-} from '../lib/recipesTab/sectionExpanded';
+import type { RecipesTabSectionExpanded } from '../lib/recipesTab/sectionExpanded';
 import {
   appendRecipesTabSurfaceEvent,
   readRecipesTabSurfaceEvents,
@@ -159,10 +156,6 @@ export function useRecipesTabSurface(options: {
     );
     visitStateForRotationRef.current = nextState;
   }, [categoryChips, creatorSlots, enabled, ownerId, visitSession]);
-
-  useEffect(() => {
-    writeRecipesTabSectionExpanded(ownerId, sections);
-  }, [ownerId, sections]);
 
   const setClassicExpanded = useCallback(
     (expanded: boolean) => {

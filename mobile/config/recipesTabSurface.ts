@@ -6,8 +6,8 @@ export const RECIPES_TAB_SURFACE = {
   visitStateStorageKey: 'mealprep.recipesTab.visitState',
   sectionExpandedStorageKey: 'mealprep.recipesTab.sectionExpanded',
   surfaceEventsStoragePrefix: 'mealprep.recipesTab.surfaceEvents',
-  /** Classic section open on first load; Creators collapsed until expanded (lazy load). */
-  defaultClassicExpanded: true,
+  /** Home catalog sections start collapsed on each fresh app load. */
+  defaultClassicExpanded: false,
   defaultCreatorsExpanded: false,
   explorationSwapProbability: 0.3,
   minLifetimeImpressionsForExploration: 3,

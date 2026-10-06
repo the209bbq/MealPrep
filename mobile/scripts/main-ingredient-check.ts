@@ -3,6 +3,9 @@
  * Run from mobile/: npm run test:main-ingredient
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Recipe } from '../types/mealprep';
 import {
   compareMainIngredientRanking,
@@ -159,5 +162,13 @@ const cmp = compareMainIngredientRanking(
   costCache,
 );
 assert(cmp < 0, 'equal missing: lower index (popularity) wins when costs tie');
+
+const mobileRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const homeSource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/index.tsx'), 'utf8');
+assert(
+  !/mainIngredientPickFromLabel|MainIngredientChipRow|selectedMainIngredient/.test(homeSource),
+  'Home feed should not wire main-ingredient chip UI (library remains for ranking helpers)',
+);
+assert(/rankTabRows\(/.test(homeSource), 'Home should still rank catalog rows without a main-ingredient pick');
 
 console.log('main-ingredient-check: ok');

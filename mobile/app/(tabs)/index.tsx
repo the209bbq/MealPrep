@@ -51,7 +51,10 @@ import { MEALDB_COPY } from '../../config/mealdb';
 import { RECIPES_TAB_SURFACE_COPY } from '../../config/recipesTabSurface';
 import type { MealDbCatalogCategory } from '../../config/recipesTabSurface';
 import { useRecipesTabSurface } from '../../hooks/useRecipesTabSurface';
-import { readRecipesTabSectionExpanded } from '../../lib/recipesTab/sectionExpanded';
+import {
+  defaultRecipesTabSectionExpanded,
+  type RecipesTabSectionExpanded,
+} from '../../lib/recipesTab/sectionExpanded';
 import {
   mealDbListCategories,
   countPassingRecipesForCategoryFromRows,
@@ -65,16 +68,6 @@ import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImpo
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { CreatorListItem } from '../../lib/creatorVideos/types';
 import { creatorWebsiteForChannel } from '../../config/creatorWebsites';
-import { MainIngredientChipRow } from '../../components/recipes/MainIngredientChipRow';
-import { MAIN_INGREDIENT_COPY } from '../../config/mainIngredient';
-import {
-  creatorFeedModelMatchesMainPick,
-  mainIngredientPickFromLabel,
-  recipesTabRowMatchesMainPick,
-  suggestMainIngredientChips,
-  type MainIngredientPick,
-} from '../../lib/mainIngredient';
-import type { RecipesSearchResultItem } from '../../lib/recipes/mergeSearchResults';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 import { GUEST_OWNER_ID } from '../../config/guestMode';
 import { useRecipeRanking } from '../../hooks/useRecipeRanking';
@@ -107,7 +100,7 @@ export default function HomeScreen() {
     url?: string;
     text?: string;
     import?: string;
-    cookWith?: string;
+    search?: string;
   }>();
   const {
     pantry,
@@ -156,11 +149,9 @@ export default function HomeScreen() {
   const [mealDbCategoriesLoading, setMealDbCategoriesLoading] = useState(false);
   const [classicCategoryRows, setClassicCategoryRows] = useState<RecipesTabRow[]>([]);
   const [classicCategoryLoading, setClassicCategoryLoading] = useState(false);
-  const [sectionsExpanded, setSectionsExpanded] = useState(() => readRecipesTabSectionExpanded(ownerId));
-
-  useEffect(() => {
-    setSectionsExpanded(readRecipesTabSectionExpanded(ownerId));
-  }, [ownerId]);
+  const [sectionsExpanded, setSectionsExpanded] = useState<RecipesTabSectionExpanded>(() =>
+    defaultRecipesTabSectionExpanded(),
+  );
 
   const handleFeedModeChange = useCallback((mode: CreatorRecipesFeedMode) => {
     setFeedMode(mode);
@@ -177,7 +168,6 @@ export default function HomeScreen() {
   const [detailInitialSection, setDetailInitialSection] = useState<'ingredients' | 'steps'>('ingredients');
   const { openScheduleRecipe } = useScheduleRecipeSheet();
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
-  const [selectedMainIngredient, setSelectedMainIngredient] = useState<MainIngredientPick | null>(null);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const recipeRanking = useRecipeRanking({
     ownerId,
@@ -219,10 +209,7 @@ export default function HomeScreen() {
   }, [handleSavedRecipeToggleOutcome, registerSavedRecipeToggleOutcome]);
 
   const creatorsCatalogEnabled =
-    creatorFeedEnabled &&
-    !searchQuery.trim() &&
-    !selectedCreator &&
-    sectionsExpanded.creators;
+    creatorFeedEnabled && !searchQuery.trim() && !selectedCreator;
 
   const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
     enabled: creatorsCatalogEnabled,
@@ -236,7 +223,7 @@ export default function HomeScreen() {
         creatorFeedEnabled &&
         !searchQuery.trim() &&
         !selectedCreator &&
-        (sectionsExpanded.creators || Boolean(selectedCreator)),
+        sectionsExpanded.creators,
     },
   );
 
@@ -287,7 +274,7 @@ export default function HomeScreen() {
   });
 
   useEffect(() => {
-    if (!showCreatorCatalogSections || !sectionsExpanded.classic) return;
+    if (!showCreatorCatalogSections) return;
     let cancelled = false;
     setMealDbCategoriesLoading(true);
     void mealDbListCategories()
@@ -300,7 +287,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [sectionsExpanded.classic, showCreatorCatalogSections]);
+  }, [showCreatorCatalogSections]);
 
   useEffect(() => {
     if (!selectedClassicCategory) {
@@ -352,48 +339,11 @@ export default function HomeScreen() {
 
   const pantryEmpty = pantry.length === 0;
 
-  const cookWithParam = typeof params.cookWith === 'string' ? params.cookWith.trim() : '';
+  const homeSearchParam = typeof params.search === 'string' ? params.search.trim() : '';
   useEffect(() => {
-    if (!cookWithParam) return;
-    try {
-      setSelectedMainIngredient(mainIngredientPickFromLabel(decodeURIComponent(cookWithParam)));
-    } catch {
-      setSelectedMainIngredient(mainIngredientPickFromLabel(cookWithParam));
-    }
-  }, [cookWithParam]);
-
-  const mainIngredientChipOptions = useMemo(() => suggestMainIngredientChips(pantry), [pantry]);
-
-  const applyMainIngredientToTabRows = useCallback(
-    (rows: RecipesTabRow[]) => {
-      if (!selectedMainIngredient) return rows;
-      return rows.filter((row) => recipesTabRowMatchesMainPick(row, selectedMainIngredient));
-    },
-    [selectedMainIngredient],
-  );
-
-  const applyMainIngredientToCreatorModels = useCallback(
-    (models: ReturnType<typeof buildCreatorFeedCardModels>) => {
-      if (!selectedMainIngredient) return models;
-      return models.filter((model) =>
-        creatorFeedModelMatchesMainPick(model, selectedMainIngredient),
-      );
-    },
-    [selectedMainIngredient],
-  );
-
-  const applyMainIngredientToSearchResults = useCallback(
-    (results: RecipesSearchResultItem[]) => {
-      if (!selectedMainIngredient) return results;
-      return results.filter((result) => {
-        if (result.kind === 'classic') {
-          return recipesTabRowMatchesMainPick(result.row, selectedMainIngredient);
-        }
-        return creatorFeedModelMatchesMainPick(result.model, selectedMainIngredient);
-      });
-    },
-    [selectedMainIngredient],
-  );
+    if (!homeSearchParam) return;
+    setSearchQuery(homeSearchParam);
+  }, [homeSearchParam]);
 
   const kitchenRecipes = useMemo(() => feedKitchenRecipes, [feedKitchenRecipes]);
 
@@ -409,26 +359,15 @@ export default function HomeScreen() {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
     const fed = buildUnifiedRecipesFeed(narrowed, searchQuery, { diversitySeed: feedDiversitySeed });
     const diet = filterRecipesTabRowsForDietPrefs(fed, userDietPrefs);
-    const main = applyMainIngredientToTabRows(diet);
-    return rankTabRows(main);
-  }, [
-    applyMainIngredientToTabRows,
-    filterBaseRows,
-    filters,
-    searchQuery,
-    feedDiversitySeed,
-    userDietPrefs,
-    rankTabRows,
-  ]);
+    return rankTabRows(diet);
+  }, [filterBaseRows, filters, searchQuery, feedDiversitySeed, userDietPrefs, rankTabRows]);
 
   const classicRecipeRows = useMemo(() => {
     if (!showCreatorCatalogSections) return [];
     const source = selectedClassicCategory ? classicCategoryRows : mealDbRows;
     const diet = filterRecipesTabRowsForDietPrefs(source, userDietPrefs);
-    const main = applyMainIngredientToTabRows(diet);
-    return rankTabRows(main);
+    return rankTabRows(diet);
   }, [
-    applyMainIngredientToTabRows,
     classicCategoryRows,
     mealDbRows,
     selectedClassicCategory,
@@ -442,8 +381,7 @@ export default function HomeScreen() {
     const videos = selectedCreator ? channelVideos : feedVideos;
     const models = buildCreatorFeedCardModels(videos, kitchenRecipes, pantryRecipeMatches);
     const diet = filterCreatorFeedModelsForDietPrefs(models, userDietPrefs);
-    const main = applyMainIngredientToCreatorModels(diet);
-    return rankCreatorModels(main);
+    return rankCreatorModels(diet);
   }, [
     channelVideos,
     creatorFeedEnabled,
@@ -453,7 +391,6 @@ export default function HomeScreen() {
     searchQuery,
     selectedCreator,
     userDietPrefs,
-    applyMainIngredientToCreatorModels,
     rankCreatorModels,
   ]);
 
@@ -470,15 +407,8 @@ export default function HomeScreen() {
 
   const searchResultsFiltered = useMemo(() => {
     const diet = filterRecipeSearchResultsForDietPrefs(searchResults, userDietPrefs);
-    const main = applyMainIngredientToSearchResults(diet);
-    return rankSearchResults(main, searchQuery.trim());
-  }, [
-    applyMainIngredientToSearchResults,
-    searchResults,
-    searchQuery,
-    userDietPrefs,
-    rankSearchResults,
-  ]);
+    return rankSearchResults(diet, searchQuery.trim());
+  }, [searchResults, searchQuery, userDietPrefs, rankSearchResults]);
 
   function openDetail(row: RecipesTabRow) {
     logOpen(refKeyFromRecipesTabRow(row));
@@ -558,8 +488,17 @@ export default function HomeScreen() {
 
   const showLegacyKitchenFeed = !creatorFeedEnabled;
 
+  const catalogBrowsingIdle =
+    showCreatorCatalogSections &&
+    !sectionsExpanded.classic &&
+    !sectionsExpanded.creators &&
+    !selectedCreator &&
+    !selectedClassicCategory;
+
   const hasUnfilteredResults = showCreatorCatalogSections
-    ? mealDbRows.length > 0 || browseVideoModels.length > 0 || creators.length > 0
+    ? (sectionsExpanded.classic && mealDbRows.length > 0) ||
+      ((sectionsExpanded.creators || Boolean(selectedCreator)) &&
+        (browseVideoModels.length > 0 || creators.length > 0))
     : showLegacyKitchenFeed
       ? filterBaseRows.length > 0
       : false;
@@ -571,22 +510,27 @@ export default function HomeScreen() {
     filteredRows.length === 0 &&
     !searching;
 
-  const mealDbBlockingLoad = mealDbLoading && mealDbRows.length === 0;
+  const mealDbBlockingLoad =
+    showCreatorCatalogSections &&
+    sectionsExpanded.classic &&
+    mealDbLoading &&
+    mealDbRows.length === 0;
   const creatorFeedBlockingLoad =
     showCreatorCatalogSections &&
+    sectionsExpanded.creators &&
     !selectedCreator &&
     feedLoading &&
-    browseVideoModels.length === 0 &&
-    creators.length === 0 &&
-    mealDbBlockingLoad;
+    browseVideoModels.length === 0;
 
   const listLoading =
     (searching && searchLoading) ||
     (showCreatorCatalogSections && selectedCreator && channelLoading) ||
     creatorFeedBlockingLoad ||
-    (showLegacyKitchenFeed && mealDbBlockingLoad);
+    mealDbBlockingLoad ||
+    (showLegacyKitchenFeed && mealDbLoading && mealDbRows.length === 0);
 
   const showCatalogEmpty =
+    !catalogBrowsingIdle &&
     !showFilterEmpty &&
     !listLoading &&
     !hasUnfilteredResults &&
@@ -595,18 +539,6 @@ export default function HomeScreen() {
 
   const showSearchEmpty =
     searching && !searchLoading && searchResultsFiltered.length === 0;
-
-  const showMainIngredientEmpty =
-    Boolean(selectedMainIngredient) &&
-    !listLoading &&
-    !showSearchEmpty &&
-    !showFilterEmpty &&
-    !showCatalogEmpty &&
-    (searching
-      ? searchResultsFiltered.length === 0
-      : showCreatorCatalogSections
-        ? classicRecipeRows.length === 0 && browseVideoModels.length === 0
-        : filteredRows.length === 0);
 
   const refKeyForCreatorOpen = useCallback(
     (videoId: string) => {
@@ -667,12 +599,16 @@ export default function HomeScreen() {
         }
         return;
       }
-      if (!showCreatorCatalogSections || showMainIngredientEmpty) return;
-      for (const row of classicRecipeRows) {
-        logImpression(refKeyFromRecipesTabRow(row));
+      if (!showCreatorCatalogSections) return;
+      if (sectionsExpanded.classic) {
+        for (const row of classicRecipeRows) {
+          logImpression(refKeyFromRecipesTabRow(row));
+        }
       }
-      for (const model of browseVideoModels) {
-        logImpression(refKeyFromCreatorModel(model));
+      if (sectionsExpanded.creators || selectedCreator) {
+        for (const model of browseVideoModels) {
+          logImpression(refKeyFromCreatorModel(model));
+        }
       }
       if (showLegacyKitchenFeed) {
         for (const row of filteredRows) {
@@ -690,7 +626,9 @@ export default function HomeScreen() {
     searching,
     showCreatorCatalogSections,
     showLegacyKitchenFeed,
-    showMainIngredientEmpty,
+    sectionsExpanded.classic,
+    sectionsExpanded.creators,
+    selectedCreator,
   ]);
 
   const showSignInOnImportError =
@@ -809,6 +747,7 @@ export default function HomeScreen() {
   const handleCreatorSlotPress = useCallback(
     (slot: CreatorRotationSlot) => {
       tabSurface.logCreatorOpen(slot.creator.id, slot.position, slot.slotType);
+      tabSurface.setCreatorsExpanded(true);
       handleSelectCreator(slot.creator);
     },
     [handleSelectCreator, tabSurface],
@@ -817,6 +756,7 @@ export default function HomeScreen() {
   const handleCategoryChipPress = useCallback(
     (chip: MealDbCategoryChip) => {
       tabSurface.logCategoryOpen(chip.category, chip.position);
+      tabSurface.setClassicExpanded(true);
       setSelectedClassicCategory(chip.category);
     },
     [tabSurface],
@@ -857,7 +797,7 @@ export default function HomeScreen() {
       ) : null}
       <Card
         className="mt-4"
-        title={creatorFeedEnabled ? CREATOR_RECIPES_COPY.feedTitle : RECIPES_COPY.cookNowCard.title}
+        title={creatorFeedEnabled ? undefined : RECIPES_COPY.cookNowCard.title}
         subtitle={
           creatorFeedEnabled ? CREATOR_RECIPES_COPY.feedSubtitle : RECIPES_COPY.cookNowCard.subtitle
         }
@@ -902,11 +842,6 @@ export default function HomeScreen() {
           url={typeof params.url === 'string' ? params.url : undefined}
           text={typeof params.text === 'string' ? params.text : undefined}
           autoRun={autoStartSharedImport}
-        />
-        <MainIngredientChipRow
-          options={mainIngredientChipOptions}
-          selected={selectedMainIngredient}
-          onSelect={setSelectedMainIngredient}
         />
         {showLegacyKitchenFeed ? (
           <RecipesTabFilterBar
@@ -959,20 +894,6 @@ export default function HomeScreen() {
       {showSearchEmpty ? (
         <Text className="mt-4 text-sm text-muted">{CREATOR_RECIPES_COPY.emptySearch}</Text>
       ) : null}
-      {showMainIngredientEmpty ? (
-        <View className="mt-4 rounded-xl border border-border bg-card px-4 py-4">
-          <Text className="text-sm text-muted">{MAIN_INGREDIENT_COPY.emptyFiltered}</Text>
-          <Pressable
-            onPress={() => setSelectedMainIngredient(null)}
-            className="mt-3 items-center rounded-lg border border-border py-2"
-            accessibilityRole="button"
-            accessibilityLabel={MAIN_INGREDIENT_COPY.clearFilter}
-          >
-            <Text className="text-sm font-semibold text-primary">{MAIN_INGREDIENT_COPY.clearFilter}</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
       {searching
         ? searchResultsFiltered.map((result) =>
             result.kind === 'classic' ? (
@@ -1025,13 +946,22 @@ export default function HomeScreen() {
           )
         : null}
 
-      {showCreatorCatalogSections && !searching && !showMainIngredientEmpty ? (
+      {showCreatorCatalogSections && !searching ? (
         <>
           <RecipesTabCollapsibleSection
             title={RECIPES_TAB_SURFACE_COPY.classicSectionTitle}
             expanded={tabSurface.sections.classic}
             onToggle={() => tabSurface.setClassicExpanded(!tabSurface.sections.classic)}
             loading={tabSurface.sections.classic && (mealDbBlockingLoad || mealDbCategoriesLoading)}
+            bubbleRow={
+              <CategoryAvatarsRow
+                chips={tabSurface.categoryChips}
+                onSelect={handleCategoryChipPress}
+                onImpression={(chip) =>
+                  tabSurface.logCategoryImpression(chip.category, chip.position)
+                }
+              />
+            }
           >
             {selectedClassicCategory ? (
               <Pressable
@@ -1045,13 +975,6 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            <CategoryAvatarsRow
-              chips={tabSurface.categoryChips}
-              onSelect={handleCategoryChipPress}
-              onImpression={(chip) =>
-                tabSurface.logCategoryImpression(chip.category, chip.position)
-              }
-            />
             {mealDbBlockingLoad || classicCategoryLoading ? <RecipesFeedCardSkeleton count={4} /> : null}
             {classicRecipeRows.map((row) => (
               <RecipesUnifiedFeedCard
@@ -1086,9 +1009,8 @@ export default function HomeScreen() {
             expanded={tabSurface.sections.creators}
             onToggle={() => tabSurface.setCreatorsExpanded(!tabSurface.sections.creators)}
             loading={tabSurface.sections.creators && creatorsLoading && creators.length === 0}
-          >
-            {!selectedCreator ? (
-              <>
+            bubbleRow={
+              !selectedCreator ? (
                 <CreatorAvatarsRow
                   slots={tabSurface.creatorSlots}
                   onSelect={handleCreatorSlotPress}
@@ -1100,50 +1022,50 @@ export default function HomeScreen() {
                     )
                   }
                 />
+              ) : null
+            }
+          >
+            {!selectedCreator ? (
+              <>
                 {creatorsLoading ? (
-                  <View className="mt-3 flex-row items-center gap-2">
+                  <View className="flex-row items-center gap-2">
                     <ActivityIndicator color={THEME.primary} size="small" />
                     <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loadingCreators}</Text>
                   </View>
                 ) : null}
                 {!creatorsLoading && creatorsError ? (
-                  <Text className="mt-2 text-xs text-muted">{creatorsError}</Text>
+                  <Text className="text-xs text-muted">{creatorsError}</Text>
                 ) : null}
                 {!creatorsLoading && tabSurface.creatorSlots.length === 0 ? (
-                  <Text className="mt-2 text-xs text-muted">{CREATOR_RECIPES_COPY.emptyCreators}</Text>
+                  <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.emptyCreators}</Text>
                 ) : null}
               </>
             ) : null}
+            {browseVideoModels.map((model) => (
+              <CreatorRecipesFeedCard
+                key={model.videoId}
+                model={model}
+                saved={savedRecipes.isCreatorSaved(model.videoId, model.importedRecipe)}
+                onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
+                saveDisabled={savedRecipes.isCreatorSavePending(model.videoId, model.importedRecipe)}
+                onOpen={() => {
+                  openCreatorVideo(model.item);
+                }}
+                onCook={() => openCookSheetForCreator(model)}
+              />
+            ))}
+            {!selectedCreator && browseVideoModels.length === 0 && feedLoading ? (
+              <View className="flex-row items-center gap-2">
+                <ActivityIndicator color={THEME.primary} size="small" />
+                <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loading}</Text>
+              </View>
+            ) : null}
+            {!selectedCreator &&
+            browseVideoModels.length === 0 &&
+            !feedLoading ? (
+              <Text className="text-sm text-muted">{CREATOR_RECIPES_COPY.emptyVideos}</Text>
+            ) : null}
           </RecipesTabCollapsibleSection>
-
-          {browseVideoModels.map((model) => (
-            <CreatorRecipesFeedCard
-              key={model.videoId}
-              model={model}
-              saved={savedRecipes.isCreatorSaved(model.videoId, model.importedRecipe)}
-              onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
-              saveDisabled={savedRecipes.isCreatorSavePending(model.videoId, model.importedRecipe)}
-              onOpen={() => {
-                openCreatorVideo(model.item);
-              }}
-              onCook={() => openCookSheetForCreator(model)}
-            />
-          ))}
-          {!selectedCreator &&
-          browseVideoModels.length === 0 &&
-          feedLoading &&
-          !showMainIngredientEmpty ? (
-            <View className="mt-2 flex-row items-center gap-2">
-              <ActivityIndicator color={THEME.primary} size="small" />
-              <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loading}</Text>
-            </View>
-          ) : null}
-          {!selectedCreator &&
-          browseVideoModels.length === 0 &&
-          !feedLoading &&
-          !showMainIngredientEmpty ? (
-            <Text className="mt-2 text-sm text-muted">{CREATOR_RECIPES_COPY.emptyVideos}</Text>
-          ) : null}
         </>
       ) : null}
 
