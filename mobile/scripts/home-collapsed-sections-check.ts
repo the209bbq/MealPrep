@@ -42,5 +42,20 @@ assert.doesNotMatch(
   /readRecipesTabSectionExpanded/,
   'home should not restore expanded state from storage',
 );
+assert.doesNotMatch(
+  homeSource,
+  /RecipesEmptyState/,
+  'home must not render the catalog empty-state card',
+);
+assert.doesNotMatch(
+  homeSource,
+  /showCatalogEmpty/,
+  'home must not gate a catalog empty-state card',
+);
+assert.doesNotMatch(
+  homeSource,
+  /No recipes yet/,
+  'home must not show the removed empty-state copy',
+);
 
 console.log('home-collapsed-sections-check: ok');
