@@ -42,6 +42,8 @@ import { pruneGroceryForRemovedMeals } from '../lib/grocery/grouping';
 import { GROCERY_LIST_REFRESH_DEBOUNCE_MS } from '../config/grocerySync';
 import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
+import { mergeMissingIntoGroceryWithPlanLink } from '../lib/seamlessFlow/groceryPlanLinks';
+import type { GroceryPlannedMealLink } from '../types/mealprep';
 import { router } from 'expo-router';
 import { APP_ROUTES } from '../config/appRoutes';
 import { deleteUserAccount } from '../lib/account/deleteAccount';
@@ -376,6 +378,11 @@ interface AppContextValue {
   ) => Promise<void>;
   setFeatureFlag: (key: keyof FeatureFlags, value: boolean) => void;
   refreshGrocery: () => void;
+  appendMissingIngredientsForPlannedMeal: (
+    recipeId: string,
+    missing: RecipeIngredient[],
+    link: GroceryPlannedMealLink,
+  ) => void;
   pantryRecipeMatches: PantryMatchIndex;
   /** Pantry-ranked kitchen recipes after diet/allergy hiding rules. */
   pantryRecipeMatchesRankedFiltered: RecipePantryMatch[];
@@ -1151,6 +1158,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
       return addedCount;
+    },
+    [ownerId, pantry, persistGroceryList, showGroceryAddedToast],
+  );
+
+  const appendMissingIngredientsForPlannedMeal = useCallback(
+    (
+      recipeId: string,
+      missing: RecipeIngredient[],
+      link: GroceryPlannedMealLink,
+    ) => {
+      if (missing.length === 0) return;
+      const dismissals = readGroceryDismissals(ownerId);
+      setGrocery((prev) => {
+        const { items: next, added } = mergeMissingIntoGroceryWithPlanLink({
+          missing,
+          recipeId,
+          pantry,
+          previous: prev,
+          link,
+          groceryDismissals: dismissals,
+        });
+        if (added.length > 0) {
+          removeGroceryDismissals(
+            ownerId,
+            added.map((item) => groceryManualLineDismissalKey(item.name, item.unit)),
+          );
+        }
+        persistGroceryList(next);
+        if (added.length > 0) {
+          showGroceryAddedToast(added, prev);
+        }
+        return next;
+      });
     },
     [ownerId, pantry, persistGroceryList, showGroceryAddedToast],
   );
@@ -2436,6 +2476,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       savePantryScanReview,
       setFeatureFlag,
       refreshGrocery,
+      appendMissingIngredientsForPlannedMeal,
       pantryRecipeMatches,
       pantryRecipeMatchesRankedFiltered,
       pantryRecipeRecommendations,
@@ -2487,6 +2528,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       profile,
       recipes,
       refreshGrocery,
+      appendMissingIngredientsForPlannedMeal,
       mealPlan,
       plannedRecipeIds,
       servingOverrides,

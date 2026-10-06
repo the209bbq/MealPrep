@@ -9,8 +9,19 @@ function recencyMultiplier(ageMs: number, nowMs: number): number {
   return Math.pow(0.5, ageDays / RECENCY_HALF_LIFE_DAYS);
 }
 
+const V2_ONLY_EVENT_TYPES = new Set<RecipeEngagementEvent['type']>([
+  'plan',
+  'cook_now',
+  'just_save',
+]);
+
 export function countCookSaveSignals(events: readonly RecipeEngagementEvent[]): number {
-  return events.filter((event) => event.type === 'cook' || event.type === 'save').length;
+  return events.filter(
+    (event) =>
+      event.type === 'cook' ||
+      event.type === 'save' ||
+      event.type === 'just_save',
+  ).length;
 }
 
 export function personalSignalsReady(events: readonly RecipeEngagementEvent[]): boolean {
@@ -25,8 +36,11 @@ export function scorePersonalHistory(
   let weighted = 0;
   for (const event of events) {
     if (event.refKey !== refKey) continue;
-    if (event.type === 'impression' || event.type === 'wont_cook') continue;
-    const weight = SIGNAL_WEIGHTS[event.type];
+    if (event.type === 'impression' || event.type === 'wont_cook' || V2_ONLY_EVENT_TYPES.has(event.type)) {
+      continue;
+    }
+    if (!(event.type in SIGNAL_WEIGHTS)) continue;
+    const weight = SIGNAL_WEIGHTS[event.type as keyof typeof SIGNAL_WEIGHTS];
     const atMs = Date.parse(event.at);
     if (!Number.isFinite(atMs)) continue;
     weighted += weight * recencyMultiplier(atMs, nowMs);

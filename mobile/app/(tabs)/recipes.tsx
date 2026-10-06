@@ -64,6 +64,12 @@ import {
   refKeyFromCreatorModel,
   refKeyFromRecipesTabRow,
 } from '../../lib/recipeRanking/recipeInputs';
+import { useScheduleRecipeSheet } from '../../context/ScheduleRecipeSheetContext';
+import {
+  scheduleTargetFromCreatorModel,
+  scheduleTargetFromRecipesTabRow,
+} from '../../lib/mealCalendar/scheduleTarget';
+import type { CreatorFeedCardModel } from '../../lib/recipes/creatorFeedRows';
 
 function RecipesFeedSectionLabel({ title, className }: { title: string; className?: string }) {
   return (
@@ -128,6 +134,8 @@ export default function RecipesScreen() {
   const browseMode: CreatorRecipesBrowseMode = feedMode;
   const showCreatorCatalogSections = creatorFeedEnabled && !searchQuery.trim();
   const [myRecipesOpen, setMyRecipesOpen] = useState(false);
+  const [detailInitialSection, setDetailInitialSection] = useState<'ingredients' | 'steps'>('ingredients');
+  const { openScheduleRecipe } = useScheduleRecipeSheet();
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
   const [selectedMainIngredient, setSelectedMainIngredient] = useState<MainIngredientPick | null>(null);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
@@ -352,8 +360,44 @@ export default function RecipesScreen() {
 
   function openDetail(row: RecipesTabRow) {
     logOpen(refKeyFromRecipesTabRow(row));
+    setDetailInitialSection('ingredients');
     setPickedDetailRow(row);
   }
+
+  const openSwapRecipe = useCallback(
+    (recipeId: string) => {
+      const match = pantryRecipeMatches.byRecipeId.get(recipeId);
+      const kitchen = feedKitchenRecipes.find((recipe) => recipe.id === recipeId);
+      if (!kitchen || !match) return;
+      const row: RecipesTabRow = { kind: 'kitchen', recipe: kitchen, match };
+      logCook(refKeyFromRecipesTabRow(row));
+      setDetailInitialSection('steps');
+      setPickedDetailRow(row);
+    },
+    [feedKitchenRecipes, logCook, pantryRecipeMatches.byRecipeId],
+  );
+
+  const openCookSheetForRow = useCallback(
+    (row: RecipesTabRow) => {
+      const refKey = refKeyFromRecipesTabRow(row);
+      openScheduleRecipe(
+        scheduleTargetFromRecipesTabRow(row, {
+          onOpenCookView: () => {
+            logCook(refKey);
+            setDetailInitialSection('steps');
+            setPickedDetailRow(row);
+          },
+          onJustSave: () => {
+            if (row.kind !== 'kitchen') return;
+            savedRecipes.toggleKitchenRecipe(row.recipe);
+            logSave(refKey);
+          },
+          onOpenSwapRecipe: openSwapRecipe,
+        }),
+      );
+    },
+    [logCook, logSave, openScheduleRecipe, openSwapRecipe, savedRecipes],
+  );
 
   function showDifferentIdeas() {
     setFeedDiversitySeed((value) => value + 1);
@@ -462,6 +506,27 @@ export default function RecipesScreen() {
       openViralItem(item);
     },
     [logOpen, openViralItem, refKeyForCreatorOpen],
+  );
+
+  const openCookSheetForCreator = useCallback(
+    (model: CreatorFeedCardModel) => {
+      const refKey = refKeyFromCreatorModel(model);
+      openScheduleRecipe(
+        scheduleTargetFromCreatorModel(model, {
+          onOpenCookView: () => {
+            logCook(refKey);
+            openCreatorVideo(model.item);
+            setDetailInitialSection('steps');
+          },
+          onJustSave: () => {
+            savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe);
+            logSave(refKey);
+          },
+          onOpenSwapRecipe: openSwapRecipe,
+        }),
+      );
+    },
+    [logCook, logSave, openCreatorVideo, openScheduleRecipe, openSwapRecipe, savedRecipes],
   );
 
   useEffect(() => {
@@ -593,6 +658,22 @@ export default function RecipesScreen() {
     }
     savedRecipes.toggleKitchenRecipe(detailRow.recipe);
   }
+
+  const detailCookTarget = useMemo(() => {
+    if (!detailRow) return null;
+    const refKey = detailRankingRefKey ?? refKeyFromRecipesTabRow(detailRow);
+    return scheduleTargetFromRecipesTabRow(detailRow, {
+      onOpenCookView: () => {
+        logCook(refKey);
+        setDetailInitialSection('steps');
+      },
+      onJustSave: () => {
+        toggleDetailRecipeSave();
+        logSave(refKey);
+      },
+      onOpenSwapRecipe: openSwapRecipe,
+    });
+  }, [detailRankingRefKey, detailRow, logCook, logSave, openSwapRecipe]);
 
   function openSavedRecipeRow(row: RecipesTabRow) {
     setMyRecipesOpen(false);
@@ -764,6 +845,7 @@ export default function RecipesScreen() {
                     : false
                 }
                 onOpen={() => openDetail(result.row)}
+                onCook={() => openCookSheetForRow(result.row)}
               />
             ) : (
               <CreatorRecipesFeedCard
@@ -783,6 +865,7 @@ export default function RecipesScreen() {
                 onOpen={() => {
                   openCreatorVideo(result.model.item);
                 }}
+                onCook={() => openCookSheetForCreator(result.model)}
               />
             ),
           )
@@ -809,6 +892,7 @@ export default function RecipesScreen() {
                 row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false
               }
               onOpen={() => openDetail(row)}
+              onCook={() => openCookSheetForRow(row)}
             />
           ))}
           {mealDbLoadingMore && classicRecipeRows.length > 0 ? (
@@ -849,6 +933,7 @@ export default function RecipesScreen() {
               onOpen={() => {
                 openCreatorVideo(model.item);
               }}
+              onCook={() => openCookSheetForCreator(model)}
             />
           ))}
           {!selectedCreator &&
@@ -885,6 +970,7 @@ export default function RecipesScreen() {
               }
               saveDisabled={row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false}
               onOpen={() => openDetail(row)}
+              onCook={() => openCookSheetForRow(row)}
             />
           ))
         : null}
@@ -912,8 +998,11 @@ export default function RecipesScreen() {
         onClose={() => {
           closeViral();
           setPickedDetailRow(null);
+          setDetailInitialSection('ingredients');
           if (routeRecipeId) router.replace('/recipes');
         }}
+        cookTarget={detailCookTarget}
+        initialDetailSection={detailInitialSection}
         onAddMissingKitchen={addMissingRecipeIngredientsToGrocery}
         onAddMissingDiscovery={addMissingDiscoveryRecipeIngredientsToGrocery}
         isOnMealPlan={isOnMealPlan}

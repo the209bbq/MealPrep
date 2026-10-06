@@ -14,5 +14,14 @@ export function formatAddedToCalendarMessage(isoDate: string, mealSlot: MealSlot
     mealSlot === 'snack'
       ? 'snack'
       : (MEAL_CALENDAR.slotLabels[mealSlot].toLowerCase() as string);
-  return `Added to ${weekday} ${slot}`;
+  return `Planned for ${weekday} ${slot}`;
+}
+
+export function formatPlannedMealToastLabel(isoDate: string, mealSlot: MealSlot): string {
+  const weekday = weekdayFormatter.format(parseLocalDate(isoDate));
+  const slot =
+    mealSlot === 'snack'
+      ? 'snack'
+      : (MEAL_CALENDAR.slotLabels[mealSlot].toLowerCase() as string);
+  return `${weekday} ${slot}`;
 }

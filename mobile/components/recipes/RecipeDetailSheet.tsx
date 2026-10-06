@@ -1,8 +1,8 @@
 import { Ionicons } from '../../lib/icons/Ionicons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AddToCalendarButton } from '../mealCalendar/AddToCalendarButton';
+import { CookThisButton } from '../mealCalendar/CookThisButton';
 import { THEME } from '../../config/appConfig';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
@@ -58,6 +58,8 @@ export interface RecipeDetailSheetProps {
   creatorAvatarUrl?: string | null;
   wontCookAgain?: boolean;
   onToggleWontCook?: () => void;
+  cookTarget?: import('../../lib/mealCalendar/scheduleTarget').ScheduleRecipeTarget | null;
+  initialDetailSection?: 'ingredients' | 'steps';
 }
 
 type DetailSection = 'ingredients' | 'steps';
@@ -146,6 +148,8 @@ function ClassicRecipeDetailBody({
   onClearRecipeSource,
   wontCookAgain = false,
   onToggleWontCook,
+  cookTarget = null,
+  initialDetailSection,
 }: {
   row: RecipesTabRow;
   match: RecipePantryMatch | null | undefined;
@@ -167,9 +171,15 @@ function ClassicRecipeDetailBody({
   onClearRecipeSource?: (recipeId: string) => void;
   wontCookAgain?: boolean;
   onToggleWontCook?: () => void;
+  cookTarget?: import('../../lib/mealCalendar/scheduleTarget').ScheduleRecipeTarget | null;
+  initialDetailSection?: DetailSection;
 }) {
   const insets = useSafeAreaInsets();
-  const [section, setSection] = useState<DetailSection>('ingredients');
+  const [section, setSection] = useState<DetailSection>(initialDetailSection ?? 'ingredients');
+
+  useEffect(() => {
+    if (initialDetailSection) setSection(initialDetailSection);
+  }, [initialDetailSection, row.kind === 'kitchen' ? row.recipe.id : row.recipe.id]);
 
   const sourceCredit = row.kind === 'kitchen' ? sourceCreditFromRecipe(row.recipe) : null;
   const minutes =
@@ -178,19 +188,13 @@ function ClassicRecipeDetailBody({
       : (row.recipe.prep_time ?? 0) + (row.recipe.cook_time ?? 0);
 
   const scheduleTarget =
-    row.kind === 'kitchen'
-      ? scheduleTargetFromKitchenRecipe(row.recipe)
-      : scheduleTargetFromDiscoveryRecipe(row.recipe);
+    cookTarget ??
+    (row.kind === 'kitchen'
+      ? scheduleTargetFromKitchenRecipe(row.recipe, match ?? null)
+      : scheduleTargetFromDiscoveryRecipe(row.recipe, match ?? null));
 
   const isMealDbCatalog =
     row.kind === 'kitchen' && (isMealDbRecipeId(row.recipe.id) || row.recipe.sourceType === 'themealdb');
-
-  const onPlan =
-    row.kind === 'kitchen' && !isMealDbCatalog
-      ? isOnMealPlan({ recipeSlug: row.recipe.id })
-      : row.kind === 'discovery'
-        ? isOnMealPlan({ recipeApiId: row.recipe.id })
-        : false;
 
   const missingCount = match?.missingCount ?? 0;
 
@@ -274,27 +278,9 @@ function ClassicRecipeDetailBody({
 
           <RecipeDietNotice ingredientLines={ingredientLinesFromRecipe(kitchenRecipe)} />
 
-          <View className="mt-3 flex-row flex-wrap items-center gap-2">
-            {!isMealDbCatalog ? (
-              <Pressable
-                onPress={() => {
-                  if (importing) return;
-                  if (row.kind === 'kitchen') void onToggleKitchen(row.recipe.id);
-                  else void onToggleDiscovery(row.recipe);
-                }}
-                disabled={importing}
-                className={`rounded-full px-3 py-1.5 ${onPlan ? 'bg-primary' : 'border border-border bg-card'}`}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add
-                }
-              >
-                <Text className={`text-xs font-bold ${onPlan ? 'text-on-primary' : 'text-ink'}`}>
-                  {onPlan ? RECIPES_COPY.mealPlanChip.onPlan : RECIPES_COPY.mealPlanChip.add}
-                </Text>
-              </Pressable>
-            ) : null}
-            <AddToCalendarButton target={scheduleTarget} size={20} className="rounded-full border border-border bg-card p-2" />
+          <View className="mt-3 gap-2">
+            <CookThisButton target={scheduleTarget} className="w-full" />
+            <View className="flex-row flex-wrap items-center gap-2">
             {onToggleWontCook ? (
               <Pressable
                 onPress={onToggleWontCook}
@@ -313,6 +299,7 @@ function ClassicRecipeDetailBody({
                 </Text>
               </Pressable>
             ) : null}
+            </View>
             {!importing && missingCount > 0 ? (
               <Pressable
                 onPress={() => {
@@ -426,6 +413,8 @@ export function RecipeDetailSheet({
   creatorAvatarUrl = null,
   wontCookAgain = false,
   onToggleWontCook,
+  cookTarget = null,
+  initialDetailSection,
 }: RecipeDetailSheetProps) {
   const kitchenRecipe = useMemo(() => {
     if (!row) return null;
@@ -487,6 +476,8 @@ export function RecipeDetailSheet({
           onClearRecipeSource={onClearRecipeSource}
           wontCookAgain={wontCookAgain}
           onToggleWontCook={onToggleWontCook}
+          cookTarget={cookTarget}
+          initialDetailSection={initialDetailSection}
         />
       )}
     </Modal>

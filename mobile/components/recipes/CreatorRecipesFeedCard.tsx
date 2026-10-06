@@ -8,10 +8,12 @@ import { DietAllergenBadge } from '../diet/DietAllergenBadge';
 import { ingredientLinesFromCreatorModel } from '../../lib/diet/ingredientLines';
 import { RecipeThumbnail } from './RecipeThumbnail';
 import { RecipeSaveButton } from './RecipeSaveButton';
+import { CookThisButton } from '../mealCalendar/CookThisButton';
 
 interface CreatorRecipesFeedCardProps {
   model: CreatorFeedCardModel;
   onOpen: () => void;
+  onCook?: () => void;
   saved?: boolean;
   onToggleSave?: () => void;
   saveDisabled?: boolean;
@@ -20,6 +22,7 @@ interface CreatorRecipesFeedCardProps {
 function CreatorRecipesFeedCardInner({
   model,
   onOpen,
+  onCook,
   saved,
   onToggleSave,
   saveDisabled = false,
@@ -76,6 +79,11 @@ function CreatorRecipesFeedCardInner({
         <Text className="mt-1 text-[11px] text-muted" numberOfLines={1}>
           {sourceLabel}
         </Text>
+        {onCook ? (
+          <View className="mt-2">
+            <CookThisButton compact className="self-start" onPress={onCook} />
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );

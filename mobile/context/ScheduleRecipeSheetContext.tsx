@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { ScheduleRecipeSheet } from '../components/mealCalendar/ScheduleRecipeSheet';
 import type { ScheduleRecipeTarget } from '../lib/mealCalendar/scheduleTarget';
+import { createScheduleSheetId } from '../lib/seamlessFlow/sheetId';
 
 interface ScheduleRecipeSheetContextValue {
   openScheduleRecipe: (target: ScheduleRecipeTarget) => void;
@@ -12,7 +13,7 @@ export function ScheduleRecipeSheetProvider({ children }: { children: ReactNode 
   const [target, setTarget] = useState<ScheduleRecipeTarget | null>(null);
 
   const openScheduleRecipe = useCallback((next: ScheduleRecipeTarget) => {
-    setTarget(next);
+    setTarget({ ...next, sheetId: next.sheetId ?? createScheduleSheetId() });
   }, []);
 
   const close = useCallback(() => setTarget(null), []);

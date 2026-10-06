@@ -11,10 +11,12 @@ import { DietAllergenBadge } from '../diet/DietAllergenBadge';
 import { ingredientLinesFromRecipesTabRow } from '../../lib/diet/ingredientLines';
 import { RecipeThumbnail } from './RecipeThumbnail';
 import { RecipeSaveButton } from './RecipeSaveButton';
+import { CookThisButton } from '../mealCalendar/CookThisButton';
 
 interface RecipesUnifiedFeedCardProps {
   row: RecipesTabRow;
   onOpen: () => void;
+  onCook?: () => void;
   sourceTag?: string | null;
   saved?: boolean;
   onToggleSave?: () => void;
@@ -24,6 +26,7 @@ interface RecipesUnifiedFeedCardProps {
 function RecipesUnifiedFeedCardInner({
   row,
   onOpen,
+  onCook,
   sourceTag,
   saved,
   onToggleSave,
@@ -81,6 +84,11 @@ function RecipesUnifiedFeedCardInner({
           <Text className="mt-1 text-[11px] text-muted" numberOfLines={1}>
             {sourceTag}
           </Text>
+        ) : null}
+        {onCook ? (
+          <View className="mt-2">
+            <CookThisButton compact className="self-start" onPress={onCook} />
+          </View>
         ) : null}
       </View>
     </Pressable>

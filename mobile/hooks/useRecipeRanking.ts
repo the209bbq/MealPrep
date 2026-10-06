@@ -6,6 +6,7 @@ import {
   appendRecipeEngagementEvent,
   clearWontCookForRef,
   createEngagementEvent,
+  createSeamlessEngagementEvent,
   personalSignalsReady,
   rankCreatorFeedModels,
   rankRecipeSearchResults,
@@ -15,6 +16,7 @@ import {
   wontCookRefKeys,
   type RecipeEngagementEvent,
   type RecipeEngagementEventType,
+  type RecipeEngagementEventV2,
   type RecipeRankingContext,
 } from '../lib/recipeRanking';
 
@@ -78,6 +80,24 @@ export function useRecipeRanking(options: {
   const logSave = useCallback((refKey: string) => logEvent(refKey, 'save'), [logEvent]);
   const logSkip = useCallback((refKey: string) => logEvent(refKey, 'skip'), [logEvent]);
 
+  const logSeamlessEvent = useCallback(
+    (
+      refKey: string,
+      type: Extract<RecipeEngagementEventType, 'plan' | 'cook_now' | 'just_save' | 'skip'>,
+      v2: RecipeEngagementEventV2,
+    ) => {
+      const trimmed = refKey.trim();
+      if (!trimmed) return;
+      const next = appendRecipeEngagementEvent(
+        ownerId,
+        createSeamlessEngagementEvent(trimmed, type, v2),
+        events,
+      );
+      setEvents(next);
+    },
+    [events, ownerId],
+  );
+
   const markWontCook = useCallback(
     (refKey: string) => {
       logEvent(refKey, 'wont_cook');
@@ -124,6 +144,7 @@ export function useRecipeRanking(options: {
     logCook,
     logSave,
     logSkip,
+    logSeamlessEvent,
     markWontCook,
     undoWontCook,
     isWontCook,

@@ -1,6 +1,10 @@
 import { RECIPE_RANKING } from '../../config/recipeRanking';
 import { readJson, writeJson } from '../storage';
-import type { RecipeEngagementEvent, RecipeEngagementEventType } from './types';
+import type {
+  RecipeEngagementEvent,
+  RecipeEngagementEventType,
+  RecipeEngagementEventV2,
+} from './types';
 
 function storageKey(ownerId: string): string {
   if (!ownerId || ownerId === 'guest') {
@@ -68,6 +72,20 @@ export function createEngagementEvent(
   at: string = new Date().toISOString(),
 ): RecipeEngagementEvent {
   return { refKey, type, at };
+}
+
+export function createSeamlessEngagementEvent(
+  refKey: string,
+  type: Extract<RecipeEngagementEventType, 'plan' | 'cook_now' | 'just_save' | 'skip'>,
+  v2: RecipeEngagementEventV2,
+): RecipeEngagementEvent {
+  const ts = v2.ts ?? Date.now();
+  return {
+    refKey,
+    type,
+    at: new Date(ts).toISOString(),
+    v2: { ...v2, ts },
+  };
 }
 
 export function clearWontCookForRef(
