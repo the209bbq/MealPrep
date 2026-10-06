@@ -1,6 +1,9 @@
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import type { CreatorFeedCardModel } from '../recipes/creatorFeedRows';
-import { ingredientLinesFromCreatorModel, ingredientLinesFromRecipesTabRow } from '../diet/ingredientLines';
+import {
+  ingredientLinesFromRecipe,
+  ingredientLinesFromRecipesTabRow,
+} from '../diet/ingredientLines';
 import { recipeFromRecipesTabRow } from '../mainIngredient/recipeFromRow';
 import { refKeyForCreatorVideo, refKeyForKitchenRecipe } from '../savedRecipes/refKey';
 import type { RecipePantryMatch } from '../recipeMatch';
@@ -60,10 +63,11 @@ export function rankingInputFromCreatorModel(model: CreatorFeedCardModel): Recip
     };
   const match = model.match ?? zeroMatch(recipe);
   const refKey = refKeyFromCreatorModel(model);
+  const importedLines = model.importedRecipe ? ingredientLinesFromRecipe(model.importedRecipe) : null;
   return {
     refKey,
     recipe,
     match,
-    ingredientLines: ingredientLinesFromCreatorModel(model),
+    ingredientLines: importedLines,
   };
 }

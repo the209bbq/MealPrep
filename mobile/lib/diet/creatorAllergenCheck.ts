@@ -1,24 +1,35 @@
 import type { CreatorFeedCardModel } from '../recipes/creatorFeedRows';
-import { PEANUT_DISH_NAME_KEYWORDS, PEANUT_INGREDIENT_KEYWORDS } from '../../config/dietRules';
+import {
+  PEANUT_DISH_NAME_STRONG,
+  PEANUT_DISH_NAME_WEAK,
+  PEANUT_INGREDIENT_KEYWORDS,
+} from '../../config/dietRules';
 import { haystackForLine, phraseMatchesHaystack } from './allergenMatch';
 import { shouldHideRecipeForDietPrefs } from './conflicts';
 import { ingredientLinesFromRecipe } from './ingredientLines';
 import type { UserDietPrefs } from './types';
 
-function redactPeanutDishNamePhrases(line: string): string {
-  let out = line;
-  for (const phrase of PEANUT_DISH_NAME_KEYWORDS) {
-    const normalized = phrase.replace(/-/g, ' ');
-    const tokens = normalized.split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) continue;
-    const body = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
-    const re = new RegExp(`(?:^|[\\s|,])${body}(?:$|[\\s|,])`, 'gi');
-    out = out.replace(re, ' ');
-  }
-  return out.replace(/\s+/g, ' ').trim();
+function peanutIngredientInHaystack(haystack: string): boolean {
+  return PEANUT_INGREDIENT_KEYWORDS.some((phrase) => phraseMatchesHaystack(haystack, phrase));
 }
 
-/** Creator video descriptions: direct peanut words only (not title-style dish names). */
+function peanutStrongDishInHaystack(haystack: string): boolean {
+  return PEANUT_DISH_NAME_STRONG.some((phrase) => phraseMatchesHaystack(haystack, phrase));
+}
+
+function peanutWeakDishInHaystack(haystack: string): boolean {
+  return PEANUT_DISH_NAME_WEAK.some((phrase) => phraseMatchesHaystack(haystack, phrase));
+}
+
+function peanutTitleShouldHide(prefs: UserDietPrefs, title: string): boolean {
+  if (!prefs.hideConflicts || !prefs.allergens.includes('peanuts')) return false;
+  const haystack = haystackForLine(title);
+  if (peanutIngredientInHaystack(haystack)) return true;
+  if (peanutStrongDishInHaystack(haystack)) return true;
+  return peanutWeakDishInHaystack(haystack);
+}
+
+/** Creator video descriptions: peanut ingredients + strong dish names only. */
 export function shouldHideCreatorDescriptionForDietPrefs(
   prefs: UserDietPrefs,
   description: string,
@@ -28,15 +39,13 @@ export function shouldHideCreatorDescriptionForDietPrefs(
 
   if (prefs.allergens.includes('peanuts')) {
     const haystack = haystackForLine(trimmed);
-    const ingredientPeanut = PEANUT_INGREDIENT_KEYWORDS.some((phrase) =>
-      phraseMatchesHaystack(haystack, phrase),
-    );
-    if (ingredientPeanut) {
+    if (peanutIngredientInHaystack(haystack)) {
       return shouldHideRecipeForDietPrefs(prefs, [trimmed]);
     }
-    const redacted = redactPeanutDishNamePhrases(trimmed);
-    if (!redacted) return false;
-    return shouldHideRecipeForDietPrefs(prefs, [redacted]);
+    if (peanutStrongDishInHaystack(haystack)) {
+      return shouldHideRecipeForDietPrefs(prefs, [trimmed]);
+    }
+    return false;
   }
 
   return shouldHideRecipeForDietPrefs(prefs, [trimmed]);
@@ -48,11 +57,14 @@ export function shouldHideCreatorModelForDietPrefs(
 ): boolean {
   if (!prefs.hideConflicts) return false;
   const title = model.video.title?.trim() || model.item.title?.trim();
+  if (title && peanutTitleShouldHide(prefs, title)) {
+    return true;
+  }
   const fromRecipe = model.importedRecipe ? ingredientLinesFromRecipe(model.importedRecipe) : [];
-  const titleAndIngredients = [...fromRecipe, ...(title ? [title] : [])];
+  const nonPeanutTitleLines = [...fromRecipe, ...(title ? [title] : [])];
   if (
-    titleAndIngredients.length > 0 &&
-    shouldHideRecipeForDietPrefs(prefs, titleAndIngredients)
+    nonPeanutTitleLines.length > 0 &&
+    shouldHideRecipeForDietPrefs(prefs, nonPeanutTitleLines)
   ) {
     return true;
   }

@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { Tabs, type Href } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { AppHeader } from '../../components/AppHeader';
 import { OfflineNotice } from '../../components/OfflineNotice';
 import { HydrationSafeIonicon } from '../../components/HydrationSafeIonicon';
@@ -17,20 +17,7 @@ export default function TabsLayout() {
   const { maintenanceActive, isAdmin } = useApp();
   const hydrated = useHydrated();
 
-  if (!hydrated) {
-    return (
-      <HomeHubSheetProvider>
-        <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
-          <AppHeader />
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator color={THEME.primary} />
-          </View>
-        </View>
-      </HomeHubSheetProvider>
-    );
-  }
-
-  if (maintenanceActive) {
+  if (hydrated && maintenanceActive) {
     return (
       <HomeHubSheetProvider>
         <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">

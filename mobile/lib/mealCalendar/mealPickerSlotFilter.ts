@@ -1,10 +1,11 @@
 import type { MealSlot, Recipe } from '../../types/mealprep';
+import { mealDbCategoryFromRecipeTag } from '../recipesTab/categoryDiet';
 import { recipeCategoryGroup } from '../seamlessFlow/categoryGroup';
 import { mealSlotToPlanCode, type PlanSlotCode } from '../seamlessFlow/planSlots';
 
 /** Sauces / condiments that are not meal picks (matches QA dinner picker noise). */
 const SAUCE_CONDIMENT_TITLE =
-  /\b(aioli|mayo|mayonnaise|ketchup|mustard|relish|chutney|dressing|dip|gravy|marinade|salsa|pesto|tahini|hummus|guacamole|bbq sauce|barbecue sauce|condiment|sauce)\b/i;
+  /\b(aioli|mayo|mayonnaise|ketchup|relish|chutney|dip|gravy|marinade|salsa|pesto|tahini|guacamole|bbq sauce|barbecue sauce|condiment)\b/i;
 
 function isSauceOrCondimentTitle(name: string): boolean {
   if (SAUCE_CONDIMENT_TITLE.test(name)) return true;
@@ -12,11 +13,12 @@ function isSauceOrCondimentTitle(name: string): boolean {
   return false;
 }
 
-const SWEET_OR_BAKED_TITLE =
-  /\b(cake|cookie|brownie|cupcake|muffin|pastry|pudding|tart|pie|boterkoek|butter cake|sweet bread|banana bread|zucchini bread|pumpkin bread|brioche|babka|challah|æbleskiver|ebleskiver|pancake|waffle|crepe|blini|boxty)\b/i;
+/** Title fallback when MealDB category is unknown (imports, creator recipes). */
+const DESSERT_TITLE_FALLBACK =
+  /\b(cake|cookie|brownie|cupcake|muffin|pastry|pudding|tart|boterkoek|butter cake|sweet bread|banana bread|zucchini bread|pumpkin bread|brioche|babka|challah|affogato|baklava|crumble|chelsea buns?|buns)\b/i;
 
-const SAVORY_FLATBREAD_TITLE =
-  /\b(naan|pita|flatbread|focaccia|lavash|roti|chapati|tortilla wrap)\b/i;
+const BREAKFAST_TITLE_FALLBACK =
+  /\b(pancakes?|waffles?|omelett?e|oats?|oatmeal|granola|smoothie|toast|frittata|crepes?|blini|boxty|breakfast|congee|porridge|muffins?|bagels?|hash browns?|french toast|aebleskiver|ebleskiver)\b/i;
 
 const SLOT_PRIOR: Record<
   ReturnType<typeof recipeCategoryGroup>,
@@ -29,9 +31,34 @@ const SLOT_PRIOR: Record<
   unknown: { B: 0.3, L: 1, D: 1 },
 };
 
+function normalizeTitleForKeywordMatch(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+}
+
+function mealDbCategoryForRecipe(recipe: Recipe): string | null {
+  return mealDbCategoryFromRecipeTag(recipe.tag);
+}
+
 function categoryGroupForRecipe(recipe: Recipe) {
+  const mealdbCat = mealDbCategoryForRecipe(recipe);
+  if (mealdbCat) {
+    if (/^breakfast$/i.test(mealdbCat)) return 'breakfast';
+    if (/^dessert$/i.test(mealdbCat)) return 'dessert';
+    if (/^(starter|side)$/i.test(mealdbCat)) return 'light';
+    if (
+      /^(beef|chicken|lamb|pork|goat|seafood|pasta|vegetarian|vegan|miscellaneous)$/i.test(
+        mealdbCat,
+      )
+    ) {
+      return 'main';
+    }
+  }
+  const category = mealdbCat ?? recipe.tag;
   return recipeCategoryGroup({
-    category: recipe.tag,
+    category,
     title: recipe.name,
     tags: [],
   });
@@ -44,30 +71,62 @@ function slotPriorForRecipe(recipe: Recipe, slot: MealSlot): number {
   return SLOT_PRIOR[group][code] ?? 0;
 }
 
-function dinnerExcludedSweetOrSauce(recipe: Recipe): boolean {
-  const tag = (recipe.tag ?? '').trim();
-  if (/^dessert$/i.test(tag)) return true;
+function isDessertCategory(category: string | null): boolean {
+  return Boolean(category && /^dessert$/i.test(category));
+}
+
+function isBreakfastCategory(category: string | null): boolean {
+  return Boolean(category && /^breakfast$/i.test(category));
+}
+
+function lunchDinnerExcludedByCategory(recipe: Recipe, slot: MealSlot): boolean {
+  const category = mealDbCategoryForRecipe(recipe);
+  if (!category) return false;
+  if (isDessertCategory(category)) return true;
+  if (slot === 'dinner' && /^(starter|side)$/i.test(category)) return true;
+  return false;
+}
+
+function lunchDinnerExcludedByTitleFallback(name: string): boolean {
+  const normalized = normalizeTitleForKeywordMatch(name);
+  if (DESSERT_TITLE_FALLBACK.test(normalized)) return true;
+  if (BREAKFAST_TITLE_FALLBACK.test(normalized)) return true;
+  return false;
+}
+
+function breakfastAllowed(recipe: Recipe): boolean {
+  const category = mealDbCategoryForRecipe(recipe);
+  if (isBreakfastCategory(category)) return true;
   const group = categoryGroupForRecipe(recipe);
-  if (group === 'dessert') return true;
-  const name = recipe.name;
-  if (isSauceOrCondimentTitle(name)) return true;
-  if (SWEET_OR_BAKED_TITLE.test(name)) return true;
-  if (/\bbread\b/i.test(name)) {
-    if (group === 'main' || SAVORY_FLATBREAD_TITLE.test(name)) return false;
-    return true;
+  if (group === 'breakfast') return true;
+  if (!category) {
+    return BREAKFAST_TITLE_FALLBACK.test(normalizeTitleForKeywordMatch(recipe.name));
   }
-  if (/\bcookie\b/i.test(name) || /\bcake\b/i.test(name)) return true;
   return false;
 }
 
 /** Default picker list (not search): hide recipes that clearly belong to another slot. */
 export function recipeSuitsMealPickerSlot(recipe: Recipe, slot: MealSlot): boolean {
   if (isSauceOrCondimentTitle(recipe.name)) return false;
-  const group = categoryGroupForRecipe(recipe);
-  if (group === 'dessert') return false;
-  if (slot === 'dinner' && dinnerExcludedSweetOrSauce(recipe)) return false;
-  if (slot !== 'breakfast' && group === 'breakfast') return false;
-  if (slot === 'breakfast' && group === 'main') return false;
+
+  const category = mealDbCategoryForRecipe(recipe);
+  const hasMealDbCategory = Boolean(category);
+
+  if (slot === 'lunch' || slot === 'dinner') {
+    if (hasMealDbCategory && lunchDinnerExcludedByCategory(recipe, slot)) return false;
+    if (!hasMealDbCategory && lunchDinnerExcludedByTitleFallback(recipe.name)) return false;
+    if (isDessertCategory(category) || categoryGroupForRecipe(recipe) === 'dessert') return false;
+  }
+
+  if (slot === 'breakfast') {
+    if (!breakfastAllowed(recipe)) return false;
+    return slotPriorForRecipe(recipe, slot) >= 0.5;
+  }
+
+  if (isBreakfastCategory(category) || categoryGroupForRecipe(recipe) === 'breakfast') {
+    return false;
+  }
+
   return slotPriorForRecipe(recipe, slot) >= 0.5;
 }
 

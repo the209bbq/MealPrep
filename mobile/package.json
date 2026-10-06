@@ -105,6 +105,7 @@
     "test:home-pantry-cta": "npx tsx scripts/home-pantry-cta-check.ts",
     "test:home-qa1-ui": "npx tsx scripts/home-qa1-ui-check.ts",
     "test:home-qa2": "npx tsx scripts/home-qa2-check.ts",
+    "test:home-qa3": "npx tsx scripts/home-qa3-check.ts",
     "test:home-prefetch": "npx tsx scripts/home-prefetch-check.ts",
     "test:home-qa1-safety": "npx tsx scripts/home-qa1-safety-check.ts",
     "test:home-qa1-data": "npx tsx scripts/home-qa1-data-check.ts",
