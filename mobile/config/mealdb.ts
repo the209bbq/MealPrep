@@ -8,9 +8,15 @@ export const MEALDB = {
   /** `v1` (public) or `v2` (premium — stub until premium base paths are wired). */
   apiVersion: (process.env.EXPO_PUBLIC_MEALDB_API_VERSION?.trim() || 'v1').toLowerCase(),
   requestTimeoutMs: 20_000,
-  clientCacheTtlMs: 30 * 60 * 1000,
+  /** Full meal lookups (`lookup.php`) — details rarely change. */
+  lookupCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
+  /** Filter/search list responses — refresh daily. */
+  filterCacheTtlMs: 24 * 60 * 60 * 1000,
+  /** @deprecated use lookupCacheTtlMs / filterCacheTtlMs */
+  clientCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   failureCacheTtlMs: 5 * 60 * 1000,
   cacheKeyPrefix: 'mealprep.mealdb',
+  maxConcurrentRequests: 6,
   /** Max filter.php ingredient queries per pantry refresh. */
   maxPantryFilterQueries: 3,
   /** Max full meal lookups after filtering. */

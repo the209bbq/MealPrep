@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { MEALDB_COPY } from '../config/mealdb';
 import type { RecipesTabRow } from '../config/recipesTabFilters';
+import { readMealDbCatalogSnapshot } from '../lib/mealdb/catalogCache';
 import { fetchMealDbCatalogRows } from '../lib/mealdb/catalogFeed';
 import type { PantryItem } from '../types/mealprep';
 
@@ -10,14 +11,18 @@ export function useMealDbRecipes(
 ): {
   rows: RecipesTabRow[];
   loading: boolean;
+  loadingMore: boolean;
   error: string | null;
   refreshSeed: number;
   refreshMealDb: () => void;
 } {
   const enabled = options?.enabled ?? true;
   const [refreshSeed, setRefreshSeed] = useState(options?.refreshSeed ?? 0);
-  const [rows, setRows] = useState<RecipesTabRow[]>([]);
+  const [rows, setRows] = useState<RecipesTabRow[]>(() =>
+    enabled ? readMealDbCatalogSnapshot(pantry) : [],
+  );
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshMealDb = useCallback(() => {
@@ -29,12 +34,31 @@ export function useMealDbRecipes(
       setRows([]);
       setError(null);
       setLoading(false);
+      setLoadingMore(false);
       return;
     }
 
     let cancelled = false;
-    setLoading(true);
-    void fetchMealDbCatalogRows(pantry)
+    const snapshot = readMealDbCatalogSnapshot(pantry);
+    if (snapshot.length > 0) {
+      setRows(snapshot);
+      setLoading(false);
+      setLoadingMore(true);
+    } else {
+      setRows([]);
+      setLoading(true);
+      setLoadingMore(false);
+    }
+    setError(null);
+
+    void fetchMealDbCatalogRows(pantry, {
+      onRows: (partial) => {
+        if (cancelled || partial.length === 0) return;
+        setRows(partial);
+        setLoading(false);
+        setLoadingMore(true);
+      },
+    })
       .then((result) => {
         if (cancelled) return;
         setRows(result.rows);
@@ -45,12 +69,17 @@ export function useMealDbRecipes(
       })
       .catch(() => {
         if (!cancelled) {
-          setRows([]);
+          if (snapshot.length === 0) {
+            setRows([]);
+          }
           setError(MEALDB_COPY.error);
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       });
 
     return () => {
@@ -58,5 +87,5 @@ export function useMealDbRecipes(
     };
   }, [enabled, pantry, refreshSeed]);
 
-  return { rows, loading, error, refreshSeed, refreshMealDb };
+  return { rows, loading, loadingMore, error, refreshSeed, refreshMealDb };
 }

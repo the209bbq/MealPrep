@@ -1,4 +1,5 @@
 import { MEALDB, mealDbApiBaseUrl } from '../../config/mealdb';
+import { mapWithConcurrency } from '../concurrency';
 import { readJson, writeJson } from '../storage';
 import type { MealDbFilterResponse, MealDbMealDetail, MealDbMealsResponse } from './types';
 
@@ -9,19 +10,17 @@ interface CacheEntry {
 }
 
 const memoryCache = new Map<string, CacheEntry>();
+const inFlight = new Map<string, Promise<unknown>>();
 
 function persistentKey(key: string): string {
   return `${MEALDB.cacheKeyPrefix}:${key}`;
 }
 
-function readCache(key: string): CacheEntry | null {
+function readCacheEntry(key: string): CacheEntry | null {
   const hit = memoryCache.get(key);
-  if (hit) {
-    if (hit.expiresAt < Date.now()) memoryCache.delete(key);
-    else return hit;
-  }
+  if (hit) return hit;
   const persisted = readJson<CacheEntry | null>(persistentKey(key), null);
-  if (!persisted || persisted.expiresAt < Date.now()) return null;
+  if (!persisted) return null;
   memoryCache.set(key, persisted);
   return persisted;
 }
@@ -32,12 +31,17 @@ function writeCache(key: string, payload: unknown, ttlMs: number, failed = false
   writeJson(persistentKey(key), entry);
 }
 
-async function mealDbFetch<T>(path: string): Promise<T | null> {
-  const cacheKey = path;
-  const cached = readCache(cacheKey);
-  if (cached && !cached.failed) return cached.payload as T;
-  if (cached?.failed) return null;
+function cacheFresh(entry: CacheEntry): boolean {
+  return entry.expiresAt >= Date.now();
+}
 
+function cacheTtlMsForPath(path: string): number {
+  if (path.startsWith('lookup.php')) return MEALDB.lookupCacheTtlMs;
+  return MEALDB.filterCacheTtlMs;
+}
+
+async function fetchMealDbPath<T>(path: string): Promise<T | null> {
+  const cacheKey = path;
   const url = `${mealDbApiBaseUrl()}${path}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MEALDB.requestTimeoutMs);
@@ -48,7 +52,7 @@ async function mealDbFetch<T>(path: string): Promise<T | null> {
       return null;
     }
     const json = (await response.json()) as T;
-    writeCache(cacheKey, json, MEALDB.clientCacheTtlMs);
+    writeCache(cacheKey, json, cacheTtlMsForPath(path));
     return json;
   } catch {
     writeCache(cacheKey, null, MEALDB.failureCacheTtlMs, true);
@@ -56,6 +60,33 @@ async function mealDbFetch<T>(path: string): Promise<T | null> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function mealDbFetch<T>(path: string): Promise<T | null> {
+  const cacheKey = path;
+  const cached = readCacheEntry(cacheKey);
+  if (cached) {
+    if (cached.failed) {
+      if (cacheFresh(cached)) return null;
+    } else if (cacheFresh(cached)) {
+      return cached.payload as T;
+    } else {
+      void revalidateMealDbFetch<T>(path);
+      return cached.payload as T;
+    }
+  }
+  return revalidateMealDbFetch<T>(path);
+}
+
+async function revalidateMealDbFetch<T>(path: string): Promise<T | null> {
+  const cacheKey = path;
+  const existing = inFlight.get(cacheKey);
+  if (existing) return existing as Promise<T | null>;
+  const promise = fetchMealDbPath<T>(path).finally(() => {
+    inFlight.delete(cacheKey);
+  });
+  inFlight.set(cacheKey, promise);
+  return promise;
 }
 
 function encodeFilterIngredient(name: string): string {
@@ -91,12 +122,33 @@ export async function mealDbSearchByName(query: string): Promise<string[]> {
   return data.meals.map((row) => row.idMeal);
 }
 
-export async function mealDbLookupMeals(ids: readonly string[]): Promise<MealDbMealDetail[]> {
+export interface MealDbLookupMealsOptions {
+  concurrency?: number;
+  onMeal?: (meal: MealDbMealDetail) => void;
+}
+
+export async function mealDbLookupMeals(
+  ids: readonly string[],
+  options?: MealDbLookupMealsOptions,
+): Promise<MealDbMealDetail[]> {
   const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (unique.length === 0) return [];
+
+  const concurrency = options?.concurrency ?? MEALDB.maxConcurrentRequests;
   const meals: MealDbMealDetail[] = [];
-  for (const id of unique) {
+
+  await mapWithConcurrency(unique, concurrency, async (id) => {
     const meal = await mealDbLookupMeal(id);
-    if (meal) meals.push(meal);
-  }
+    if (!meal) return;
+    meals.push(meal);
+    options?.onMeal?.(meal);
+  });
+
   return meals;
+}
+
+/** Clears in-memory MealDB caches (for unit tests). */
+export function resetMealDbClientCacheForTests(): void {
+  memoryCache.clear();
+  inFlight.clear();
 }

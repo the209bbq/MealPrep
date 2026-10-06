@@ -1,4 +1,5 @@
 import { MEALDB } from '../../config/mealdb';
+import { mapWithConcurrency } from '../concurrency';
 import { mealDbFilterByIngredient, mealDbSearchByName } from './client';
 
 const EMPTY_PANTRY_CATEGORY_FILTERS = ['Chicken', 'Beef', 'Pasta', 'Vegetarian'] as const;
@@ -15,13 +16,17 @@ export async function mealDbIdsForEmptyPantryBrowse(): Promise<string[]> {
     return emptyPantryCatalogIdsCache;
   }
 
-  const idSets: string[][] = [];
-  for (const category of EMPTY_PANTRY_CATEGORY_FILTERS) {
-    idSets.push(await mealDbFilterByIngredient(category));
-  }
-  for (const letter of EMPTY_PANTRY_LETTER_SEARCHES) {
-    idSets.push(await mealDbSearchByName(letter));
-  }
+  const categorySets = await mapWithConcurrency(
+    EMPTY_PANTRY_CATEGORY_FILTERS,
+    MEALDB.maxConcurrentRequests,
+    (category) => mealDbFilterByIngredient(category),
+  );
+  const letterSets = await mapWithConcurrency(
+    EMPTY_PANTRY_LETTER_SEARCHES,
+    MEALDB.maxConcurrentRequests,
+    (letter) => mealDbSearchByName(letter),
+  );
+  const idSets = [...categorySets, ...letterSets];
 
   const seen = new Set<string>();
   const merged: string[] = [];

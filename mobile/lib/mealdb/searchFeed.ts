@@ -1,8 +1,10 @@
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
+import { mapWithConcurrency } from '../concurrency';
 import { compareRecipePantryMatches, scoreRecipeAgainstPantry } from '../recipeMatch';
 import type { PantryItem, Recipe } from '../../types/mealprep';
-import { mealDbLookupMeals, mealDbSearchByName } from './client';
+import { mealDbFilterByIngredient, mealDbLookupMeals, mealDbSearchByName } from './client';
 import { mealDbMealToAppRecipe } from './normalize';
+import { MEALDB } from '../../config/mealdb';
 
 const INGREDIENT_WORD = /^[a-z][a-z0-9_-]{1,24}$/i;
 
@@ -26,10 +28,14 @@ export async function fetchMealDbSearchRows(
   const nameIds = await mealDbSearchByName(trimmed);
   for (const id of nameIds) idSet.add(id);
 
-  for (const token of ingredientTokens(trimmed)) {
-    const { mealDbFilterByIngredient } = await import('./client');
-    const filterIds = await mealDbFilterByIngredient(token);
-    for (const id of filterIds.slice(0, 12)) idSet.add(id);
+  const tokens = ingredientTokens(trimmed);
+  if (tokens.length > 0) {
+    const filterResults = await mapWithConcurrency(tokens, MEALDB.maxConcurrentRequests, (token) =>
+      mealDbFilterByIngredient(token),
+    );
+    for (const filterIds of filterResults) {
+      for (const id of filterIds.slice(0, 12)) idSet.add(id);
+    }
   }
 
   const meals = await mealDbLookupMeals([...idSet].slice(0, 24));
