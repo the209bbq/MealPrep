@@ -174,8 +174,10 @@ export function useRecipeRanking(options: {
   );
 
   const rankSearchResults = useCallback(
-    (items: Parameters<typeof rankRecipeSearchResults>[0]) =>
-      rankRecipeSearchResults(items, rankingContext),
+    (
+      items: Parameters<typeof rankRecipeSearchResults>[0],
+      searchQuery?: string,
+    ) => rankRecipeSearchResults(items, rankingContext, undefined, searchQuery),
     [rankingContext],
   );
 

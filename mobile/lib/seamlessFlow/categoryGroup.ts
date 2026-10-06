@@ -2,7 +2,7 @@
 export type RecipeCategoryGroup = 'breakfast' | 'light' | 'dessert' | 'main' | 'unknown';
 
 const BREAKFAST_KEYWORDS =
-  /\b(pancake|waffle|egg|omelet|oat|granola|smoothie|toast|frittata)\b/i;
+  /\b(pancakes?|waffles?|eggs?|omelett?e|oats?|oatmeal|granola|smoothie|toast|frittata|crepes?|blini)\b/i;
 const LIGHT_KEYWORDS = /\b(salad|sandwich|wrap|soup|bowl)\b/i;
 
 function haystack(category: string, title: string, tags: string[]): string {

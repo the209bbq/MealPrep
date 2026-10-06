@@ -1,6 +1,6 @@
 import type { MealPlanItem, MealSlot } from '../../types/mealprep';
 import { MEAL_SLOTS } from '../../types/mealprep';
-import { buildLocalDayRange } from './dates';
+import { addLocalDays, buildLocalDayRange } from './dates';
 
 const SLOT_ORDER: Record<MealSlot, number> = {
   breakfast: 0,
@@ -18,6 +18,23 @@ export function compareScheduledMeals(a: MealPlanItem, b: MealPlanItem): number 
 
 export function activeScheduledMeals(mealPlan: MealPlanItem[]): MealPlanItem[] {
   return mealPlan.filter((item) => !item.made && item.scheduledOn != null);
+}
+
+/** Uncooked meals scheduled today or later (matches Home week strip window). */
+export function countUpcomingScheduledMeals(
+  mealPlan: MealPlanItem[],
+  todayIso: string,
+  dayCount: number,
+): number {
+  const end = addLocalDays(todayIso, dayCount - 1);
+  return mealPlan.filter(
+    (item) =>
+      item.scheduledOn &&
+      !item.made &&
+      !item.leftoverOfId &&
+      item.scheduledOn >= todayIso &&
+      item.scheduledOn <= end,
+  ).length;
 }
 
 export function unscheduledActiveMeals(mealPlan: MealPlanItem[]): MealPlanItem[] {

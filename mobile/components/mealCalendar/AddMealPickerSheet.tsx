@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { MEAL_CALENDAR } from '../../config/mealCalendar';
 import { MEAL_SLOTS, type MealSlot, type Recipe } from '../../types/mealprep';
+import { formatMealPickerHeaderDate } from '../../lib/mealCalendar/formatScheduleDate';
 import { buildMealPickerRecipeOptions } from '../../lib/mealCalendar/recipePickerOptions';
+import { localDateString } from '../../lib/mealCalendar/dates';
 import { findKitchenRecipeById } from '../../lib/mealPlan/kitchenRecipeLookup';
 import type { PantryMatchIndex } from '../../lib/recipeMatch';
 
@@ -12,6 +14,7 @@ interface AddMealPickerSheetProps {
   defaultSlot: MealSlot;
   recipes: Recipe[];
   pantryMatches: PantryMatchIndex;
+  savedRecipeIds: ReadonlySet<string>;
   onClose: () => void;
   onPick: (input: {
     recipeId: string;
@@ -54,6 +57,7 @@ export function AddMealPickerSheet({
   defaultSlot,
   recipes,
   pantryMatches,
+  savedRecipeIds,
   onClose,
   onPick,
 }: AddMealPickerSheetProps) {
@@ -66,6 +70,7 @@ export function AddMealPickerSheet({
           defaultSlot={defaultSlot}
           recipes={recipes}
           pantryMatches={pantryMatches}
+          savedRecipeIds={savedRecipeIds}
           onClose={onClose}
           onPick={onPick}
         />
@@ -79,6 +84,7 @@ function AddMealPickerSheetForm({
   defaultSlot,
   recipes,
   pantryMatches,
+  savedRecipeIds,
   onClose,
   onPick,
 }: Omit<AddMealPickerSheetProps, 'visible'>) {
@@ -92,9 +98,12 @@ function AddMealPickerSheetForm({
         recipes,
         pantryMatches.ranked,
         MEAL_CALENDAR.picker.maxRecipes,
+        savedRecipeIds,
       ),
-    [pantryMatches.ranked, recipes],
+    [pantryMatches.ranked, recipes, savedRecipeIds],
   );
+
+  const headerDate = formatMealPickerHeaderDate(isoDate, localDateString());
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -106,7 +115,7 @@ function AddMealPickerSheetForm({
     <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
         <Pressable className="max-h-[80%] rounded-t-3xl bg-card px-4 pb-8 pt-4" onPress={() => undefined}>
           <Text className="text-lg font-bold text-ink">Add meal</Text>
-          <Text className="mt-1 text-sm text-muted">{isoDate}</Text>
+          <Text className="mt-1 text-sm text-muted">{headerDate}</Text>
 
           <View className="mt-3 flex-row gap-2">
             {MEAL_SLOTS.map((value) => (
@@ -149,13 +158,15 @@ function AddMealPickerSheetForm({
                 className="border-t border-border py-3"
               >
                 <Text className="font-semibold text-ink">{row.title}</Text>
-                {row.pantryPercent > 0 ? (
+                {row.isSaved ? (
+                  <Text className="mt-0.5 text-xs text-muted">Saved recipe</Text>
+                ) : row.missingCount === 0 && row.matchedCount > 0 ? (
+                  <Text className="mt-0.5 text-xs text-muted">Ready to cook!</Text>
+                ) : row.pantryPercent > 0 ? (
                   <Text className="mt-0.5 text-xs text-muted">
                     Pantry match {row.pantryPercent}% ({row.matchedCount} items)
                   </Text>
-                ) : (
-                  <Text className="mt-0.5 text-xs text-muted">Saved recipe</Text>
-                )}
+                ) : null}
               </Pressable>
             ))}
             {filtered.length === 0 ? (

@@ -52,6 +52,8 @@ export function MealWeekCalendarCard() {
     demoMode,
     pantryRecipeMatches,
     pantryRecipeMatchesRankedFiltered,
+    feedKitchenRecipes,
+    savedRecipes,
     scheduleMealFromRecipe,
     updateMealPlanSchedule,
     removeMealPlanItem,
@@ -114,6 +116,16 @@ export function MealWeekCalendarCard() {
   const pickerDefaultSlot: MealSlot = pickerDate
     ? nextMealSlotForDate(mealPlan, pickerDate)
     : 'dinner';
+
+  const savedRecipeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const record of savedRecipes.records) {
+      if (record.refKey.startsWith('kitchen:')) {
+        ids.add(record.refKey.slice('kitchen:'.length));
+      }
+    }
+    return ids;
+  }, [savedRecipes.records]);
 
   async function exportWeekIcs(): Promise<void> {
     const body = buildWeekIcsFromMeals(weekMeals, exportContexts);
@@ -202,7 +214,12 @@ export function MealWeekCalendarCard() {
                       </Text>
                       {slotLabel ? <Text className="text-xs text-muted">{slotLabel}</Text> : null}
                     </Pressable>
-                    <Pressable onPress={() => setMenuItem(item)} className="ml-2 p-1">
+                    <Pressable
+                      onPress={() => setMenuItem(item)}
+                      className="ml-2 p-1"
+                      accessibilityRole="button"
+                      accessibilityLabel={`Meal options for ${item.title}`}
+                    >
                       <Ionicons name="ellipsis-horizontal" size={18} color={THEME.muted} />
                     </Pressable>
                   </View>
@@ -233,8 +250,9 @@ export function MealWeekCalendarCard() {
         visible={pickerDate != null}
         isoDate={pickerDate ?? today}
         defaultSlot={pickerDefaultSlot}
-        recipes={recipes}
+        recipes={feedKitchenRecipes}
         pantryMatches={{ ...pantryRecipeMatches, ranked: pantryRecipeMatchesRankedFiltered }}
+        savedRecipeIds={savedRecipeIds}
         onClose={() => setPickerDate(null)}
         onPick={(input) =>
           void scheduleMealFromRecipe({

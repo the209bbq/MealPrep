@@ -179,6 +179,7 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                   onChangeText={setZip}
                   keyboardType="number-pad"
                   maxLength={10}
+                  accessibilityLabel={ACCOUNT_SHEET_COPY.homeZipLabel}
                   className="mt-1 rounded-xl border border-border bg-paper px-3 py-2 text-ink"
                 />
                 <Text className="mt-3 text-xs font-semibold text-muted">{ACCOUNT_SHEET_COPY.householdLabel}</Text>
@@ -186,6 +187,7 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                   value={householdSize}
                   onChangeText={setHouseholdSize}
                   keyboardType="number-pad"
+                  accessibilityLabel={ACCOUNT_SHEET_COPY.householdLabel}
                   className="mt-1 rounded-xl border border-border bg-paper px-3 py-2 text-ink"
                 />
                 <Text className="mt-3 text-xs font-semibold text-muted">{ACCOUNT_SHEET_COPY.dietaryNotesLabel}</Text>

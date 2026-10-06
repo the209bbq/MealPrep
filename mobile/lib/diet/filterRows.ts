@@ -51,6 +51,7 @@ export function filterPantryMatchesForDietPrefs(
   if (!prefs.hideConflicts) return [...matches];
   return matches.filter((match) => {
     const lines = recipeIngredientsById.get(match.recipeId) ?? [];
-    return !shouldHideRecipeForDietPrefs(prefs, lines.length > 0 ? lines : null);
+    const checkLines = lines.length > 0 ? lines : [match.recipeName];
+    return !shouldHideRecipeForDietPrefs(prefs, checkLines);
   });
 }
