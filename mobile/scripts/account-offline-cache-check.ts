@@ -9,8 +9,15 @@ import {
   readAccountKitchenCache,
   writeAccountKitchenCache,
 } from '../lib/account/accountKitchenCache';
+import { writeLastAccountUserId, readLastAccountUserId, clearLastAccountUserId } from '../lib/account/lastAccountUser';
+import {
+  readAccountSavedRecipesCache,
+  writeAccountSavedRecipesCache,
+  clearAccountSavedRecipesCache,
+} from '../lib/savedRecipes/accountCache';
 import { isUserImportedKitchenRecipe } from '../lib/recipeImport/mapToAppRecipe';
 import type { Recipe } from '../types/mealprep';
+import { savedRefKeyMealDb } from '../lib/savedRecipes/keys';
 
 const userId = 'user-offline-test';
 
@@ -66,5 +73,23 @@ const photoRecipe: Recipe = {
 
 assert.equal(isUserImportedKitchenRecipe(photoRecipe), true);
 
+writeLastAccountUserId(userId);
+assert.equal(readLastAccountUserId(), userId);
+
+writeAccountSavedRecipesCache(userId, [
+  {
+    refKey: savedRefKeyMealDb('53367'),
+    sourceType: 'mealdb',
+    mealdbId: '53367',
+    title: 'Chicken Fried Rice',
+    imageUrl: null,
+    preview: { kind: 'none' },
+    savedAt: new Date().toISOString(),
+  },
+]);
+assert.equal(readAccountSavedRecipesCache(userId)?.length, 1);
+
 clearAccountKitchenCache(userId);
+clearAccountSavedRecipesCache(userId);
+clearLastAccountUserId();
 console.log('account-offline-cache-check: ok');

@@ -58,7 +58,10 @@ function isWaterIngredient(name: string, ingredientId: string): boolean {
   if (iceOnly) return true;
   if (!hasWater) return false;
   const strip = new Set<string>(INGREDIENT_STRIP_TOKENS);
-  const nonWater = tokens.filter((t) => t !== 'water' && !strip.has(t));
+  const waterModifiers = new Set(['hot', 'cold', 'warm', 'boiling', 'ice', 'iced', 'room', 'temperature']);
+  const nonWater = tokens.filter(
+    (t) => t !== 'water' && !strip.has(t) && !waterModifiers.has(t),
+  );
   return nonWater.length === 0;
 }
 

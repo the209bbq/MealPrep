@@ -104,9 +104,12 @@ const garlicRecipe: Recipe = {
 };
 const garlicMatch = scoreRecipeAgainstPantry(garlicRecipe, garlicPantry);
 const garlicLines = buildPantryDeductionLines(garlicMatch, garlicRecipe, {}, new Set());
-assert(garlicLines.every((line) => !line.quantityApplied), 'incompatible units should not deduct');
+assert(garlicLines.every((line) => line.quantityApplied), 'garlic head and cloves should deduct');
 const { nextPantry: garlicAfter } = applyPantryDeductions(garlicPantry, garlicLines);
-assert(garlicAfter.length === 1 && garlicAfter[0].quantity === 1, 'garlic head must remain after failed deduct');
+assert(
+  garlicAfter.length === 1 && garlicAfter[0].quantity < 1,
+  'garlic head should shrink after clove deduct',
+);
 
 assert(convertQuantity(1, 'dozen', 'each') === 12, 'dozen converts to each');
 

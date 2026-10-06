@@ -1,4 +1,5 @@
 import {
+  HOME_CLASSIC_CATEGORY_CHIPS,
   MEALDB_CATEGORY_ORDER_COLD_START,
   RECIPES_TAB_SURFACE,
   type MealDbCatalogCategory,
@@ -74,10 +75,11 @@ export function buildCategoryRotation(input: CategoryRotationInput): MealDbCateg
   const lastFirst3 = input.visitState.lastFirst3Categories ?? [];
   const strongCount = countStrongEvents(input.index, input.nowMs);
 
+  const homeChipSet = new Set<string>(HOME_CLASSIC_CATEGORY_CHIPS);
   const visible = input.categories.filter((row) => {
     if (isCategoryHiddenByDietMap(row.category, input.prefs)) return false;
     if (isCategoryHiddenByDislikes(row.category, input.prefs)) return false;
-    if (row.passingRecipeCount < 3) return false;
+    if (!homeChipSet.has(row.category)) return false;
     return true;
   });
 

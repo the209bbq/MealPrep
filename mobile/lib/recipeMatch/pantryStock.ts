@@ -1,5 +1,6 @@
 import type { PantryItem, RecipeIngredient } from '../../types/mealprep';
-import { convertQuantity, unitsAreConvertible } from '../units/conversion';
+import { convertQuantity } from '../units/conversion';
+import { convertIngredientQuantity, ingredientUnitsConvertible } from '../units/ingredientUnitBridge';
 import { expandSynonymKeys, fuzzyNameScore, normalizeIngredientName } from './normalize';
 import { FUZZY_MATCH_THRESHOLD } from '../../config/recipeMatchingConfig';
 
@@ -58,17 +59,27 @@ function roundQty(value: number): number {
 export function totalPantryQuantityInUnit(
   items: PantryItem[],
   targetUnit: string,
+  ingredientName?: string,
 ): number | null {
   if (items.length === 0) return 0;
 
+  const name = ingredientName ?? items[0]?.name ?? '';
   let total = 0;
   for (const item of items) {
-    if (!unitsAreConvertible(item.unit, targetUnit)) {
+    const convertible = ingredientName
+      ? ingredientUnitsConvertible(name, item.unit, targetUnit)
+      : ingredientUnitsConvertible(item.name, item.unit, targetUnit);
+    if (!convertible) {
       return null;
     }
-    const converted = convertQuantity(item.quantity, item.unit, targetUnit);
-    if (converted === null) return null;
-    total += converted;
+    const converted = convertIngredientQuantity(item.quantity, item.unit, targetUnit, name || item.name);
+    if (converted === null) {
+      const fallback = convertQuantity(item.quantity, item.unit, targetUnit);
+      if (fallback === null) return null;
+      total += fallback;
+    } else {
+      total += converted;
+    }
   }
   return roundQty(total);
 }
@@ -94,7 +105,7 @@ export function ingredientShortfall(
     };
   }
 
-  const have = totalPantryQuantityInUnit(matches, ingredient.unit);
+  const have = totalPantryQuantityInUnit(matches, ingredient.unit, ingredient.name);
   if (have === null) {
     return null;
   }

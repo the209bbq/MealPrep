@@ -236,7 +236,8 @@ const { nextPantry } = applyPantryDeductions(madePantry, lines);
 const chickenAfter = nextPantry.find((p) => p.name === 'chicken breast');
 const riceAfter = nextPantry.find((p) => p.name === 'jasmine rice');
 assert(chickenAfter && chickenAfter.quantity > 0 && chickenAfter.quantity < 2, 'chicken partially deducted in lb');
-assert(riceAfter && riceAfter.quantity === 5, 'rice left unchanged when cups vs lb');
+const riceGrocery = grocery.added.find((g) => g.name.toLowerCase().includes('rice'));
+assert(!riceGrocery, 'jasmine rice cups should be covered by pantry rice in lb');
 
 const eggRecipe = recipes[0];
 if (eggRecipe) {

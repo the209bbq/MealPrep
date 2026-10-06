@@ -1,7 +1,11 @@
 import { resolveRecipeServings } from '../profile/servings';
 import type { PantryItem, Recipe, RecipeIngredient } from '../../types/mealprep';
 import type { MatchedIngredient, RecipePantryMatch } from '../recipeMatch/match';
-import { convertQuantity, unitKind, unitsAreConvertible } from '../units/conversion';
+import { unitKind } from '../units/conversion';
+import {
+  convertIngredientQuantity,
+  ingredientUnitsConvertible,
+} from '../units/ingredientUnitBridge';
 
 export interface PantryDeductionLine {
   pantryItemId: string;
@@ -44,7 +48,11 @@ export function buildPantryDeductionLines(
     const deductQuantity = roundQty(row.ingredient.quantity * scale);
     if (deductQuantity <= 0) continue;
 
-    const convertible = unitsAreConvertible(pantryItem.unit, row.ingredient.unit);
+    const convertible = ingredientUnitsConvertible(
+      row.ingredient.name,
+      pantryItem.unit,
+      row.ingredient.unit,
+    );
     lines.push({
       pantryItemId: pantryItem.id,
       ingredient: row.ingredient,
@@ -71,10 +79,11 @@ export function applyPantryDeductions(pantry: PantryItem[], lines: PantryDeducti
     const current = updates.get(line.pantryItemId) ?? pantry.find((item) => item.id === line.pantryItemId);
     if (!current) continue;
 
-    const convertedDeduct = convertQuantity(
+    const convertedDeduct = convertIngredientQuantity(
       line.deductQuantity,
       line.ingredient.unit,
       current.unit,
+      line.ingredient.name,
     );
 
     if (convertedDeduct === null) {

@@ -2,7 +2,10 @@ import type { MealDbCatalogCategory } from '../../config/recipesTabSurface';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import { filterRecipesTabRowsForDietPrefs } from '../diet/filterRows';
 import type { UserDietPrefs } from '../diet/types';
+import type { PantryItem } from '../../types/mealprep';
+import { compareRecipePantryMatches, scoreRecipeAgainstPantry } from '../recipeMatch';
 import { mealDbFetchCategories, mealDbFilterByCategory, mealDbLookupMeals } from './client';
+import { readMealDbCategorySnapshot, writeMealDbCategorySnapshot } from './categoryFeedCache';
 import { mealDbMealToAppRecipe } from './normalize';
 import { mealDbCategoryFromRecipeTag } from '../recipesTab/categoryDiet';
 import { wontCookRefKeys } from '../recipeRanking/hardFilter';
@@ -79,4 +82,28 @@ export async function countPassingRecipesForCategory(
 
 export function wontCookSetFromEvents(events: readonly RecipeEngagementEvent[]): Set<string> {
   return wontCookRefKeys(events);
+}
+
+export async function fetchMealDbCategoryFeedRows(
+  category: MealDbCatalogCategory,
+  pantry: PantryItem[],
+): Promise<RecipesTabRow[]> {
+  const cached = readMealDbCategorySnapshot(category, pantry);
+  if (cached.length > 0) return cached;
+
+  const ids = await mealDbFilterByCategory(category);
+  const meals = await mealDbLookupMeals(ids.slice(0, 40));
+  const rows: RecipesTabRow[] = meals.map((meal) => {
+    const recipe = mealDbMealToAppRecipe(meal);
+    return {
+      kind: 'kitchen',
+      recipe,
+      match: scoreRecipeAgainstPantry(recipe, pantry),
+    };
+  });
+  rows.sort((a, b) => compareRecipePantryMatches(a.match, b.match));
+  if (rows.length > 0) {
+    writeMealDbCategorySnapshot(category, pantry, rows);
+  }
+  return rows;
 }

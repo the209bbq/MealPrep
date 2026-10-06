@@ -23,7 +23,7 @@ import {
 } from './grocery/pinnedSurvivors';
 import { normalizePlannedMealLinks } from './grocery/grouping';
 import { resolveMealPlanRecipeId } from './mealPlan/resolve';
-import { convertQuantity, unitsAreConvertible } from './units/conversion';
+import { convertIngredientQuantity, ingredientUnitsConvertible } from './units/ingredientUnitBridge';
 import { normalizeIngredientName } from './recipeMatch/normalize';
 
 /** Store aisle order for grouped grocery UI. */
@@ -116,12 +116,22 @@ function consumePantryForIngredient(
   const matches = findPantryItemsForIngredient(ingredient, pantry);
   for (const item of matches) {
     if (remaining <= 0) break;
-    if (!unitsAreConvertible(item.unit, ingredient.unit)) continue;
-    const available = convertQuantity(item.quantity, item.unit, ingredient.unit);
+    if (!ingredientUnitsConvertible(ingredient.name, item.unit, ingredient.unit)) continue;
+    const available = convertIngredientQuantity(
+      item.quantity,
+      item.unit,
+      ingredient.unit,
+      ingredient.name,
+    );
     if (available == null || available <= 0) continue;
     const take = Math.min(remaining, available);
     remaining = roundQty(remaining - take);
-    const takeInItemUnit = convertQuantity(take, ingredient.unit, item.unit);
+    const takeInItemUnit = convertIngredientQuantity(
+      take,
+      ingredient.unit,
+      item.unit,
+      ingredient.name,
+    );
     if (takeInItemUnit == null) continue;
     item.quantity = roundQty(Math.max(0, item.quantity - takeInItemUnit));
   }
@@ -304,7 +314,7 @@ export function buildGroceryList(
       },
       pantry,
     );
-    const have = totalPantryQuantityInUnit(pantryMatches, value.unit);
+    const have = totalPantryQuantityInUnit(pantryMatches, value.unit, value.name);
     if (pantryMatches.length > 0 && have === null) {
       // Name/id match in pantry but units don't convert (e.g. 1 each vs 250 g) — skip auto-buy line.
       continue;

@@ -52,9 +52,12 @@ import { RECIPES_TAB_SURFACE_COPY } from '../../config/recipesTabSurface';
 import type { MealDbCatalogCategory } from '../../config/recipesTabSurface';
 import { useRecipesTabSurface } from '../../hooks/useRecipesTabSurface';
 import { readRecipesTabSectionExpanded } from '../../lib/recipesTab/sectionExpanded';
-import { mealDbListCategories, countPassingRecipesForCategoryFromRows } from '../../lib/mealdb/categories';
+import {
+  mealDbListCategories,
+  countPassingRecipesForCategoryFromRows,
+  fetchMealDbCategoryFeedRows,
+} from '../../lib/mealdb/categories';
 import { wontCookRefKeys } from '../../lib/recipeRanking/hardFilter';
-import { mealDbCategoryFromRecipeTag } from '../../lib/recipesTab/categoryDiet';
 import type { CreatorRotationSlot } from '../../lib/recipesTab/creatorRotation';
 import type { MealDbCategoryChip } from '../../lib/recipesTab/categoryRotation';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
@@ -151,6 +154,8 @@ export default function HomeScreen() {
     Awaited<ReturnType<typeof mealDbListCategories>>
   >([]);
   const [mealDbCategoriesLoading, setMealDbCategoriesLoading] = useState(false);
+  const [classicCategoryRows, setClassicCategoryRows] = useState<RecipesTabRow[]>([]);
+  const [classicCategoryLoading, setClassicCategoryLoading] = useState(false);
   const [sectionsExpanded, setSectionsExpanded] = useState(() => readRecipesTabSectionExpanded(ownerId));
 
   useEffect(() => {
@@ -297,6 +302,26 @@ export default function HomeScreen() {
     };
   }, [sectionsExpanded.classic, showCreatorCatalogSections]);
 
+  useEffect(() => {
+    if (!selectedClassicCategory) {
+      setClassicCategoryRows([]);
+      setClassicCategoryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setClassicCategoryLoading(true);
+    void fetchMealDbCategoryFeedRows(selectedClassicCategory, pantry)
+      .then((rows) => {
+        if (!cancelled) setClassicCategoryRows(rows);
+      })
+      .finally(() => {
+        if (!cancelled) setClassicCategoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pantry, selectedClassicCategory]);
+
   const {
     viralOpenState,
     openViralItem,
@@ -398,22 +423,13 @@ export default function HomeScreen() {
 
   const classicRecipeRows = useMemo(() => {
     if (!showCreatorCatalogSections) return [];
-    const diet = filterRecipesTabRowsForDietPrefs(mealDbRows, userDietPrefs);
+    const source = selectedClassicCategory ? classicCategoryRows : mealDbRows;
+    const diet = filterRecipesTabRowsForDietPrefs(source, userDietPrefs);
     const main = applyMainIngredientToTabRows(diet);
-    const byCategory = selectedClassicCategory
-      ? main.filter((row) => {
-          if (row.kind === 'kitchen') {
-            return mealDbCategoryFromRecipeTag(row.recipe.tag) === selectedClassicCategory;
-          }
-          return (
-            mealDbCategoryFromRecipeTag(row.recipe.meal_type ?? row.recipe.cuisine ?? null) ===
-            selectedClassicCategory
-          );
-        })
-      : main;
-    return rankTabRows(byCategory);
+    return rankTabRows(main);
   }, [
     applyMainIngredientToTabRows,
+    classicCategoryRows,
     mealDbRows,
     selectedClassicCategory,
     showCreatorCatalogSections,
@@ -1036,7 +1052,7 @@ export default function HomeScreen() {
                 tabSurface.logCategoryImpression(chip.category, chip.position)
               }
             />
-            {mealDbBlockingLoad ? <RecipesFeedCardSkeleton count={4} /> : null}
+            {mealDbBlockingLoad || classicCategoryLoading ? <RecipesFeedCardSkeleton count={4} /> : null}
             {classicRecipeRows.map((row) => (
               <RecipesUnifiedFeedCard
                 key={row.recipe.id}

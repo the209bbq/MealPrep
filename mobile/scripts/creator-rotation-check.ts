@@ -211,7 +211,9 @@ function simulateVisit(
     visitId: 'cat-visit',
     categories: [
       { category: 'Chicken', thumbUrl: null, passingRecipeCount: 2 },
-      { category: 'Pasta', thumbUrl: null, passingRecipeCount: 5 },
+      { category: 'Beef', thumbUrl: null, passingRecipeCount: 5 },
+      { category: 'Pasta', thumbUrl: null, passingRecipeCount: 99 },
+      { category: 'Miscellaneous', thumbUrl: null, passingRecipeCount: 10 },
     ],
     prefs: DEFAULT_USER_DIET_PREFS,
     householdSize: 2,
@@ -226,8 +228,10 @@ function simulateVisit(
     },
     nowMs: Date.now(),
   });
-  assert(!chips.some((c) => c.category === 'Chicken'), 'check 6: <3 recipes hidden');
-  assert(chips.some((c) => c.category === 'Pasta'), 'check 6: pasta remains');
+  assert(chips.some((c) => c.category === 'Chicken'), 'check 6: home chips ignore loaded-page counts');
+  assert(!chips.some((c) => c.category === 'Miscellaneous'), 'check 6: non-home categories hidden');
+  assert(!chips.some((c) => c.category === 'Pasta'), 'check 6: pasta excluded from HOME_CLASSIC_CATEGORY_CHIPS');
+  assert(chips.some((c) => c.category === 'Beef'), 'check 6: home-listed categories remain');
 }
 
 // 7. Breakfast before 10 AM.

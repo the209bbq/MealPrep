@@ -23,6 +23,10 @@ import {
   savedCreatorItemFromRecord,
 } from '../lib/savedRecipes/resolveRows';
 import {
+  readAccountSavedRecipesCache,
+  writeAccountSavedRecipesCache,
+} from '../lib/savedRecipes/accountCache';
+import {
   deleteUserSavedRecipe,
   fetchUserSavedRecipes,
   upsertUserSavedRecipe,
@@ -43,6 +47,8 @@ export type SavedRecipesController = ReturnType<typeof useSavedRecipes>;
 
 export function useSavedRecipes(options: {
   session: Session | null;
+  /** Signed-in kitchen user id (includes offline cache fallback). */
+  accountUserId?: string | null;
   demoMode: boolean;
   isGuest: boolean;
   accountRecipeIds: ReadonlySet<string>;
@@ -54,6 +60,7 @@ export function useSavedRecipes(options: {
 }) {
   const {
     session,
+    accountUserId = null,
     demoMode,
     isGuest,
     accountRecipeIds,
@@ -63,7 +70,7 @@ export function useSavedRecipes(options: {
     liveDataLoaded = true,
     onToggleOutcome,
   } = options;
-  const userId = session?.user?.id ?? null;
+  const userId = session?.user?.id ?? accountUserId;
   const supabase = getSupabase();
   const [records, setRecords] = useState<SavedRecipeRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -78,20 +85,28 @@ export function useSavedRecipes(options: {
       setHydrated(true);
       return;
     }
-    if (isGuest || !userId || !supabase) {
+    if (isGuest || !userId) {
       setRecords(readGuestSavedRecipes());
+      setHydrated(true);
+      return;
+    }
+    if (!supabase || !session?.user?.id) {
+      const cached = readAccountSavedRecipesCache(userId);
+      setRecords(cached ?? []);
       setHydrated(true);
       return;
     }
     try {
       const rows = await fetchUserSavedRecipes(supabase, userId);
       setRecords(rows);
+      writeAccountSavedRecipesCache(userId, rows);
     } catch {
-      setRecords([]);
+      const cached = readAccountSavedRecipesCache(userId);
+      setRecords(cached ?? []);
     } finally {
       setHydrated(true);
     }
-  }, [demoMode, isGuest, supabase, userId]);
+  }, [demoMode, isGuest, session?.user?.id, supabase, userId]);
 
   useEffect(() => {
     void load();
