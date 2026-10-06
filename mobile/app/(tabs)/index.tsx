@@ -85,6 +85,7 @@ import {
   scheduleTargetFromRecipesTabRow,
 } from '../../lib/mealCalendar/scheduleTarget';
 import type { CreatorFeedCardModel } from '../../lib/recipes/creatorFeedRows';
+import { sourceTagForRecipesTabRow } from '../../lib/recipes/searchResultSourceTag';
 
 function RecipesFeedSectionLabel({ title, className }: { title: string; className?: string }) {
   return (
@@ -151,6 +152,10 @@ export default function HomeScreen() {
   >([]);
   const [mealDbCategoriesLoading, setMealDbCategoriesLoading] = useState(false);
   const [sectionsExpanded, setSectionsExpanded] = useState(() => readRecipesTabSectionExpanded(ownerId));
+
+  useEffect(() => {
+    setSectionsExpanded(readRecipesTabSectionExpanded(ownerId));
+  }, [ownerId]);
 
   const handleFeedModeChange = useCallback((mode: CreatorRecipesFeedMode) => {
     setFeedMode(mode);
@@ -958,7 +963,7 @@ export default function HomeScreen() {
               <RecipesUnifiedFeedCard
                 key={`classic-${result.row.recipe.id}`}
                 row={result.row}
-                sourceTag={CREATOR_RECIPES_COPY.sourceClassic}
+                sourceTag={sourceTagForRecipesTabRow(result.row)}
                 saved={
                   result.row.kind === 'kitchen'
                     ? savedRecipes.isKitchenSaved(result.row.recipe)

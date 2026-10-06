@@ -2,8 +2,10 @@
 export type RecipeCategoryGroup = 'breakfast' | 'light' | 'dessert' | 'main' | 'unknown';
 
 const BREAKFAST_KEYWORDS =
-  /\b(pancakes?|waffles?|eggs?|omelett?e|oats?|oatmeal|granola|smoothie|toast|frittata|crepes?|blini)\b/i;
+  /\b(pancakes?|waffles?|eggs?|omelett?e|oats?|oatmeal|granola|smoothie|toast|frittata|crepes?|blini|boxty|breakfast|congee|porridge|muffins?|bagels?|granola|hash browns?|french toast)\b/i;
 const LIGHT_KEYWORDS = /\b(salad|sandwich|wrap|soup|bowl)\b/i;
+const MAIN_DISH_KEYWORDS =
+  /\b(fried rice|curry|stew|chili|lasagna|meatloaf|roast|braised|tacos?|enchiladas?|casserole|stir[- ]?fry|biryani|risotto|paella|burgers?|meatballs?)\b/i;
 
 function haystack(category: string, title: string, tags: string[]): string {
   return [category, title, ...tags].join(' ').toLowerCase();
@@ -21,6 +23,9 @@ export function recipeCategoryGroup(input: {
 
   if (/^breakfast$/i.test(category) || BREAKFAST_KEYWORDS.test(text)) {
     return 'breakfast';
+  }
+  if (MAIN_DISH_KEYWORDS.test(text)) {
+    return 'main';
   }
   if (/^(starter|side)$/i.test(category) || LIGHT_KEYWORDS.test(text)) {
     return 'light';

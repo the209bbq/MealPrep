@@ -23,6 +23,7 @@ import { addLocalDays, localDateString } from '../../lib/mealCalendar/dates';
 import { shareOrDownloadIcs } from '../../lib/mealCalendar/shareIcs';
 import { openExternalUrl } from '../../lib/smartShop/openExternalUrl';
 import { resolveMealPlanRecipeId } from '../../lib/mealPlan/resolve';
+import { savedKitchenRecipeIdsFromRecords } from '../../lib/savedRecipes/pickerRecipeIds';
 import type { MealPlanItem, MealSlot } from '../../types/mealprep';
 
 function openRecipeFromMeal(item: MealPlanItem, recipeId: string | null): void {
@@ -118,15 +119,10 @@ export function MealWeekCalendarCard() {
     ? nextMealSlotForDate(mealPlan, pickerDate)
     : 'dinner';
 
-  const savedRecipeIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const record of savedRecipes.records) {
-      if (record.refKey.startsWith('kitchen:')) {
-        ids.add(record.refKey.slice('kitchen:'.length));
-      }
-    }
-    return ids;
-  }, [savedRecipes.records]);
+  const savedRecipeIds = useMemo(
+    () => savedKitchenRecipeIdsFromRecords(savedRecipes.records),
+    [savedRecipes.records],
+  );
 
   async function exportWeekIcs(): Promise<void> {
     const body = buildWeekIcsFromMeals(weekMeals, exportContexts);
@@ -254,6 +250,7 @@ export function MealWeekCalendarCard() {
         recipes={feedKitchenRecipes}
         pantryMatches={{ ...pantryRecipeMatches, ranked: pantryRecipeMatchesRankedFiltered }}
         savedRecipeIds={savedRecipeIds}
+        savedRecords={savedRecipes.records}
         onClose={() => setPickerDate(null)}
         onPick={(input) =>
           void scheduleMealFromRecipe({

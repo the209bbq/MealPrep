@@ -3,7 +3,10 @@ import type { CreatorFeedCardModel } from '../recipes/creatorFeedRows';
 import type { RecipesSearchResultItem } from '../recipes/mergeSearchResults';
 import type { RecipePantryMatch } from '../recipeMatch';
 import { shouldHideRecipeForDietPrefs } from './conflicts';
-import { ingredientLinesFromCreatorModel, ingredientLinesFromRecipesTabRow } from './ingredientLines';
+import {
+  dietCheckLinesFromCreatorModel,
+  ingredientLinesFromRecipesTabRow,
+} from './ingredientLines';
 import type { UserDietPrefs } from './types';
 
 export function filterRecipesTabRowsForDietPrefs(
@@ -23,7 +26,7 @@ export function filterCreatorFeedModelsForDietPrefs(
 ): CreatorFeedCardModel[] {
   if (!prefs.hideConflicts) return [...models];
   return models.filter((model) => {
-    const lines = ingredientLinesFromCreatorModel(model);
+    const lines = dietCheckLinesFromCreatorModel(model);
     return !shouldHideRecipeForDietPrefs(prefs, lines);
   });
 }
@@ -38,7 +41,7 @@ export function filterRecipeSearchResultsForDietPrefs(
       const lines = ingredientLinesFromRecipesTabRow(item.row);
       return !shouldHideRecipeForDietPrefs(prefs, lines);
     }
-    const lines = ingredientLinesFromCreatorModel(item.model);
+    const lines = dietCheckLinesFromCreatorModel(item.model);
     return !shouldHideRecipeForDietPrefs(prefs, lines);
   });
 }

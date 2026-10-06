@@ -122,6 +122,7 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
       <TextInput
         value={name}
         onChangeText={setName}
+        accessibilityLabel={ACCOUNT_SHEET_COPY.displayNameLabel}
         className="mt-2 rounded-xl border border-border bg-card px-3 py-2 text-ink"
         autoCapitalize="words"
       />

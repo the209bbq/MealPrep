@@ -2,6 +2,10 @@ import type { Recipe } from '../../types/mealprep';
 import { isUserImportedKitchenRecipe } from '../recipeImport/mapToAppRecipe';
 import { recipesForRecipesFeed } from '../recipeMatch/kitchenCatalogMerge';
 import type { RecipePantryMatch } from '../recipeMatch';
+import { mapNormalizedRecipeToAppRecipe } from '../recipes/normalizedRecipeShape';
+import { mealDbRecipeId } from '../mealdb/slug';
+import { savedKitchenRecipeIdsFromRecords } from '../savedRecipes/pickerRecipeIds';
+import type { SavedRecipeRecord } from '../savedRecipes/types';
 
 export interface MealPickerRecipeOption {
   recipeId: string;
@@ -12,19 +16,42 @@ export interface MealPickerRecipeOption {
   isSaved: boolean;
 }
 
+function kitchenCatalogWithSavedBookmarks(
+  feedKitchenRecipes: readonly Recipe[],
+  savedRecords: readonly SavedRecipeRecord[],
+): Recipe[] {
+  const byId = new Map(feedKitchenRecipes.map((recipe) => [recipe.id, recipe]));
+  for (const record of savedRecords) {
+    if (record.preview.kind === 'mealdb') {
+      const shape = record.preview.shape;
+      const id = shape.id.startsWith('mealdb-') ? shape.id : mealDbRecipeId(shape.id);
+      const recipe = mapNormalizedRecipeToAppRecipe({ ...shape, id });
+      if (!byId.has(recipe.id)) byId.set(recipe.id, recipe);
+    }
+    const kitchenId = record.kitchenRecipeId;
+    if (kitchenId && !byId.has(kitchenId)) {
+      const fromFeed = feedKitchenRecipes.find((row) => row.id === kitchenId);
+      if (fromFeed) byId.set(kitchenId, fromFeed);
+    }
+  }
+  return [...byId.values()];
+}
+
 export function buildMealPickerRecipeOptions(
   feedKitchenRecipes: readonly Recipe[],
   rankedMatches: RecipePantryMatch[],
   maxRecipes: number,
   savedRecipeIds: ReadonlySet<string>,
+  savedRecords: readonly SavedRecipeRecord[] = [],
 ): MealPickerRecipeOption[] {
-  const kitchen = [...feedKitchenRecipes];
+  const kitchen = kitchenCatalogWithSavedBookmarks(feedKitchenRecipes, savedRecords);
+  const savedIds = savedRecipeIds.size > 0 ? savedRecipeIds : savedKitchenRecipeIdsFromRecords(savedRecords);
   const byId = new Map(rankedMatches.map((row) => [row.recipeId, row]));
   const rankedIds = rankedMatches.map((row) => row.recipeId);
   const rankedSet = new Set(rankedIds);
 
   const savedFirst = kitchen
-    .filter((recipe) => savedRecipeIds.has(recipe.id) || isUserImportedKitchenRecipe(recipe))
+    .filter((recipe) => savedIds.has(recipe.id) || isUserImportedKitchenRecipe(recipe))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((recipe) => recipe.id);
 
@@ -39,7 +66,7 @@ export function buildMealPickerRecipeOptions(
   return orderedIds.map((recipeId) => {
     const recipe = kitchen.find((row) => row.id === recipeId);
     const match = byId.get(recipeId);
-    const isSaved = savedRecipeIds.has(recipeId) || (recipe != null && isUserImportedKitchenRecipe(recipe));
+    const isSaved = savedIds.has(recipeId) || (recipe != null && isUserImportedKitchenRecipe(recipe));
     return {
       recipeId,
       title: recipe?.name ?? recipeId,

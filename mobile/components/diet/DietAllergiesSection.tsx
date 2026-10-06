@@ -92,6 +92,7 @@ export function DietAllergiesSection({ value, onChange, compact }: DietAllergies
           value={dislikeDraft}
           onChangeText={setDislikeDraft}
           placeholder={DIET_PREF_COPY.dislikesPlaceholder}
+          accessibilityLabel={DIET_PREF_COPY.dislikesPlaceholder}
           className="flex-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-ink"
           onSubmitEditing={() => addDislike()}
           returnKeyType="done"
@@ -109,6 +110,7 @@ export function DietAllergiesSection({ value, onChange, compact }: DietAllergies
         <Switch
           value={value.hideConflicts}
           onValueChange={(hideConflicts) => onChange({ ...value, hideConflicts })}
+          accessibilityLabel={DIET_PREF_COPY.hideConflictsLabel}
           trackColor={{ true: THEME.primary, false: THEME.border }}
         />
       </View>
