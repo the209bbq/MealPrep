@@ -51,6 +51,7 @@ interface CreatorDto {
   channelUrl: string;
   avatarUrl: string | null;
   subscriberCount: number;
+  totalChannelViews: number;
   rank: number | null;
   fit: string;
   source: string | null;
@@ -82,6 +83,7 @@ interface CreatorRow {
   channel_url: string;
   avatar_url: string | null;
   subscriber_count: number;
+  total_views: number;
   avg_views: number;
   rank: number | null;
   fit: string | null;
@@ -111,6 +113,7 @@ function creatorToDto(row: CreatorRow): CreatorDto {
     channelUrl: row.channel_url,
     avatarUrl: row.avatar_url,
     subscriberCount: row.subscriber_count,
+    totalChannelViews: row.total_views ?? 0,
     rank: row.rank,
     fit: row.fit ?? 'Medium',
     source: row.source,
@@ -193,7 +196,7 @@ async function loadCreatorsMap(
   const { data, error } = await admin
     .from('recipe_creators')
     .select(
-      'id, youtube_channel_id, display_name, handle, channel_url, avatar_url, subscriber_count, avg_views, rank, fit, source',
+      'id, youtube_channel_id, display_name, handle, channel_url, avatar_url, subscriber_count, total_views, avg_views, rank, fit, source',
     )
     .eq('enabled', true);
   if (error) throw error;

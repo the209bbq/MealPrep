@@ -5,6 +5,8 @@ import { Ionicons } from '../../lib/icons/Ionicons';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
 import { CreatorAvatarsRow } from '../../components/recipes/CreatorAvatarsRow';
+import { CategoryAvatarsRow } from '../../components/recipes/CategoryAvatarsRow';
+import { RecipesTabCollapsibleSection } from '../../components/recipes/RecipesTabCollapsibleSection';
 import { CreatorRecipesFeedCard } from '../../components/recipes/CreatorRecipesFeedCard';
 import { CreatorRecipesFeedModeDropdown } from '../../components/recipes/CreatorRecipesFeedModeDropdown';
 import { RecipesFeedCardSkeleton } from '../../components/recipes/RecipesFeedCardSkeleton';
@@ -43,6 +45,15 @@ import { MyRecipesSheet } from '../../components/recipes/MyRecipesSheet';
 import { savedCreatorItemFromRecord } from '../../lib/savedRecipes/resolveRows';
 import { RECIPE_SOURCES } from '../../config/recipeSources';
 import { MEALDB_COPY } from '../../config/mealdb';
+import { RECIPES_TAB_SURFACE_COPY } from '../../config/recipesTabSurface';
+import type { MealDbCatalogCategory } from '../../config/recipesTabSurface';
+import { useRecipesTabSurface } from '../../hooks/useRecipesTabSurface';
+import { readRecipesTabSectionExpanded } from '../../lib/recipesTab/sectionExpanded';
+import { mealDbListCategories, countPassingRecipesForCategoryFromRows } from '../../lib/mealdb/categories';
+import { wontCookRefKeys } from '../../lib/recipeRanking/hardFilter';
+import { mealDbCategoryFromRecipeTag } from '../../lib/recipesTab/categoryDiet';
+import type { CreatorRotationSlot } from '../../lib/recipesTab/creatorRotation';
+import type { MealDbCategoryChip } from '../../lib/recipesTab/categoryRotation';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
@@ -122,6 +133,14 @@ export default function RecipesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [feedMode, setFeedMode] = useState<CreatorRecipesFeedMode>('popular');
   const [selectedCreator, setSelectedCreator] = useState<CreatorListItem | null>(null);
+  const [selectedClassicCategory, setSelectedClassicCategory] = useState<MealDbCatalogCategory | null>(
+    null,
+  );
+  const [mealDbCategoryMeta, setMealDbCategoryMeta] = useState<
+    Awaited<ReturnType<typeof mealDbListCategories>>
+  >([]);
+  const [mealDbCategoriesLoading, setMealDbCategoriesLoading] = useState(false);
+  const [sectionsExpanded, setSectionsExpanded] = useState(() => readRecipesTabSectionExpanded(ownerId));
 
   const handleFeedModeChange = useCallback((mode: CreatorRecipesFeedMode) => {
     setFeedMode(mode);
@@ -130,6 +149,7 @@ export default function RecipesScreen() {
   const handleSelectCreator = useCallback((creator: CreatorListItem) => {
     setSelectedCreator(creator);
   }, []);
+
   const creatorFeedEnabled =
     RECIPE_SOURCES.creatorRecipesPrimaryFeed && isCreatorRecipesConfigured();
   const browseMode: CreatorRecipesBrowseMode = feedMode;
@@ -179,14 +199,26 @@ export default function RecipesScreen() {
     return () => registerSavedRecipeToggleOutcome(null);
   }, [handleSavedRecipeToggleOutcome, registerSavedRecipeToggleOutcome]);
 
+  const creatorsCatalogEnabled =
+    creatorFeedEnabled &&
+    !searchQuery.trim() &&
+    !selectedCreator &&
+    sectionsExpanded.creators;
+
   const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
-    enabled: creatorFeedEnabled && !searchQuery.trim() && !selectedCreator,
+    enabled: creatorsCatalogEnabled,
   });
 
   const { videos: feedVideos, loading: feedLoading, error: feedError } = useCreatorFeed(
     session,
     browseMode,
-    { enabled: creatorFeedEnabled && !searchQuery.trim() && !selectedCreator },
+    {
+      enabled:
+        creatorFeedEnabled &&
+        !searchQuery.trim() &&
+        !selectedCreator &&
+        (sectionsExpanded.creators || Boolean(selectedCreator)),
+    },
   );
 
   const {
@@ -204,7 +236,52 @@ export default function RecipesScreen() {
     loadingMore: mealDbLoadingMore,
     error: mealDbError,
     refreshMealDb,
-  } = useMealDbRecipes(pantry, { enabled: showCreatorCatalogSections });
+  } = useMealDbRecipes(pantry, {
+    enabled: showCreatorCatalogSections && sectionsExpanded.classic,
+  });
+
+  const categoryPassCounts = useMemo(() => {
+    const wont = wontCookRefKeys(recipeRanking.events);
+    const map = new Map<MealDbCatalogCategory, number>();
+    for (const meta of mealDbCategoryMeta) {
+      map.set(
+        meta.category,
+        countPassingRecipesForCategoryFromRows(meta.category, mealDbRows, userDietPrefs, wont),
+      );
+    }
+    return map;
+  }, [mealDbCategoryMeta, mealDbRows, recipeRanking.events, userDietPrefs]);
+
+  const tabSurface = useRecipesTabSurface({
+    ownerId,
+    enabled: showCreatorCatalogSections,
+    creators,
+    feedVideos,
+    categoryMeta: mealDbCategoryMeta,
+    categoryPassCounts,
+    dietPrefs: userDietPrefs,
+    householdSize: profile.householdSize,
+    engagementIndex: recipeRanking.engagementIndex,
+    recipeEvents: recipeRanking.events,
+    sectionsExpanded,
+    onSectionsExpandedChange: setSectionsExpanded,
+  });
+
+  useEffect(() => {
+    if (!showCreatorCatalogSections || !sectionsExpanded.classic) return;
+    let cancelled = false;
+    setMealDbCategoriesLoading(true);
+    void mealDbListCategories()
+      .then((rows) => {
+        if (!cancelled) setMealDbCategoryMeta(rows);
+      })
+      .finally(() => {
+        if (!cancelled) setMealDbCategoriesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sectionsExpanded.classic, showCreatorCatalogSections]);
 
   const {
     viralOpenState,
@@ -309,10 +386,22 @@ export default function RecipesScreen() {
     if (!showCreatorCatalogSections) return [];
     const diet = filterRecipesTabRowsForDietPrefs(mealDbRows, userDietPrefs);
     const main = applyMainIngredientToTabRows(diet);
-    return rankTabRows(main);
+    const byCategory = selectedClassicCategory
+      ? main.filter((row) => {
+          if (row.kind === 'kitchen') {
+            return mealDbCategoryFromRecipeTag(row.recipe.tag) === selectedClassicCategory;
+          }
+          return (
+            mealDbCategoryFromRecipeTag(row.recipe.meal_type ?? row.recipe.cuisine ?? null) ===
+            selectedClassicCategory
+          );
+        })
+      : main;
+    return rankTabRows(byCategory);
   }, [
     applyMainIngredientToTabRows,
     mealDbRows,
+    selectedClassicCategory,
     showCreatorCatalogSections,
     userDietPrefs,
     rankTabRows,
@@ -682,6 +771,22 @@ export default function RecipesScreen() {
     });
   }, [detailRankingRefKey, detailRow, logCook, logSave, openSwapRecipe]);
 
+  const handleCreatorSlotPress = useCallback(
+    (slot: CreatorRotationSlot) => {
+      tabSurface.logCreatorOpen(slot.creator.id, slot.position, slot.slotType);
+      handleSelectCreator(slot.creator);
+    },
+    [handleSelectCreator, tabSurface],
+  );
+
+  const handleCategoryChipPress = useCallback(
+    (chip: MealDbCategoryChip) => {
+      tabSurface.logCategoryOpen(chip.category, chip.position);
+      setSelectedClassicCategory(chip.category);
+    },
+    [tabSurface],
+  );
+
   function openSavedRecipeRow(row: RecipesTabRow) {
     setMyRecipesOpen(false);
     if (row.kind === 'kitchen' && row.recipe.id.startsWith('viral-preview-')) {
@@ -880,56 +985,95 @@ export default function RecipesScreen() {
 
       {showCreatorCatalogSections && !searching && !showMainIngredientEmpty ? (
         <>
-          <RecipesFeedSectionLabel title={MEALDB_COPY.feedModeLabel} />
-          {mealDbBlockingLoad ? <RecipesFeedCardSkeleton count={4} /> : null}
-          {classicRecipeRows.map((row) => (
-            <RecipesUnifiedFeedCard
-              key={row.recipe.id}
-              row={row}
-              saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
-              onToggleSave={
-                row.kind === 'kitchen'
-                  ? () => {
-                      if (row.kind !== 'kitchen') return;
-                      savedRecipes.toggleKitchenRecipe(row.recipe);
-                    }
-                  : undefined
+          <RecipesTabCollapsibleSection
+            title={RECIPES_TAB_SURFACE_COPY.classicSectionTitle}
+            expanded={tabSurface.sections.classic}
+            onToggle={() => tabSurface.setClassicExpanded(!tabSurface.sections.classic)}
+            loading={tabSurface.sections.classic && (mealDbBlockingLoad || mealDbCategoriesLoading)}
+          >
+            {selectedClassicCategory ? (
+              <Pressable
+                onPress={() => setSelectedClassicCategory(null)}
+                className="mb-2 min-h-[36px] justify-center"
+                accessibilityRole="button"
+                accessibilityLabel="Show all classic categories"
+              >
+                <Text className="text-sm font-semibold text-primary">
+                  ← All {selectedClassicCategory} recipes
+                </Text>
+              </Pressable>
+            ) : null}
+            <CategoryAvatarsRow
+              chips={tabSurface.categoryChips}
+              onSelect={handleCategoryChipPress}
+              onImpression={(chip) =>
+                tabSurface.logCategoryImpression(chip.category, chip.position)
               }
-              saveDisabled={
-                row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false
-              }
-              onOpen={() => openDetail(row)}
-              onCook={() => openCookSheetForRow(row)}
             />
-          ))}
-          {mealDbLoadingMore && classicRecipeRows.length > 0 ? (
-            <View className="mt-1 flex-row items-center gap-2">
-              <ActivityIndicator color={THEME.primary} size="small" />
-              <Text className="text-xs text-muted">{MEALDB_COPY.loading}</Text>
-            </View>
-          ) : null}
+            {mealDbBlockingLoad ? <RecipesFeedCardSkeleton count={4} /> : null}
+            {classicRecipeRows.map((row) => (
+              <RecipesUnifiedFeedCard
+                key={row.recipe.id}
+                row={row}
+                saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
+                onToggleSave={
+                  row.kind === 'kitchen'
+                    ? () => {
+                        if (row.kind !== 'kitchen') return;
+                        savedRecipes.toggleKitchenRecipe(row.recipe);
+                      }
+                    : undefined
+                }
+                saveDisabled={
+                  row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false
+                }
+                onOpen={() => openDetail(row)}
+                onCook={() => openCookSheetForRow(row)}
+              />
+            ))}
+            {mealDbLoadingMore && classicRecipeRows.length > 0 ? (
+              <View className="mt-1 flex-row items-center gap-2">
+                <ActivityIndicator color={THEME.primary} size="small" />
+                <Text className="text-xs text-muted">{MEALDB_COPY.loading}</Text>
+              </View>
+            ) : null}
+          </RecipesTabCollapsibleSection>
 
-          <RecipesFeedSectionLabel
+          <RecipesTabCollapsibleSection
             title={CREATOR_RECIPES_COPY.creatorsSectionTitle}
-            className="mb-2 mt-6"
-          />
-          {!selectedCreator ? (
-            <>
-              <CreatorAvatarsRow creators={creators} onSelect={handleSelectCreator} />
-              {creatorsLoading ? (
-                <View className="mt-3 flex-row items-center gap-2">
-                  <ActivityIndicator color={THEME.primary} size="small" />
-                  <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loadingCreators}</Text>
-                </View>
-              ) : null}
-              {!creatorsLoading && creatorsError ? (
-                <Text className="mt-2 text-xs text-muted">{creatorsError}</Text>
-              ) : null}
-              {!creatorsLoading && creators.length === 0 ? (
-                <Text className="mt-2 text-xs text-muted">{CREATOR_RECIPES_COPY.emptyCreators}</Text>
-              ) : null}
-            </>
-          ) : null}
+            expanded={tabSurface.sections.creators}
+            onToggle={() => tabSurface.setCreatorsExpanded(!tabSurface.sections.creators)}
+            loading={tabSurface.sections.creators && creatorsLoading && creators.length === 0}
+          >
+            {!selectedCreator ? (
+              <>
+                <CreatorAvatarsRow
+                  slots={tabSurface.creatorSlots}
+                  onSelect={handleCreatorSlotPress}
+                  onImpression={(slot) =>
+                    tabSurface.logCreatorImpression(
+                      slot.creator.id,
+                      slot.position,
+                      slot.slotType,
+                    )
+                  }
+                />
+                {creatorsLoading ? (
+                  <View className="mt-3 flex-row items-center gap-2">
+                    <ActivityIndicator color={THEME.primary} size="small" />
+                    <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loadingCreators}</Text>
+                  </View>
+                ) : null}
+                {!creatorsLoading && creatorsError ? (
+                  <Text className="mt-2 text-xs text-muted">{creatorsError}</Text>
+                ) : null}
+                {!creatorsLoading && tabSurface.creatorSlots.length === 0 ? (
+                  <Text className="mt-2 text-xs text-muted">{CREATOR_RECIPES_COPY.emptyCreators}</Text>
+                ) : null}
+              </>
+            ) : null}
+          </RecipesTabCollapsibleSection>
+
           {browseVideoModels.map((model) => (
             <CreatorRecipesFeedCard
               key={model.videoId}

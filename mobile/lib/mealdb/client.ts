@@ -103,6 +103,28 @@ export async function mealDbFilterByIngredient(ingredient: string): Promise<stri
   return data.meals.map((row) => row.idMeal);
 }
 
+export async function mealDbFilterByCategory(category: string): Promise<string[]> {
+  const path = `filter.php?c=${encodeURIComponent(category.trim())}`;
+  const data = await mealDbFetch<MealDbFilterResponse>(path);
+  if (!data?.meals) return [];
+  return data.meals.map((row) => row.idMeal);
+}
+
+interface MealDbCategoriesResponse {
+  categories?: { strCategory: string; strCategoryThumb: string | null }[];
+}
+
+export async function mealDbFetchCategories(): Promise<
+  { category: string; thumbUrl: string | null }[]
+> {
+  const data = await mealDbFetch<MealDbCategoriesResponse>('categories.php');
+  if (!data?.categories) return [];
+  return data.categories.map((row) => ({
+    category: row.strCategory.trim(),
+    thumbUrl: row.strCategoryThumb?.trim() || null,
+  }));
+}
+
 export async function mealDbLookupMeal(idMeal: string): Promise<MealDbMealDetail | null> {
   const path = `lookup.php?i=${encodeURIComponent(idMeal)}`;
   const data = await mealDbFetch<MealDbMealsResponse>(path);

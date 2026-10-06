@@ -20,6 +20,7 @@ export interface ScheduleRecipeTarget {
   pantryRecipeId: string;
   refKey: string;
   source: RecipeEngagementSource;
+  creatorId?: string;
   categoryLabel: string;
   tags?: string[];
   match: RecipePantryMatch | null;
@@ -107,6 +108,7 @@ export function scheduleTargetFromRecipesTabRow(
 export function scheduleTargetFromCreatorModel(
   model: CreatorFeedCardModel,
   options?: ScheduleRecipeOpenOptions,
+  creatorId?: string | null,
 ): ScheduleRecipeTarget {
   const recipe = model.importedRecipe;
   const match = model.match;
@@ -116,6 +118,7 @@ export function scheduleTargetFromCreatorModel(
       ...target,
       refKey: refKeyFromCreatorModel(model),
       source: 'creator',
+      creatorId: creatorId ?? undefined,
       categoryLabel: recipe.tag,
     };
   }
@@ -127,6 +130,7 @@ export function scheduleTargetFromCreatorModel(
     pantryRecipeId: model.videoId,
     refKey: refKeyFromCreatorModel(model),
     source: 'creator',
+    creatorId: creatorId ?? undefined,
     categoryLabel: 'Creator',
     tags: [],
     match,

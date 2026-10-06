@@ -2,6 +2,7 @@ import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import type { Recipe } from '../../types/mealprep';
 import type { RecipeDiscoveryListItem } from '../recipeDiscovery/types';
 import type { CreatorFeedCardModel } from '../recipes/creatorFeedRows';
+import type { CreatorVideoItem } from '../creatorVideos/types';
 
 export function ingredientLinesFromRecipe(recipe: Recipe): string[] {
   return recipe.ingredients.map((ing) => ing.name).filter(Boolean);
@@ -28,6 +29,15 @@ function titleAndDescriptionLines(model: CreatorFeedCardModel): string[] {
   const description = model.video.descriptionSnippet?.trim();
   if (description) lines.push(description);
   return lines;
+}
+
+export function ingredientLinesFromCreatorVideo(video: CreatorVideoItem): string[] | null {
+  const lines: string[] = [];
+  const title = video.title?.trim();
+  if (title) lines.push(title);
+  const description = video.descriptionSnippet?.trim();
+  if (description) lines.push(description);
+  return lines.length > 0 ? lines : null;
 }
 
 export function ingredientLinesFromCreatorModel(model: CreatorFeedCardModel): string[] | null {
