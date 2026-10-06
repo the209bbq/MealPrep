@@ -7,6 +7,7 @@ import {
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { router } from 'expo-router';
+import { APP_ROUTES } from '../../config/appRoutes';
 import { Card } from '../Card';
 import { AddMealPickerSheet } from './AddMealPickerSheet';
 import { MealCalendarMonthModal } from './MealCalendarMonthModal';
@@ -33,14 +34,14 @@ function openRecipeFromMeal(item: MealPlanItem, recipeId: string | null): void {
     }
   }
   if (recipeId) {
-    router.push({ pathname: '/recipes', params: { recipeId } });
+    router.push({ pathname: '/', params: { recipeId } });
     return;
   }
   if (item.recipeApiId != null) {
     router.push(`/discover-recipes/${item.recipeApiId}`);
     return;
   }
-  router.push('/recipes');
+  router.push(APP_ROUTES.home);
 }
 
 export function MealWeekCalendarCard() {

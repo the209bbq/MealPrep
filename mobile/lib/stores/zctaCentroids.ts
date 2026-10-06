@@ -1,3 +1,4 @@
+import { haversineMiles } from '../../config/smartShop';
 import type { GeocodedPoint } from './nominatim';
 
 export type ZctaCentroidMap = Record<string, [number, number]>;
@@ -32,4 +33,20 @@ export async function lookupZctaCentroid(zip: string): Promise<GeocodedPoint | n
   const [lat, lng] = row;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   return { lat, lng };
+}
+
+/** Nearest 5-digit ZCTA for device coordinates (bundled centroids; no network). */
+export async function nearestZctaZip(lat: number, lng: number): Promise<string | null> {
+  const map = await loadZctaCentroids();
+  let bestZip: string | null = null;
+  let bestDist = Infinity;
+  for (const [zip, [zLat, zLng]] of Object.entries(map)) {
+    if (!Number.isFinite(zLat) || !Number.isFinite(zLng)) continue;
+    const dist = haversineMiles({ lat, lng }, { lat: zLat, lng: zLng });
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestZip = zip;
+    }
+  }
+  return bestZip;
 }

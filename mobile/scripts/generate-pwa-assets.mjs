@@ -82,7 +82,7 @@ function writeManifest() {
     theme_color: THEME.primaryDark,
     background_color: THEME.paper,
     share_target: {
-      action: webPath('/recipes?import=1'),
+      action: webPath('/?import=1'),
       method: 'GET',
       enctype: 'application/x-www-form-urlencoded',
       params: {

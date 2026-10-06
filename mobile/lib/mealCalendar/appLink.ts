@@ -7,5 +7,5 @@ export function buildRecipeAppLink(recipeId: string): string {
     typeof window !== 'undefined' && window.location?.origin
       ? window.location.origin
       : 'https://mealplanatic.app';
-  return `${origin}${base}/recipes?recipeId=${encodeURIComponent(recipeId)}`;
+  return `${origin}${base}/?recipeId=${encodeURIComponent(recipeId)}`;
 }

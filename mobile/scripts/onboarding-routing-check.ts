@@ -19,4 +19,8 @@ assert.ok(adminTab);
 assert.equal(adminTab?.title, 'Admin');
 assert.equal(adminTab?.adminOnly, true);
 
+assert.equal(TABS[0]?.name, 'index');
+assert.equal(TABS[0]?.title, 'Home');
+assert.equal(TABS.find((t) => t.name === 'recipes'), undefined);
+
 console.log('onboarding-routing-check: ok');

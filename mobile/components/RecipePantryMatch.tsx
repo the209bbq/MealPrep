@@ -76,7 +76,7 @@ export function CookFromPantryCard({ recommendations, recipes, onOpenRecipe, onA
           ) : null}
         </View>
       ))}
-      <Pressable onPress={() => router.push('/recipes')} className="mt-2 items-center py-2">
+      <Pressable onPress={() => router.push('/')} className="mt-2 items-center py-2">
         <Text className="text-sm font-bold text-primary-dark">{RECIPES_COPY.cookFromPantryCard.seeAllOnRecipes}</Text>
       </Pressable>
     </Card>

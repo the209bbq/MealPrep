@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ACCOUNT_SHEET_COPY, HOUSEHOLD_SIZE_LIMITS } from '../../config/account';
 import { useApp } from '../../context/AppContext';
 import { readSavedZip } from '../../lib/smartShop/storage';
-import { localZipPlaceLabel } from '../../lib/stores/localZipTable';
+import { prefillHomeZipFromGrantedLocation } from '../../lib/profile/prefillHomeZipFromLocation';
+import { PROFILE_HOME_ZIP_COPY, validateOptionalHomeZip } from '../../lib/profile/homeZip';
 import { DietAllergiesSection } from '../diet/DietAllergiesSection';
 import { DIET_PREF_COPY } from '../../config/diet';
 import type { UserDietPrefs } from '../../lib/diet/types';
 import { ProfileAvatar } from './ProfileAvatar';
 import { pickProfilePhotoFromLibrary } from './pickProfilePhoto';
+import { HomeZipField } from './HomeZipField';
 
 type PostSignupProfileSheetProps = {
   visible: boolean;
@@ -22,13 +24,34 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
     useApp();
   const [dietPrefs, setDietPrefs] = useState<UserDietPrefs>(userDietPrefs);
   const [name, setName] = useState(profile.name);
-  const [zip, setZip] = useState(profile.homeZip?.trim() || readSavedZip());
+  const [zip, setZip] = useState(() => formatInitialZip(profile));
   const [householdSize, setHouseholdSize] = useState(String(profile.householdSize || 2));
   const [photoPreview, setPhotoPreview] = useState<string | null>(profile.photoUrl);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zipError, setZipError] = useState<string | null>(null);
+  const [locationCoords, setLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [hideZipField, setHideZipField] = useState(false);
+  const [zipHint, setZipHint] = useState<string | null>(null);
 
-  const zipLabel = localZipPlaceLabel(zip);
+  useEffect(() => {
+    if (profile.homeZip?.trim() || readSavedZip()) return;
+    let cancelled = false;
+    void prefillHomeZipFromGrantedLocation().then((prefill) => {
+      if (cancelled || !prefill) return;
+      setLocationCoords({ lat: prefill.lat, lng: prefill.lng });
+      if (prefill.zip) {
+        setZip(prefill.zip);
+        setZipHint(PROFILE_HOME_ZIP_COPY.fromLocationHint);
+      } else {
+        setHideZipField(true);
+        setZipHint(PROFILE_HOME_ZIP_COPY.usingLocationSkip);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile.homeZip, profile.id]);
 
   async function onPickPhoto() {
     setError(null);
@@ -48,12 +71,26 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
   async function save(andClose: boolean) {
     setBusy(true);
     setError(null);
+    setZipError(null);
     try {
+      const zipValidation = hideZipField && !zip.trim()
+        ? { ok: true as const, zip: '' }
+        : validateOptionalHomeZip(zip);
+      if (!zipValidation.ok) {
+        setZipError(zipValidation.message);
+        return;
+      }
       const size = Math.min(
         HOUSEHOLD_SIZE_LIMITS.max,
         Math.max(HOUSEHOLD_SIZE_LIMITS.min, Number.parseInt(householdSize, 10) || 2),
       );
-      await saveProfileSetup({ name: name.trim(), homeZip: zip.trim(), householdSize: size });
+      await saveProfileSetup({
+        name: name.trim(),
+        homeZip: zipValidation.zip,
+        householdSize: size,
+        homeLat: locationCoords?.lat,
+        homeLng: locationCoords?.lng,
+      });
       await saveUserDietPrefs(dietPrefs);
       if (andClose) onDone();
     } catch (err) {
@@ -89,18 +126,6 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
         autoCapitalize="words"
       />
 
-      <Text className="mt-4 text-sm font-semibold text-ink">{ACCOUNT_SHEET_COPY.homeZipLabel}</Text>
-      <TextInput
-        value={zip}
-        onChangeText={setZip}
-        keyboardType="number-pad"
-        maxLength={10}
-        className="mt-2 rounded-xl border border-border bg-card px-3 py-2 text-ink"
-        placeholder="ZIP"
-        accessibilityLabel={ACCOUNT_SHEET_COPY.homeZipLabel}
-      />
-      {zipLabel ? <Text className="mt-1 text-xs text-muted">{zipLabel}</Text> : null}
-
       <Text className="mt-4 text-sm font-semibold text-ink">{ACCOUNT_SHEET_COPY.householdLabel}</Text>
       <TextInput
         value={householdSize}
@@ -109,6 +134,21 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
         className="mt-2 rounded-xl border border-border bg-card px-3 py-2 text-ink"
         accessibilityLabel={ACCOUNT_SHEET_COPY.householdLabel}
       />
+
+      {hideZipField && zipHint ? (
+        <Text className="mt-4 text-xs text-muted">{zipHint}</Text>
+      ) : (
+        <HomeZipField
+          value={zip}
+          onChange={(next) => {
+            setZip(next);
+            setZipError(null);
+            setHideZipField(false);
+          }}
+          hint={zipHint}
+          error={zipError}
+        />
+      )}
 
       <DietAllergiesSection value={dietPrefs} onChange={setDietPrefs} compact />
 
@@ -130,6 +170,13 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
       </Pressable>
     </ScrollView>
   );
+}
+
+function formatInitialZip(profile: { homeZip?: string }): string {
+  const fromProfile = profile.homeZip?.trim() ?? '';
+  if (fromProfile) return fromProfile.replace(/\D/g, '').slice(0, 5);
+  const saved = readSavedZip();
+  return saved ? saved.replace(/\D/g, '').slice(0, 5) : '';
 }
 
 export function PostSignupProfileSheet({ visible, onDone }: PostSignupProfileSheetProps) {

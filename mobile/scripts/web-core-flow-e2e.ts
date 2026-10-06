@@ -164,8 +164,8 @@ async function countRecipeFeedCards(page: Page): Promise<number> {
 }
 
 async function exerciseEmptyPantryRecipesBrowse(page: Page, pointer: FilterPointer): Promise<void> {
-  await page.getByRole('tab', { name: 'Recipes' }).click();
-  await page.waitForURL(/\/recipes/, { timeout: 15_000 });
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.waitForURL(/\/?$|\/index/, { timeout: 15_000 });
   await page
     .getByText(RECIPES_COPY.cookNowCard.emptyPantryBrowseHint, { exact: true })
     .waitFor({ timeout: 15_000 });
@@ -190,8 +190,8 @@ async function exerciseEmptyPantryRecipesBrowse(page: Page, pointer: FilterPoint
 }
 
 async function exerciseRecipesFilterSheet(page: Page, pointer: FilterPointer): Promise<void> {
-  await page.getByRole('tab', { name: 'Recipes' }).click();
-  await page.waitForURL(/\/recipes/, { timeout: 15_000 });
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.waitForURL(/\/?$|\/index/, { timeout: 15_000 });
 
   const feedCards = page.locator('[class*="mb-3"]').filter({
     has: page.getByText(RECIPES_COPY.recipeCard.addMissingCta, { exact: true }),
@@ -244,7 +244,7 @@ async function exerciseRecipesQuestionFilter(page: Page): Promise<void> {
 /** Nudge is Home-only; demo/web E2E runs without Supabase (demo mode hides the nudge entirely). */
 async function assertGuestSaveNudgeNotOnKitchenTabs(page: Page): Promise<void> {
   const message = GUEST_SAVE_NUDGE_CONFIG.copy.message;
-  for (const tab of ['Pantry', 'Recipes', 'Grocery'] as const) {
+  for (const tab of ['Pantry', 'Grocery'] as const) {
     await page.getByRole('tab', { name: tab }).click();
     const body = await page.locator('body').innerText();
     assert(!body.includes(message), `guest save nudge should not appear on ${tab}`);
@@ -252,8 +252,8 @@ async function assertGuestSaveNudgeNotOnKitchenTabs(page: Page): Promise<void> {
 }
 
 async function addMissingFromRecipes(page: Page): Promise<string> {
-  await page.getByRole('tab', { name: 'Recipes' }).click();
-  await page.waitForURL(/\/recipes/, { timeout: 15_000 });
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.waitForURL(/\/?$|\/index/, { timeout: 15_000 });
 
   const addMissing = page.getByText(RECIPES_COPY.recipeCard.addMissingCta, { exact: true }).first();
   await addMissing.waitFor({ timeout: 30_000 });
@@ -322,6 +322,8 @@ async function smartShopWithMockStores(page: Page): Promise<void> {
 async function verifyHomeMealCalendar(page: Page): Promise<void> {
   await page.getByRole('tab', { name: 'Home' }).click();
   await page.waitForURL(/\/?$|\/index/, { timeout: 15_000 });
+  await page.getByRole('button', { name: 'My recipes and week plan' }).click();
+  await page.getByText('Week plan', { exact: true }).waitFor({ timeout: 10_000 });
   await page.getByText('This week', { exact: true }).waitFor({ timeout: 15_000 });
   await page.getByText('+ Add meal', { exact: true }).first().waitFor({ timeout: 10_000 });
   await page.getByText('Shop for this week', { exact: true }).waitFor({ timeout: 10_000 });

@@ -22,13 +22,6 @@ export const APP_SCHEME = 'mealprep';
 
 export const TABS: TabConfig[] = [
   { name: 'index', title: 'Home', href: '/', icon: 'home-outline', iconActive: 'home' },
-  {
-    name: 'recipes',
-    title: 'Recipes',
-    href: '/recipes',
-    icon: 'restaurant-outline',
-    iconActive: 'restaurant',
-  },
   { name: 'pantry', title: 'Pantry', href: '/pantry', icon: 'leaf-outline', iconActive: 'leaf' },
   {
     name: 'grocery',

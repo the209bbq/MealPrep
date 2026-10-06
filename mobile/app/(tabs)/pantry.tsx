@@ -642,7 +642,7 @@ export default function PantryScreen() {
   function cookWithPantryItem(item: PantryItem) {
     closeManualModal();
     router.push({
-      pathname: '/recipes',
+      pathname: '/',
       params: { cookWith: encodeURIComponent(item.name.trim()) },
     });
   }
@@ -823,7 +823,7 @@ export default function PantryScreen() {
             <Pressable
               onPress={() => {
                 setScanRecipeCount(null);
-                router.push('/recipes');
+                router.push(APP_ROUTES.home);
               }}
               className="mt-3 items-center rounded-xl bg-primary py-3"
             >

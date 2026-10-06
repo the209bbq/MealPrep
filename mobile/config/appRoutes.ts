@@ -4,7 +4,8 @@ import type { Href } from 'expo-router';
 export const APP_ROUTES = {
   home: '/' as Href,
   pantry: '/pantry' as Href,
-  recipes: '/recipes' as Href,
+  /** Recipe feed and imports (same screen as home). */
+  recipes: '/' as Href,
   grocery: '/grocery' as Href,
   /** Legacy email links; screen redirects to home. */
   profile: '/profile' as Href,
