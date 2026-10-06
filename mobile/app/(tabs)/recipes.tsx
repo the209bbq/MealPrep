@@ -7,6 +7,7 @@ import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
 import { CreatorAvatarsRow } from '../../components/recipes/CreatorAvatarsRow';
 import { CreatorRecipesFeedCard } from '../../components/recipes/CreatorRecipesFeedCard';
 import { CreatorRecipesFeedModeDropdown } from '../../components/recipes/CreatorRecipesFeedModeDropdown';
+import { RecipesFeedCardSkeleton } from '../../components/recipes/RecipesFeedCardSkeleton';
 import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedFeedCard';
 import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
 import { RecipesEmptyState } from '../../components/RecipesEmptyState';
@@ -191,6 +192,7 @@ export default function RecipesScreen() {
   const {
     rows: mealDbRows,
     loading: mealDbLoading,
+    loadingMore: mealDbLoadingMore,
     error: mealDbError,
     refreshMealDb,
   } = useMealDbRecipes(pantry, { enabled: showCreatorCatalogSections });
@@ -399,10 +401,20 @@ export default function RecipesScreen() {
     filteredRows.length === 0 &&
     !searching;
 
+  const mealDbBlockingLoad = mealDbLoading && mealDbRows.length === 0;
+  const creatorFeedBlockingLoad =
+    showCreatorCatalogSections &&
+    !selectedCreator &&
+    feedLoading &&
+    browseVideoModels.length === 0 &&
+    creators.length === 0 &&
+    mealDbBlockingLoad;
+
   const listLoading =
     (searching && searchLoading) ||
-    (showCreatorCatalogSections && (mealDbLoading || (selectedCreator ? channelLoading : feedLoading))) ||
-    (showLegacyKitchenFeed && mealDbLoading);
+    (showCreatorCatalogSections && selectedCreator && channelLoading) ||
+    creatorFeedBlockingLoad ||
+    (showLegacyKitchenFeed && mealDbBlockingLoad);
 
   const showCatalogEmpty =
     !showFilterEmpty &&
@@ -779,6 +791,7 @@ export default function RecipesScreen() {
       {showCreatorCatalogSections && !searching && !showMainIngredientEmpty ? (
         <>
           <RecipesFeedSectionLabel title={MEALDB_COPY.feedModeLabel} />
+          {mealDbBlockingLoad ? <RecipesFeedCardSkeleton count={4} /> : null}
           {classicRecipeRows.map((row) => (
             <RecipesUnifiedFeedCard
               key={row.recipe.id}
@@ -798,6 +811,12 @@ export default function RecipesScreen() {
               onOpen={() => openDetail(row)}
             />
           ))}
+          {mealDbLoadingMore && classicRecipeRows.length > 0 ? (
+            <View className="mt-1 flex-row items-center gap-2">
+              <ActivityIndicator color={THEME.primary} size="small" />
+              <Text className="text-xs text-muted">{MEALDB_COPY.loading}</Text>
+            </View>
+          ) : null}
 
           <RecipesFeedSectionLabel
             title={CREATOR_RECIPES_COPY.creatorsSectionTitle}
@@ -832,6 +851,15 @@ export default function RecipesScreen() {
               }}
             />
           ))}
+          {!selectedCreator &&
+          browseVideoModels.length === 0 &&
+          feedLoading &&
+          !showMainIngredientEmpty ? (
+            <View className="mt-2 flex-row items-center gap-2">
+              <ActivityIndicator color={THEME.primary} size="small" />
+              <Text className="text-xs text-muted">{CREATOR_RECIPES_COPY.loading}</Text>
+            </View>
+          ) : null}
           {!selectedCreator &&
           browseVideoModels.length === 0 &&
           !feedLoading &&

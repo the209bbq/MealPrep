@@ -63,7 +63,7 @@
     "test:cost-per-serving": "npx tsx scripts/cost-per-serving-check.ts",
     "test:main-ingredient": "npx tsx scripts/main-ingredient-check.ts",
     "test:recipe-ranking": "npx tsx scripts/recipe-ranking-check.ts",
-    "test:mealdb": "npx tsx scripts/mealdb-normalize-check.ts",
+    "test:mealdb": "npx tsx scripts/mealdb-normalize-check.ts && npx tsx scripts/mealdb-lookup-concurrency-check.ts",
     "test:viral-recipes": "npx tsx scripts/viral-recipes-check.ts && npx tsx scripts/viral-recipes-relevance-check.ts && npx tsx scripts/viral-recipes-feed-check.ts",
     "test:viral-recipes-live": "npx tsx scripts/viral-recipes-live-sample.ts",
     "test:recipes-tab-catalog": "npx tsx scripts/recipes-tab-catalog-check.ts",
