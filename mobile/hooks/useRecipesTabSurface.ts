@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useHydrated } from './useHydrated';
 import { useRecipesTabVisitSession } from '../lib/recipesTab/useVisitSessionOnFocus';
 import type { MealDbCatalogCategory } from '../config/recipesTabSurface';
 import type { CreatorListItem } from '../lib/creatorVideos/types';
@@ -62,9 +63,8 @@ export function useRecipesTabSurface(options: {
     onSectionsExpandedChange,
     manualRotationEpoch,
   } = options;
-  const [surfaceEvents, setSurfaceEvents] = useState<RecipesTabSurfaceEvent[]>(() =>
-    readRecipesTabSurfaceEvents(ownerId),
-  );
+  const hydrated = useHydrated();
+  const [surfaceEvents, setSurfaceEvents] = useState<RecipesTabSurfaceEvent[]>([]);
   const committedVisitRef = useRef<string | null>(null);
   const visitStateForRotationRef = useRef<RecipesTabVisitState | null>(null);
   const impressedCreatorsRef = useRef<Set<string>>(new Set());
@@ -77,6 +77,11 @@ export function useRecipesTabSurface(options: {
   useEffect(() => {
     visitStateForRotationRef.current = visitSession?.state ?? null;
   }, [visitSession]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setSurfaceEvents(readRecipesTabSurfaceEvents(ownerId));
+  }, [hydrated, ownerId]);
 
   useEffect(() => {
     committedVisitRef.current = null;

@@ -25,9 +25,9 @@ export const RECIPE_IMPORT = {
 
 export const RECIPE_IMPORT_COPY = {
   importButton: 'Import',
-  importButtonAccessibility: 'Import a recipe',
+  importButtonAccessibility: 'Import recipe',
   importBoxPlaceholder: 'Paste a link or recipe text',
-  importBoxLabel: 'Import recipe',
+  importBoxLabel: 'Paste a video link or recipe text',
   redditPasteTip:
     "Reddit doesn't let apps read posts. Copy the recipe text or screenshot it, then paste it here or tap 📷.",
   removeSourceCta: 'Remove source',

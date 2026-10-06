@@ -188,14 +188,19 @@ export function RecipeImportBox({
       setError(RECIPE_IMPORT_COPY.guestSignInMessage);
       return;
     }
-    setLoading(true);
     setError(null);
+    let images: RecipeImportPickedImage[] = [];
     try {
-      const images = await pickRecipeImportPhotoFromCamera();
-      if (images.length === 0) {
-        setLoading(false);
-        return;
-      }
+      images = await pickRecipeImportPhotoFromCamera();
+    } catch (err) {
+      handleImportError(err);
+      return;
+    }
+    if (images.length === 0) {
+      return;
+    }
+    setLoading(true);
+    try {
       const paths = await uploadPickedImages(images);
       if (!paths) {
         setLoading(false);

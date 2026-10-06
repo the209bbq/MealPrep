@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { CookConfirmBanner } from '../../components/home/CookConfirmBanner';
@@ -67,6 +67,10 @@ import type { MealDbCategoryChip } from '../../lib/recipesTab/categoryRotation';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { useHomeRecipePrefetch } from '../../hooks/useHomeRecipePrefetch';
 import { useHomeRecipesRefresh } from '../../hooks/useHomeRecipesRefresh';
+import {
+  HomeWebPullRefreshIndicator,
+  useHomeScrollRefresh,
+} from '../../hooks/useHomeScrollRefresh';
 import { prefetchMealDbCategoryOnIntent } from '../../lib/mealdb/homePrefetch';
 import {
   clearMealDbCategoryFeedSnapshot,
@@ -489,6 +493,12 @@ export default function HomeScreen() {
     });
 
   const searching = searchQuery.trim().length >= 2;
+
+  const homeScrollRefresh = useHomeScrollRefresh({
+    enabled: showCreatorCatalogSections && !searching,
+    refreshing: homeRecipesRefresh.refreshing,
+    onRefresh: homeRecipesRefresh.onRefresh,
+  });
 
   const searchResultsFiltered = useMemo(() => {
     const diet = filterRecipeSearchResultsForDietPrefs(searchResults, userDietPrefs);
@@ -914,19 +924,13 @@ export default function HomeScreen() {
   return (
     <ScrollView
       className="flex-1 bg-paper px-4 pb-8"
-      refreshControl={
-        showCreatorCatalogSections && !searching
-          ? (
-              <RefreshControl
-                refreshing={homeRecipesRefresh.refreshing}
-                onRefresh={homeRecipesRefresh.onRefresh}
-                colors={[THEME.primary]}
-                tintColor={THEME.primary}
-              />
-            )
-          : undefined
-      }
+      {...homeScrollRefresh.scrollViewProps}
+      refreshControl={homeScrollRefresh.refreshControl}
     >
+      <HomeWebPullRefreshIndicator
+        visible={homeScrollRefresh.pullIndicatorOffset > 0}
+        refreshing={homeRecipesRefresh.refreshing}
+      />
       {showCreatorCatalogSections && !searching ? <HomePantryCta /> : null}
       <InstallAppBanner />
       <GuestSaveNudge />

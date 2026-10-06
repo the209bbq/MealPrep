@@ -263,17 +263,23 @@ export function VideoRecipeDetailView({
 
           <CreatorCreditRow channelTitle={channelTitle} channelUrl={channelUrl} avatarUrl={avatar} />
 
-          {!showLoading && !importError ? (
+          {!showLoading && !importError && !isImportPreview ? (
             <PantryStatusLine
               missingCount={missingCount}
               minutes={recipe.minutes}
               servings={recipe.servings}
               ingredientCount={recipe.ingredients.length}
-              previewWithoutIngredients={isImportPreview}
+              previewWithoutIngredients={false}
             />
           ) : null}
 
-          {!showLoading && !importError ? <RecipeCostPerServingForRecipe recipe={recipe} /> : null}
+          {isImportPreview && !showLoading && !importError ? (
+            <Text className="mt-2 text-sm text-muted">{RECIPES_COPY.recipeCard.previewNoIngredients}</Text>
+          ) : null}
+
+          {!showLoading && !importError && !isImportPreview ? (
+            <RecipeCostPerServingForRecipe recipe={recipe} />
+          ) : null}
 
           {!showLoading && !importError ? (
             <RecipeDietNotice
@@ -302,13 +308,13 @@ export function VideoRecipeDetailView({
 
           {isImportPreview && !showLoading && !importError ? (
             <View className="mt-4 rounded-2xl border border-border bg-card px-4 py-4">
-              <Text className="text-base font-bold text-ink">{VIRAL_RECIPES_COPY.getRecipeCta}</Text>
-              <Text className="mt-1 text-sm leading-5 text-muted">{VIRAL_RECIPES_COPY.getRecipeHint}</Text>
+              <Text className="text-sm leading-5 text-muted">{VIRAL_RECIPES_COPY.getRecipeHint}</Text>
               {onStartImport ? (
                 <Pressable
                   onPress={onStartImport}
                   className="mt-3 min-h-[48px] items-center justify-center rounded-xl bg-primary px-4"
                   accessibilityRole="button"
+                  accessibilityLabel={VIRAL_RECIPES_COPY.getRecipeCta}
                 >
                   <Text className="text-base font-bold text-on-primary">{VIRAL_RECIPES_COPY.getRecipeCta}</Text>
                 </Pressable>
