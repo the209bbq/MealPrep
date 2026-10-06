@@ -109,6 +109,7 @@
     "test:home-qa4": "npx tsx scripts/home-qa4-check.ts",
     "test:home-qa5": "npx tsx scripts/home-qa5-check.ts",
     "test:home-qa6": "npx tsx scripts/home-qa6-check.ts",
+    "test:home-qa7": "npx tsx scripts/home-qa7-check.ts",
     "test:home-prefetch": "npx tsx scripts/home-prefetch-check.ts",
     "test:home-qa1-safety": "npx tsx scripts/home-qa1-safety-check.ts",
     "test:home-qa1-data": "npx tsx scripts/home-qa1-data-check.ts",

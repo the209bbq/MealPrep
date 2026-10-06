@@ -8,6 +8,8 @@ node_modules/
 dist/
 web-build/
 .hydration-serve-root/
+.home-qa7-dist/
+.home-qa7-serve-root/
 .e2e-serve-root/
 .pantry-scan-serve-root/
 expo-env.d.ts

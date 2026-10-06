@@ -269,6 +269,7 @@ function assertAuthChromeSourceGuards(): void {
   const headerSource = fs.readFileSync(path.join(mobileRoot, 'components/AppHeader.tsx'), 'utf8');
   assert.match(headerSource, /accountChromeReady/);
   assert.match(headerSource, /hasLikelyStoredAuthSession/);
+  assert.match(headerSource, /resolveAccountHeaderAccessibilityLabel/);
   const indexSource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/index.tsx'), 'utf8');
   assert.match(indexSource, /profileReady && pantry\.length === 0/);
   const pickerSource = fs.readFileSync(

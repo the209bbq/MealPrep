@@ -21,6 +21,8 @@ export type AppRouteKey = keyof typeof APP_ROUTES;
 export const AUTH_EMAIL_REDIRECT_PATH = APP_ROUTES.home;
 
 export const ACCOUNT_HEADER_COPY = {
+  /** SSR and pre-authReady shell — no Sign-in promise before auth is known. */
+  avatarAccessibilityLabelNeutral: 'Account',
   avatarAccessibilityLabelGuest: 'Sign in or open account',
   avatarAccessibilityLabelSignedIn: 'Open account',
 } as const;
