@@ -39,6 +39,8 @@ export interface NearbyStoreSearchParams {
   radiusMultiplier?: 1 | 2;
   /** Stores tab: cap list length after closest-first sort. */
   displayLimit?: number;
+  /** Stores tab only: allow ZCTA table lookup for unresolved ZIPs. */
+  useStoresTabZipTable?: boolean;
 }
 
 export interface ResolvedGeo {

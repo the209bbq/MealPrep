@@ -140,7 +140,7 @@ async function main() {
 
   const icon1024 = await squareOnCream(iconCrop.clone(), 1024, 0.86);
   const splash512 = await squareOnCream(iconCrop.clone(), 512, 0.8);
-  const mark512 = await squareOnCream(iconCrop.clone(), 512, 0.9);
+  const markHeader = await squareOnCream(iconCrop.clone(), 66, 0.9);
 
   const androidFg = await androidForeground(icon1024);
   const androidBg = await solidBackground(1024, creamHex);
@@ -160,7 +160,7 @@ async function main() {
     [brand.assets.androidIconMonochrome, androidMono],
     [brand.assets.logoFull, logoFull],
     [brand.assets.logoFullTransparent, logoTransparent],
-    [brand.assets.logoMark, mark512],
+    [brand.assets.logoMark, markHeader],
   ];
 
   for (const [relative, buffer] of writes) {

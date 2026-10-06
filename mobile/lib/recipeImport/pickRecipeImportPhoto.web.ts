@@ -1,4 +1,3 @@
-import { preparePantryImageFromFile } from '../pantryVision/prepareImage.web';
 import { pickWebImageFile } from '../web/pickWebImageFile';
 import { RECIPE_IMPORT_PHOTO_PREPARE } from './prepareRecipeImportPhotoShared';
 
@@ -12,6 +11,7 @@ export const RECIPE_IMPORT_PHOTO_LIBRARY_PERMISSION_MESSAGE =
 
 async function prepareFromWebFile(file: File): Promise<RecipeImportPickedImage> {
   try {
+    const { preparePantryImageFromFile } = await import('../pantryVision/prepareImage.web');
     const prepared = await preparePantryImageFromFile(file, RECIPE_IMPORT_PHOTO_PREPARE);
     if (!prepared.base64) {
       throw new Error('Could not prepare photo for upload.');

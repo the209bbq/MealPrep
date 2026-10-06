@@ -2,8 +2,6 @@ import { SMART_SHOP_STORES } from '../../config/smartShop';
 import { readCache, writeCache } from './cache';
 import { lookupLocalZipGeocode } from './localZipTable';
 import { readPersistentCache, writePersistentCache } from './osmPersistentCache';
-import { lookupZctaCentroid } from './zctaCentroids';
-
 export interface GeocodedPoint {
   lat: number;
   lng: number;
@@ -33,13 +31,6 @@ export async function geocodeUsZip(zip: string): Promise<GeocodeResult> {
     writeCache(cacheKey, local, SMART_SHOP_STORES.cacheTtlMs);
     writePersistentCache(cacheKey, local, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
     return { ok: true, point: local };
-  }
-
-  const zcta = await lookupZctaCentroid(normalized);
-  if (zcta) {
-    writeCache(cacheKey, zcta, SMART_SHOP_STORES.cacheTtlMs);
-    writePersistentCache(cacheKey, zcta, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
-    return { ok: true, point: zcta };
   }
 
   return { ok: false, reason: 'not_found' };

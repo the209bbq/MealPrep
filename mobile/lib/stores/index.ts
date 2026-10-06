@@ -19,8 +19,6 @@ export { resolveSearchOriginFast, readCachedOverpassStores };
 export { chooseRegionalStaticFallback, isWithinOakdaleRegionalFallback } from './regionalFallback';
 export { nearbyStoreSearchRadiusMeters } from './storeSearchRadius';
 export { nearbyStoresCacheGeohash } from './geohash';
-export { lookupZctaCentroid, loadZctaCentroids } from './zctaCentroids';
-
 function zipGeocodeMessage(reason: string): string {
   switch (reason) {
     case 'not_found':
@@ -32,8 +30,17 @@ function zipGeocodeMessage(reason: string): string {
   }
 }
 
+async function geocodeZipForParams(zip: string, useStoresTabZipTable?: boolean) {
+  if (useStoresTabZipTable) {
+    const { geocodeUsZipForStoresTab } = await import('./storesTabGeocode');
+    return geocodeUsZipForStoresTab(zip);
+  }
+  return geocodeUsZip(zip);
+}
+
 export async function resolveSearchOrigin(params: NearbyStoreSearchParams): Promise<ResolvedGeo> {
-  return resolveSearchOriginWithGeocode(params, geocodeUsZip, zipGeocodeMessage);
+  const geocodeZip = (zip: string) => geocodeZipForParams(zip, params.useStoresTabZipTable);
+  return resolveSearchOriginWithGeocode(params, geocodeZip, zipGeocodeMessage);
 }
 
 export type InstantGroceryStorePreview = {

@@ -22,7 +22,6 @@ import { addCommunityDeal } from '../../lib/communityDeals/client';
 import { isPastLocalDate } from '../../lib/communityDeals/localDate';
 import type { CommunityStoreDeal } from '../../lib/communityDeals/types';
 import type { DealsSearchResult, StoreLocation } from '../../lib/deals/types';
-import { preparePantryImage } from '../../lib/pantryVision/prepareImage';
 import {
   PantryVisionAuthError,
   PantryVisionNotConfiguredError,
@@ -402,6 +401,7 @@ function SmartShopAddPriceSheetForm({
     });
     if (result.canceled || !result.assets[0]?.uri) return;
     try {
+      const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
       const prepared = await preparePantryImage(result.assets[0].uri);
       await runScan(prepared);
     } catch {

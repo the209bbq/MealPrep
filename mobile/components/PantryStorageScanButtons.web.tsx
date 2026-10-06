@@ -8,7 +8,6 @@ import { resolvePhotoScanAccess } from '../lib/guest/resolvePhotoScanAccess';
 import { resolvePhotoScanSession } from '../lib/guest/resolvePhotoScanSession';
 import { photoScanAccessUserMessage } from '../lib/plans/photoScanAccess';
 import { PantryImageQualityError } from '../lib/pantryVision/prepareImageShared';
-import { preparePantryImageFromFile } from '../lib/pantryVision/prepareImage.web';
 import { pickWebImageFile } from '../lib/web/pickWebImageFile';
 import { PhotoScanPlusUpgradeCard } from './PhotoScanPlusUpgradeCard';
 import type { PantryStorageScanButtonsProps } from './PantryStorageScanButtons';
@@ -87,6 +86,7 @@ export function PantryStorageScanButtons({
         source === 'camera' ? { capture: 'environment' } : undefined,
       );
       if (!file) return;
+      const { preparePantryImageFromFile } = await import('../lib/pantryVision/prepareImage.web');
       const prepared = await preparePantryImageFromFile(file);
       onImagePrepared(scanLocation, prepared);
     } catch (error: unknown) {
