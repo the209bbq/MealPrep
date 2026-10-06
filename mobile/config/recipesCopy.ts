@@ -16,6 +16,13 @@ export const RECIPES_COPY = {
     refreshOffline: "You're offline, showing saved recipes",
   },
 
+  /** Compact Home prompt below catalog section bars — nudge users to fill pantry. */
+  homePantryPrompt: {
+    description:
+      "Add what's in your kitchen — recipes will match what you have, and your grocery list skips it.",
+    buttonLabel: 'Go to Pantry',
+  },
+
   cookNowCard: {
     title: 'Cook now',
     subtitle: 'Meals you can make with what is already in your pantry',

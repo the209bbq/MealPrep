@@ -5,6 +5,7 @@ import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { CookConfirmBanner } from '../../components/home/CookConfirmBanner';
 import { HomeRecipesRefreshButton } from '../../components/home/HomeRecipesRefreshButton';
+import { HomePantryCta } from '../../components/home/HomePantryCta';
 import { HomeHubSheet } from '../../components/home/HomeHubSheet';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
@@ -1230,6 +1231,8 @@ export default function HomeScreen() {
               <Text className="text-sm text-muted">{CREATOR_RECIPES_COPY.emptyVideos}</Text>
             ) : null}
           </RecipesTabCollapsibleSection>
+
+          <HomePantryCta />
         </>
       ) : null}
 
