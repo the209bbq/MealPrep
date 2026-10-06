@@ -38,5 +38,8 @@ const chips = buildCategoryRotation({
 for (const expected of HOME_CLASSIC_CATEGORY_CHIPS) {
   assert(chips.some((chip) => chip.category === expected), `missing home chip ${expected}`);
 }
+const seafoodIdx = HOME_CLASSIC_CATEGORY_CHIPS.indexOf('Seafood');
+const pastaIdx = HOME_CLASSIC_CATEGORY_CHIPS.indexOf('Pasta');
+assert.ok(seafoodIdx >= 0 && pastaIdx === seafoodIdx + 1, 'Pasta chip follows Seafood');
 assert.equal(chips.some((chip) => chip.category === 'Miscellaneous'), false);
 console.log('category-chips-home-check: ok');
