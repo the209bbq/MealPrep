@@ -2,10 +2,11 @@ import { usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { BrandLogo } from './BrandLogo';
 import { HydrationSafeIonicon } from './HydrationSafeIonicon';
-import { ACCOUNT_HEADER_COPY, APP_ROUTES } from '../config/appRoutes';
+import { APP_ROUTES } from '../config/appRoutes';
 import { TABS, THEME } from '../config/appConfig';
 import { HOME_HUB_COPY } from '../config/homeHub';
 import { readAccountKitchenCache } from '../lib/account/accountKitchenCache';
+import { resolveAccountHeaderAccessibilityLabel } from '../lib/account/accountHeaderChrome';
 import { hasLikelyStoredAuthSession } from '../lib/account/authBootstrap';
 import { readLastAccountUserId } from '../lib/account/lastAccountUser';
 import { useApp } from '../context/AppContext';
@@ -29,6 +30,12 @@ export function AppHeader() {
   const avatarName = bootstrapProfile?.name ?? profile.name;
   const avatarPhoto = bootstrapProfile?.photoUrl ?? profile.photoUrl;
   const accountChromeReady = demoMode || authReady;
+  const avatarAccessibilityLabel = resolveAccountHeaderAccessibilityLabel({
+    demoMode,
+    hydrated,
+    authReady,
+    signedIn,
+  });
   const onHome = pathname === APP_ROUTES.home || pathname === '/index';
 
   return (
@@ -56,11 +63,7 @@ export function AppHeader() {
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={
-            signedIn
-              ? ACCOUNT_HEADER_COPY.avatarAccessibilityLabelSignedIn
-              : ACCOUNT_HEADER_COPY.avatarAccessibilityLabelGuest
-          }
+          accessibilityLabel={avatarAccessibilityLabel}
           onPress={signedIn ? openAccountSheet : openAuthSheet}
           className="shrink-0"
         >

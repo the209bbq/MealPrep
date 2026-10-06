@@ -13,7 +13,7 @@ const SWEET_FRIED_SIDE_TITLE =
   /\b(sopaipillas?|buñuelos?|bunuelos?|jamaican festival|festival bread|sweet dumpling|num e|ansom chek|churros?|beignets?|doughnuts?|donuts?|fritters?)\b/i;
 
 const DINNER_SIDE_ALLOWED_TITLE =
-  /\b(soup|chowder|stew|pierogi|mantu|burek|kumpir|callaloo|dumpling)\b/i;
+  /\b(soup|chowder|stew|pierogi|mantu|burek|kumpir|callaloo|dumplings?)\b/i;
 
 /** Title fallback when MealDB category is unknown (imports, creator recipes). */
 const DESSERT_TITLE_FALLBACK =
