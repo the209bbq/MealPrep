@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useHydrated } from './useHydrated';
 import { MEALDB_COPY } from '../config/mealdb';
 import type { RecipesTabRow } from '../config/recipesTabFilters';
 import { readMealDbCatalogSnapshot } from '../lib/mealdb/catalogCache';
@@ -17,10 +18,9 @@ export function useMealDbRecipes(
   refreshMealDb: () => void;
 } {
   const enabled = options?.enabled ?? true;
+  const hydrated = useHydrated();
   const [refreshSeed, setRefreshSeed] = useState(options?.refreshSeed ?? 0);
-  const [rows, setRows] = useState<RecipesTabRow[]>(() =>
-    enabled ? readMealDbCatalogSnapshot(pantry) : [],
-  );
+  const [rows, setRows] = useState<RecipesTabRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export function useMealDbRecipes(
   }, []);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !hydrated) {
       setRows([]);
       setError(null);
       setLoading(false);
@@ -88,7 +88,7 @@ export function useMealDbRecipes(
     return () => {
       cancelled = true;
     };
-  }, [enabled, pantry, refreshSeed]);
+  }, [enabled, hydrated, pantry, refreshSeed]);
 
   return { rows, loading, loadingMore, error, refreshSeed, refreshMealDb };
 }

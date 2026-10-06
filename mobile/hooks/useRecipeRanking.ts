@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useHydrated } from './useHydrated';
 import type { RecipesTabFilterState } from '../config/recipesTabFilters';
 import type { UserDietPrefs } from '../lib/diet/types';
 import type { RecipeCostPricingContext } from '../lib/costPerServing/types';
@@ -32,17 +33,15 @@ export function useRecipeRanking(options: {
   pricing: RecipeCostPricingContext;
 }) {
   const { ownerId, dietPrefs, householdSize, tabFilters, pricing } = options;
-  const [events, setEvents] = useState<RecipeEngagementEvent[]>(() =>
-    readRecipeEngagementEvents(ownerId),
-  );
-  const [engagementIndex, setEngagementIndex] = useState(() =>
-    readEngagementIndexForOwner(ownerId),
-  );
+  const hydrated = useHydrated();
+  const [events, setEvents] = useState<RecipeEngagementEvent[]>([]);
+  const [engagementIndex, setEngagementIndex] = useState(() => readEngagementIndexForOwner(''));
 
   useEffect(() => {
+    if (!hydrated) return;
     setEvents(readRecipeEngagementEvents(ownerId));
     setEngagementIndex(readEngagementIndexForOwner(ownerId));
-  }, [ownerId]);
+  }, [hydrated, ownerId]);
 
   const reloadEvents = useCallback(() => {
     setEvents(readRecipeEngagementEvents(ownerId));

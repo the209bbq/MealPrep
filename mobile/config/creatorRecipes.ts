@@ -47,6 +47,6 @@ export const CREATOR_RECIPES_COPY = {
   error: 'Could not load creator recipes right now.',
   feedAccessibility: 'Choose recipe feed',
   creatorRowAccessibility: 'Browse recipes by creator',
-  searchPlaceholder: 'Search recipes and creators',
+  searchPlaceholder: 'Search recipes',
   fullRecipesAtHost: (host: string) => `Full recipes at ${host}`,
 } as const;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useHydrated } from './useHydrated';
 import type { Session } from '@supabase/supabase-js';
 import { isCreatorRecipesConfigured } from '../config/appConfig';
 import type { CreatorRecipesBrowseMode } from '../config/creatorRecipes';
@@ -16,11 +17,18 @@ import type { CreatorListItem, CreatorVideoItem } from '../lib/creatorVideos/typ
 export function useCreatorList(session: Session | null, options?: { enabled?: boolean }) {
   const configured = isCreatorRecipesConfigured();
   const enabled = configured && (options?.enabled ?? true);
-  const [creators, setCreators] = useState<CreatorListItem[]>(() =>
-    enabled ? readPersistedCreatorList() : [],
-  );
+  const hydrated = useHydrated();
+  const [creators, setCreators] = useState<CreatorListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !hydrated) {
+      setCreators([]);
+      return;
+    }
+    setCreators(readPersistedCreatorList());
+  }, [enabled, hydrated]);
 
   const load = useCallback(async () => {
     if (!enabled) {

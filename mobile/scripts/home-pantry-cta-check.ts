@@ -30,7 +30,8 @@ assert.match(
 );
 assert.match(ctaSource, /accessibilityRole="button"/);
 assert.match(ctaSource, /accessibilityLabel=\{buttonLabel\}/);
-assert.match(ctaSource, /pressed \? 0\.88/, 'button should have pressed opacity feedback');
+assert.match(ctaSource, /pressed \? 0\.72/, 'button should have visible pressed opacity feedback');
+assert.ok(!ctaSource.includes('numberOfLines'), 'pantry description should wrap fully');
 
 const homeSource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/index.tsx'), 'utf8');
 const scrollOpen = homeSource.indexOf('<ScrollView');

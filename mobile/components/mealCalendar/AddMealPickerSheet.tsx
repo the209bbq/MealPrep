@@ -105,8 +105,12 @@ function AddMealPickerSheetForm({
         MEAL_CALENDAR.picker.maxRecipes,
         savedRecipeIds,
         savedRecords,
+        {
+          mealSlot: slot,
+          includeAllForSearch: query.trim().length > 0,
+        },
       ),
-    [pantryMatches.ranked, recipes, savedRecipeIds, savedRecords],
+    [pantryMatches.ranked, query, recipes, savedRecipeIds, savedRecords, slot],
   );
 
   const headerDate = formatMealPickerHeaderDate(isoDate, localDateString());
@@ -170,7 +174,8 @@ function AddMealPickerSheetForm({
                   <Text className="mt-0.5 text-xs text-muted">Ready to cook!</Text>
                 ) : row.pantryPercent > 0 ? (
                   <Text className="mt-0.5 text-xs text-muted">
-                    Pantry match {row.pantryPercent}% ({row.matchedCount} items)
+                    Pantry match {row.pantryPercent}% ({row.matchedCount}{' '}
+                    {row.matchedCount === 1 ? 'item' : 'items'})
                   </Text>
                 ) : null}
               </Pressable>

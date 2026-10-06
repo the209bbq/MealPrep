@@ -9,17 +9,17 @@ export function InstallAppBanner() {
   if (!showHint) return null;
 
   return (
-    <View className="mb-3 rounded-2xl border border-primary/30 bg-primary-light px-4 py-3">
-      <View className="flex-row items-start justify-between gap-2">
-        <View className="flex-1">
-          <Text className="text-sm font-bold text-primary-dark">Install {APP_SHORT_NAME}</Text>
+    <View className="mb-2 rounded-xl border border-primary/30 bg-primary-light px-3 py-2">
+      <View className="flex-row items-center justify-between gap-2">
+        <View className="min-w-0 flex-1">
+          <Text className="text-xs font-bold text-primary-dark">Install {APP_SHORT_NAME}</Text>
           {canInstall ? (
-            <Text className="mt-1 text-xs text-primary-dark">
-              Add a home-screen shortcut for faster access and offline app shell loading.
+            <Text className="mt-0.5 text-[11px] leading-4 text-primary-dark" numberOfLines={2}>
+              Add a home-screen shortcut for faster access.
             </Text>
           ) : isIos ? (
-            <Text className="mt-1 text-xs text-primary-dark">
-              Tap Share in Safari, then &quot;Add to Home Screen&quot; to install.
+            <Text className="mt-0.5 text-[11px] leading-4 text-primary-dark" numberOfLines={2}>
+              Safari Share → Add to Home Screen.
             </Text>
           ) : null}
         </View>
@@ -30,15 +30,15 @@ export function InstallAppBanner() {
           hitSlop={8}
           className="rounded-full p-1"
         >
-          <Ionicons name="close" size={20} color={THEME.primaryDark} />
+          <Ionicons name="close" size={18} color={THEME.primaryDark} />
         </Pressable>
       </View>
       {canInstall ? (
         <Pressable
           onPress={() => promptInstall()}
-          className="mt-3 items-center rounded-xl bg-primary py-2.5"
+          className="mt-2 items-center rounded-lg bg-primary py-2"
         >
-          <Text className="text-sm font-bold text-on-primary">Install app</Text>
+          <Text className="text-xs font-bold text-on-primary">Install app</Text>
         </Pressable>
       ) : null}
     </View>
