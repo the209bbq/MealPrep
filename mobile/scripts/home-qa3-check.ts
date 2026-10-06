@@ -27,6 +27,30 @@ import { recipesTabRowsFromFilterSummaries } from '../lib/mealdb/categoryStubRow
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mobileRoot = path.resolve(__dirname, '..');
 
+async function withStubNavigatorOffline<T>(fn: () => Promise<T>): Promise<T> {
+  const key = 'navigator';
+  const hadNavigator = Object.prototype.hasOwnProperty.call(globalThis, key);
+  const previous = hadNavigator ? (globalThis as { navigator?: Navigator }).navigator : undefined;
+  Object.defineProperty(globalThis, key, {
+    configurable: true,
+    writable: true,
+    value: { onLine: false },
+  });
+  try {
+    return await fn();
+  } finally {
+    if (hadNavigator) {
+      Object.defineProperty(globalThis, key, {
+        configurable: true,
+        writable: true,
+        value: previous,
+      });
+    } else {
+      Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}
+
 function kitchenRecipe(partial: Partial<Recipe> & Pick<Recipe, 'id' | 'name'>): Recipe {
   return {
     tag: partial.tag ?? 'Chicken',
@@ -220,13 +244,11 @@ async function main(): Promise<void> {
     'tabs layout should always mount Tabs (avoids React #419 Suspense fallback)',
   );
 
-  const nav = globalThis.navigator as Navigator & { onLine: boolean };
-  const wasOnline = nav.onLine;
-  Object.defineProperty(nav, 'onLine', { configurable: true, value: false });
-  const offlineFetch = await fetchMealDbCategoryFeedRows('Vegan', [], {});
-  assert.equal(offlineFetch.listFetchFailed, false);
-  assert.equal(offlineFetch.offlineCategoryEmpty, true);
-  Object.defineProperty(nav, 'onLine', { configurable: true, value: wasOnline });
+  await withStubNavigatorOffline(async () => {
+    const offlineFetch = await fetchMealDbCategoryFeedRows('Vegan', [], {});
+    assert.equal(offlineFetch.listFetchFailed, false);
+    assert.equal(offlineFetch.offlineCategoryEmpty, true);
+  });
 
   assert.equal(typeof kitchenCategoryRowsAvailableOffline, 'function');
 
