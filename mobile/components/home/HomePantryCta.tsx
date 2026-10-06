@@ -8,7 +8,7 @@ export function HomePantryCta() {
   const { description, buttonLabel } = RECIPES_COPY.homePantryPrompt;
 
   return (
-    <Card className="mt-3 p-3">
+    <Card className="mt-4 p-3">
       <View className="flex-row items-center gap-3">
         <Text className="min-w-0 flex-1 text-sm text-muted" numberOfLines={2}>
           {description}

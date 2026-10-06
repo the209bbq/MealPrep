@@ -927,6 +927,7 @@ export default function HomeScreen() {
           : undefined
       }
     >
+      {showCreatorCatalogSections && !searching ? <HomePantryCta /> : null}
       <InstallAppBanner />
       <GuestSaveNudge />
       {cookConfirmPrompt ? (
@@ -1231,8 +1232,6 @@ export default function HomeScreen() {
               <Text className="text-sm text-muted">{CREATOR_RECIPES_COPY.emptyVideos}</Text>
             ) : null}
           </RecipesTabCollapsibleSection>
-
-          <HomePantryCta />
         </>
       ) : null}
 
