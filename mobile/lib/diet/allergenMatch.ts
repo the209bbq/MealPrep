@@ -11,15 +11,39 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const PHRASE_REGEX_CACHE = new Map<string, RegExp>();
+const PHRASE_REGEX_CACHE_MAX = 512;
+
+function regexForNormalizedPhrase(normalizedPhrase: string): RegExp | null {
+  const tokens = normalizedPhrase.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return null;
+  let cached = PHRASE_REGEX_CACHE.get(normalizedPhrase);
+  if (!cached) {
+    const body = tokens.map(escapeRegex).join('\\s+');
+    cached = new RegExp(`(?:^|[\\s|,])${body}(?:$|[\\s|,])`, 'i');
+    if (PHRASE_REGEX_CACHE.size >= PHRASE_REGEX_CACHE_MAX) {
+      const oldest = PHRASE_REGEX_CACHE.keys().next().value;
+      if (oldest !== undefined) PHRASE_REGEX_CACHE.delete(oldest);
+    }
+    PHRASE_REGEX_CACHE.set(normalizedPhrase, cached);
+  }
+  return cached;
+}
+
+export function clearPhraseRegexCacheForTests(): void {
+  PHRASE_REGEX_CACHE.clear();
+}
+
+export function phraseRegexCacheSizeForTests(): number {
+  return PHRASE_REGEX_CACHE.size;
+}
+
 /** Word / token boundary match for a normalized phrase inside a normalized haystack. */
 export function phraseMatchesHaystack(haystack: string, phrase: string): boolean {
   const normalizedPhrase = normalizeIngredientName(phrase);
   if (!normalizedPhrase) return false;
-  const tokens = normalizedPhrase.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return false;
-  const body = tokens.map(escapeRegex).join('\\s+');
-  const re = new RegExp(`(?:^|[\\s|,])${body}(?:$|[\\s|,])`, 'i');
-  return re.test(haystack);
+  const re = regexForNormalizedPhrase(normalizedPhrase);
+  return re ? re.test(haystack) : false;
 }
 
 type FlatPhraseRule = { phrase: string; allergens: AllergenId[] };

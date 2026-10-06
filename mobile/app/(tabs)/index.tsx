@@ -196,12 +196,13 @@ export default function HomeScreen() {
   const [homeMetaRefreshSeed, setHomeMetaRefreshSeed] = useState(0);
   const [rowDetailLoadingId, setRowDetailLoadingId] = useState<string | null>(null);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
+  const recipeCostPricing = useMemo(() => ({ ownerId, communityDeals: [] }), [ownerId]);
   const recipeRanking = useRecipeRanking({
     ownerId,
     dietPrefs: userDietPrefs,
     householdSize: profile.householdSize,
     tabFilters: filters,
-    pricing: { ownerId, communityDeals: [] },
+    pricing: recipeCostPricing,
   });
   const {
     logImpression,
