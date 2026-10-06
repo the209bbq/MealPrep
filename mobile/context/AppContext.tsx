@@ -17,6 +17,7 @@ import {
 import { GROCERY_COPY } from '../config/grocery';
 import { SAVED_RECIPES_COPY } from '../config/savedRecipes';
 import { GUEST_OWNER_ID } from '../config/guestMode';
+import { DIET_PREF_COPY } from '../config/diet';
 import {
   DEFAULT_PANTRY_STORAGE_LOCATION,
   normalizePantryItemList,
@@ -396,6 +397,7 @@ interface AppContextValue {
   notifySavedToMyRecipes: (onViewMyRecipes: () => void) => void;
   notifyRemovedFromMyRecipes: (onUndo: () => void) => void;
   notifyMyRecipesSaveFailed: () => void;
+  notifyRecipeHiddenForDietSettings: () => void;
   savedRecipes: SavedRecipesController;
   registerSavedRecipeToggleOutcome: (handler: ((outcome: SavedRecipeToggleOutcome) => void) | null) => void;
   toggleGroceryItem: (id: string) => void;
@@ -2863,6 +2865,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const notifyRecipeHiddenForDietSettings = useCallback(() => {
+    setUndoToast({
+      message: DIET_PREF_COPY.hiddenForAllergySettingsToast,
+      showUndo: false,
+      onUndo: () => setUndoToast(null),
+    });
+  }, []);
+
   const mealMadeReviewTitle = useMemo(() => {
     if (!mealMadeReview) return null;
     return mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)?.title ?? null;
@@ -2940,6 +2950,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifySavedToMyRecipes,
       notifyRemovedFromMyRecipes,
       notifyMyRecipesSaveFailed,
+      notifyRecipeHiddenForDietSettings,
       savedRecipes,
       registerSavedRecipeToggleOutcome,
       toggleGroceryItem,
@@ -3069,6 +3080,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifySavedToMyRecipes,
       notifyRemovedFromMyRecipes,
       notifyMyRecipesSaveFailed,
+      notifyRecipeHiddenForDietSettings,
       savedRecipes,
       registerSavedRecipeToggleOutcome,
       updateRecipe,

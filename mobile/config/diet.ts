@@ -12,6 +12,7 @@ export const DIET_PREF_COPY = {
   hideConflictsHint: 'When on, lists skip recipes that conflict with your choices.',
   estimateDisclaimer: 'Check labels — estimate only',
   skipAtSignup: 'Skip for now',
+  hiddenForAllergySettingsToast: 'Hidden because of your allergy settings',
 } as const;
 
 export const DIET_OPTIONS: { id: DietId; label: string }[] = [

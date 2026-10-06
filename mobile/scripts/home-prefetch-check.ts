@@ -19,6 +19,12 @@ import {
   mergeMealDetailIntoCategoryRows,
 } from '../lib/mealdb/categoryStubRows';
 import { fetchMealDbCategoryFeedRows } from '../lib/mealdb/categories';
+import { filterRecipesTabRowsForDietPrefs } from '../lib/diet/filterRows';
+import type { UserDietPrefs } from '../lib/diet/types';
+import {
+  kitchenRowFailsDietPrefs,
+  resolveKitchenRecipesTabRowDetails,
+} from '../lib/mealdb/resolveKitchenRowDetails';
 import {
   prefetchMealDbCategoryOnIntent,
   resetHomeRecipePrefetchForTests,
@@ -189,6 +195,54 @@ void (async () => {
   assert.ok(
     filterCalls.length > 0 || lookupCalls.length > 0,
     `press-in prefetch should hit network (filter=${filterCalls.length}, lookup=${lookupCalls.length})`,
+  );
+
+  const peanutPrefs: UserDietPrefs = {
+    diets: [],
+    allergens: ['peanuts'],
+    dislikes: [],
+    hideConflicts: true,
+  };
+  const dietStubs = recipesTabRowsFromFilterSummaries(
+    [
+      { idMeal: '10', strMeal: 'Peanut Noodles', strMealThumb: 'https://example.com/p.jpg' },
+      { idMeal: '11', strMeal: 'Garden Salad', strMealThumb: 'https://example.com/s.jpg' },
+    ],
+    'Chicken',
+  );
+  const titleFiltered = filterRecipesTabRowsForDietPrefs(dietStubs, peanutPrefs);
+  assert.equal(titleFiltered.length, 1, 'stub title allergen filter');
+  assert.match(titleFiltered[0].recipe.name, /Salad/);
+
+  const saladStub = dietStubs.find((row) => row.recipe.name.includes('Salad'));
+  assert.ok(saladStub);
+  const peanutMeal: MealDbMealDetail = {
+    ...minimalMeal('11', 'Garden Salad'),
+    strIngredient1: 'peanut butter',
+    strMeasure1: '2 tbsp',
+  };
+  const afterDetail = mergeMealDetailIntoCategoryRows([saladStub!], peanutMeal, []);
+  assert.equal(
+    filterRecipesTabRowsForDietPrefs(afterDetail, peanutPrefs).length,
+    0,
+    'full ingredient filter removes row after lookup',
+  );
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('lookup.php?i=11')) {
+      return {
+        ok: true,
+        json: async () => ({ meals: [peanutMeal] }),
+      } as Response;
+    }
+    return originalFetch(input);
+  }) as typeof fetch;
+  const resolved = await resolveKitchenRecipesTabRowDetails(saladStub!, []);
+  assert.ok(resolved, 'resolve should load details for tap');
+  assert.ok(
+    kitchenRowFailsDietPrefs(resolved!, peanutPrefs),
+    'resolved row should fail diet prefs before open',
   );
 
   globalThis.fetch = originalFetch;

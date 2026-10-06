@@ -71,6 +71,10 @@ import {
   clearMealDbCategoryFeedSnapshot,
   readMealDbCategorySnapshot,
 } from '../../lib/mealdb/categoryFeedCache';
+import {
+  kitchenRowFailsDietPrefs,
+  resolveKitchenRecipesTabRowDetails,
+} from '../../lib/mealdb/resolveKitchenRowDetails';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { CreatorListItem } from '../../lib/creatorVideos/types';
@@ -128,6 +132,7 @@ export default function HomeScreen() {
     notifySavedToMyRecipes,
     notifyRemovedFromMyRecipes,
     notifyMyRecipesSaveFailed,
+    notifyRecipeHiddenForDietSettings,
     profile,
     savedRecipes,
     registerSavedRecipeToggleOutcome,
@@ -178,6 +183,7 @@ export default function HomeScreen() {
   const [manualRotationEpoch, setManualRotationEpoch] = useState(0);
   const [classicCategoryRefreshSeed, setClassicCategoryRefreshSeed] = useState(0);
   const [homeMetaRefreshSeed, setHomeMetaRefreshSeed] = useState(0);
+  const [rowDetailLoadingId, setRowDetailLoadingId] = useState<string | null>(null);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const recipeRanking = useRecipeRanking({
     ownerId,
@@ -488,11 +494,70 @@ export default function HomeScreen() {
     return rankSearchResults(diet, searchQuery.trim());
   }, [searchResults, searchQuery, userDietPrefs, rankSearchResults]);
 
-  function openDetail(row: RecipesTabRow) {
-    logOpen(refKeyFromRecipesTabRow(row));
-    setDetailInitialSection('ingredients');
-    setPickedDetailRow(row);
-  }
+  const syncResolvedClassicRow = useCallback((resolved: RecipesTabRow) => {
+    setClassicCategoryRows((prev) => {
+      const index = prev.findIndex(
+        (candidate) => candidate.kind === 'kitchen' && candidate.recipe.id === resolved.recipe.id,
+      );
+      if (index < 0) return prev;
+      const next = [...prev];
+      next[index] = resolved;
+      return next;
+    });
+  }, []);
+
+  const removeClassicRowById = useCallback((recipeId: string) => {
+    setClassicCategoryRows((prev) =>
+      prev.filter((candidate) => candidate.kind !== 'kitchen' || candidate.recipe.id !== recipeId),
+    );
+  }, []);
+
+  const resolveRowBeforeUserAction = useCallback(
+    async (row: RecipesTabRow): Promise<RecipesTabRow | null> => {
+      let working = row;
+      if (row.kind === 'kitchen' && row.pantryMatchPending) {
+        setRowDetailLoadingId(row.recipe.id);
+        try {
+          const resolved = await resolveKitchenRecipesTabRowDetails(row, pantry);
+          if (!resolved) return null;
+          working = resolved;
+        } finally {
+          setRowDetailLoadingId(null);
+        }
+      }
+      if (kitchenRowFailsDietPrefs(working, userDietPrefs)) {
+        if (working.kind === 'kitchen') {
+          removeClassicRowById(working.recipe.id);
+        }
+        notifyRecipeHiddenForDietSettings();
+        return null;
+      }
+      if (row.kind === 'kitchen' && row.pantryMatchPending && working.kind === 'kitchen') {
+        syncResolvedClassicRow(working);
+      }
+      return working;
+    },
+    [
+      notifyRecipeHiddenForDietSettings,
+      pantry,
+      removeClassicRowById,
+      syncResolvedClassicRow,
+      userDietPrefs,
+    ],
+  );
+
+  const openDetail = useCallback(
+    (row: RecipesTabRow) => {
+      void (async () => {
+        const resolved = await resolveRowBeforeUserAction(row);
+        if (!resolved) return;
+        logOpen(refKeyFromRecipesTabRow(resolved));
+        setDetailInitialSection('ingredients');
+        setPickedDetailRow(resolved);
+      })();
+    },
+    [logOpen, resolveRowBeforeUserAction],
+  );
 
   const openSwapRecipe = useCallback(
     (recipeId: string) => {
@@ -509,24 +574,28 @@ export default function HomeScreen() {
 
   const openCookSheetForRow = useCallback(
     (row: RecipesTabRow) => {
-      const refKey = refKeyFromRecipesTabRow(row);
-      openScheduleRecipe(
-        scheduleTargetFromRecipesTabRow(row, {
-          onOpenCookView: () => {
-            logCook(refKey);
-            setDetailInitialSection('steps');
-            setPickedDetailRow(row);
-          },
-          onJustSave: () => {
-            if (row.kind !== 'kitchen') return;
-            savedRecipes.toggleKitchenRecipe(row.recipe);
-            logSave(refKey);
-          },
-          onOpenSwapRecipe: openSwapRecipe,
-        }),
-      );
+      void (async () => {
+        const resolved = await resolveRowBeforeUserAction(row);
+        if (!resolved) return;
+        const refKey = refKeyFromRecipesTabRow(resolved);
+        openScheduleRecipe(
+          scheduleTargetFromRecipesTabRow(resolved, {
+            onOpenCookView: () => {
+              logCook(refKey);
+              setDetailInitialSection('steps');
+              setPickedDetailRow(resolved);
+            },
+            onJustSave: () => {
+              if (resolved.kind !== 'kitchen') return;
+              savedRecipes.toggleKitchenRecipe(resolved.recipe);
+              logSave(refKey);
+            },
+            onOpenSwapRecipe: openSwapRecipe,
+          }),
+        );
+      })();
     },
-    [logCook, logSave, openScheduleRecipe, openSwapRecipe, savedRecipes],
+    [logCook, logSave, openScheduleRecipe, openSwapRecipe, resolveRowBeforeUserAction, savedRecipes],
   );
 
   function showDifferentIdeas() {
@@ -1001,6 +1070,9 @@ export default function HomeScreen() {
                     ? savedRecipes.isKitchenSavePending(result.row.recipe)
                     : false
                 }
+                interactionLoading={
+                  result.row.kind === 'kitchen' && result.row.recipe.id === rowDetailLoadingId
+                }
                 onOpen={() => openDetail(result.row)}
                 onCook={() => openCookSheetForRow(result.row)}
               />
@@ -1083,6 +1155,7 @@ export default function HomeScreen() {
                 saveDisabled={
                   row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false
                 }
+                interactionLoading={row.kind === 'kitchen' && row.recipe.id === rowDetailLoadingId}
                 onOpen={() => openDetail(row)}
                 onCook={() => openCookSheetForRow(row)}
               />
