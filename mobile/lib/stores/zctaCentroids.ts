@@ -8,16 +8,6 @@ export type ZctaCentroidMap = Record<string, [number, number]>;
 let loaded: ZctaCentroidMap | null = null;
 let loadPromise: Promise<ZctaCentroidMap> | null = null;
 
-async function readZctaJsonFromDisk(): Promise<ZctaCentroidMap> {
-  const fs = await import('node:fs');
-  const path = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
-  const dir = path.dirname(fileURLToPath(import.meta.url));
-  const filePath = path.join(dir, '../../public/zcta-centroids.json');
-  const text = fs.readFileSync(filePath, 'utf8');
-  return JSON.parse(text) as ZctaCentroidMap;
-}
-
 async function fetchZctaJsonWeb(): Promise<ZctaCentroidMap> {
   const url = webAssetPath('/zcta-centroids.json');
   const res = await fetch(url);
@@ -27,27 +17,23 @@ async function fetchZctaJsonWeb(): Promise<ZctaCentroidMap> {
   return (await res.json()) as ZctaCentroidMap;
 }
 
-async function importZctaJsonNative(): Promise<ZctaCentroidMap> {
-  const payload = (await import('../../data/zcta-centroids.json')) as
-    | ZctaCentroidMap
-    | { default: ZctaCentroidMap };
-  if (payload && typeof payload === 'object' && 'default' in payload && payload.default) {
-    return payload.default;
+/** Native and Node (tests / SSR): separate async chunk, not in web client entry/common. */
+async function importZctaJsonBundled(): Promise<ZctaCentroidMap> {
+  const mod: unknown = await import('../../data/zcta-centroids.json');
+  if (mod && typeof mod === 'object' && 'default' in mod) {
+    return (mod as { default: ZctaCentroidMap }).default;
   }
-  return payload as ZctaCentroidMap;
+  return mod as ZctaCentroidMap;
 }
 
 async function loadZctaPayload(): Promise<ZctaCentroidMap> {
-  if (typeof window === 'undefined') {
-    return readZctaJsonFromDisk();
-  }
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return fetchZctaJsonWeb();
   }
-  return importZctaJsonNative();
+  return importZctaJsonBundled();
 }
 
-/** Lazy-load Census ZCTA centroids (public domain). Not bundled into web entry/common. */
+/** Lazy-load Census ZCTA centroids (public domain). Not bundled into web client entry/common. */
 export async function loadZctaCentroids(): Promise<ZctaCentroidMap> {
   if (loaded) return loaded;
   if (!loadPromise) {
