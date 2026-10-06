@@ -25,7 +25,6 @@ import {
   runHomeRecipePrefetch,
   scheduleHomeRecipePrefetch,
 } from '../lib/mealdb/homePrefetch';
-import { removeStorageKey } from '../lib/storage';
 import type { MealDbMealDetail } from '../lib/mealdb/types';
 
 const TEST_TIMEOUT_MS = 15_000;
