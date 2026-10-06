@@ -4,7 +4,7 @@ export const PANTRY_STAPLES_PROMPT_DISMISSED_KEY = 'mealprep.pantryStaplesPrompt
 
 export const PANTRY_STAPLES_COPY = {
   inviteTitle: 'Pick your staples',
-  inviteSubtitle: 'Tap what you usually keep on hand — no typing.',
+  inviteSubtitle: 'Tap some staples in your house!',
   inviteCta: 'Pick staples',
   addStaplesLink: 'Add staples',
   screenTitle: 'Pick your staples',
