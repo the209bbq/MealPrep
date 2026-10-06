@@ -112,6 +112,7 @@ export default function RecipesScreen() {
     profile,
     savedRecipes,
     registerSavedRecipeToggleOutcome,
+    finishCookViewSession,
   } = useApp();
   const ownerId =
     session?.user?.id ?? (demoMode ? profile.id || 'demo-user' : GUEST_OWNER_ID);
@@ -996,6 +997,7 @@ export default function RecipesScreen() {
         }
         onSignInForImport={showSignInOnImportError ? openAuthSheet : undefined}
         onClose={() => {
+          finishCookViewSession();
           closeViral();
           setPickedDetailRow(null);
           setDetailInitialSection('ingredients');

@@ -13,6 +13,8 @@ const V2_ONLY_EVENT_TYPES = new Set<RecipeEngagementEvent['type']>([
   'plan',
   'cook_now',
   'just_save',
+  'cook_confirmed',
+  'cook_declined',
 ]);
 
 export function countCookSaveSignals(events: readonly RecipeEngagementEvent[]): number {

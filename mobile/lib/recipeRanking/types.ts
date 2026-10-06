@@ -14,7 +14,9 @@ export type RecipeEngagementEventType =
   | 'wont_cook'
   | 'plan'
   | 'cook_now'
-  | 'just_save';
+  | 'just_save'
+  | 'cook_confirmed'
+  | 'cook_declined';
 
 export type RecipeEngagementSource = 'mealdb' | 'creator' | 'import';
 
@@ -33,6 +35,7 @@ export interface RecipeEngagementEventV2 {
   slot?: PlanSlotCode;
   ghostShown?: boolean;
   missingCount?: number;
+  via?: 'planned' | 'cook_now';
 }
 
 export interface RecipeEngagementEvent {

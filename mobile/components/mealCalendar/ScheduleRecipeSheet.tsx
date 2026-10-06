@@ -79,6 +79,7 @@ function ScheduleRecipeSheetBody({
     demoMode,
     notifyMealScheduled,
     removeMealPlanItem,
+    beginCookViewSession,
   } = useApp();
 
   const ownerId = session?.user?.id ?? profile.id ?? (demoMode ? 'demo-user' : GUEST_OWNER_ID);
@@ -154,9 +155,10 @@ function ScheduleRecipeSheetBody({
 
   const openCookView = useCallback(() => {
     markSettled();
+    beginCookViewSession(target);
     target.onOpenCookView?.();
     onClose();
-  }, [markSettled, onClose, target]);
+  }, [beginCookViewSession, markSettled, onClose, target]);
 
   const confirmPlan = useCallback(
     async (day: string, slot: MealSlot) => {

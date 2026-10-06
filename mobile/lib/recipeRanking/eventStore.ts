@@ -76,7 +76,10 @@ export function createEngagementEvent(
 
 export function createSeamlessEngagementEvent(
   refKey: string,
-  type: Extract<RecipeEngagementEventType, 'plan' | 'cook_now' | 'just_save' | 'skip'>,
+  type: Extract<
+    RecipeEngagementEventType,
+    'plan' | 'cook_now' | 'just_save' | 'skip' | 'cook_confirmed' | 'cook_declined'
+  >,
   v2: RecipeEngagementEventV2,
 ): RecipeEngagementEvent {
   const ts = v2.ts ?? Date.now();
