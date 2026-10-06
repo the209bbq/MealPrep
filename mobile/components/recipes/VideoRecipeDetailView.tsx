@@ -29,6 +29,7 @@ export interface VideoRecipeDetailViewProps {
   importError?: string | null;
   onClose: () => void;
   onRetryImport?: () => void;
+  onStartImport?: () => void;
   onSignInForImport?: () => void;
   onAddMissing: () => void;
   recipeSaved?: boolean;
@@ -162,6 +163,7 @@ export function VideoRecipeDetailView({
   importError = null,
   onClose,
   onRetryImport,
+  onStartImport,
   onSignInForImport,
   onAddMissing,
   recipeSaved,
@@ -174,6 +176,8 @@ export function VideoRecipeDetailView({
 }: VideoRecipeDetailViewProps) {
   const insets = useSafeAreaInsets();
   const [section, setSection] = useState<DetailSection>(initialSection);
+  const isImportPreview =
+    Boolean(viralItem) && recipe.id.startsWith('viral-preview-') && recipe.ingredients.length === 0;
   const showLoading = previewLoading || importing;
   const missingCount = match?.missingCount ?? 0;
 
@@ -274,6 +278,22 @@ export function VideoRecipeDetailView({
                   : RECIPES_COPY.recipeDetail.wontCookAgain}
               </Text>
             </Pressable>
+          ) : null}
+
+          {isImportPreview && !showLoading && !importError ? (
+            <View className="mt-4 rounded-2xl border border-border bg-card px-4 py-4">
+              <Text className="text-base font-bold text-ink">{VIRAL_RECIPES_COPY.getRecipeCta}</Text>
+              <Text className="mt-1 text-sm leading-5 text-muted">{VIRAL_RECIPES_COPY.getRecipeHint}</Text>
+              {onStartImport ? (
+                <Pressable
+                  onPress={onStartImport}
+                  className="mt-3 min-h-[48px] items-center justify-center rounded-xl bg-primary px-4"
+                  accessibilityRole="button"
+                >
+                  <Text className="text-base font-bold text-on-primary">{VIRAL_RECIPES_COPY.getRecipeCta}</Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
 
           {showLoading ? <LoadingSkeleton /> : null}

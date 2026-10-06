@@ -1,6 +1,10 @@
 import { RECIPE_SOURCES } from '../../config/recipeSources';
 import { catalogToRecipes } from '../../data/kitchenCatalog';
-import type { Recipe } from '../../types/mealprep';
+import { readMealDbCatalogSnapshot } from '../mealdb/catalogCache';
+import { readCachedMealDbAppRecipe } from '../mealdb/client';
+import { isMealDbRecipeId } from '../mealdb/normalize';
+import { readRememberedMealDbRecipes } from '../mealdb/plannedRecipeStore';
+import type { MealPlanItem, PantryItem, Recipe } from '../../types/mealprep';
 
 let cachedCatalogRecipes: Recipe[] | null = null;
 
@@ -54,4 +58,43 @@ export function recipesForRecipesFeed(
     byId.set(recipe.id, recipe);
   }
   return [...byId.values()];
+}
+
+function mergeRecipesById(base: Recipe[], extras: Iterable<Recipe>): Recipe[] {
+  const byId = new Map(base.map((recipe) => [recipe.id, recipe]));
+  for (const recipe of extras) {
+    byId.set(recipe.id, recipe);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Kitchen recipes used for meal plan, grocery rebuild, pantry match, and cook confirmation —
+ * includes Classic (MealDB) rows from catalog cache, planned snapshots, and lookup cache.
+ */
+export function kitchenRecipesWithMealPlanContext(
+  accountRecipes: Recipe[],
+  libraryRecipes: readonly Recipe[],
+  pantry: PantryItem[],
+  mealPlan: MealPlanItem[],
+): Recipe[] {
+  const base = recipesForRecipesFeed(accountRecipes, libraryRecipes);
+  const extras: Recipe[] = [];
+
+  for (const row of readMealDbCatalogSnapshot(pantry)) {
+    if (row.kind === 'kitchen') extras.push(row.recipe);
+  }
+  extras.push(...readRememberedMealDbRecipes());
+
+  for (const item of mealPlan) {
+    const slug = item.recipeSlug;
+    if (!slug || !isMealDbRecipeId(slug)) continue;
+    if (base.some((recipe) => recipe.id === slug) || extras.some((recipe) => recipe.id === slug)) {
+      continue;
+    }
+    const cached = readCachedMealDbAppRecipe(slug);
+    if (cached) extras.push(cached);
+  }
+
+  return mergeRecipesById(base, extras);
 }

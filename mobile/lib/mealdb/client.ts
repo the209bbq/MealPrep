@@ -1,6 +1,9 @@
 import { MEALDB, mealDbApiBaseUrl } from '../../config/mealdb';
 import { mapWithConcurrency } from '../concurrency';
 import { readJson, writeJson } from '../storage';
+import { mealDbMealToAppRecipe } from './normalize';
+import { mealDbIdFromRecipeId } from './slug';
+import type { Recipe } from '../../types/mealprep';
 import type { MealDbFilterResponse, MealDbMealDetail, MealDbMealsResponse } from './types';
 
 interface CacheEntry {
@@ -151,4 +154,17 @@ export async function mealDbLookupMeals(
 export function resetMealDbClientCacheForTests(): void {
   memoryCache.clear();
   inFlight.clear();
+}
+
+/** Sync read of a previously fetched lookup result (no network). */
+export function readCachedMealDbAppRecipe(recipeId: string): Recipe | null {
+  const idMeal = mealDbIdFromRecipeId(recipeId);
+  if (!idMeal) return null;
+  const path = `lookup.php?i=${encodeURIComponent(idMeal)}`;
+  const cached = readCacheEntry(path);
+  if (!cached || cached.failed) return null;
+  const data = cached.payload as MealDbMealsResponse | null;
+  const meal = data?.meals?.[0];
+  if (!meal) return null;
+  return mealDbMealToAppRecipe(meal);
 }

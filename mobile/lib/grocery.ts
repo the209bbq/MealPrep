@@ -17,6 +17,10 @@ import {
   totalPantryQuantityInUnit,
 } from './recipeMatch/pantryStock';
 import { isGroceryOriginPinned, preferGroceryOrigin } from './grocery/origin';
+import {
+  pinnedGroceryForMealPlanRebuild,
+  pinnedGroceryWithoutMealPlan,
+} from './grocery/pinnedSurvivors';
 import { normalizePlannedMealLinks } from './grocery/grouping';
 import { resolveMealPlanRecipeId } from './mealPlan/resolve';
 import { convertQuantity, unitsAreConvertible } from './units/conversion';
@@ -233,11 +237,7 @@ export function buildGroceryList(
   if (options?.mealPlan?.length && options.userId) {
     const active = activeMealsForGrocery(options.mealPlan);
     if (active.length > 0) {
-      const pinnedItems = normalizedPrevious.filter(
-        (item) =>
-          isGroceryOriginPinned(item.origin) &&
-          !isGroceryManualLineDismissed(dismissals, item.name, item.unit),
-      );
+      const pinnedItems = pinnedGroceryForMealPlanRebuild(normalizedPrevious, dismissals);
       const recipeItems = buildGroceryListFromMealPlan(
         recipes,
         options.mealPlan,
@@ -286,11 +286,7 @@ export function buildGroceryList(
     ]),
   );
 
-  const pinnedItems = normalizedPrevious.filter(
-    (item) =>
-      isGroceryOriginPinned(item.origin) &&
-      !isGroceryManualLineDismissed(dismissals, item.name, item.unit),
-  );
+  const pinnedItems = pinnedGroceryWithoutMealPlan(normalizedPrevious, dismissals);
 
   const list: GroceryListItem[] = [];
   for (const [key, value] of needed) {
@@ -357,9 +353,12 @@ export function mergeManualGroceryLines(
     const existingIndex = indexByKey.get(key);
     if (existingIndex != null) {
       const existing = merged[existingIndex];
+      const sumQty = !(existing.origin === 'plan' && manual.origin === 'add_missing');
       merged[existingIndex] = {
         ...existing,
-        quantity: roundQty(existing.quantity + manual.quantity),
+        quantity: sumQty
+          ? roundQty(existing.quantity + manual.quantity)
+          : existing.quantity,
         checked: existing.checked || manual.checked,
         origin: preferGroceryOrigin(existing.origin, manual.origin),
       };

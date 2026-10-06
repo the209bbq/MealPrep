@@ -784,6 +784,8 @@ export async function insertGroceryItem(
     unit: item.unit,
     checked: item.checked,
     source_recipe_ids: item.sourceRecipeIds,
+    origin: item.origin,
+    planned_meal_links: item.plannedMealLinks ?? [],
   };
 
   if (matched) {
@@ -792,6 +794,7 @@ export async function insertGroceryItem(
       .update({
         ...payload,
         quantity: matched.quantity + item.quantity,
+        origin: item.origin === 'manual' ? 'manual' : matched.origin ?? item.origin,
       })
       .eq('id', matched.id)
       .eq('user_id', userId)
