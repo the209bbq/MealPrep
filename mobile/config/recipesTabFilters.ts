@@ -102,6 +102,8 @@ export interface RecipesTabKitchenRow {
   match: RecipePantryMatch;
   /** True while pantry match is still loading from a MealDB lookup. */
   pantryMatchPending?: boolean;
+  /** Lookup failed after retries — tap card to try again. */
+  pantryMatchFailed?: boolean;
 }
 
 export interface RecipesTabDiscoveryRow {

@@ -20,6 +20,7 @@ import {
 } from './categoryListCache';
 import {
   mergeMealDetailIntoCategoryRows,
+  markKitchenRowLookupFailed,
   recipesTabRowsFromFilterSummaries,
   rowsFromMealDetails,
 } from './categoryStubRows';
@@ -28,6 +29,7 @@ import { MEALDB } from '../../config/mealdb';
 import { isOffline } from '../network/isOffline';
 import { kitchenCategoryRowsAvailableOffline } from './offlineCategoryRows';
 import { mealDbCategoryFromRecipeTag } from '../recipesTab/categoryDiet';
+import { withMealDbUserVisibleLookups } from './lookupScheduler';
 import { wontCookRefKeys } from '../recipeRanking/hardFilter';
 import type { RecipeEngagementEvent } from '../recipeRanking/types';
 import { refKeyFromRecipesTabRow } from '../recipeRanking/recipeInputs';
@@ -49,7 +51,10 @@ export async function mealDbListCategories(): Promise<MealDbCategoryMeta[]> {
 
 function mealDbCategoryForRow(row: RecipesTabRow): string | null {
   if (row.kind === 'kitchen') {
-    return mealDbCategoryFromRecipeTag(row.recipe.tag);
+    return mealDbCategoryFromRecipeTag(row.recipe.tag, {
+      recipeId: row.recipe.id,
+      sourceType: row.recipe.sourceType,
+    });
   }
   return mealDbCategoryFromRecipeTag(row.recipe.meal_type ?? row.recipe.cuisine ?? null);
 }
@@ -113,6 +118,8 @@ export interface FetchMealDbCategoryFeedOptions {
   bypassListCache?: boolean;
   /** Only fetch filter.php list — no meal lookups (home refresh). */
   listOnly?: boolean;
+  /** When false, lookups use background priority (home prefetch). Default true for on-screen category feed. */
+  userVisibleLookups?: boolean;
 }
 
 export interface MealDbCategoryFeedResult {
@@ -150,7 +157,10 @@ function mealIdsNeedingLookup(
 ): string[] {
   const resolvedIds = new Set(
     rows
-      .filter((row) => row.kind === 'kitchen' && !row.pantryMatchPending)
+      .filter(
+        (row) =>
+          row.kind === 'kitchen' && !row.pantryMatchPending && !row.pantryMatchFailed,
+      )
       .map((row) => String(row.recipe.id).replace(/^mealdb-/, '')),
   );
   return summaries
@@ -220,6 +230,8 @@ export async function fetchMealDbCategoryFeedRows(
 
   const mealsAcc: MealDbMealDetail[] = [];
   const lookupConcurrency = options?.lookupConcurrency ?? MEALDB.maxConcurrentRequests;
+  const userVisibleLookups = options?.userVisibleLookups ?? true;
+  const lookupPriority = userVisibleLookups ? 'user-visible' : 'background';
 
   const applyMeal = (meal: MealDbMealDetail) => {
     mealsAcc.push(meal);
@@ -227,25 +239,43 @@ export async function fetchMealDbCategoryFeedRows(
     options?.onRows?.(rows);
   };
 
-  await mealDbLookupMeals(awaitIds, {
-    concurrency: lookupConcurrency,
-    onMeal: applyMeal,
-  });
+  const applyFailed = (idMeal: string) => {
+    rows = markKitchenRowLookupFailed(rows, idMeal);
+    options?.onRows?.(rows);
+  };
+
+  const runLookups = async (lookupIds: readonly string[]) => {
+    if (lookupIds.length === 0) return;
+    await mealDbLookupMeals(lookupIds, {
+      concurrency: lookupConcurrency,
+      priority: lookupPriority,
+      onMeal: applyMeal,
+      onFailed: applyFailed,
+    });
+  };
+
+  const resolveAllLookups = async () => {
+    await runLookups(awaitIds);
+    if (backgroundIds.length > 0) {
+      if (userVisibleLookups) {
+        await runLookups(backgroundIds);
+      } else {
+        void runLookups(backgroundIds);
+      }
+    }
+  };
+
+  if (userVisibleLookups) {
+    await withMealDbUserVisibleLookups(resolveAllLookups);
+  } else {
+    await resolveAllLookups();
+  }
 
   if (mealsAcc.length > 0) {
     options?.onRows?.(rows);
     writeMealDbCategorySnapshot(category, pantry, rows);
-  }
-
-  if (backgroundIds.length > 0) {
-    void mealDbLookupMeals(backgroundIds, {
-      concurrency: lookupConcurrency,
-      onMeal: (meal) => {
-        rows = mergeMealDetailIntoCategoryRows(rows, meal, pantry);
-        options?.onRows?.(rows);
-        writeMealDbCategorySnapshot(category, pantry, rows);
-      },
-    });
+  } else if (rows.some((row) => row.kind === 'kitchen' && row.pantryMatchFailed)) {
+    writeMealDbCategorySnapshot(category, pantry, rows);
   }
 
   return { rows, listFetchFailed: false };

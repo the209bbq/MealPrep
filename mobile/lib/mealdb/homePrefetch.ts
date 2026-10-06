@@ -48,6 +48,7 @@ export async function runHomeRecipePrefetch(input: HomeRecipePrefetchInput): Pro
           detailLimit,
           lookupConcurrency: MEALDB.homePrefetchLookupConcurrency,
           listOnly: input.listOnly,
+          userVisibleLookups: false,
         });
       },
     );
@@ -86,6 +87,7 @@ export function prefetchMealDbCategoryOnIntent(
   return fetchMealDbCategoryFeedRows(category, pantry, {
     detailLimit: MEALDB.homeCategoryPrefetchMealCount,
     lookupConcurrency: MEALDB.homePrefetchLookupConcurrency,
+    userVisibleLookups: false,
   }).then(() => undefined);
 }
 

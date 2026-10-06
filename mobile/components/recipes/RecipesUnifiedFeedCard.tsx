@@ -50,10 +50,12 @@ function RecipesUnifiedFeedCardInner({
       : resolveDiscoveryRecipeImageUrl(row.recipe);
   }, [maskImage, row]);
   const matchPending = row.kind === 'kitchen' && Boolean(row.pantryMatchPending);
+  const matchFailed = row.kind === 'kitchen' && Boolean(row.pantryMatchFailed);
   const shopLine = useMemo(() => {
+    if (matchFailed) return RECIPES_COPY.recipeCard.lookupFailed;
     if (matchPending) return RECIPES_COPY.recipeCard.checkingPantry;
     return recipeListShopLine(row.match);
-  }, [matchPending, row.match]);
+  }, [matchFailed, matchPending, row.match]);
   const hasIngredients = row.kind === 'kitchen' && row.recipe.ingredients.length > 0;
   const readyToCook = !matchPending && hasIngredients && row.match.missingCount === 0;
   const ingredientLines = useMemo(() => dietCheckLinesFromRecipesTabRow(row), [row]);

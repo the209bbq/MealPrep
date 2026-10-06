@@ -54,8 +54,10 @@ export function HomeHubSheet({
 
   const setHubSection = (next: HomeHubSection) => setSection(next);
 
+  if (!visible) return null;
+
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeHub}>
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={closeHub}>
       <View className="flex-1 bg-paper" style={{ paddingTop: insets.top }}>
         <View className="flex-row items-center border-b border-border bg-card px-3 py-2">
           <Pressable

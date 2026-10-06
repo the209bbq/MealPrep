@@ -80,6 +80,7 @@ export function mergeMealDetailIntoCategoryRows(
       recipe,
       match: scoreRecipeAgainstPantry(recipe, pantry),
       pantryMatchPending: false,
+      pantryMatchFailed: false,
     };
   });
   if (!found) {
@@ -88,10 +89,23 @@ export function mergeMealDetailIntoCategoryRows(
       recipe,
       match: scoreRecipeAgainstPantry(recipe, pantry),
       pantryMatchPending: false,
+      pantryMatchFailed: false,
     });
   }
   next.sort((a, b) => compareRecipePantryMatches(a.match, b.match));
   return next;
+}
+
+export function markKitchenRowLookupFailed(rows: RecipesTabRow[], idMeal: string): RecipesTabRow[] {
+  const recipeId = mealDbRecipeId(idMeal.trim());
+  return rows.map((row) => {
+    if (row.kind !== 'kitchen' || row.recipe.id !== recipeId) return row;
+    return {
+      ...row,
+      pantryMatchPending: false,
+      pantryMatchFailed: true,
+    };
+  });
 }
 
 export function rowsFromMealDetails(

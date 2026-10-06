@@ -19,6 +19,8 @@ export const PEANUT_DISH_NAME_STRONG: string[] = [
   'gado-gado',
   'gado gado',
   'massaman',
+  'dan dan',
+  'dandan',
 ];
 
 /** Ambiguous peanut dish names — creator video titles only (not descriptions). */
