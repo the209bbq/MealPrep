@@ -17,6 +17,8 @@ export interface HomeRecipePrefetchInput {
   categories?: readonly MealDbCatalogCategory[];
   /** When set, prefetch channel videos for these ids (e.g. visible rotation slots). */
   creatorChannelIds?: readonly string[];
+  /** When true, warm filter.php lists only (no meal lookups). */
+  listOnly?: boolean;
 }
 
 let prefetchGeneration = 0;
@@ -45,6 +47,7 @@ export async function runHomeRecipePrefetch(input: HomeRecipePrefetchInput): Pro
         await fetchMealDbCategoryFeedRows(category, input.pantry, {
           detailLimit,
           lookupConcurrency: MEALDB.homePrefetchLookupConcurrency,
+          listOnly: input.listOnly,
         });
       },
     );

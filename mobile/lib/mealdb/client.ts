@@ -73,18 +73,22 @@ async function fetchMealDbPath<T>(path: string): Promise<T | null> {
   try {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) {
-      writeCache(cacheKey, null, MEALDB.failureCacheTtlMs, true);
       return null;
     }
     const json = (await response.json()) as T;
     writeCache(cacheKey, json, cacheTtlMsForPath(path));
     return json;
   } catch {
-    writeCache(cacheKey, null, MEALDB.failureCacheTtlMs, true);
     return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function dropFailedCacheEntry(cacheKey: string): void {
+  memoryCache.delete(cacheKey);
+  inFlight.delete(cacheKey);
+  removeStorageKey(persistentKey(cacheKey));
 }
 
 async function mealDbFetch<T>(path: string): Promise<T | null> {
@@ -92,7 +96,7 @@ async function mealDbFetch<T>(path: string): Promise<T | null> {
   const cached = readCacheEntry(cacheKey);
   if (cached) {
     if (cached.failed) {
-      if (cacheFresh(cached)) return null;
+      dropFailedCacheEntry(cacheKey);
     } else if (cacheFresh(cached)) {
       if (shouldStaleRevalidate(cached, path)) {
         void revalidateMealDbFetch<T>(path);
@@ -130,15 +134,17 @@ export async function mealDbFilterByIngredient(ingredient: string): Promise<stri
 
 export async function mealDbFilterByCategory(category: string): Promise<string[]> {
   const summaries = await mealDbFilterSummariesByCategory(category);
+  if (!summaries) return [];
   return summaries.map((row) => row.idMeal);
 }
 
 export async function mealDbFilterSummariesByCategory(
   category: string,
-): Promise<MealDbFilterMealSummary[]> {
+): Promise<MealDbFilterMealSummary[] | null> {
   const path = `filter.php?c=${encodeURIComponent(category.trim())}`;
   const data = await mealDbFetch<MealDbFilterResponse>(path);
-  if (!data?.meals) return [];
+  if (data === null) return null;
+  if (!data.meals) return [];
   return data.meals;
 }
 
@@ -210,10 +216,10 @@ export function resetMealDbClientCacheForTests(): void {
   inFlight.clear();
 }
 
-export function invalidateMealDbClientCacheForHomeRefresh(): void {
+function invalidateMealDbClientPaths(paths: readonly string[], prefixMatch?: (pathKey: string) => boolean): void {
   const keysToDrop: string[] = [];
   for (const key of memoryCache.keys()) {
-    if (key.startsWith('filter.php') || key.startsWith('lookup.php') || key === 'categories.php') {
+    if (paths.includes(key) || prefixMatch?.(key)) {
       keysToDrop.push(key);
     }
   }
@@ -225,14 +231,33 @@ export function invalidateMealDbClientCacheForHomeRefresh(): void {
   const storagePrefix = persistentKey('');
   for (const storageKey of listStorageKeysWithPrefix(storagePrefix)) {
     const pathKey = storageKey.slice(storagePrefix.length);
-    if (
-      pathKey.startsWith('filter.php') ||
-      pathKey.startsWith('lookup.php') ||
-      pathKey === 'categories.php'
-    ) {
+    if (paths.includes(pathKey) || prefixMatch?.(pathKey)) {
       removeStorageKey(storageKey);
     }
   }
+}
+
+export function invalidateMealDbClientCacheForHomeRefresh(): void {
+  invalidateMealDbClientPaths([], (pathKey) =>
+    pathKey.startsWith('filter.php') ||
+    pathKey.startsWith('lookup.php') ||
+    pathKey === 'categories.php',
+  );
+}
+
+/** Home toolbar refresh: drop list caches only; keep meal lookups for lazy reuse. */
+export function invalidateMealDbListClientCacheForHomeRefresh(): void {
+  invalidateMealDbClientPaths([], (pathKey) =>
+    pathKey.startsWith('filter.php') || pathKey === 'categories.php',
+  );
+}
+
+export function invalidateMealDbFilterCacheForCategory(category: string): void {
+  const path = `filter.php?c=${encodeURIComponent(category.trim())}`;
+  dropFailedCacheEntry(path);
+  memoryCache.delete(path);
+  inFlight.delete(path);
+  removeStorageKey(persistentKey(path));
 }
 
 export function revalidateStaleMealDbPaths(paths: readonly string[]): void {

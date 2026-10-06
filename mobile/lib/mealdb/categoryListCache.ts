@@ -39,3 +39,7 @@ export function clearAllMealDbCategoryListSnapshots(): void {
     removeStorageKey(key);
   }
 }
+
+export function clearMealDbCategoryListSnapshot(category: MealDbCatalogCategory): void {
+  removeStorageKey(storageKey(category));
+}

@@ -59,8 +59,9 @@ import {
 import {
   mealDbListCategories,
   countPassingRecipesForCategoryFromRows,
-  fetchMealDbCategoryFeedRows,
 } from '../../lib/mealdb/categories';
+import { useClassicCategoryFeed } from '../../hooks/useClassicCategoryFeed';
+import { userNeedsResolvedMealDbRowsBeforeDisplay } from '../../lib/diet/stubSafety';
 import { wontCookRefKeys } from '../../lib/recipeRanking/hardFilter';
 import type { CreatorRotationSlot } from '../../lib/recipesTab/creatorRotation';
 import type { MealDbCategoryChip } from '../../lib/recipesTab/categoryRotation';
@@ -68,10 +69,7 @@ import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { useHomeRecipePrefetch } from '../../hooks/useHomeRecipePrefetch';
 import { useHomeRecipesRefresh } from '../../hooks/useHomeRecipesRefresh';
 import { prefetchMealDbCategoryOnIntent } from '../../lib/mealdb/homePrefetch';
-import {
-  clearMealDbCategoryFeedSnapshot,
-  readMealDbCategorySnapshot,
-} from '../../lib/mealdb/categoryFeedCache';
+import { clearMealDbCategoryFeedSnapshot } from '../../lib/mealdb/categoryFeedCache';
 import {
   kitchenRowFailsDietPrefs,
   resolveKitchenRecipesTabRowDetails,
@@ -82,6 +80,7 @@ import type { CreatorListItem } from '../../lib/creatorVideos/types';
 import { creatorWebsiteForChannel } from '../../config/creatorWebsites';
 import type { RecipeDiscoveryListItem } from '../../lib/recipeDiscovery/types';
 import { GUEST_OWNER_ID } from '../../config/guestMode';
+import { isOffline } from '../../lib/network/isOffline';
 import { useRecipeRanking } from '../../hooks/useRecipeRanking';
 import {
   refKeyFromCreatorModel,
@@ -160,8 +159,6 @@ export default function HomeScreen() {
     Awaited<ReturnType<typeof mealDbListCategories>>
   >([]);
   const [mealDbCategoriesLoading, setMealDbCategoriesLoading] = useState(false);
-  const [classicCategoryRows, setClassicCategoryRows] = useState<RecipesTabRow[]>([]);
-  const [classicCategoryLoading, setClassicCategoryLoading] = useState(false);
   const [sectionsExpanded, setSectionsExpanded] = useState<RecipesTabSectionExpanded>(() =>
     defaultRecipesTabSectionExpanded(),
   );
@@ -177,7 +174,10 @@ export default function HomeScreen() {
   const creatorFeedEnabled =
     RECIPE_SOURCES.creatorRecipesPrimaryFeed && isCreatorRecipesConfigured();
   const browseMode: CreatorRecipesBrowseMode = feedMode;
-  const showCreatorCatalogSections = creatorFeedEnabled && !searchQuery.trim();
+  const searchTrimmed = searchQuery.trim();
+  const searchTyping = searchTrimmed.length === 1;
+  const searching = searchTrimmed.length >= 2;
+  const showCreatorCatalogSections = creatorFeedEnabled && !searching;
   const [detailInitialSection, setDetailInitialSection] = useState<'ingredients' | 'steps'>('ingredients');
   const { openScheduleRecipe } = useScheduleRecipeSheet();
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
@@ -361,38 +361,14 @@ export default function HomeScreen() {
     };
   }, [homeMetaRefreshSeed, showCreatorCatalogSections]);
 
-  useEffect(() => {
-    if (!selectedClassicCategory) {
-      setClassicCategoryRows([]);
-      setClassicCategoryLoading(false);
-      return;
-    }
-    let cancelled = false;
-    const snapshot = readMealDbCategorySnapshot(selectedClassicCategory, pantry);
-    if (snapshot.length > 0) {
-      setClassicCategoryRows(snapshot);
-      setClassicCategoryLoading(false);
-    } else {
-      setClassicCategoryRows([]);
-      setClassicCategoryLoading(true);
-    }
-    void fetchMealDbCategoryFeedRows(selectedClassicCategory, pantry, {
-      onRows: (rows) => {
-        if (cancelled || rows.length === 0) return;
-        setClassicCategoryRows(rows);
-        setClassicCategoryLoading(false);
-      },
-    })
-      .then((rows) => {
-        if (!cancelled) setClassicCategoryRows(rows);
-      })
-      .finally(() => {
-        if (!cancelled) setClassicCategoryLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [classicCategoryRefreshSeed, pantry, selectedClassicCategory]);
+  const classicCategoryFeed = useClassicCategoryFeed(
+    selectedClassicCategory,
+    pantry,
+    classicCategoryRefreshSeed,
+  );
+  const classicCategoryRows = classicCategoryFeed.rows;
+  const classicCategoryLoading = classicCategoryFeed.loading;
+  const maskClassicStubTitles = userNeedsResolvedMealDbRowsBeforeDisplay(userDietPrefs);
 
   const {
     viralOpenState,
@@ -488,30 +464,10 @@ export default function HomeScreen() {
       pantryMatches: pantryRecipeMatches,
     });
 
-  const searching = searchQuery.trim().length >= 2;
-
   const searchResultsFiltered = useMemo(() => {
     const diet = filterRecipeSearchResultsForDietPrefs(searchResults, userDietPrefs);
     return rankSearchResults(diet, searchQuery.trim());
   }, [searchResults, searchQuery, userDietPrefs, rankSearchResults]);
-
-  const syncResolvedClassicRow = useCallback((resolved: RecipesTabRow) => {
-    setClassicCategoryRows((prev) => {
-      const index = prev.findIndex(
-        (candidate) => candidate.kind === 'kitchen' && candidate.recipe.id === resolved.recipe.id,
-      );
-      if (index < 0) return prev;
-      const next = [...prev];
-      next[index] = resolved;
-      return next;
-    });
-  }, []);
-
-  const removeClassicRowById = useCallback((recipeId: string) => {
-    setClassicCategoryRows((prev) =>
-      prev.filter((candidate) => candidate.kind !== 'kitchen' || candidate.recipe.id !== recipeId),
-    );
-  }, []);
 
   const resolveRowBeforeUserAction = useCallback(
     async (row: RecipesTabRow): Promise<RecipesTabRow | null> => {
@@ -528,23 +484,33 @@ export default function HomeScreen() {
       }
       if (kitchenRowFailsDietPrefs(working, userDietPrefs)) {
         if (working.kind === 'kitchen') {
-          removeClassicRowById(working.recipe.id);
+          classicCategoryFeed.removeRowById(working.recipe.id);
         }
         notifyRecipeHiddenForDietSettings();
         return null;
       }
       if (row.kind === 'kitchen' && row.pantryMatchPending && working.kind === 'kitchen') {
-        syncResolvedClassicRow(working);
+        classicCategoryFeed.syncRow(working);
       }
       return working;
     },
     [
+      classicCategoryFeed,
       notifyRecipeHiddenForDietSettings,
       pantry,
-      removeClassicRowById,
-      syncResolvedClassicRow,
       userDietPrefs,
     ],
+  );
+
+  const toggleKitchenSaveWithResolve = useCallback(
+    (row: RecipesTabRow) => {
+      void (async () => {
+        const resolved = await resolveRowBeforeUserAction(row);
+        if (!resolved || resolved.kind !== 'kitchen') return;
+        savedRecipes.toggleKitchenRecipe(resolved.recipe);
+      })();
+    },
+    [resolveRowBeforeUserAction, savedRecipes],
   );
 
   const openDetail = useCallback(
@@ -1039,8 +1005,16 @@ export default function HomeScreen() {
       {channelError && selectedCreator ? (
         <Text className="mt-3 text-sm text-muted">{channelError}</Text>
       ) : null}
-      {showCreatorCatalogSections && mealDbError ? (
+      {showCreatorCatalogSections &&
+      mealDbError &&
+      mealDbRows.length === 0 &&
+      classicRecipeRows.length === 0 &&
+      !isOffline() ? (
         <Text className="mt-3 text-sm text-muted">{mealDbError}</Text>
+      ) : null}
+
+      {searchTyping ? (
+        <Text className="mt-4 text-sm text-muted">{CREATOR_RECIPES_COPY.searchTypingHint}</Text>
       ) : null}
 
       {showFilterEmpty ? <RecipesTabFiltersEmptyState onClearAll={clearAllFilters} /> : null}
@@ -1061,10 +1035,7 @@ export default function HomeScreen() {
                 }
                 onToggleSave={
                   result.row.kind === 'kitchen'
-                    ? () => {
-                        if (result.row.kind !== 'kitchen') return;
-                        savedRecipes.toggleKitchenRecipe(result.row.recipe);
-                      }
+                    ? () => toggleKitchenSaveWithResolve(result.row)
                     : undefined
                 }
                 saveDisabled={
@@ -1133,10 +1104,21 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Show all classic categories"
               >
-                <Text className="text-sm font-semibold text-primary">
-                  ← All {selectedClassicCategory} recipes
-                </Text>
+                <Text className="text-sm font-semibold text-primary">← All categories</Text>
               </Pressable>
+            ) : null}
+            {classicCategoryFeed.loadFailed && classicRecipeRows.length === 0 ? (
+              <View className="mb-2">
+                <Text className="text-sm text-muted">{MEALDB_COPY.categoryLoadFailed}</Text>
+                <Pressable
+                  onPress={classicCategoryFeed.retryLoad}
+                  className="mt-2 min-h-[40px] justify-center rounded-lg px-3 py-2"
+                  accessibilityRole="button"
+                  accessibilityLabel={MEALDB_COPY.categoryRetry}
+                >
+                  <Text className="text-sm font-semibold text-primary">{MEALDB_COPY.categoryRetry}</Text>
+                </Pressable>
+              </View>
             ) : null}
             {(mealDbBlockingLoad || classicCategoryLoading) && classicRecipeRows.length === 0 ? (
               <RecipesFeedCardSkeleton count={4} />
@@ -1145,14 +1127,14 @@ export default function HomeScreen() {
               <RecipesUnifiedFeedCard
                 key={row.recipe.id}
                 row={row}
+                maskTitle={
+                  maskClassicStubTitles &&
+                  row.kind === 'kitchen' &&
+                  Boolean(row.pantryMatchPending)
+                }
                 saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
                 onToggleSave={
-                  row.kind === 'kitchen'
-                    ? () => {
-                        if (row.kind !== 'kitchen') return;
-                        savedRecipes.toggleKitchenRecipe(row.recipe);
-                      }
-                    : undefined
+                  row.kind === 'kitchen' ? () => toggleKitchenSaveWithResolve(row) : undefined
                 }
                 saveDisabled={
                   row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false

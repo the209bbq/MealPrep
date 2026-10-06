@@ -24,6 +24,8 @@ interface RecipesUnifiedFeedCardProps {
   onToggleSave?: () => void;
   saveDisabled?: boolean;
   interactionLoading?: boolean;
+  /** Hide recipe title until MealDB details resolve (allergen safety). */
+  maskTitle?: boolean;
 }
 
 function RecipesUnifiedFeedCardInner({
@@ -35,8 +37,9 @@ function RecipesUnifiedFeedCardInner({
   onToggleSave,
   saveDisabled = false,
   interactionLoading = false,
+  maskTitle = false,
 }: RecipesUnifiedFeedCardProps) {
-  const name = row.recipe.name;
+  const name = maskTitle ? '' : row.recipe.name;
   const imageUri = useMemo(
     () =>
       row.kind === 'kitchen'
@@ -49,7 +52,8 @@ function RecipesUnifiedFeedCardInner({
     if (matchPending) return RECIPES_COPY.recipeCard.checkingPantry;
     return recipeListShopLine(row.match);
   }, [matchPending, row.match]);
-  const readyToCook = !matchPending && row.match.missingCount === 0;
+  const hasIngredients = row.kind === 'kitchen' && row.recipe.ingredients.length > 0;
+  const readyToCook = !matchPending && hasIngredients && row.match.missingCount === 0;
   const ingredientLines = useMemo(() => dietCheckLinesFromRecipesTabRow(row), [row]);
 
   return (
@@ -57,7 +61,7 @@ function RecipesUnifiedFeedCardInner({
       onPress={onOpen}
       disabled={interactionLoading}
       accessibilityRole="button"
-      accessibilityLabel={`${name}. ${shopLine}`}
+      accessibilityLabel={maskTitle ? shopLine : `${row.recipe.name}. ${shopLine}`}
       className="relative mb-2 overflow-hidden rounded-xl border border-border bg-card"
     >
       <View className="relative">
@@ -80,9 +84,11 @@ function RecipesUnifiedFeedCardInner({
         ) : null}
       </View>
       <View className="px-3 py-2.5">
-        <Text className="text-base font-semibold text-ink" numberOfLines={2}>
-          {name}
-        </Text>
+        {name ? (
+          <Text className="text-base font-semibold text-ink" numberOfLines={2}>
+            {name}
+          </Text>
+        ) : null}
         <Text
           className={`mt-0.5 text-xs ${readyToCook ? 'text-success-accent' : 'text-danger'}`}
           numberOfLines={1}

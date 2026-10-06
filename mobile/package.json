@@ -104,6 +104,8 @@
     "test:home-collapsed-sections": "npx tsx scripts/home-collapsed-sections-check.ts",
     "test:home-pantry-cta": "npx tsx scripts/home-pantry-cta-check.ts",
     "test:home-prefetch": "npx tsx scripts/home-prefetch-check.ts",
+    "test:home-qa1-safety": "npx tsx scripts/home-qa1-safety-check.ts",
+    "test:home-qa1-data": "npx tsx scripts/home-qa1-data-check.ts",
     "test:home-recipes-refresh": "npx tsx scripts/home-recipes-refresh-check.ts",
     "test:pantry-unit-bridge": "npx tsx scripts/pantry-unit-bridge-check.ts",
     "test:grocery-plan-single-write": "npx tsx scripts/grocery-plan-single-write-check.ts",
