@@ -44,7 +44,7 @@ export interface RecipeEngagementEventV2 {
   suggestedSlot?: PlanSlotCode;
   chosenDay?: string;
   chosenSlot?: PlanSlotCode;
-  via?: 'plan' | 'cook_now';
+  via?: 'planned' | 'cook_now';
 }
 
 export interface RecipeEngagementEvent {

@@ -1,7 +1,7 @@
 import { ScrollView, Text, View } from 'react-native';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
-import { MealMadeReviewSheet } from '../../components/MealMadeReviewSheet';
+import { CookConfirmBanner } from '../../components/home/CookConfirmBanner';
 import { HomeMyRecipesStrip } from '../../components/home/HomeMyRecipesStrip';
 import { MealWeekCalendarCard } from '../../components/mealCalendar/MealWeekCalendarCard';
 import { useApp } from '../../context/AppContext';
@@ -9,13 +9,11 @@ import { useApp } from '../../context/AppContext';
 export default function HomeScreen() {
   const {
     demoMode,
-    closeMealMadeReview,
-    toggleMealMadePantryUse,
-    confirmMealMade,
-    mealMadeReview,
-    mealMadeReviewTitle,
-    mealMadeReviewRows,
-    mealMadeBusy,
+    cookConfirmPrompt,
+    confirmCookConfirmPrompt,
+    declineCookConfirmPrompt,
+    dismissCookConfirmPrompt,
+    cookConfirmBusy,
   } = useApp();
 
   return (
@@ -28,6 +26,16 @@ export default function HomeScreen() {
 
         <MealWeekCalendarCard />
 
+        {cookConfirmPrompt ? (
+          <CookConfirmBanner
+            title={cookConfirmPrompt.title}
+            busy={cookConfirmBusy}
+            onYes={() => void confirmCookConfirmPrompt()}
+            onNotThisTime={declineCookConfirmPrompt}
+            onDismiss={dismissCookConfirmPrompt}
+          />
+        ) : null}
+
         {demoMode ? (
           <Text className="mt-3 text-xs text-muted">
             Demo mode — local data only until you sign in with a connected account.
@@ -35,16 +43,6 @@ export default function HomeScreen() {
         ) : null}
       </ScrollView>
 
-      <MealMadeReviewSheet
-        visible={mealMadeReview != null}
-        mealTitle={mealMadeReviewTitle ?? 'Meal'}
-        rows={mealMadeReviewRows}
-        selectedPantryIds={mealMadeReview?.selectedPantryIds ?? new Set()}
-        onTogglePantryItem={toggleMealMadePantryUse}
-        onConfirm={() => void confirmMealMade()}
-        onCancel={closeMealMadeReview}
-        busy={mealMadeBusy}
-      />
     </View>
   );
 }

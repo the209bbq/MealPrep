@@ -34,7 +34,11 @@ import {
   readGroceryDismissals,
   removeGroceryDismissals,
 } from '../lib/grocery/dismissals';
-import { applyGroceryCheckRestock, reverseGroceryCheckRestock } from '../lib/grocery/restockLedger';
+import {
+  applyGroceryCheckRestock,
+  applyGroceryCheckRestockBatch,
+  reverseGroceryCheckRestock,
+} from '../lib/grocery/restockLedger';
 import { bumpGroceryPersistGeneration, enqueueGroceryPersist } from '../lib/grocery/persistQueue';
 import { groceryListsEqual } from '../lib/grocery/fingerprint';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
@@ -44,8 +48,25 @@ import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
 import { mergeMissingIntoGroceryWithPlanLink } from '../lib/seamlessFlow/groceryPlanLinks';
 import { recipeCategoryGroup } from '../lib/seamlessFlow/categoryGroup';
+import {
+  cookPromptKeyForCookNow,
+  cookPromptKeyForMeal,
+  pickDuePlannedMeal,
+  type CookConfirmVia,
+} from '../lib/seamlessFlow/cookPrompt';
+import {
+  markCookPromptAsked,
+  readCookPromptAskedKeys,
+} from '../lib/seamlessFlow/cookPromptStorage';
+import {
+  categoryGroupForTarget,
+  scheduleTargetFromKitchenRecipe,
+  scheduleTargetFromMealPlanItem,
+} from '../lib/mealCalendar/scheduleTarget';
+import type { ScheduleRecipeTarget } from '../lib/mealCalendar/scheduleTarget';
 import { appendRecipeEngagementEvent, createSeamlessEngagementEvent } from '../lib/recipeRanking';
 import { refKeyForKitchenRecipe } from '../lib/savedRecipes/refKey';
+import { SEAMLESS_FLOW_COPY } from '../config/seamlessFlow';
 import type { GroceryPlannedMealLink } from '../types/mealprep';
 import { router } from 'expo-router';
 import { APP_ROUTES } from '../config/appRoutes';
@@ -271,6 +292,18 @@ interface MealMadeReviewState {
   selectedPantryIds: Set<string>;
 }
 
+export interface CookConfirmPromptState {
+  key: string;
+  title: string;
+  mealPlanItemId: string | null;
+  recipeId: string;
+  refKey: string;
+  source: import('../lib/recipeRanking/types').RecipeEngagementSource;
+  group: import('../lib/recipeRanking/types').RecipeCategoryGroup;
+  sheetId: string | null;
+  via: CookConfirmVia;
+}
+
 interface AppContextValue {
   appName: string;
   demoMode: boolean;
@@ -314,6 +347,13 @@ interface AppContextValue {
   mealMadeReviewTitle: string | null;
   mealMadeReviewRows: ReturnType<typeof matchedRowsForReview>;
   mealMadeBusy: boolean;
+  cookConfirmPrompt: CookConfirmPromptState | null;
+  beginCookViewSession: (target: ScheduleRecipeTarget) => void;
+  finishCookViewSession: () => void;
+  confirmCookConfirmPrompt: () => Promise<void>;
+  declineCookConfirmPrompt: () => void;
+  dismissCookConfirmPrompt: () => void;
+  cookConfirmBusy: boolean;
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
   scheduleMealFromRecipe: (input: {
     recipeId: string;
@@ -467,6 +507,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mealMadeReview, setMealMadeReview] = useState<MealMadeReviewState | null>(null);
   const [mealMadeUndo, setMealMadeUndo] = useState<MealMadeUndoState | null>(null);
   const [mealMadeBusy, setMealMadeBusy] = useState(false);
+  const [cookConfirmPrompt, setCookConfirmPrompt] = useState<CookConfirmPromptState | null>(null);
+  const [cookConfirmBusy, setCookConfirmBusy] = useState(false);
+  const cookViewSessionRef = useRef<ScheduleRecipeTarget | null>(null);
   const [liveAnalytics, setLiveAnalytics] = useState<UserAnalytics | null>(null);
   const [accountSheet, setAccountSheet] = useState<'closed' | 'auth' | 'account'>('closed');
   const [showPostSignupSetup, setShowPostSignupSetup] = useState(false);
@@ -1392,6 +1435,194 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     userId,
   ]);
 
+  const logCookEngagement = useCallback(
+    (prompt: CookConfirmPromptState, type: 'cook_confirmed' | 'cook_declined') => {
+      appendRecipeEngagementEvent(
+        ownerId,
+        createSeamlessEngagementEvent(prompt.refKey, type, {
+          ts: Date.now(),
+          recipeId: prompt.recipeId,
+          source: prompt.source,
+          group: prompt.group,
+          sheetId: prompt.sheetId ?? 'sheet-unknown',
+          via: prompt.via,
+        }),
+      );
+    },
+    [ownerId],
+  );
+
+  const buildCookPromptFromTarget = useCallback(
+    (target: ScheduleRecipeTarget, via: CookConfirmVia): CookConfirmPromptState => {
+      const key =
+        via === 'cook_now'
+          ? cookPromptKeyForCookNow(target.pantryRecipeId, target.sheetId ?? null)
+          : cookPromptKeyForMeal(target.pantryRecipeId);
+      return {
+        key,
+        title: target.title,
+        mealPlanItemId: null,
+        recipeId: target.pantryRecipeId,
+        refKey: target.refKey,
+        source: target.source,
+        group: categoryGroupForTarget(target),
+        sheetId: target.sheetId ?? null,
+        via,
+      };
+    },
+    [],
+  );
+
+  const buildCookPromptFromMeal = useCallback(
+    (item: MealPlanItem, recipeId: string): CookConfirmPromptState | null => {
+      const recipe = feedKitchenRecipes.find((row) => row.id === recipeId);
+      const target = recipe
+        ? scheduleTargetFromKitchenRecipe(recipe, null)
+        : scheduleTargetFromMealPlanItem(item);
+      return {
+        key: cookPromptKeyForMeal(item.id),
+        title: item.title.replace(/^Leftovers:\s*/i, ''),
+        mealPlanItemId: item.id,
+        recipeId,
+        refKey: target.refKey,
+        source: target.source,
+        group: categoryGroupForTarget(target),
+        sheetId: null,
+        via: 'planned',
+      };
+    },
+    [feedKitchenRecipes],
+  );
+
+  const beginCookViewSession = useCallback((target: ScheduleRecipeTarget) => {
+    cookViewSessionRef.current = target;
+  }, []);
+
+  const finishCookViewSession = useCallback(() => {
+    const target = cookViewSessionRef.current;
+    cookViewSessionRef.current = null;
+    if (!target) return;
+
+    const prompt = buildCookPromptFromTarget(target, 'cook_now');
+    const asked = readCookPromptAskedKeys(ownerId);
+    if (asked.has(prompt.key)) return;
+
+    setCookConfirmPrompt((current) => current ?? prompt);
+  }, [buildCookPromptFromTarget, ownerId]);
+
+  const dismissCookConfirmPrompt = useCallback(() => {
+    if (!cookConfirmPrompt) return;
+    markCookPromptAsked(ownerId, cookConfirmPrompt.key);
+    setCookConfirmPrompt(null);
+  }, [cookConfirmPrompt, ownerId]);
+
+  const declineCookConfirmPrompt = useCallback(() => {
+    if (!cookConfirmPrompt) return;
+    logCookEngagement(cookConfirmPrompt, 'cook_declined');
+    markCookPromptAsked(ownerId, cookConfirmPrompt.key);
+    setCookConfirmPrompt(null);
+  }, [cookConfirmPrompt, logCookEngagement, ownerId]);
+
+  const confirmCookConfirmPrompt = useCallback(async () => {
+    if (!cookConfirmPrompt) return;
+    const prompt = cookConfirmPrompt;
+
+    const recipe = feedKitchenRecipes.find((row) => row.id === prompt.recipeId);
+    if (!recipe) {
+      dismissCookConfirmPrompt();
+      return;
+    }
+
+    const match = scoreRecipeAgainstPantry(recipe, pantry);
+    const lines = buildPantryDeductionLines(
+      match,
+      recipe,
+      servingOverrides,
+      new Set(),
+      profile.householdSize,
+    );
+    const pantrySnapshot = pantry.map((row) => ({ ...row }));
+    const { nextPantry } = applyPantryDeductions(pantry, lines);
+    const madeAt = new Date().toISOString();
+
+    setCookConfirmBusy(true);
+    try {
+      setPantry(nextPantry);
+      if (prompt.mealPlanItemId) {
+        setMealPlan((prev) =>
+          prev.map((row) =>
+            row.id === prompt.mealPlanItemId ? { ...row, made: true, madeAt } : row,
+          ),
+        );
+      }
+
+      if (!demoMode && supabase && userId) {
+        for (const line of lines) {
+          const updated = nextPantry.find((row) => row.id === line.pantryItemId);
+          if (updated) {
+            await updatePantryItem(supabase, userId, updated);
+          } else {
+            await deletePantryItemsByIds(supabase, userId, [line.pantryItemId]);
+          }
+        }
+        if (prompt.mealPlanItemId) {
+          await updateMealPlanItem(supabase, userId, prompt.mealPlanItemId, { made: true, madeAt });
+        }
+      }
+
+      logCookEngagement(prompt, 'cook_confirmed');
+      markCookPromptAsked(ownerId, prompt.key);
+      setCookConfirmPrompt(null);
+      setUndoToast({
+        message: SEAMLESS_FLOW_COPY.pantryUpdatedToast,
+        onUndo: () => setUndoToast(null),
+        showUndo: false,
+      });
+    } catch (error: unknown) {
+      setAuthError(error instanceof Error ? error.message : 'Failed to update pantry');
+      setPantry(pantrySnapshot);
+    } finally {
+      setCookConfirmBusy(false);
+    }
+  }, [
+    cookConfirmPrompt,
+    demoMode,
+    dismissCookConfirmPrompt,
+    feedKitchenRecipes,
+    logCookEngagement,
+    ownerId,
+    pantry,
+    profile.householdSize,
+    servingOverrides,
+    supabase,
+    userId,
+  ]);
+
+  useEffect(() => {
+    if (cookConfirmPrompt) return;
+    const asked = readCookPromptAskedKeys(ownerId);
+    const due = pickDuePlannedMeal(mealPlan, asked);
+    if (!due) return;
+    const recipeId = resolveMealPlanRecipeId(due, feedKitchenRecipes, ownerId);
+    if (!recipeId) return;
+    const prompt = buildCookPromptFromMeal(due, recipeId);
+    if (prompt) setCookConfirmPrompt(prompt);
+  }, [buildCookPromptFromMeal, cookConfirmPrompt, feedKitchenRecipes, mealPlan, ownerId]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (cookConfirmPrompt) return;
+      const asked = readCookPromptAskedKeys(ownerId);
+      const due = pickDuePlannedMeal(mealPlan, asked);
+      if (!due) return;
+      const recipeId = resolveMealPlanRecipeId(due, feedKitchenRecipes, ownerId);
+      if (!recipeId) return;
+      const prompt = buildCookPromptFromMeal(due, recipeId);
+      if (prompt) setCookConfirmPrompt(prompt);
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [buildCookPromptFromMeal, cookConfirmPrompt, feedKitchenRecipes, mealPlan, ownerId]);
+
   const addMealPlanEntry = useCallback(
     async (entry: Omit<MealPlanItem, 'id'>) => {
       const normalized: Omit<MealPlanItem, 'id'> = {
@@ -1599,10 +1830,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (toRestock.length === 0) return;
 
       const pantrySnapshot = pantry.map((row) => ({ ...row }));
-      let nextPantry = pantry;
-      for (const item of toRestock) {
-        nextPantry = applyGroceryCheckRestock(nextPantry, item, groceryRestockLedgerRef.current);
-      }
+      let nextPantry = applyGroceryCheckRestockBatch(
+        pantry,
+        toRestock,
+        groceryRestockLedgerRef.current,
+      );
 
       setPantry(nextPantry);
 
@@ -1784,14 +2016,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let nextPantry = pantry;
 
     if (restockEnabled) {
-      const incoming = groceryItemsToPantryItems(removed);
-      const merged = mergePantryStock(pantry, incoming);
-      nextPantry = merged.pantry;
+      const toRestock = removed.filter((item) => !groceryRestockLedgerRef.current.has(item.id));
+      nextPantry = applyGroceryCheckRestockBatch(pantry, toRestock, groceryRestockLedgerRef.current);
       setPantry(nextPantry);
 
-      if (!demoMode && !isGuest && supabase && userId) {
+      if (!demoMode && !isGuest && supabase && userId && toRestock.length > 0) {
+        const pantryBefore = pantrySnapshot;
         void (async () => {
           try {
+            const incoming = groceryItemsToPantryItems(toRestock);
+            const merged = mergePantryStock(pantryBefore, incoming);
             for (const row of merged.updated) {
               await updatePantryItem(supabase, userId, row);
             }
@@ -1808,6 +2042,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setPantry(pantrySnapshot);
             setGrocery(previousGrocery);
             persistGroceryList(previousGrocery);
+            for (const item of toRestock) {
+              groceryRestockLedgerRef.current.delete(item.id);
+            }
           }
         })();
       }
@@ -2467,6 +2704,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mealMadeReviewTitle,
       mealMadeReviewRows,
       mealMadeBusy,
+      cookConfirmPrompt,
+      beginCookViewSession,
+      finishCookViewSession,
+      confirmCookConfirmPrompt,
+      declineCookConfirmPrompt,
+      dismissCookConfirmPrompt,
+      cookConfirmBusy,
       isOnMealPlan,
       scheduleMealFromRecipe,
       notifyMealScheduled,
@@ -2587,6 +2831,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mealMadeReviewTitle,
       mealMadeReviewRows,
       mealMadeBusy,
+      cookConfirmPrompt,
+      beginCookViewSession,
+      finishCookViewSession,
+      confirmCookConfirmPrompt,
+      declineCookConfirmPrompt,
+      dismissCookConfirmPrompt,
+      cookConfirmBusy,
       isOnMealPlan,
       scheduleMealFromRecipe,
       notifyMealScheduled,

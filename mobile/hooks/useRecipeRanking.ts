@@ -96,7 +96,15 @@ export function useRecipeRanking(options: {
       refKey: string,
       type: Extract<
         RecipeEngagementEventType,
-        'plan' | 'cook_now' | 'just_save' | 'skip' | 'ghost_confirm' | 'ghost_override' | 'import'
+        | 'plan'
+        | 'cook_now'
+        | 'just_save'
+        | 'skip'
+        | 'import'
+        | 'ghost_confirm'
+        | 'ghost_override'
+        | 'cook_confirmed'
+        | 'cook_declined'
       >,
       v2: RecipeEngagementEventV2,
     ) => {

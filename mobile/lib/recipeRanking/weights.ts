@@ -1,5 +1,3 @@
-import type { RecipeEngagementEventType } from './types';
-
 /** Top-level score weights (spec §2.4, peer reserved at 0). */
 export const RANK_WEIGHT_FIT_COLD = 40;
 export const RANK_WEIGHT_PERSONAL_COLD = 35;
