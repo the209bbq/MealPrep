@@ -777,7 +777,12 @@ export default function HomeScreen() {
         className="mt-4"
         title={creatorFeedEnabled ? undefined : RECIPES_COPY.cookNowCard.title}
         subtitle={
-          creatorFeedEnabled ? CREATOR_RECIPES_COPY.feedSubtitle : RECIPES_COPY.cookNowCard.subtitle
+          creatorFeedEnabled
+            ? RECIPES_COPY.homeToolbarCard.subtitle
+            : RECIPES_COPY.cookNowCard.subtitle
+        }
+        subtitleClassName={
+          creatorFeedEnabled ? 'mt-1 text-base text-muted' : undefined
         }
       >
         {selectedCreator ? (

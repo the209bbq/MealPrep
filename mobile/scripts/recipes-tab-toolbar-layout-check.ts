@@ -10,6 +10,7 @@ import {
   CREATOR_RECIPES_FEED_MODE_SHORT_LABELS,
   CREATOR_RECIPES_FEED_MODES,
 } from '../config/creatorRecipes';
+import { RECIPES_COPY } from '../config/recipesCopy';
 
 const DROPDOWN_TRIGGER_MAX_PX = 108;
 const TOOLBAR_GAP_PX = 6;
@@ -42,8 +43,17 @@ assert.doesNotMatch(
 assert.doesNotMatch(homeSource, /MainIngredientChipRow/, 'Home should not render Cook-with chips');
 assert.match(
   homeSource,
-  /CREATOR_RECIPES_COPY\.feedSubtitle/,
-  'Home toolbar card should keep the feed subtitle',
+  /RECIPES_COPY\.homeToolbarCard\.subtitle/,
+  'Home toolbar card should show the paste/snap subtitle',
+);
+assert.match(
+  homeSource,
+  /subtitleClassName=\{[\s\S]*text-base text-muted/,
+  'Home toolbar paste/snap line should use text-base',
+);
+assert.equal(
+  RECIPES_COPY.homeToolbarCard.subtitle,
+  'Paste a video link or recipe text — or tap 📷 to snap a cookbook, magazine, or recipe card.',
 );
 const distDir = path.join(mobileRoot, 'dist');
 const serveRoot = path.join(mobileRoot, '.toolbar-layout-serve-root');

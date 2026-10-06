@@ -7,6 +7,12 @@ export type RecipesPantryFilterCopyId = 'best_match' | 'have_all' | 'missing_1_2
 export const RECIPES_COPY = {
   mealsOnHomeLink: (count: number) => `Meals to make on Home (${count})`,
 
+  /** Top line on the Home recipe toolbar when the creator feed is enabled. */
+  homeToolbarCard: {
+    subtitle:
+      'Paste a video link or recipe text — or tap 📷 to snap a cookbook, magazine, or recipe card.',
+  },
+
   cookNowCard: {
     title: 'Cook now',
     subtitle: 'Meals you can make with what is already in your pantry',
