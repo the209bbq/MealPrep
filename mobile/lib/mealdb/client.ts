@@ -1,6 +1,6 @@
 import { MEALDB, mealDbApiBaseUrl } from '../../config/mealdb';
 import { mapWithConcurrency } from '../concurrency';
-import { readJson, writeJson } from '../storage';
+import { listStorageKeysWithPrefix, readJson, removeStorageKey, writeJson } from '../storage';
 import { mealDbMealToAppRecipe } from './normalize';
 import { mealDbIdFromRecipeId } from './slug';
 import type { Recipe } from '../../types/mealprep';
@@ -14,6 +14,7 @@ import type {
 interface CacheEntry {
   payload: unknown;
   expiresAt: number;
+  cachedAtMs?: number;
   failed?: boolean;
 }
 
@@ -34,9 +35,25 @@ function readCacheEntry(key: string): CacheEntry | null {
 }
 
 function writeCache(key: string, payload: unknown, ttlMs: number, failed = false): void {
-  const entry: CacheEntry = { payload, expiresAt: Date.now() + ttlMs, failed };
+  const now = Date.now();
+  const entry: CacheEntry = {
+    payload,
+    expiresAt: now + ttlMs,
+    cachedAtMs: now,
+    failed,
+  };
   memoryCache.set(key, entry);
   writeJson(persistentKey(key), entry);
+}
+
+function cacheEntryAgeMs(entry: CacheEntry, path: string): number {
+  const cachedAt = entry.cachedAtMs ?? entry.expiresAt - cacheTtlMsForPath(path);
+  return Date.now() - cachedAt;
+}
+
+function shouldStaleRevalidate(entry: CacheEntry, path: string): boolean {
+  if (entry.failed) return false;
+  return cacheEntryAgeMs(entry, path) >= MEALDB.staleRevalidateAfterMs;
 }
 
 function cacheFresh(entry: CacheEntry): boolean {
@@ -77,6 +94,9 @@ async function mealDbFetch<T>(path: string): Promise<T | null> {
     if (cached.failed) {
       if (cacheFresh(cached)) return null;
     } else if (cacheFresh(cached)) {
+      if (shouldStaleRevalidate(cached, path)) {
+        void revalidateMealDbFetch<T>(path);
+      }
       return cached.payload as T;
     } else {
       void revalidateMealDbFetch<T>(path);
@@ -188,6 +208,41 @@ export async function mealDbLookupMeals(
 export function resetMealDbClientCacheForTests(): void {
   memoryCache.clear();
   inFlight.clear();
+}
+
+export function invalidateMealDbClientCacheForHomeRefresh(): void {
+  const keysToDrop: string[] = [];
+  for (const key of memoryCache.keys()) {
+    if (key.startsWith('filter.php') || key.startsWith('lookup.php') || key === 'categories.php') {
+      keysToDrop.push(key);
+    }
+  }
+  for (const key of keysToDrop) {
+    memoryCache.delete(key);
+    inFlight.delete(key);
+    removeStorageKey(persistentKey(key));
+  }
+  const storagePrefix = persistentKey('');
+  for (const storageKey of listStorageKeysWithPrefix(storagePrefix)) {
+    const pathKey = storageKey.slice(storagePrefix.length);
+    if (
+      pathKey.startsWith('filter.php') ||
+      pathKey.startsWith('lookup.php') ||
+      pathKey === 'categories.php'
+    ) {
+      removeStorageKey(storageKey);
+    }
+  }
+}
+
+export function revalidateStaleMealDbPaths(paths: readonly string[]): void {
+  for (const path of paths) {
+    const entry = readCacheEntry(path);
+    if (!entry || entry.failed) continue;
+    if (shouldStaleRevalidate(entry, path)) {
+      void revalidateMealDbFetch(path);
+    }
+  }
 }
 
 /** Sync read of a previously fetched lookup result (no network). */

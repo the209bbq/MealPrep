@@ -1,6 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
+  forceRecipesTabVisitRotation,
   resolveRecipesTabVisit,
   type RecipesTabVisitSession,
 } from './visitState';
@@ -11,6 +12,7 @@ import {
 export function useRecipesTabVisitSession(
   ownerId: string,
   enabled: boolean,
+  options?: { manualRotationEpoch?: number },
 ): { visitSession: RecipesTabVisitSession | null; visitEpoch: number } {
   const [visitEpoch, setVisitEpoch] = useState(0);
   const [visitSession, setVisitSession] = useState<RecipesTabVisitSession | null>(() =>
@@ -27,6 +29,14 @@ export function useRecipesTabVisitSession(
       }
     }, [enabled, ownerId]),
   );
+
+  const manualRotationEpoch = options?.manualRotationEpoch ?? 0;
+  useEffect(() => {
+    if (!enabled || manualRotationEpoch === 0) return;
+    const session = forceRecipesTabVisitRotation(ownerId, Date.now());
+    setVisitSession(session);
+    setVisitEpoch((value) => value + 1);
+  }, [enabled, manualRotationEpoch, ownerId]);
 
   return { visitSession, visitEpoch };
 }

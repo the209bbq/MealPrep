@@ -44,6 +44,8 @@ export function useRecipesTabSurface(options: {
   recipeEvents: readonly RecipeEngagementEvent[];
   sectionsExpanded: RecipesTabSectionExpanded;
   onSectionsExpandedChange: (next: RecipesTabSectionExpanded) => void;
+  /** Increment to reshuffle creator/category bubbles (manual refresh). */
+  manualRotationEpoch?: number;
 }) {
   const {
     ownerId,
@@ -58,6 +60,7 @@ export function useRecipesTabSurface(options: {
     recipeEvents,
     sectionsExpanded: sections,
     onSectionsExpandedChange,
+    manualRotationEpoch,
   } = options;
   const [surfaceEvents, setSurfaceEvents] = useState<RecipesTabSurfaceEvent[]>(() =>
     readRecipesTabSurfaceEvents(ownerId),
@@ -67,7 +70,9 @@ export function useRecipesTabSurface(options: {
   const impressedCreatorsRef = useRef<Set<string>>(new Set());
   const impressedCategoriesRef = useRef<Set<string>>(new Set());
 
-  const { visitSession, visitEpoch } = useRecipesTabVisitSession(ownerId, enabled);
+  const { visitSession, visitEpoch } = useRecipesTabVisitSession(ownerId, enabled, {
+    manualRotationEpoch,
+  });
 
   useEffect(() => {
     visitStateForRotationRef.current = visitSession?.state ?? null;

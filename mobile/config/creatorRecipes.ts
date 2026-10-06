@@ -13,6 +13,8 @@ export const CREATOR_RECIPES = {
   requestTimeoutMs: 20_000,
   proxyUrl: process.env.EXPO_PUBLIC_CREATOR_VIDEOS_URL ?? '',
   clientCacheTtlMs: 15 * 60 * 1000,
+  /** Background revalidate persisted creator responses after this age. */
+  staleRevalidateAfterMs: 24 * 60 * 60 * 1000,
   migrationFilePath: 'mobile/supabase/migrations/20261004120000_recipe_creators.sql',
 } as const;
 

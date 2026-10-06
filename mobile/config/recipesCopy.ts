@@ -11,6 +11,9 @@ export const RECIPES_COPY = {
   homeToolbarCard: {
     subtitle:
       'Paste a video link or recipe text — or tap 📷 to snap a cookbook, magazine, or recipe card.',
+    refreshRecipes: 'Refresh recipes',
+    refreshUpdated: 'Updated',
+    refreshOffline: "You're offline, showing saved recipes",
   },
 
   cookNowCard: {

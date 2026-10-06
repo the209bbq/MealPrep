@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { CookConfirmBanner } from '../../components/home/CookConfirmBanner';
+import { HomeRecipesRefreshButton } from '../../components/home/HomeRecipesRefreshButton';
 import { HomeHubSheet } from '../../components/home/HomeHubSheet';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
@@ -64,8 +65,12 @@ import type { CreatorRotationSlot } from '../../lib/recipesTab/creatorRotation';
 import type { MealDbCategoryChip } from '../../lib/recipesTab/categoryRotation';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { useHomeRecipePrefetch } from '../../hooks/useHomeRecipePrefetch';
+import { useHomeRecipesRefresh } from '../../hooks/useHomeRecipesRefresh';
 import { prefetchMealDbCategoryOnIntent } from '../../lib/mealdb/homePrefetch';
-import { readMealDbCategorySnapshot } from '../../lib/mealdb/categoryFeedCache';
+import {
+  clearMealDbCategoryFeedSnapshot,
+  readMealDbCategorySnapshot,
+} from '../../lib/mealdb/categoryFeedCache';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { CreatorListItem } from '../../lib/creatorVideos/types';
@@ -170,6 +175,9 @@ export default function HomeScreen() {
   const [detailInitialSection, setDetailInitialSection] = useState<'ingredients' | 'steps'>('ingredients');
   const { openScheduleRecipe } = useScheduleRecipeSheet();
   const [feedDiversitySeed, setFeedDiversitySeed] = useState(0);
+  const [manualRotationEpoch, setManualRotationEpoch] = useState(0);
+  const [classicCategoryRefreshSeed, setClassicCategoryRefreshSeed] = useState(0);
+  const [homeMetaRefreshSeed, setHomeMetaRefreshSeed] = useState(0);
   const { filters, setFilter, clearAllFilters } = useRecipesTabFilters();
   const recipeRanking = useRecipeRanking({
     ownerId,
@@ -213,11 +221,21 @@ export default function HomeScreen() {
   const creatorsCatalogEnabled =
     creatorFeedEnabled && !searchQuery.trim() && !selectedCreator;
 
-  const { creators, loading: creatorsLoading, error: creatorsError } = useCreatorList(session, {
+  const {
+    creators,
+    loading: creatorsLoading,
+    error: creatorsError,
+    refresh: refreshCreators,
+  } = useCreatorList(session, {
     enabled: creatorsCatalogEnabled,
   });
 
-  const { videos: feedVideos, loading: feedLoading, error: feedError } = useCreatorFeed(
+  const {
+    videos: feedVideos,
+    loading: feedLoading,
+    error: feedError,
+    refresh: refreshCreatorFeed,
+  } = useCreatorFeed(
     session,
     browseMode,
     {
@@ -234,6 +252,7 @@ export default function HomeScreen() {
     videos: channelVideos,
     loading: channelLoading,
     error: channelError,
+    refresh: refreshCreatorChannel,
   } = useCreatorChannelVideos(session, selectedCreator?.youtubeChannelId ?? null, {
     enabled: creatorFeedEnabled && Boolean(selectedCreator) && !searchQuery.trim(),
   });
@@ -273,6 +292,7 @@ export default function HomeScreen() {
     recipeEvents: recipeRanking.events,
     sectionsExpanded,
     onSectionsExpandedChange: setSectionsExpanded,
+    manualRotationEpoch,
   });
 
   const creatorBubbleChannelIds = useMemo(
@@ -285,6 +305,37 @@ export default function HomeScreen() {
     pantry,
     session,
     creatorChannelIds: creatorBubbleChannelIds,
+  });
+
+  const handleClassicCatalogRefresh = useCallback(() => {
+    setFeedDiversitySeed((value) => value + 1);
+    setHomeMetaRefreshSeed((value) => value + 1);
+    refreshMealDb();
+  }, [refreshMealDb]);
+
+  const handleCreatorsDataRefresh = useCallback(() => {
+    void refreshCreators();
+    void refreshCreatorFeed();
+    if (selectedCreator) {
+      void refreshCreatorChannel();
+    }
+  }, [refreshCreatorChannel, refreshCreatorFeed, refreshCreators, selectedCreator]);
+
+  const handleCategoryReselectRefresh = useCallback(() => {
+    if (!selectedClassicCategory) return;
+    clearMealDbCategoryFeedSnapshot(selectedClassicCategory, pantry);
+    setClassicCategoryRefreshSeed((value) => value + 1);
+  }, [pantry, selectedClassicCategory]);
+
+  const homeRecipesRefresh = useHomeRecipesRefresh({
+    enabled: showCreatorCatalogSections && !searchQuery.trim(),
+    pantry,
+    session,
+    creatorChannelIds: creatorBubbleChannelIds,
+    onRotationBump: () => setManualRotationEpoch((value) => value + 1),
+    onClassicCatalogRefresh: handleClassicCatalogRefresh,
+    onCreatorsRefresh: handleCreatorsDataRefresh,
+    onCategoryReselect: handleCategoryReselectRefresh,
   });
 
   useEffect(() => {
@@ -301,7 +352,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [showCreatorCatalogSections]);
+  }, [homeMetaRefreshSeed, showCreatorCatalogSections]);
 
   useEffect(() => {
     if (!selectedClassicCategory) {
@@ -334,7 +385,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [pantry, selectedClassicCategory]);
+  }, [classicCategoryRefreshSeed, pantry, selectedClassicCategory]);
 
   const {
     viralOpenState,
@@ -791,7 +842,21 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-paper px-4 pb-8">
+    <ScrollView
+      className="flex-1 bg-paper px-4 pb-8"
+      refreshControl={
+        showCreatorCatalogSections && !searching
+          ? (
+              <RefreshControl
+                refreshing={homeRecipesRefresh.refreshing}
+                onRefresh={homeRecipesRefresh.onRefresh}
+                colors={[THEME.primary]}
+                tintColor={THEME.primary}
+              />
+            )
+          : undefined
+      }
+    >
       <InstallAppBanner />
       <GuestSaveNudge />
       {cookConfirmPrompt ? (
@@ -965,6 +1030,12 @@ export default function HomeScreen() {
 
       {showCreatorCatalogSections && !searching ? (
         <>
+          <HomeRecipesRefreshButton
+            visible
+            refreshing={homeRecipesRefresh.refreshing}
+            statusMessage={homeRecipesRefresh.statusMessage}
+            onPress={homeRecipesRefresh.onRefresh}
+          />
           <RecipesTabCollapsibleSection
             title={RECIPES_TAB_SURFACE_COPY.classicSectionTitle}
             expanded={tabSurface.sections.classic}

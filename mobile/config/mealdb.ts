@@ -12,6 +12,8 @@ export const MEALDB = {
   lookupCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   /** Filter/search list responses — refresh daily. */
   filterCacheTtlMs: 24 * 60 * 60 * 1000,
+  /** Background revalidate when cached data is older than this (even if hard TTL not expired). */
+  staleRevalidateAfterMs: 24 * 60 * 60 * 1000,
   /** @deprecated use lookupCacheTtlMs / filterCacheTtlMs */
   clientCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   failureCacheTtlMs: 5 * 60 * 1000,

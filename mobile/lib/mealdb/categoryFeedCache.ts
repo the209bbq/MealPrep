@@ -2,7 +2,7 @@ import { MEALDB } from '../../config/mealdb';
 import type { MealDbCatalogCategory } from '../../config/recipesTabSurface';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import type { PantryItem } from '../../types/mealprep';
-import { readJson, writeJson } from '../storage';
+import { listStorageKeysWithPrefix, readJson, removeStorageKey, writeJson } from '../storage';
 
 interface CategorySnapshot {
   rows: RecipesTabRow[];
@@ -41,4 +41,19 @@ export function writeMealDbCategorySnapshot(
     expiresAt: Date.now() + MEALDB.filterCacheTtlMs,
   };
   writeJson(`${MEALDB.cacheKeyPrefix}:${key}`, entry);
+}
+
+export function clearMealDbCategoryFeedSnapshot(
+  category: MealDbCatalogCategory,
+  pantry: PantryItem[],
+): void {
+  const key = categorySnapshotKey(category, pantry);
+  removeStorageKey(`${MEALDB.cacheKeyPrefix}:${key}`);
+}
+
+export function clearAllMealDbCategoryFeedSnapshots(): void {
+  const prefix = `${MEALDB.cacheKeyPrefix}:category:`;
+  for (const key of listStorageKeysWithPrefix(prefix)) {
+    removeStorageKey(key);
+  }
 }

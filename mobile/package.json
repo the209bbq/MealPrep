@@ -102,6 +102,7 @@
     "test:category-chips-home": "npx tsx scripts/category-chips-home-check.ts",
     "test:home-collapsed-sections": "npx tsx scripts/home-collapsed-sections-check.ts",
     "test:home-prefetch": "npx tsx scripts/home-prefetch-check.ts",
+    "test:home-recipes-refresh": "npx tsx scripts/home-recipes-refresh-check.ts",
     "test:pantry-unit-bridge": "npx tsx scripts/pantry-unit-bridge-check.ts",
     "test:grocery-plan-single-write": "npx tsx scripts/grocery-plan-single-write-check.ts",
     "eval:pantry-vision-photos": "npx tsx scripts/pantry-vision-photo-eval.ts",

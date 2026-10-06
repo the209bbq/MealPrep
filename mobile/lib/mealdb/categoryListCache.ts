@@ -1,6 +1,6 @@
 import { MEALDB } from '../../config/mealdb';
 import type { MealDbCatalogCategory } from '../../config/recipesTabSurface';
-import { readJson, writeJson } from '../storage';
+import { listStorageKeysWithPrefix, readJson, removeStorageKey, writeJson } from '../storage';
 import type { MealDbFilterMealSummary } from './types';
 
 interface CategoryListSnapshot {
@@ -31,4 +31,11 @@ export function writeMealDbCategoryListSnapshot(
     expiresAt: Date.now() + MEALDB.filterCacheTtlMs,
   };
   writeJson(storageKey(category), entry);
+}
+
+export function clearAllMealDbCategoryListSnapshots(): void {
+  const prefix = `${MEALDB.cacheKeyPrefix}:category-list:`;
+  for (const key of listStorageKeysWithPrefix(prefix)) {
+    removeStorageKey(key);
+  }
 }
