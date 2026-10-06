@@ -2,6 +2,7 @@ import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import type { ViralRecipeLinkItem } from '../viralRecipes/types';
 import { compareRecipePantryMatches, type PantryMatchIndex, type RecipePantryMatch } from '../recipeMatch';
 import type { Recipe } from '../../types/mealprep';
+import { isUserImportedKitchenRecipe } from '../recipeImport/mapToAppRecipe';
 import { findKitchenRecipeBySourceUrl } from './recipeSourceUrl';
 import { buildRecipesTabCatalogRows } from './recipesTabCatalog';
 
@@ -81,12 +82,10 @@ export function viralItemToKitchenRow(
 }
 
 export function buildMyRecipesFeedRows(options: {
-  kitchenRecipes: Recipe[];
+  kitchenRecipes: readonly Recipe[];
   pantryMatches: PantryMatchIndex;
 }): RecipesTabRow[] {
-  const owned = options.kitchenRecipes.filter(
-    (recipe) => recipe.sourceUrl || recipe.id.startsWith('link-import-'),
-  );
+  const owned = options.kitchenRecipes.filter((recipe) => isUserImportedKitchenRecipe(recipe));
   const rows = buildRecipesTabCatalogRows({
     kitchenRecipes: owned,
     pantryMatches: options.pantryMatches,

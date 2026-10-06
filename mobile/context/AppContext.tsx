@@ -150,6 +150,11 @@ import { mergeGuestKitchenIntoAccount } from '../lib/guest/mergeGuestKitchen';
 import { clearGuestSavedRecipes, readGuestSavedRecipes } from '../lib/savedRecipes/localStore';
 import { mergeGuestSavedRecipesIntoAccount } from '../lib/savedRecipes/supabaseStore';
 import { readJson, removeStorageKey, writeJson } from '../lib/storage';
+import {
+  readAccountKitchenCache,
+  writeAccountKitchenCache,
+} from '../lib/account/accountKitchenCache';
+import { clearUserScopedLocalStorage } from '../lib/account/clearUserScopedLocalStorage';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
 import { getSupabase } from '../lib/supabase';
 import { recipeApiToAppRecipe } from '../lib/recipeDiscovery/mapToAppRecipe';
@@ -519,6 +524,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [accountSheet, setAccountSheet] = useState<'closed' | 'auth' | 'account'>('closed');
   const [showPostSignupSetup, setShowPostSignupSetup] = useState(false);
   const [demoProfilePatch, setDemoProfilePatch] = useState<Partial<UserProfile>>({});
+  const userId = session?.user.id ?? null;
 
   const profile = useMemo<UserProfile>(() => {
     if (demoMode) {
@@ -527,11 +533,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (liveProfile) {
       return { ...liveProfile, preferences: userPreferences };
     }
+    if (userId) {
+      const cached = readAccountKitchenCache(userId);
+      if (cached?.profile) {
+        return { ...cached.profile, preferences: userPreferences };
+      }
+    }
     return { ...GUEST_PROFILE, preferences: userPreferences };
-  }, [demoMode, demoProfilePatch, liveProfile, role, userPreferences]);
+  }, [demoMode, demoProfilePatch, liveProfile, role, userId, userPreferences]);
   const isAdmin = profile.role === 'admin';
   const maintenanceActive = featureFlags.maintenanceMode && !isAdmin;
-  const userId = session?.user.id ?? null;
   const isGuest = !demoMode && !userId;
   const profileReady = demoMode || isGuest || liveDataLoaded;
   const ownerId = userId ?? (demoMode ? profile.id || 'demo-user' : GUEST_OWNER_ID);
@@ -559,9 +570,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const loadLiveData = useCallback(async () => {
     if (!supabase || !userId) return;
-    setLiveDataLoaded(false);
+    const cachedKitchen = readAccountKitchenCache(userId);
+    if (!cachedKitchen) {
+      setLiveDataLoaded(false);
+    }
     const guestKitchen = readGuestKitchenSnapshot();
-    const bundle = await fetchLiveBundle(supabase, userId);
+    let bundle;
+    try {
+      bundle = await fetchLiveBundle(supabase, userId);
+    } catch (error: unknown) {
+      if (cachedKitchen) {
+        setLiveProfile(cachedKitchen.profile);
+        setPantry(normalizePantryItemList(cachedKitchen.pantry));
+        setGrocery(cachedKitchen.grocery);
+        setMealPlan(cachedKitchen.mealPlan);
+        setRecipes(cachedKitchen.recipes);
+        setLiveDataLoaded(true);
+        setKitchenError(
+          error instanceof Error ? error.message : 'Offline — showing your last saved kitchen data',
+        );
+        return;
+      }
+      throw error;
+    }
     if (bundle.profile) {
       setLiveProfile(bundle.profile);
       setUserPreferences((prev) => ({
@@ -666,6 +697,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setMealPlan(nextMealPlan);
     setLiveAnalytics(bundle.analytics);
     setLiveDataLoaded(true);
+
+    if (bundle.profile) {
+      writeAccountKitchenCache({
+        userId,
+        savedAt: new Date().toISOString(),
+        profile: bundle.profile,
+        pantry: nextPantry,
+        grocery: nextGrocery,
+        mealPlan: nextMealPlan,
+        recipes: nextRecipes,
+      });
+    }
   }, [supabase, userId]);
 
   const clearKitchenError = useCallback(() => setKitchenError(null), []);
@@ -786,7 +829,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, supabase]);
 
   useEffect(() => {
-    if (!hydrated || demoMode) return;
+    if (!hydrated || demoMode || !authReady) return;
     if (userId) return;
     setPantry(readGuestPantry());
     setGrocery(readGuestGrocery());
@@ -794,7 +837,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setRecipes(readGuestRecipes());
     setLiveDataLoaded(true);
     setGuestKitchenHydrated(true);
-  }, [demoMode, hydrated, userId]);
+  }, [authReady, demoMode, hydrated, userId]);
+
+  useEffect(() => {
+    if (demoMode || !authReady || !userId) return;
+    const cached = readAccountKitchenCache(userId);
+    if (cached) {
+      setLiveProfile(cached.profile);
+      setPantry(normalizePantryItemList(cached.pantry));
+      setGrocery(cached.grocery);
+      setMealPlan(cached.mealPlan);
+      setRecipes(cached.recipes);
+      setLiveDataLoaded(true);
+    }
+  }, [authReady, demoMode, userId]);
 
   useEffect(() => {
     if (demoMode) return;
@@ -1076,7 +1132,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     if (!supabase) return;
     setAuthError(null);
-    const signedOutOwnerId = profile.id;
+    const signedOutOwnerId = userId ?? profile.id;
+    clearUserScopedLocalStorage(signedOutOwnerId);
+    setUserDietPrefs(DEFAULT_USER_DIET_PREFS);
     await supabase.auth.signOut();
     if (signedOutOwnerId) {
       clearGroceryDismissals(signedOutOwnerId);
@@ -1101,7 +1159,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       removeStorageKey(key);
     }
     closeAccountSheet();
-  }, [profile.id, supabase, closeAccountSheet]);
+  }, [closeAccountSheet, profile.id, supabase, userId]);
 
   const deleteAccount = useCallback(async () => {
     await deleteUserAccount();

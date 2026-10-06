@@ -3,6 +3,7 @@ import { Ionicons } from '../../lib/icons/Ionicons';
 import { Tabs, type Href } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { AppHeader } from '../../components/AppHeader';
+import { OfflineNotice } from '../../components/OfflineNotice';
 import { HydrationSafeIonicon } from '../../components/HydrationSafeIonicon';
 import { MaintenanceScreen } from '../../components/MaintenanceScreen';
 import { TABS, THEME } from '../../config/appConfig';
@@ -30,6 +31,7 @@ export default function TabsLayout() {
     return (
       <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
         <AppHeader />
+        <OfflineNotice />
         <MaintenanceScreen />
       </View>
     );
@@ -38,6 +40,7 @@ export default function TabsLayout() {
   return (
     <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
       <AppHeader />
+      <OfflineNotice />
       <Tabs
         screenOptions={{
           headerShown: false,

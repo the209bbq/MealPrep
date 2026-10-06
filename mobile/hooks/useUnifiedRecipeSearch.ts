@@ -4,6 +4,7 @@ import { isCreatorRecipesConfigured } from '../config/appConfig';
 import { searchCreatorVideos } from '../lib/creatorVideos/client';
 import { fetchMealDbSearchRows } from '../lib/mealdb/searchFeed';
 import { buildCreatorFeedCardModels } from '../lib/recipes/creatorFeedRows';
+import { searchImportedKitchenRecipes } from '../lib/recipes/kitchenSearch';
 import { mergeRecipeSearchResults, type RecipesSearchResultItem } from '../lib/recipes/mergeSearchResults';
 import type { PantryMatchIndex } from '../lib/recipeMatch';
 import type { PantryItem, Recipe } from '../types/mealprep';
@@ -42,12 +43,13 @@ export function useUnifiedRecipeSearch(options: {
             : Promise.resolve([]);
           const [classicRows, creatorVideos] = await Promise.all([classicPromise, creatorPromise]);
           if (cancelled) return;
+          const importedKitchenRows = searchImportedKitchenRecipes(trimmed, kitchenRecipes, pantryMatches);
           const videoModels = buildCreatorFeedCardModels(
             creatorVideos,
             kitchenRecipes,
             pantryMatches,
           );
-          setResults(mergeRecipeSearchResults(classicRows, videoModels));
+          setResults(mergeRecipeSearchResults(classicRows, videoModels, importedKitchenRows));
         } catch {
           if (!cancelled) {
             setResults([]);

@@ -63,6 +63,15 @@ assert(
 assert(ingredientMatchScore('diced tomatoes', 'tomato paste') < 0.72, 'diced tomatoes vs tomato paste');
 assert(ingredientMatchScore('diced tomatoes', 'tomato soup') < 0.72, 'diced tomatoes vs tomato soup');
 assert(ingredientMatchScore('diced tomatoes', 'ketchup') < 0.72, 'diced tomatoes vs ketchup');
+assert(
+  ingredientMatchScore('1 large yellow onion, diced', 'Onion') >= 0.72,
+  'yellow onion diced matches onion',
+);
+assert(
+  ingredientMatchScore('2 tablespoons unsalted butter, softened', 'Butter') >= 0.72,
+  'descriptive butter matches butter',
+);
+assert(ingredientMatchScore('butter', 'peanut butter') < 0.72, 'butter vs peanut butter');
 
 const tokens = tokenizeIngredientName('Essential Everyday All Purpose Flour 5 lb');
 assert(tokens.join(' ').includes('all-purpose'), 'all purpose flour phrase');

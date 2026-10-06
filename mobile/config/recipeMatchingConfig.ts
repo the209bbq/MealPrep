@@ -13,10 +13,6 @@ export const PANTRY_STAPLES = [
   'olive oil',
   'vegetable oil',
   'cooking oil',
-  'butter',
-  'garlic powder',
-  'onion powder',
-  'paprika',
 ] as const;
 
 export type PantryStaple = (typeof PANTRY_STAPLES)[number];
@@ -53,7 +49,7 @@ export const INGREDIENT_SYNONYMS: Record<string, readonly string[]> = {
   milk: ['whole milk', '2% milk', 'skim milk'],
   yogurt: ['greek yogurt', 'plain greek yogurt'],
   lettuce: ['romaine', 'romaine lettuce'],
-  cilantro: ['cilantro bunch'],
+  cilantro: ['cilantro bunch', 'coriander', 'coriander leaves', 'fresh coriander'],
   broth: ['chicken broth', 'beef broth', 'vegetable broth'],
 };
 
@@ -161,6 +157,43 @@ export const INGREDIENT_STRIP_TOKENS = [
   'plain',
   'percent',
   'grinder',
+  'tablespoon',
+  'tablespoons',
+  'teaspoon',
+  'teaspoons',
+  'divided',
+  'taste',
+  'optional',
+  'garnish',
+  'room',
+  'temperature',
+] as const;
+
+/** Prep words stripped only when leading a phrase (recipe lines), not pantry product names. */
+export const INGREDIENT_LEADING_PREP_WORDS = [
+  'diced',
+  'minced',
+  'chopped',
+  'sliced',
+  'softened',
+  'melted',
+  'finely',
+  'roughly',
+  'thinly',
+  'peeled',
+  'seeded',
+  'cored',
+  'trimmed',
+  'halved',
+  'quartered',
+  'crushed',
+  'grated',
+  'zested',
+  'juiced',
+  'warm',
+  'cold',
+  'hot',
+  'boiling',
 ] as const;
 
 /** Score for same protein family but wrong cut/form — below FUZZY_MATCH_THRESHOLD. */

@@ -8,6 +8,7 @@ import {
   INGREDIENT_CUT_OR_FORM_MODIFIERS,
   INGREDIENT_SUBSTITUTE_MATCH_SCORE,
   INGREDIENT_SYNONYMS,
+  INGREDIENT_LEADING_PREP_WORDS,
   INGREDIENT_STRIP_TOKENS,
 } from '../../config/recipeMatchingConfig';
 import { LruCache } from './lruCache';
@@ -15,9 +16,23 @@ import { LruCache } from './lruCache';
 const CUT_MODIFIERS = new Set<string>(INGREDIENT_CUT_OR_FORM_MODIFIERS);
 
 /** Variety words that refine a generic ingredient (jasmine rice) but are not a different product. */
-const VARIETY_MODIFIERS = new Set(['jasmine', 'basmati', 'brown', 'wild', 'cauliflower', 'white', 'yellow', 'red']);
+const VARIETY_MODIFIERS = new Set([
+  'jasmine',
+  'basmati',
+  'brown',
+  'wild',
+  'cauliflower',
+  'white',
+  'yellow',
+  'red',
+  'black',
+  'green',
+]);
 
 const STRIP_TOKENS = new Set<string>(INGREDIENT_STRIP_TOKENS);
+const LEADING_PREP_WORDS = new Set<string>(INGREDIENT_LEADING_PREP_WORDS);
+/** Two-word lines like "minced garlic" — not "diced tomatoes" (product). */
+const LEADING_PREP_TWO_WORD = new Set(['minced', 'chopped', 'crushed', 'grated', 'melted', 'softened']);
 
 const QUANTITY_PATTERNS: RegExp[] = [
   /\b\d+(\.\d+)?\s*(%|percent)\b/gi,
@@ -76,6 +91,42 @@ function applyPantryScanPhraseSynonyms(text: string): string {
   return out;
 }
 
+function stripParentheticalNotes(text: string): string {
+  let out = text;
+  for (let i = 0; i < 6; i += 1) {
+    const next = out
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/\{[^}]*\}/g, ' ');
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
+/** Drop trailing prep clauses after a comma when they are only strip/prep tokens. */
+function stripTrailingCommaClause(text: string): string {
+  const comma = text.indexOf(',');
+  if (comma < 0) return text;
+  const head = text.slice(0, comma).trim();
+  const tail = text.slice(comma + 1).trim();
+  if (!head || !tail) return text;
+  const tailTokens = tail
+    .split(/\s+/)
+    .map((t) => t.replace(/[^ \p{L}\p{N}-]/gu, ''))
+    .filter(Boolean);
+  if (tailTokens.length === 0) return head;
+  const prepOnly = tailTokens.every(
+    (t) =>
+      STRIP_TOKENS.has(t) ||
+      LEADING_PREP_WORDS.has(t) ||
+      CUT_MODIFIERS.has(t) ||
+      VARIETY_MODIFIERS.has(t) ||
+      t === 'to',
+  );
+  return prepOnly ? head : text;
+}
+
 function normalizeIngredientNameCore(value: string): string {
   let text = value
     .normalize('NFC')
@@ -86,6 +137,9 @@ function normalizeIngredientNameCore(value: string): string {
     .replace(/['’]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+  text = stripParentheticalNotes(text);
+  text = stripTrailingCommaClause(text);
 
   text = stripPantryScanBrands(text);
   text = text.replace(/[^ \p{L}\p{N}%./-]/gu, ' ');
@@ -124,13 +178,29 @@ function singularizeToken(token: string): string {
   return token;
 }
 
+/** "minced garlic" → garlic; keep "sliced black olives" (3+ tokens). */
+function stripLeadingPrepTokens(tokens: string[]): string[] {
+  if (tokens.length === 2 && LEADING_PREP_TWO_WORD.has(tokens[0])) {
+    return tokens.slice(1);
+  }
+  return tokens;
+}
+
+function stripTrailingPrepTokens(tokens: string[]): string[] {
+  if (tokens.length > 1 && LEADING_PREP_WORDS.has(tokens[tokens.length - 1])) {
+    return tokens.slice(0, -1);
+  }
+  return tokens;
+}
+
 function tokenizeIngredientNameCore(value: string): string[] {
   const normalized = normalizeIngredientNameCore(value);
   if (!normalized) return [];
-  return normalized
+  const tokens = normalized
     .split(' ')
     .filter((t) => t.length > 0 && !STRIP_TOKENS.has(t) && !/^\d+(\.\d+)?$/.test(t))
     .map(singularizeToken);
+  return stripTrailingPrepTokens(stripLeadingPrepTokens(tokens));
 }
 
 function canonicalIngredientPhraseCore(value: string): string {
@@ -285,7 +355,15 @@ function ingredientMatchScoreCore(recipeLabel: string, pantryLabel: string): num
       }
       return 0;
     }
-    if (pantryTokens[pantryTokens.length - 1] === head) return 1;
+    if (pantryTokens[pantryTokens.length - 1] === head) {
+      const prefix = pantryTokens.slice(0, -1);
+      if (
+        prefix.length > 0 &&
+        prefix.every((t) => CUT_MODIFIERS.has(t) || VARIETY_MODIFIERS.has(t) || STRIP_TOKENS.has(t))
+      ) {
+        return 1;
+      }
+    }
   }
 
   if (orderedPrefix(pantryTokens, recipeTokens)) {

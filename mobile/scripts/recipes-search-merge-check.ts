@@ -70,4 +70,20 @@ assert.ok(merged.some((item) => item.kind === 'creator_video'));
 const deduped = mergeRecipeSearchResults([classicRow], models);
 assert.equal(deduped.length, 2);
 
+const importedRow: RecipesTabRow = {
+  kind: 'kitchen',
+  recipe: {
+    ...classicRow.recipe,
+    id: 'photo-import-user-chili',
+    name: 'Pedernales River Chili',
+    sourceType: 'photo',
+    sourceUrl: 'photo-scan',
+  },
+  match: matchStub('photo-import-user-chili'),
+};
+
+const withImport = mergeRecipeSearchResults([classicRow], models, [importedRow]);
+assert.equal(withImport[0]!.kind, 'classic');
+assert.equal(withImport[0]!.row.recipe.id, 'photo-import-user-chili');
+
 console.log('recipes-search-merge-check: ok');

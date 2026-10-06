@@ -17,6 +17,7 @@ import type { ViralRecipeLinkItem } from '../lib/viralRecipes/types';
 import { savedRefKeyCreator, savedRefKeyKitchen, savedRefKeyMealDb } from '../lib/savedRecipes/keys';
 import { refKeyForCreatorVideo, refKeyForKitchenRecipe } from '../lib/savedRecipes/refKey';
 import { mealDbIdFromKitchenRecipe } from '../lib/savedRecipes/preview';
+import { buildMyRecipesFeedRows } from '../lib/recipes/viralFeedRows';
 import {
   buildSavedRecipeFeedRows,
   savedCreatorItemFromRecord,
@@ -268,10 +269,21 @@ export function useSavedRecipes(options: {
     [isSavedRef, toggleKitchenRecipe, toggleRefKey],
   );
 
-  const feedRows = useMemo(
-    () => buildSavedRecipeFeedRows(records, kitchenRecipes, pantry, pantryMatches),
-    [kitchenRecipes, pantry, pantryMatches, records],
-  );
+  const feedRows = useMemo(() => {
+    const saved = buildSavedRecipeFeedRows(records, kitchenRecipes, pantry, pantryMatches);
+    const imported = buildMyRecipesFeedRows({ kitchenRecipes, pantryMatches });
+    const seen = new Set(
+      saved.map((row) => (row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`)),
+    );
+    const merged = [...saved];
+    for (const row of imported) {
+      const id = row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      merged.push(row);
+    }
+    return merged;
+  }, [kitchenRecipes, pantry, pantryMatches, records]);
 
   const openCreatorFromSaved = useCallback(
     (record: SavedRecipeRecord) => savedCreatorItemFromRecord(record),
