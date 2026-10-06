@@ -17,6 +17,7 @@ export {
 } from './pantryStock';
 export {
   buildPantryMatchIndex,
+  updatePantryMatchIndex,
   compareRecipePantryMatches,
   filterRankedMatches,
   filterRankedMatchesWithPartialFallback,

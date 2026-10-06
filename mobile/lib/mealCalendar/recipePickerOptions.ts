@@ -1,4 +1,7 @@
 import type { MealSlot, Recipe } from '../../types/mealprep';
+import { shouldHideRecipeForDietPrefs } from '../diet/conflicts';
+import { ingredientLinesFromRecipe } from '../diet/ingredientLines';
+import type { UserDietPrefs } from '../diet/types';
 import { isUserImportedKitchenRecipe } from '../recipeImport/mapToAppRecipe';
 import { recipesForRecipesFeed } from '../recipeMatch/kitchenCatalogMerge';
 import type { RecipePantryMatch } from '../recipeMatch';
@@ -52,16 +55,31 @@ function kitchenCatalogWithSavedBookmarks(
   return [...byId.values()];
 }
 
+function kitchenVisibleForMealPicker(
+  kitchen: readonly Recipe[],
+  dietPrefs: UserDietPrefs | undefined,
+): Recipe[] {
+  if (!dietPrefs?.hideConflicts) return [...kitchen];
+  return kitchen.filter((recipe) => {
+    const lines = ingredientLinesFromRecipe(recipe);
+    const checkLines = lines.length > 0 ? lines : [recipe.name];
+    return !shouldHideRecipeForDietPrefs(dietPrefs, checkLines);
+  });
+}
+
 export function buildMealPickerRecipeOptions(
   feedKitchenRecipes: readonly Recipe[],
   rankedMatches: RecipePantryMatch[],
   maxRecipes: number,
   savedRecipeIds: ReadonlySet<string>,
   savedRecords: readonly SavedRecipeRecord[] = [],
-  options?: { mealSlot?: MealSlot; includeAllForSearch?: boolean },
+  options?: { mealSlot?: MealSlot; includeAllForSearch?: boolean; dietPrefs?: UserDietPrefs },
 ): MealPickerRecipeOption[] {
   const mealSlot = options?.mealSlot;
-  const kitchen = kitchenCatalogWithSavedBookmarks(feedKitchenRecipes, savedRecords);
+  const kitchen = kitchenVisibleForMealPicker(
+    kitchenCatalogWithSavedBookmarks(feedKitchenRecipes, savedRecords),
+    options?.dietPrefs,
+  );
   const savedIds = savedRecipeIds.size > 0 ? savedRecipeIds : savedKitchenRecipeIdsFromRecords(savedRecords);
   const byId = new Map(rankedMatches.map((row) => [row.recipeId, row]));
   const rankedIds = rankedMatches.map((row) => row.recipeId);

@@ -5,6 +5,9 @@ import { HydrationSafeIonicon } from './HydrationSafeIonicon';
 import { ACCOUNT_HEADER_COPY, APP_ROUTES } from '../config/appRoutes';
 import { TABS, THEME } from '../config/appConfig';
 import { HOME_HUB_COPY } from '../config/homeHub';
+import { readAccountKitchenCache } from '../lib/account/accountKitchenCache';
+import { hasLikelyStoredAuthSession } from '../lib/account/authBootstrap';
+import { readLastAccountUserId } from '../lib/account/lastAccountUser';
 import { useApp } from '../context/AppContext';
 import { useHomeHubSheet } from '../context/HomeHubSheetContext';
 import { useHydrated } from '../hooks/useHydrated';
@@ -13,11 +16,19 @@ import { ProfileAvatar } from './account/ProfileAvatar';
 export function AppHeader() {
   const pathname = usePathname();
   const hydrated = useHydrated();
-  const { profile, session, demoMode, openAuthSheet, openAccountSheet } = useApp();
+  const { profile, session, demoMode, authReady, openAuthSheet, openAccountSheet } = useApp();
   const { openHub } = useHomeHubSheet();
   const tab = TABS.find((t) => t.href === pathname || (pathname === '/' && t.name === 'index'));
   const title = tab?.title ?? 'Home';
-  const signedIn = demoMode || session != null;
+  const storedSessionHint = hydrated && !authReady && hasLikelyStoredAuthSession();
+  const signedIn = demoMode || session != null || storedSessionHint;
+  const bootstrapProfile =
+    storedSessionHint && !session
+      ? readAccountKitchenCache(readLastAccountUserId() ?? '')?.profile
+      : null;
+  const avatarName = bootstrapProfile?.name ?? profile.name;
+  const avatarPhoto = bootstrapProfile?.photoUrl ?? profile.photoUrl;
+  const accountChromeReady = demoMode || authReady;
   const onHome = pathname === APP_ROUTES.home || pathname === '/index';
 
   return (
@@ -53,10 +64,10 @@ export function AppHeader() {
           onPress={signedIn ? openAccountSheet : openAuthSheet}
           className="shrink-0"
         >
-          {hydrated ? (
+          {hydrated && accountChromeReady ? (
             <ProfileAvatar
-              name={profile.name}
-              photoUrl={profile.photoUrl}
+              name={avatarName}
+              photoUrl={avatarPhoto}
               guest={!signedIn}
               size={36}
             />

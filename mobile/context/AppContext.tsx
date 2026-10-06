@@ -101,8 +101,8 @@ import {
 } from '../lib/mealPlan/pantryDeduction';
 import { scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
 import {
-  buildPantryMatchIndex,
   filterRankedMatches,
+  updatePantryMatchIndex,
   recipeServingScale,
   scaleRecipeIngredients,
   withServingScale,
@@ -453,6 +453,8 @@ interface AppContextValue {
   libraryRecipes: Recipe[];
   /** Kitchen + library + imports for Recipes tab and meal-plan grocery resolution. */
   feedKitchenRecipes: Recipe[];
+  /** Account/library catalog without browsed MealDB snapshot rows (Home catalog only). */
+  catalogKitchenRecipes: Recipe[];
   refreshLibraryRecipes: () => void;
   libraryRecipesLoading: boolean;
   addMissingRecipeIngredientsToGrocery: (recipeId: string, matchOverride?: RecipePantryMatch) => void;
@@ -558,7 +560,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = profile.role === 'admin';
   const maintenanceActive = featureFlags.maintenanceMode && !isAdmin;
   const isGuest = !demoMode && !userId;
-  const profileReady = demoMode || isGuest || liveDataLoaded;
+  const profileReady =
+    demoMode || (authReady && (userId ? liveDataLoaded : guestKitchenHydrated));
   const ownerId = userId ?? (demoMode ? profile.id || 'demo-user' : GUEST_OWNER_ID);
 
   const {
@@ -573,6 +576,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const feedKitchenRecipes = useMemo(
     () => kitchenRecipesWithMealPlanContext(recipes, libraryRecipes, pantry, mealPlan),
     [libraryRecipes, mealDbKitchenCacheTick, mealPlan, pantry, recipes],
+  );
+
+  const catalogKitchenRecipes = useMemo(
+    () => recipesForRecipesFeed(recipes, libraryRecipes),
+    [libraryRecipes, recipes],
   );
 
   const plannedRecipeIds = useMemo(
@@ -1103,9 +1111,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [demoMode, grocery, liveAnalytics, pantry.length, recipes.length]);
 
+  const pantryMatchCacheRef = useRef<{
+    pantry: PantryItem[];
+    index: PantryMatchIndex;
+    fingerprints: Map<string, string>;
+  } | null>(null);
+
   const pantryRecipeMatches = useMemo(() => {
     const kitchenRecipes = feedKitchenRecipes.map((recipe) => withServingScale(recipe, servingOverrides));
-    return buildPantryMatchIndex(kitchenRecipes, pantry);
+    const cached =
+      pantryMatchCacheRef.current?.pantry === pantry ? pantryMatchCacheRef.current : null;
+    const { index, fingerprints } = updatePantryMatchIndex(
+      cached?.index ?? null,
+      cached?.fingerprints ?? null,
+      kitchenRecipes,
+      pantry,
+    );
+    pantryMatchCacheRef.current = { pantry, index, fingerprints };
+    return index;
   }, [feedKitchenRecipes, pantry, servingOverrides]);
 
   const recipeIngredientLinesById = useMemo(() => {
@@ -3006,6 +3029,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pantryRecipeRecommendations,
       libraryRecipes,
       feedKitchenRecipes,
+      catalogKitchenRecipes,
       refreshLibraryRecipes,
       libraryRecipesLoading,
       addMissingRecipeIngredientsToGrocery,
@@ -3119,6 +3143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pantryRecipeRecommendations,
       libraryRecipes,
       feedKitchenRecipes,
+      catalogKitchenRecipes,
       refreshLibraryRecipes,
       libraryRecipesLoading,
       addMissingRecipeIngredientsToGrocery,

@@ -206,6 +206,13 @@ export function compareRecipePantryMatches(a: RecipePantryMatch, b: RecipePantry
   return a.recipeName.localeCompare(b.recipeName);
 }
 
+function pantryMatchFingerprint(recipe: Recipe): string {
+  const parts = recipe.ingredients.map(
+    (row) => `${row.name}:${row.quantity}:${row.unit ?? ''}`,
+  );
+  return `${recipe.id}|${recipe.name}|${parts.join(';')}`;
+}
+
 export function buildPantryMatchIndex(recipes: Recipe[], pantry: PantryItem[]): PantryMatchIndex {
   const context = getPantryMatchContext(pantry);
   if (pantry.length === 0) {
@@ -218,6 +225,43 @@ export function buildPantryMatchIndex(recipes: Recipe[], pantry: PantryItem[]): 
   ranked.sort(compareRecipePantryMatches);
   const byRecipeId = new Map(ranked.map((m) => [m.recipeId, m]));
   return { byRecipeId, ranked };
+}
+
+/**
+ * Reuse prior pantry scores when recipes are unchanged; score only new or updated rows.
+ * Avoids re-scanning the full kitchen catalog on every MealDB cache tick.
+ */
+export function updatePantryMatchIndex(
+  previous: PantryMatchIndex | null,
+  previousFingerprints: ReadonlyMap<string, string> | null,
+  recipes: Recipe[],
+  pantry: PantryItem[],
+): { index: PantryMatchIndex; fingerprints: Map<string, string> } {
+  const context = getPantryMatchContext(pantry);
+  const fingerprints = new Map<string, string>();
+  const matches: RecipePantryMatch[] = [];
+
+  for (const recipe of recipes) {
+    const fingerprint = pantryMatchFingerprint(recipe);
+    fingerprints.set(recipe.id, fingerprint);
+    const priorFingerprint = previousFingerprints?.get(recipe.id);
+    const priorMatch = previous?.byRecipeId.get(recipe.id);
+    if (priorMatch && priorFingerprint === fingerprint) {
+      matches.push(priorMatch);
+      continue;
+    }
+    matches.push(scoreRecipeAgainstPantry(recipe, pantry, context));
+  }
+
+  if (pantry.length === 0) {
+    const byRecipeId = new Map(matches.map((m) => [m.recipeId, m]));
+    return { index: { byRecipeId, ranked: [] }, fingerprints };
+  }
+
+  const ranked = [...matches];
+  ranked.sort(compareRecipePantryMatches);
+  const byRecipeId = new Map(matches.map((m) => [m.recipeId, m]));
+  return { index: { byRecipeId, ranked }, fingerprints };
 }
 
 export type RecipePantryFilterMode = 'all' | 'have_all' | 'missing_1_2' | 'best_match';

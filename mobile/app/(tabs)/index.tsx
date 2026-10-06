@@ -142,6 +142,8 @@ export default function HomeScreen() {
     notifyRecipeOfflineUnavailable,
     notifyRecipeLookupNotReady,
     profile,
+    profileReady,
+    catalogKitchenRecipes,
     savedRecipes,
     registerSavedRecipeToggleOutcome,
     finishCookViewSession,
@@ -412,7 +414,8 @@ export default function HomeScreen() {
     [params.import, sharedImportText],
   );
 
-  const pantryEmpty = pantry.length === 0;
+  const pantryEmpty = profileReady && pantry.length === 0;
+  const showHomePantryCta = showCreatorCatalogSections && !searching && profileReady && pantryEmpty;
 
   const homeSearchParam = typeof params.search === 'string' ? params.search.trim() : '';
   useEffect(() => {
@@ -424,11 +427,11 @@ export default function HomeScreen() {
 
   const filterBaseRows = useMemo((): RecipesTabRow[] => {
     return buildRecipesTabCatalogRows({
-      kitchenRecipes,
+      kitchenRecipes: catalogKitchenRecipes,
       pantryMatches: pantryRecipeMatches,
       discoverySuggestions: [],
     });
-  }, [kitchenRecipes, pantryRecipeMatches]);
+  }, [catalogKitchenRecipes, pantryRecipeMatches]);
 
   const filteredRows = useMemo(() => {
     const narrowed = applyRecipesTabFilters(filterBaseRows, filters);
@@ -959,7 +962,7 @@ export default function HomeScreen() {
         refreshing={homeRecipesRefresh.refreshing}
         pullDistance={homeScrollRefresh.pullDistance ?? 0}
       />
-      {showCreatorCatalogSections && !searching ? <HomePantryCta /> : null}
+      {showHomePantryCta ? <HomePantryCta /> : null}
       <InstallAppBanner />
       <GuestSaveNudge />
       {cookConfirmPrompt ? (
