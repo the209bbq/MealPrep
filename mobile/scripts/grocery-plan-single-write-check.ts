@@ -29,7 +29,7 @@ const recipe: Recipe = {
 
 const meal: MealPlanItem = {
   id: 'meal-1',
-  recipeSlug: null,
+  recipeSlug: recipe.id,
   recipeApiId: null,
   title: 'Butter Chicken',
   imageUrl: null,
