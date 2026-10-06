@@ -7,7 +7,10 @@ const MAIN_MEALDB_CATEGORIES =
   /^(beef|chicken|lamb|pork|goat|seafood|pasta|vegetarian|vegan|miscellaneous)$/i;
 
 const CONDIMENT_DISH_START =
-  /^\s*(aioli|mayo|mayonnaise|salsa|dip|sauce|gravy|pesto|tahini|hummus|guacamole|ketchup|mustard|relish|chutney|dressing|marinade|condiment)\b/i;
+  /^\s*(aioli|aji|ají|mayo|mayonnaise|salsa|dip|sauce|gravy|pesto|chimichurri|tahini|hummus|guacamole|ketchup|mustard|relish|chutney|dressing|marinade|condiment)\b/i;
+
+const SWEET_FRIED_SIDE_TITLE =
+  /\b(sopaipillas?|buñuelos?|bunuelos?|jamaican festival|num e|ansom chek|churros?|beignets?|doughnuts?|donuts?|fritters?)\b/i;
 
 const DINNER_SIDE_ALLOWED_TITLE =
   /\b(soup|chowder|stew|pierogi|mantu|burek|kumpir|callaloo|dumpling)\b/i;
@@ -37,6 +40,13 @@ function normalizeTitleForKeywordMatch(name: string): string {
   return name
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
+    .replace(/Æ/g, 'Ae')
+    .replace(/æ/g, 'ae')
+    .replace(/Œ/g, 'Oe')
+    .replace(/œ/g, 'oe')
+    .replace(/Ø/g, 'O')
+    .replace(/ø/g, 'o')
+    .replace(/ß/g, 'ss')
     .toLowerCase();
 }
 
@@ -80,13 +90,20 @@ function isBreakfastCategory(category: string | null): boolean {
   return Boolean(category && /^breakfast$/i.test(category));
 }
 
+const CONDIMENT_FALSE_MAIN_WORD =
+  /\b(lentils|chicken|eggplant|sandwich|pita|wrap|bowl|salad|potato|potatoes|corn|lamb|beef|pork|fish|prawn|shrimp|tofu)\b/i;
+
 function isStandaloneCondimentTitle(name: string): boolean {
   const trimmed = name.trim();
   if (/^\s*aj/i.test(trimmed) && /\baguacate\b/i.test(trimmed)) return true;
-  return CONDIMENT_DISH_START.test(trimmed);
+  if (!CONDIMENT_DISH_START.test(trimmed)) return false;
+  const normalized = normalizeTitleForKeywordMatch(trimmed);
+  if (CONDIMENT_FALSE_MAIN_WORD.test(normalized)) return false;
+  return true;
 }
 
 function isSauceOrCondimentTitle(name: string, mealDbCategory: string | null): boolean {
+  if (isStandaloneCondimentTitle(name)) return true;
   if (mealDbCategory && MAIN_MEALDB_CATEGORIES.test(mealDbCategory)) {
     return false;
   }
@@ -105,11 +122,12 @@ function lunchDinnerExcludedByCategory(recipe: Recipe, slot: MealSlot): boolean 
   return false;
 }
 
-function lunchDinnerExcludedByTitleFallback(name: string): boolean {
+function lunchDinnerExcludedByTitleFallback(name: string, slot: MealSlot): boolean {
   const normalized = normalizeTitleForKeywordMatch(name);
   if (DESSERT_TITLE_FALLBACK.test(normalized)) return true;
   if (BREAKFAST_TITLE_FALLBACK.test(normalized)) return true;
   if (SWEET_BREAD_TITLE.test(normalized)) return true;
+  if (slot === 'lunch' && SWEET_FRIED_SIDE_TITLE.test(normalized)) return true;
   return false;
 }
 
@@ -130,7 +148,7 @@ export function recipeSuitsMealPickerSlot(recipe: Recipe, slot: MealSlot): boole
 
   if (slot === 'lunch' || slot === 'dinner') {
     if (lunchDinnerExcludedByCategory(recipe, slot)) return false;
-    if (lunchDinnerExcludedByTitleFallback(recipe.name)) return false;
+    if (lunchDinnerExcludedByTitleFallback(recipe.name, slot)) return false;
     if (isDessertCategory(category) || categoryGroupForRecipe(recipe) === 'dessert') return false;
   }
 

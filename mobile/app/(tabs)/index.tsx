@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useHydrated } from '../../hooks/useHydrated';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
@@ -110,6 +111,7 @@ function RecipesFeedSectionLabel({ title, className }: { title: string; classNam
 }
 
 export default function HomeScreen() {
+  const hydrated = useHydrated();
   const params = useLocalSearchParams<{
     recipeId?: string;
     url?: string;
@@ -138,6 +140,7 @@ export default function HomeScreen() {
     notifyMyRecipesSaveFailed,
     notifyRecipeHiddenForDietSettings,
     notifyRecipeOfflineUnavailable,
+    notifyRecipeLookupNotReady,
     profile,
     savedRecipes,
     registerSavedRecipeToggleOutcome,
@@ -554,6 +557,7 @@ export default function HomeScreen() {
       classicCategoryFeed,
       notifyRecipeHiddenForDietSettings,
       notifyRecipeOfflineUnavailable,
+    notifyRecipeLookupNotReady,
       pantry,
       userDietPrefs,
     ],
@@ -562,12 +566,16 @@ export default function HomeScreen() {
   const toggleKitchenSaveWithResolve = useCallback(
     (row: RecipesTabRow) => {
       void (async () => {
+        if (row.kind === 'kitchen' && row.pantryMatchFailed) {
+          notifyRecipeLookupNotReady();
+          return;
+        }
         const resolved = await resolveRowBeforeUserAction(row);
         if (!resolved || resolved.kind !== 'kitchen') return;
         savedRecipes.toggleKitchenRecipe(resolved.recipe);
       })();
     },
-    [resolveRowBeforeUserAction, savedRecipes],
+    [notifyRecipeLookupNotReady, resolveRowBeforeUserAction, savedRecipes],
   );
 
   const openDetail = useCallback(
@@ -936,6 +944,10 @@ export default function HomeScreen() {
     openDetail(row);
   }
 
+  if (!hydrated) {
+    return <ScrollView className="flex-1 bg-paper" />;
+  }
+
   return (
     <ScrollView
       className="flex-1 bg-paper px-4 pb-8"
@@ -1189,12 +1201,12 @@ export default function HomeScreen() {
                 maskTitle={
                   maskClassicStubTitles &&
                   row.kind === 'kitchen' &&
-                  Boolean(row.pantryMatchPending)
+                  (Boolean(row.pantryMatchPending) || Boolean(row.pantryMatchFailed))
                 }
                 maskImage={
                   maskClassicStubTitles &&
                   row.kind === 'kitchen' &&
-                  Boolean(row.pantryMatchPending)
+                  (Boolean(row.pantryMatchPending) || Boolean(row.pantryMatchFailed))
                 }
                 saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
                 onToggleSave={

@@ -15,6 +15,7 @@ import {
   isSupabaseConfigured,
 } from '../config/appConfig';
 import { GROCERY_COPY } from '../config/grocery';
+import { RECIPES_COPY } from '../config/recipesCopy';
 import { SAVED_RECIPES_COPY } from '../config/savedRecipes';
 import { GUEST_OWNER_ID } from '../config/guestMode';
 import { DIET_PREF_COPY } from '../config/diet';
@@ -160,6 +161,7 @@ import { resolveOfflineKitchenUserId } from '../lib/account/offlineKitchenUser';
 import { clearUserScopedLocalStorage } from '../lib/account/clearUserScopedLocalStorage';
 import { isOffline } from '../lib/network/isOffline';
 import { clearAddPriceMemory } from '../lib/smartShop/addPriceMemory';
+import { subscribeMealDbKitchenCacheChanged } from '../lib/mealdb/kitchenCacheNotify';
 import { getSupabase } from '../lib/supabase';
 import { recipeApiToAppRecipe } from '../lib/recipeDiscovery/mapToAppRecipe';
 import {
@@ -399,6 +401,7 @@ interface AppContextValue {
   notifyMyRecipesSaveFailed: () => void;
   notifyRecipeHiddenForDietSettings: () => void;
   notifyRecipeOfflineUnavailable: () => void;
+  notifyRecipeLookupNotReady: () => void;
   savedRecipes: SavedRecipesController;
   registerSavedRecipeToggleOutcome: (handler: ((outcome: SavedRecipeToggleOutcome) => void) | null) => void;
   toggleGroceryItem: (id: string) => void;
@@ -564,9 +567,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     refreshLibrary: refreshLibraryRecipes,
   } = usePublishedLibraryRecipes();
 
+  const [mealDbKitchenCacheTick, setMealDbKitchenCacheTick] = useState(0);
+  useEffect(() => subscribeMealDbKitchenCacheChanged(() => setMealDbKitchenCacheTick((v) => v + 1)), []);
+
   const feedKitchenRecipes = useMemo(
     () => kitchenRecipesWithMealPlanContext(recipes, libraryRecipes, pantry, mealPlan),
-    [libraryRecipes, mealPlan, pantry, recipes],
+    [libraryRecipes, mealDbKitchenCacheTick, mealPlan, pantry, recipes],
   );
 
   const plannedRecipeIds = useMemo(
@@ -2882,6 +2888,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const notifyRecipeLookupNotReady = useCallback(() => {
+    setUndoToast({
+      message: RECIPES_COPY.recipeCard.lookupBookmarkNotReady,
+      showUndo: false,
+      onUndo: () => setUndoToast(null),
+    });
+  }, []);
+
   const mealMadeReviewTitle = useMemo(() => {
     if (!mealMadeReview) return null;
     return mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)?.title ?? null;
@@ -2961,6 +2975,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifyMyRecipesSaveFailed,
       notifyRecipeHiddenForDietSettings,
       notifyRecipeOfflineUnavailable,
+      notifyRecipeLookupNotReady,
       savedRecipes,
       registerSavedRecipeToggleOutcome,
       toggleGroceryItem,
@@ -3092,6 +3107,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifyMyRecipesSaveFailed,
       notifyRecipeHiddenForDietSettings,
       notifyRecipeOfflineUnavailable,
+      notifyRecipeLookupNotReady,
       savedRecipes,
       registerSavedRecipeToggleOutcome,
       updateRecipe,

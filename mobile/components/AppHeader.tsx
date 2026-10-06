@@ -1,7 +1,7 @@
 import { usePathname } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
-import { Ionicons } from '../lib/icons/Ionicons';
 import { BrandLogo } from './BrandLogo';
+import { HydrationSafeIonicon } from './HydrationSafeIonicon';
 import { ACCOUNT_HEADER_COPY, APP_ROUTES } from '../config/appRoutes';
 import { TABS, THEME } from '../config/appConfig';
 import { HOME_HUB_COPY } from '../config/homeHub';
@@ -35,7 +35,7 @@ export function AppHeader() {
                 backgroundColor: pressed ? 'rgba(255,255,255,0.12)' : 'transparent',
               })}
             >
-              <Ionicons name="book-outline" size={22} color={THEME.onPrimary} />
+              <HydrationSafeIonicon name="book-outline" size={22} color={THEME.onPrimary} />
             </Pressable>
           ) : null}
           <BrandLogo variant="header" />
