@@ -54,10 +54,8 @@ export function ingredientLinesMatchingAllergen(
   return ingredientLines.filter((line) => allergensForLine(line).includes(allergen));
 }
 
-function failsVegetarian(line: string): boolean {
-  const segments = expandIngredientSegments(line);
-  for (const segment of segments) {
-    const haystack = haystackForLine(segment);
+function failsVegetarianFromHaystacks(haystacks: string[]): boolean {
+  for (const haystack of haystacks) {
     for (const keyword of MEAT_POULTRY_KEYWORDS) {
       if (lineMatchesKeyword(haystack, keyword)) return true;
     }
@@ -68,10 +66,8 @@ function failsVegetarian(line: string): boolean {
   return false;
 }
 
-function failsPescatarian(line: string): boolean {
-  const segments = expandIngredientSegments(line);
-  for (const segment of segments) {
-    const haystack = haystackForLine(segment);
+function failsPescatarianFromHaystacks(haystacks: string[]): boolean {
+  for (const haystack of haystacks) {
     for (const keyword of MEAT_POULTRY_KEYWORDS) {
       if (keyword === 'gelatin') continue;
       if (lineMatchesKeyword(haystack, keyword)) return true;
@@ -80,15 +76,14 @@ function failsPescatarian(line: string): boolean {
   return false;
 }
 
-function failsVegan(line: string): boolean {
-  if (failsVegetarian(line)) return true;
-  const segments = expandIngredientSegments(line);
-  for (const segment of segments) {
-    const haystack = haystackForLine(segment);
+function failsVeganFromHaystacks(segments: string[], haystacks: string[]): boolean {
+  if (failsVegetarianFromHaystacks(haystacks)) return true;
+  for (let index = 0; index < segments.length; index += 1) {
+    const haystack = haystacks[index]!;
     for (const keyword of VEGAN_ANIMAL_KEYWORDS) {
       if (lineMatchesKeyword(haystack, keyword)) return true;
     }
-    const tagged = allergensForLine(segment);
+    const tagged = allergensForLine(segments[index]!);
     if (tagged.some((a) => a === 'milk' || a === 'egg' || a === 'fish' || a === 'shellfish')) {
       return true;
     }
@@ -96,11 +91,11 @@ function failsVegan(line: string): boolean {
   return false;
 }
 
-function dietFailuresForLine(line: string): Partial<Record<DietId, boolean>> {
+function dietFailuresForLine(segments: string[], haystacks: string[]): Partial<Record<DietId, boolean>> {
   return {
-    vegetarian: failsVegetarian(line),
-    vegan: failsVegan(line),
-    pescatarian: failsPescatarian(line),
+    vegetarian: failsVegetarianFromHaystacks(haystacks),
+    vegan: failsVeganFromHaystacks(segments, haystacks),
+    pescatarian: failsPescatarianFromHaystacks(haystacks),
   };
 }
 
@@ -128,13 +123,13 @@ function processIngredientSegment(
   containsAllergens: Set<AllergenId>,
   unknownItems: string[],
   reasons: string[],
+  haystack = haystackForLine(segment),
 ): void {
   if (isVagueIngredient(segment)) {
     unknownItems.push(lineLabel);
     reasons.push(`Unknown: ${lineLabel}`);
     return;
   }
-  const haystack = haystackForLine(segment);
   const { allergens, oatGlutenUncertain } = allergensForLineParts(haystack);
   for (const allergen of allergens) {
     containsAllergens.add(allergen);
@@ -160,11 +155,19 @@ export function tagRecipe(input: {
 
   for (const line of lines) {
     const segments = expandIngredientSegments(line);
-    for (const segment of segments) {
-      processIngredientSegment(segment, line, containsAllergens, unknownItems, reasons);
+    const haystacks = segments.map((segment) => haystackForLine(segment));
+    for (let index = 0; index < segments.length; index += 1) {
+      processIngredientSegment(
+        segments[index]!,
+        line,
+        containsAllergens,
+        unknownItems,
+        reasons,
+        haystacks[index]!,
+      );
     }
 
-    const failures = dietFailuresForLine(line);
+    const failures = dietFailuresForLine(segments, haystacks);
     for (const diet of ['vegetarian', 'vegan', 'pescatarian'] as const) {
       if (failures[diet]) {
         const bucket = dietsFail[diet] ?? [];

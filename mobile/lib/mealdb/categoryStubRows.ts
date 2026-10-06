@@ -3,6 +3,8 @@ import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import type { RecipePantryMatch } from '../recipeMatch';
 import type { PantryItem, Recipe } from '../../types/mealprep';
 import { compareRecipePantryMatches, scoreRecipeAgainstPantry } from '../recipeMatch';
+import { getPantryMatchContext } from '../recipeMatch/pantryMatchContext';
+import { insertKitchenRowByPantryMatch } from './incrementalCatalogRows';
 import { mealDbMealPageUrl } from '../../config/mealdb';
 import { mealDbMealToAppRecipe } from './normalize';
 import { mealDbRecipeId } from './slug';
@@ -71,29 +73,19 @@ export function mergeMealDetailIntoCategoryRows(
   pantry: PantryItem[],
 ): RecipesTabRow[] {
   const recipe = mealDbMealToAppRecipe(meal);
-  let found = false;
-  const next = rows.map((row) => {
-    if (row.kind !== 'kitchen' || row.recipe.id !== recipe.id) return row;
-    found = true;
-    return {
-      kind: 'kitchen' as const,
-      recipe,
-      match: scoreRecipeAgainstPantry(recipe, pantry),
-      pantryMatchPending: false,
-      pantryMatchFailed: false,
-    };
-  });
-  if (!found) {
-    next.push({
-      kind: 'kitchen',
-      recipe,
-      match: scoreRecipeAgainstPantry(recipe, pantry),
-      pantryMatchPending: false,
-      pantryMatchFailed: false,
-    });
-  }
-  next.sort((a, b) => compareRecipePantryMatches(a.match, b.match));
-  return next;
+  const context = getPantryMatchContext(pantry);
+  const resolved: RecipesTabRow = {
+    kind: 'kitchen',
+    recipe,
+    match: scoreRecipeAgainstPantry(recipe, pantry, context),
+    pantryMatchPending: false,
+    pantryMatchFailed: false,
+  };
+  const index = rows.findIndex(
+    (row) => row.kind === 'kitchen' && row.recipe.id === recipe.id,
+  );
+  const without = index >= 0 ? rows.filter((_, i) => i !== index) : rows;
+  return insertKitchenRowByPantryMatch(without, resolved);
 }
 
 export function markKitchenRowLookupFailed(rows: RecipesTabRow[], idMeal: string): RecipesTabRow[] {

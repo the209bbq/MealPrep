@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { pantrySnapshotKey } from '../lib/pantry/pantrySnapshotKey';
 import { useHydrated } from './useHydrated';
 import { MEALDB_COPY } from '../config/mealdb';
 import type { RecipesTabRow } from '../config/recipesTabFilters';
@@ -19,6 +20,7 @@ export function useMealDbRecipes(
 } {
   const enabled = options?.enabled ?? true;
   const hydrated = useHydrated();
+  const pantryKey = useMemo(() => pantrySnapshotKey(pantry), [pantry]);
   const [refreshSeed, setRefreshSeed] = useState(options?.refreshSeed ?? 0);
   const [rows, setRows] = useState<RecipesTabRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,7 +90,7 @@ export function useMealDbRecipes(
     return () => {
       cancelled = true;
     };
-  }, [enabled, hydrated, pantry, refreshSeed]);
+  }, [enabled, hydrated, pantryKey, refreshSeed]);
 
   return { rows, loading, loadingMore, error, refreshSeed, refreshMealDb };
 }

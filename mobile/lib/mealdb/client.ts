@@ -153,8 +153,11 @@ async function revalidateMealDbFetch<T>(
   if (signal?.aborted) return null;
 
   const existing = inFlight.get(cacheKey);
-  if (existing && !signal) {
-    return existing.promise as Promise<T | null>;
+  if (existing) {
+    const shared = existing.promise as Promise<T | null>;
+    if (!signal) return shared;
+    const result = await shared;
+    return signal.aborted ? null : result;
   }
 
   const generation = ++inFlightGeneration;

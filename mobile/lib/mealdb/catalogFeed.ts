@@ -1,6 +1,7 @@
 import { MEALDB } from '../../config/mealdb';
 import { mapWithConcurrency } from '../concurrency';
 import { compareRecipePantryMatches, scoreRecipeAgainstPantry } from '../recipeMatch';
+import { MealDbCatalogRowBuilder } from './incrementalCatalogRows';
 import type { PantryItem, Recipe } from '../../types/mealprep';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import { mealDbFilterByIngredient, mealDbLookupMeals } from './client';
@@ -42,13 +43,11 @@ async function collectMealIdsForPantry(pantry: PantryItem[]): Promise<string[]> 
 }
 
 function rowsFromMeals(meals: MealDbMealDetail[], pantry: PantryItem[]): RecipesTabRow[] {
-  const recipes: Recipe[] = meals.map((meal) => mealDbMealToAppRecipe(meal));
-  const rows: RecipesTabRow[] = recipes.map((recipe) => {
-    const match = scoreRecipeAgainstPantry(recipe, pantry);
-    return { kind: 'kitchen', recipe, match };
-  });
-  rows.sort((a, b) => compareRecipePantryMatches(a.match, b.match));
-  return rows;
+  const builder = new MealDbCatalogRowBuilder(pantry);
+  for (const meal of meals) {
+    builder.appendMeal(meal);
+  }
+  return builder.getRows();
 }
 
 export async function fetchMealDbCatalogRows(
@@ -65,10 +64,11 @@ export async function fetchMealDbCatalogRows(
     const capped = ids.slice(0, MEALDB.maxCatalogMeals);
     const mealsAcc: MealDbMealDetail[] = [];
 
+    const rowBuilder = new MealDbCatalogRowBuilder(pantry);
     await mealDbLookupMeals(capped, {
       onMeal: (meal) => {
         mealsAcc.push(meal);
-        options?.onRows?.(rowsFromMeals(mealsAcc, pantry));
+        options?.onRows?.(rowBuilder.appendMeal(meal));
       },
     });
 

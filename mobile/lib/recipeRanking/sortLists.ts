@@ -6,7 +6,7 @@ import {
   normalizeRecipeTitleForDedup,
   recipesTabRowDisplayName,
 } from '../recipes/unifiedFeed';
-import { scoreRecipeForRanking } from './scoreRecipe';
+import { scoreRecipeForRankingCached } from './scoreCache';
 import type { RecipeRankingContext } from './types';
 import { rankingInputFromCreatorModel, rankingInputFromRecipesTabRow } from './recipeInputs';
 
@@ -19,7 +19,7 @@ export function rankRecipesTabRows(
   const scored = rows.map((row, index) => ({
     row,
     index,
-    breakdown: scoreRecipeForRanking(
+    breakdown: scoreRecipeForRankingCached(
       rankingInputFromRecipesTabRow(row),
       ctx,
       costCache,
@@ -47,7 +47,7 @@ export function rankCreatorFeedModels(
   const scored = models.map((model, index) => ({
     model,
     index,
-    breakdown: scoreRecipeForRanking(
+    breakdown: scoreRecipeForRankingCached(
       rankingInputFromCreatorModel(model),
       ctx,
       costCache,

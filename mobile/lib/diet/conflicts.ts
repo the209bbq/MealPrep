@@ -1,11 +1,27 @@
 import type { RecipeDietTagResult, UserDietPrefs } from './types';
+import { LruCache } from '../recipeMatch/lruCache';
 import { tagRecipe } from './tagRecipe';
+
+const DIET_TAG_CACHE = new LruCache<string, RecipeDietTagResult>(4096);
+
+function dietTagCacheKey(ingredientLines: readonly string[], dislikes: readonly string[]): string {
+  return `${ingredientLines.join('\u0001')}\u0002${dislikes.join('\u0002')}`;
+}
+
+export function clearRecipeDietTagCacheForTests(): void {
+  DIET_TAG_CACHE.clear();
+}
 
 export function recipeDietTagFromIngredientLines(
   ingredientLines: string[],
   prefs: UserDietPrefs,
 ): RecipeDietTagResult {
-  return tagRecipe({ ingredientLines, dislikes: prefs.dislikes });
+  const key = dietTagCacheKey(ingredientLines, prefs.dislikes);
+  const cached = DIET_TAG_CACHE.get(key);
+  if (cached) return cached;
+  const result = tagRecipe({ ingredientLines, dislikes: prefs.dislikes });
+  DIET_TAG_CACHE.set(key, result);
+  return result;
 }
 
 export function recipeConflictsWithDietPrefs(
