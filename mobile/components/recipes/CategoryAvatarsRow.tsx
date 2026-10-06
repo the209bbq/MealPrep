@@ -6,10 +6,12 @@ import { HalfVisibleOnce } from './HalfVisibleOnce';
 export function CategoryAvatarsRow({
   chips,
   onSelect,
+  onPressIn,
   onImpression,
 }: {
   chips: readonly MealDbCategoryChip[];
   onSelect: (chip: MealDbCategoryChip) => void;
+  onPressIn?: (chip: MealDbCategoryChip) => void;
   onImpression: (chip: MealDbCategoryChip) => void;
 }) {
   if (chips.length === 0) return null;
@@ -26,6 +28,7 @@ export function CategoryAvatarsRow({
         <HalfVisibleOnce key={chip.category} onVisible={() => onImpression(chip)}>
           <Pressable
             onPress={() => onSelect(chip)}
+            onPressIn={onPressIn ? () => onPressIn(chip) : undefined}
             accessibilityRole="button"
             accessibilityLabel={`${chip.category} classic recipes`}
             className="items-center"

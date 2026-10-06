@@ -12,6 +12,7 @@ import { ingredientLinesFromRecipesTabRow } from '../../lib/diet/ingredientLines
 import { RecipeThumbnail } from './RecipeThumbnail';
 import { RecipeSaveButton } from './RecipeSaveButton';
 import { CookThisButton } from '../mealCalendar/CookThisButton';
+import { RECIPES_COPY } from '../../config/recipesCopy';
 
 interface RecipesUnifiedFeedCardProps {
   row: RecipesTabRow;
@@ -40,8 +41,12 @@ function RecipesUnifiedFeedCardInner({
         : resolveDiscoveryRecipeImageUrl(row.recipe),
     [row],
   );
-  const shopLine = useMemo(() => recipeListShopLine(row.match), [row.match]);
-  const readyToCook = row.match.missingCount === 0;
+  const matchPending = row.kind === 'kitchen' && Boolean(row.pantryMatchPending);
+  const shopLine = useMemo(() => {
+    if (matchPending) return RECIPES_COPY.recipeCard.checkingPantry;
+    return recipeListShopLine(row.match);
+  }, [matchPending, row.match]);
+  const readyToCook = !matchPending && row.match.missingCount === 0;
   const ingredientLines = useMemo(() => ingredientLinesFromRecipesTabRow(row), [row]);
 
   return (

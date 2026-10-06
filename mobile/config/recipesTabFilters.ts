@@ -100,6 +100,8 @@ export interface RecipesTabKitchenRow {
   kind: 'kitchen';
   recipe: Recipe;
   match: RecipePantryMatch;
+  /** True while pantry match is still loading from a MealDB lookup. */
+  pantryMatchPending?: boolean;
 }
 
 export interface RecipesTabDiscoveryRow {

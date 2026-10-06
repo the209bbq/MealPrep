@@ -63,6 +63,9 @@ import { wontCookRefKeys } from '../../lib/recipeRanking/hardFilter';
 import type { CreatorRotationSlot } from '../../lib/recipesTab/creatorRotation';
 import type { MealDbCategoryChip } from '../../lib/recipesTab/categoryRotation';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
+import { useHomeRecipePrefetch } from '../../hooks/useHomeRecipePrefetch';
+import { prefetchMealDbCategoryOnIntent } from '../../lib/mealdb/homePrefetch';
+import { readMealDbCategorySnapshot } from '../../lib/mealdb/categoryFeedCache';
 import { RecipeImportFromShareParams } from '../../components/recipes/RecipeImportFromLink';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import type { CreatorListItem } from '../../lib/creatorVideos/types';
@@ -272,6 +275,18 @@ export default function HomeScreen() {
     onSectionsExpandedChange: setSectionsExpanded,
   });
 
+  const creatorBubbleChannelIds = useMemo(
+    () => tabSurface.creatorSlots.map((slot) => slot.creator.youtubeChannelId),
+    [tabSurface.creatorSlots],
+  );
+
+  useHomeRecipePrefetch({
+    enabled: showCreatorCatalogSections,
+    pantry,
+    session,
+    creatorChannelIds: creatorBubbleChannelIds,
+  });
+
   useEffect(() => {
     if (!showCreatorCatalogSections) return;
     let cancelled = false;
@@ -295,8 +310,21 @@ export default function HomeScreen() {
       return;
     }
     let cancelled = false;
-    setClassicCategoryLoading(true);
-    void fetchMealDbCategoryFeedRows(selectedClassicCategory, pantry)
+    const snapshot = readMealDbCategorySnapshot(selectedClassicCategory, pantry);
+    if (snapshot.length > 0) {
+      setClassicCategoryRows(snapshot);
+      setClassicCategoryLoading(false);
+    } else {
+      setClassicCategoryRows([]);
+      setClassicCategoryLoading(true);
+    }
+    void fetchMealDbCategoryFeedRows(selectedClassicCategory, pantry, {
+      onRows: (rows) => {
+        if (cancelled || rows.length === 0) return;
+        setClassicCategoryRows(rows);
+        setClassicCategoryLoading(false);
+      },
+    })
       .then((rows) => {
         if (!cancelled) setClassicCategoryRows(rows);
       })
@@ -740,6 +768,13 @@ export default function HomeScreen() {
     [tabSurface],
   );
 
+  const handleCategoryChipPressIn = useCallback(
+    (chip: MealDbCategoryChip) => {
+      prefetchMealDbCategoryOnIntent(chip.category, pantry);
+    },
+    [pantry],
+  );
+
   function openSavedRecipeRow(row: RecipesTabRow) {
     if (row.kind === 'kitchen' && row.recipe.id.startsWith('viral-preview-')) {
       const record = savedRecipes.records.find((entry) => {
@@ -939,6 +974,7 @@ export default function HomeScreen() {
               <CategoryAvatarsRow
                 chips={tabSurface.categoryChips}
                 onSelect={handleCategoryChipPress}
+                onPressIn={handleCategoryChipPressIn}
                 onImpression={(chip) =>
                   tabSurface.logCategoryImpression(chip.category, chip.position)
                 }
@@ -957,7 +993,9 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            {mealDbBlockingLoad || classicCategoryLoading ? <RecipesFeedCardSkeleton count={4} /> : null}
+            {(mealDbBlockingLoad || classicCategoryLoading) && classicRecipeRows.length === 0 ? (
+              <RecipesFeedCardSkeleton count={4} />
+            ) : null}
             {classicRecipeRows.map((row) => (
               <RecipesUnifiedFeedCard
                 key={row.recipe.id}

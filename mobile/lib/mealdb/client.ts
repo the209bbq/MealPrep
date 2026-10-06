@@ -4,7 +4,12 @@ import { readJson, writeJson } from '../storage';
 import { mealDbMealToAppRecipe } from './normalize';
 import { mealDbIdFromRecipeId } from './slug';
 import type { Recipe } from '../../types/mealprep';
-import type { MealDbFilterResponse, MealDbMealDetail, MealDbMealsResponse } from './types';
+import type {
+  MealDbFilterMealSummary,
+  MealDbFilterResponse,
+  MealDbMealDetail,
+  MealDbMealsResponse,
+} from './types';
 
 interface CacheEntry {
   payload: unknown;
@@ -104,10 +109,17 @@ export async function mealDbFilterByIngredient(ingredient: string): Promise<stri
 }
 
 export async function mealDbFilterByCategory(category: string): Promise<string[]> {
+  const summaries = await mealDbFilterSummariesByCategory(category);
+  return summaries.map((row) => row.idMeal);
+}
+
+export async function mealDbFilterSummariesByCategory(
+  category: string,
+): Promise<MealDbFilterMealSummary[]> {
   const path = `filter.php?c=${encodeURIComponent(category.trim())}`;
   const data = await mealDbFetch<MealDbFilterResponse>(path);
   if (!data?.meals) return [];
-  return data.meals.map((row) => row.idMeal);
+  return data.meals;
 }
 
 interface MealDbCategoriesResponse {
