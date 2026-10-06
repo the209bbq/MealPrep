@@ -38,6 +38,7 @@ export function nearbyStoresInstantPreview(params: NearbyStoresParams): {
     zip: params.zip,
     radiusMiles: params.radiusMiles ?? SMART_SHOP.defaultRadiusMiles,
     isGpsOrigin: params.isGpsOrigin,
+    useStoresTabZipTable: params.useStoresTabZipTable,
     radiusMultiplier: params.radiusMultiplier,
     displayLimit: params.displayLimit,
   });
@@ -63,6 +64,7 @@ export async function searchNearbyStores(params: NearbyStoresParams): Promise<{
     isGpsOrigin: params.isGpsOrigin,
     radiusMultiplier: params.radiusMultiplier,
     displayLimit: params.displayLimit,
+    useStoresTabZipTable: params.useStoresTabZipTable,
   });
 
   let merged: StoreRecord[] = stores;

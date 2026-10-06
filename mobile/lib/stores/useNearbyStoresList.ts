@@ -3,13 +3,13 @@ import { STORES_TAB_COPY, STORES_TAB_DISPLAY_LIMIT } from '../../config/storesTa
 import { useHydrated } from '../../hooks/useHydrated';
 import type { UserProfile } from '../../types/mealprep';
 import { nearbyStoresInstantPreview, searchNearbyStores, type StoreLocation } from '../deals';
-import { geocodeUsZip } from './nominatim';
 import { sortStoresByDistanceMiles, withDistancesFromOrigin } from './storeDistance';
 import { resolveSearchOriginFast } from './resolveOrigin';
-import { loadZctaCentroids } from './zctaCentroids';
+import { geocodeUsZipForStoresTab } from './storesTabGeocode';
 import { isValidUsZip } from '../smartShop/location';
 import { persistHomeLocation } from '../smartShop/profileLocation';
-import { readCachedZipPlaceLabel, resolveZipPlaceLabel } from './zipPlaceLabel';
+import { readCachedZipPlaceLabel } from './zipPlaceLabel';
+import { resolveZipPlaceLabelForStoresTab } from './zipPlaceLabelStoresTab';
 import { requestStoresDeviceLocation } from './requestStoresLocation';
 import {
   markStoresGeolocationDenied,
@@ -47,11 +47,6 @@ export function useNearbyStoresList(profile: UserProfile) {
   const loadStoresGeneration = useRef(0);
   const zipInitializedForProfile = useRef<string | null>(null);
   const autoLocateAttempted = useRef(false);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    void loadZctaCentroids();
-  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -112,7 +107,7 @@ export function useNearbyStoresList(profile: UserProfile) {
       setZipPlaceLabel(cached);
       return;
     }
-    void resolveZipPlaceLabel(searchZip).then((label) => setZipPlaceLabel(label));
+    void resolveZipPlaceLabelForStoresTab(searchZip).then((label) => setZipPlaceLabel(label));
   }, [hydrated, searchZip]);
 
   const searchOrigin = useMemo(() => {
@@ -151,6 +146,7 @@ export function useNearbyStoresList(profile: UserProfile) {
         isGpsOrigin,
         radiusMultiplier: mult,
         displayLimit: STORES_TAB_DISPLAY_LIMIT,
+        useStoresTabZipTable: true,
       };
 
       const instant = nearbyStoresInstantPreview(searchParams);
@@ -257,7 +253,7 @@ export function useNearbyStoresList(profile: UserProfile) {
       return false;
     }
     const trimmed = zip.trim().slice(0, 5);
-    const geocodeResult = await geocodeUsZip(trimmed);
+    const geocodeResult = await geocodeUsZipForStoresTab(trimmed);
     if (!geocodeResult.ok) {
       setError('Could not look up that ZIP. Try again.');
       return false;

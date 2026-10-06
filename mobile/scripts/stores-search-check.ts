@@ -8,7 +8,7 @@ import { encodeGeohash, nearbyStoresCacheGeohash } from '../lib/stores/geohash';
 import { chooseRegionalStaticFallback, isWithinOakdaleRegionalFallback, OAKDALE_FALLBACK_ORIGIN } from '../lib/stores/regionalFallback';
 import { nearbyStoreSearchRadiusMeters } from '../lib/stores/storeSearchRadius';
 import { nearbyStoresCacheKey } from '../lib/stores/storeSearchCache';
-import { lookupZctaCentroid } from '../lib/stores/zctaCentroids';
+import { lookupZctaCentroid, nearestZctaZip } from '../lib/stores/zctaCentroids';
 
 async function main() {
   const oakdale = await lookupZctaCentroid('95361');
@@ -38,6 +38,9 @@ async function main() {
   assert.ok(regional.length > 0, 'oakdale fallback json loads');
   const empty = chooseRegionalStaticFallback({ lat: 40.7, lng: -74.0 });
   assert.equal(empty.length, 0, 'no fallback far from oakdale');
+
+  const nearest = await nearestZctaZip(37.7665, -120.8471);
+  assert.equal(nearest, '95361', 'nearest ZCTA near Oakdale test coords');
 
   console.log('stores-search-check: ok');
 }

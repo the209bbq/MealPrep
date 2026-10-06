@@ -33,14 +33,6 @@ export async function geocodeUsZip(zip: string): Promise<GeocodeResult> {
     return { ok: true, point: local };
   }
 
-  const { lookupZctaCentroid } = await import('./zctaCentroids');
-  const zcta = await lookupZctaCentroid(normalized);
-  if (zcta) {
-    writeCache(cacheKey, zcta, SMART_SHOP_STORES.cacheTtlMs);
-    writePersistentCache(cacheKey, zcta, SMART_SHOP_STORES.zipGeocodePersistentTtlMs);
-    return { ok: true, point: zcta };
-  }
-
   return { ok: false, reason: 'not_found' };
 }
 

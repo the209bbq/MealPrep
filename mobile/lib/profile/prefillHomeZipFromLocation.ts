@@ -2,8 +2,6 @@ import { Platform } from 'react-native';
 import * as ExpoLocation from 'expo-location';
 import { queryStoresGeolocationPermissionForPlatform } from '../stores/storesGeolocation';
 import { requestStoresDeviceLocation } from '../stores/requestStoresLocation';
-import { nearestZctaZip } from '../stores/zctaCentroids';
-
 export type HomeLocationPrefill = {
   zip?: string;
   lat: number;
@@ -30,12 +28,8 @@ export async function prefillHomeZipFromGrantedLocation(): Promise<HomeLocationP
         zip = postal.slice(0, 5);
       }
     } catch {
-      // Fall back to bundled ZCTA nearest match.
+      // No ZCTA lookup outside Stores tab — coords only when reverse geocode fails.
     }
-  }
-  if (!zip) {
-    const nearest = await nearestZctaZip(resolved.lat, resolved.lng);
-    if (nearest) zip = nearest;
   }
   return { lat: resolved.lat, lng: resolved.lng, zip };
 }
