@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import {
   appendRecipeEngagementEvent,
   createSeamlessEngagementEvent,
+  readEngagementIndexForOwner,
 } from '../../lib/recipeRanking';
 import { formatIngredientText, formatQuantityWithUnit } from '../../lib/formatQuantity';
 import { localDateString } from '../../lib/mealCalendar/dates';
@@ -87,7 +88,7 @@ function ScheduleRecipeSheetBody({
   const logSeamlessEvent = useCallback(
     (
       refKey: string,
-      type: 'plan' | 'cook_now' | 'just_save' | 'skip',
+      type: Parameters<typeof createSeamlessEngagementEvent>[1],
       v2: Parameters<typeof createSeamlessEngagementEvent>[2],
     ) => {
       appendRecipeEngagementEvent(
@@ -110,7 +111,9 @@ function ScheduleRecipeSheetBody({
   const [monthOpen, setMonthOpen] = useState(false);
   const settledRef = useRef(false);
 
-  const defaultPlan = useMemo(
+  const ghostIndex = useMemo(() => readEngagementIndexForOwner(ownerId), [ownerId, target.sheetId]);
+
+  const ghostSuggestion = useMemo(
     () =>
       suggestDaySlot({
         category: target.categoryLabel,
@@ -118,17 +121,22 @@ function ScheduleRecipeSheetBody({
         tags: target.tags,
         mealPlan,
         todayIso: today,
+        ghostIndex,
       }),
-    [mealPlan, target, today],
+    [ghostIndex, mealPlan, target, today],
   );
 
-  const [selectedDay, setSelectedDay] = useState(defaultPlan.day);
-  const [selectedSlot, setSelectedSlot] = useState<MealSlot>(defaultPlan.slot);
+  const [selectedSlot, setSelectedSlot] = useState<MealSlot | null>(
+    ghostSuggestion.showSlotGhost ? ghostSuggestion.slot : null,
+  );
+  const [slotGhostActive, setSlotGhostActive] = useState(ghostSuggestion.showSlotGhost);
+  const [compactExpanded, setCompactExpanded] = useState(false);
 
   useEffect(() => {
-    setSelectedDay(defaultPlan.day);
-    setSelectedSlot(defaultPlan.slot);
-  }, [defaultPlan.day, defaultPlan.slot, target.pantryRecipeId]);
+    setSelectedSlot(ghostSuggestion.showSlotGhost ? ghostSuggestion.slot : null);
+    setSlotGhostActive(ghostSuggestion.showSlotGhost);
+    setCompactExpanded(false);
+  }, [ghostSuggestion.showSlotGhost, ghostSuggestion.slot, target.pantryRecipeId]);
 
   const dayOptions = useMemo(() => quickScheduleDayOptions(today), [today]);
 
@@ -161,14 +169,42 @@ function ScheduleRecipeSheetBody({
   }, [beginCookViewSession, markSettled, onClose, target]);
 
   const confirmPlan = useCallback(
-    async (day: string, slot: MealSlot) => {
+    async (day: string, slot: MealSlot, fromGhost: boolean) => {
       markSettled();
-      const slotCode = mealSlotToPlanCode(slot);
+      const slotCode = mealSlotToPlanCode(slot) ?? 'D';
+      const ghostDay = ghostSuggestion.day;
+      const ghostSlotCode = ghostSuggestion.slotCode;
+      const usedGhost =
+        fromGhost &&
+        day === ghostDay &&
+        slotCode === ghostSlotCode &&
+        ghostSuggestion.showSlotGhost;
+      const ghostDayOnly = fromGhost && day === ghostDay && !ghostSuggestion.showSlotGhost;
+
+      if (usedGhost || ghostDayOnly) {
+        logSeamlessEvent(target.refKey, 'ghost_confirm', {
+          ...logBase(),
+          suggestedDay: ghostDay,
+          suggestedSlot: ghostSlotCode,
+        });
+      } else if (
+        day !== ghostDay ||
+        slotCode !== ghostSlotCode
+      ) {
+        logSeamlessEvent(target.refKey, 'ghost_override', {
+          ...logBase(),
+          suggestedDay: ghostDay,
+          suggestedSlot: ghostSlotCode,
+          chosenDay: day,
+          chosenSlot: slotCode,
+        });
+      }
+
       logSeamlessEvent(target.refKey, 'plan', {
         ...logBase(),
         day,
-        slot: slotCode ?? 'D',
-        ghostShown: false,
+        slot: slotCode,
+        ghostShown: usedGhost || ghostDayOnly,
       });
 
       const result = await scheduleMealFromRecipe({
@@ -199,6 +235,7 @@ function ScheduleRecipeSheetBody({
       markSettled,
       missing,
       onClose,
+      ghostSuggestion,
       notifyMealScheduled,
       scheduleMealFromRecipe,
       target,
@@ -271,6 +308,47 @@ function ScheduleRecipeSheetBody({
   }
 
   if (step === 'plan') {
+    const ghostDay = ghostSuggestion.day;
+    const ghostSlot = ghostSuggestion.slot;
+    const activeSlot = selectedSlot ?? ghostSlot;
+    const dayLabel =
+      dayOptions.find((d) => d.isoDate === ghostDay)?.label ??
+      ghostDay;
+    const showCompact =
+      ghostSuggestion.compactPrompt &&
+      ghostSuggestion.showSlotGhost &&
+      !compactExpanded;
+
+    if (showCompact) {
+      return (
+        <Pressable className="flex-1 justify-end bg-black/40" onPress={handleDismiss}>
+          <Pressable className="rounded-t-3xl bg-card px-4 pb-8 pt-4" onPress={() => undefined}>
+            <Text className="text-lg font-bold text-ink">
+              {SEAMLESS_FLOW_COPY.ghostCompactPrompt(
+                dayLabel,
+                MEAL_CALENDAR.slotLabels[ghostSlot],
+              )}
+            </Text>
+            <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{target.title}</Text>
+            <View className="mt-4 flex-row gap-2">
+              <PrimaryActionButton
+                label={SEAMLESS_FLOW_COPY.ghostConfirm}
+                onPress={() => void confirmPlan(ghostDay, ghostSlot, true)}
+              />
+              <PrimaryActionButton
+                variant="secondary"
+                label={SEAMLESS_FLOW_COPY.ghostChange}
+                onPress={() => setCompactExpanded(true)}
+              />
+            </View>
+            <Pressable onPress={() => setStep('choose')} className="mt-4 items-center py-2">
+              <Text className="font-semibold text-muted">Back</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      );
+    }
+
     return (
       <>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={handleDismiss}>
@@ -280,18 +358,35 @@ function ScheduleRecipeSheetBody({
 
             <View className="mt-4 flex-row gap-2">
               {SEAMLESS_PLAN_SLOTS.map((slot) => {
-                const selected = selectedSlot === slot;
+                const isGhost = slotGhostActive && ghostSuggestion.showSlotGhost && slot === ghostSlot;
+                const isSolid = selectedSlot === slot && !isGhost;
+                const disabledStyle = isGhost;
                 return (
                   <Pressable
                     key={slot}
-                    onPress={() => setSelectedSlot(slot)}
-                    className={`flex-1 items-center rounded-full py-2 ${
-                      selected ? 'bg-primary' : 'bg-primary-light'
+                    onPress={() => {
+                      setSlotGhostActive(false);
+                      setSelectedSlot(slot);
+                    }}
+                    className={`flex-1 items-center rounded-full border py-2 ${
+                      isSolid
+                        ? 'border-primary bg-primary'
+                        : isGhost
+                          ? 'border-border bg-paper'
+                          : selectedSlot === slot
+                            ? 'border-primary bg-primary'
+                            : 'border-transparent bg-primary-light'
                     }`}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.85 : disabledStyle ? 0.55 : 1 })}
                   >
                     <Text
-                      className={`text-xs font-bold ${selected ? 'text-on-primary' : 'text-primary-dark'}`}
+                      className={`text-xs font-bold ${
+                        isSolid || (selectedSlot === slot && !isGhost)
+                          ? 'text-on-primary'
+                          : isGhost
+                            ? 'text-muted'
+                            : 'text-primary-dark'
+                      }`}
                     >
                       {MEAL_CALENDAR.slotLabels[slot]}
                     </Text>
@@ -302,30 +397,36 @@ function ScheduleRecipeSheetBody({
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
               {dayOptions.map((day) => {
-                const selected = selectedDay === day.isoDate;
+                const isGhostDay = day.isoDate === ghostDay;
                 const taken = takenSlotCodesForDay(mealPlan, day.isoDate);
+                const slotReady = selectedSlot != null || ghostSuggestion.showSlotGhost;
                 return (
                   <Pressable
                     key={day.isoDate}
-                    onPress={() => void confirmPlan(day.isoDate, selectedSlot)}
-                    className={`mr-2 min-w-[72px] rounded-2xl px-3 py-2 ${
-                      selected ? 'bg-primary' : 'border border-border bg-paper'
+                    disabled={!slotReady}
+                    onPress={() => {
+                      if (!slotReady) return;
+                      const slot = selectedSlot ?? ghostSlot;
+                      void confirmPlan(day.isoDate, slot, isGhostDay);
+                    }}
+                    className={`mr-2 min-w-[72px] rounded-2xl border px-3 py-2 ${
+                      isGhostDay
+                        ? 'border-border bg-paper'
+                        : 'border-transparent bg-primary-light'
                     }`}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}
+                    style={({ pressed }) => ({
+                      opacity: !slotReady ? 0.4 : pressed ? 0.85 : isGhostDay ? 0.6 : 1,
+                    })}
                   >
                     <Text
                       className={`text-center text-xs font-bold ${
-                        selected ? 'text-on-primary' : 'text-ink'
+                        isGhostDay ? 'text-muted' : 'text-ink'
                       }`}
                     >
                       {day.label}
                     </Text>
                     {taken.length > 0 ? (
-                      <Text
-                        className={`mt-0.5 text-center text-[10px] ${
-                          selected ? 'text-on-primary-muted' : 'text-muted'
-                        }`}
-                      >
+                      <Text className="mt-0.5 text-center text-[10px] text-muted">
                         {taken.join('·')}
                       </Text>
                     ) : null}
@@ -353,9 +454,9 @@ function ScheduleRecipeSheetBody({
           mealPlan={mealPlan}
           onClose={() => setMonthOpen(false)}
           onSelectDate={(isoDate) => {
-            setSelectedDay(isoDate);
             setMonthOpen(false);
-            void confirmPlan(isoDate, selectedSlot);
+            if (!activeSlot) return;
+            void confirmPlan(isoDate, activeSlot, isoDate === ghostDay);
           }}
         />
       </>

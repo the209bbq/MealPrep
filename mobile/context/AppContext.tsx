@@ -47,6 +47,7 @@ import { GROCERY_LIST_REFRESH_DEBOUNCE_MS } from '../config/grocerySync';
 import { groceryDismissalKeysForItem } from '../lib/grocery/removals';
 import { addMissingRecipeIngredientsToGrocery as mergeMissingIntoGrocery } from '../lib/recipeMatch/groceryFromMissing';
 import { mergeMissingIntoGroceryWithPlanLink } from '../lib/seamlessFlow/groceryPlanLinks';
+import { recipeCategoryGroup } from '../lib/seamlessFlow/categoryGroup';
 import {
   cookPromptKeyForCookNow,
   cookPromptKeyForMeal,
@@ -63,10 +64,8 @@ import {
   scheduleTargetFromMealPlanItem,
 } from '../lib/mealCalendar/scheduleTarget';
 import type { ScheduleRecipeTarget } from '../lib/mealCalendar/scheduleTarget';
-import {
-  appendRecipeEngagementEvent,
-  createSeamlessEngagementEvent,
-} from '../lib/recipeRanking/eventStore';
+import { appendRecipeEngagementEvent, createSeamlessEngagementEvent } from '../lib/recipeRanking';
+import { refKeyForKitchenRecipe } from '../lib/savedRecipes/refKey';
 import { SEAMLESS_FLOW_COPY } from '../config/seamlessFlow';
 import type { GroceryPlannedMealLink } from '../types/mealprep';
 import { router } from 'expo-router';
@@ -2171,9 +2170,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, isAdmin, isGuest, supabase, userId],
   );
 
+  const logImportedRecipeEngagement = useCallback(
+    (saved: Recipe, tags: string[]) => {
+      const refKey = refKeyForKitchenRecipe(saved);
+      const group = recipeCategoryGroup({
+        category: saved.tag,
+        title: saved.name,
+        tags,
+      });
+      appendRecipeEngagementEvent(
+        ownerId,
+        createSeamlessEngagementEvent(refKey, 'import', {
+          ts: Date.now(),
+          recipeId: saved.id,
+          source: 'import',
+          group,
+          sheetId: `import-${saved.id}`,
+          tags,
+        }),
+      );
+    },
+    [ownerId],
+  );
+
   const saveLinkImportedRecipe = useCallback(
     async (extracted: RecipeImportExtractedDto): Promise<Recipe> => {
       const mapped = mapExtractedImportToRecipe(extracted, ownerId);
+      const importTags = [extracted.title].filter(Boolean);
       if (demoMode || isGuest) {
         const saved = { ...mapped, isMaster: false };
         setRecipes((prev) => {
@@ -2183,6 +2206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           else writeGuestRecipes(next);
           return next;
         });
+        logImportedRecipeEngagement(saved, importTags);
         return saved;
       }
       if (!supabase || !userId) {
@@ -2193,9 +2217,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const exists = prev.some((r) => r.id === saved.id);
         return exists ? prev.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...prev];
       });
+      logImportedRecipeEngagement(saved, importTags);
       return saved;
     },
-    [demoMode, isGuest, ownerId, supabase, userId],
+    [demoMode, isGuest, logImportedRecipeEngagement, ownerId, supabase, userId],
   );
 
   const clearImportedRecipeSource = useCallback(

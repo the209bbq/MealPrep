@@ -11,6 +11,7 @@ import {
   rankCreatorFeedModels,
   rankRecipeSearchResults,
   rankRecipesTabRows,
+  readEngagementIndexForOwner,
   readRecipeEngagementEvents,
   shouldLogImpression,
   wontCookRefKeys,
@@ -19,6 +20,9 @@ import {
   type RecipeEngagementEventV2,
   type RecipeRankingContext,
 } from '../lib/recipeRanking';
+import { recipeCategoryGroup } from '../lib/seamlessFlow/categoryGroup';
+import { refKeyForKitchenRecipe } from '../lib/savedRecipes/refKey';
+import type { Recipe } from '../types/mealprep';
 
 export function useRecipeRanking(options: {
   ownerId: string;
@@ -31,13 +35,18 @@ export function useRecipeRanking(options: {
   const [events, setEvents] = useState<RecipeEngagementEvent[]>(() =>
     readRecipeEngagementEvents(ownerId),
   );
+  const [engagementIndex, setEngagementIndex] = useState(() =>
+    readEngagementIndexForOwner(ownerId),
+  );
 
   useEffect(() => {
     setEvents(readRecipeEngagementEvents(ownerId));
+    setEngagementIndex(readEngagementIndexForOwner(ownerId));
   }, [ownerId]);
 
   const reloadEvents = useCallback(() => {
     setEvents(readRecipeEngagementEvents(ownerId));
+    setEngagementIndex(readEngagementIndexForOwner(ownerId));
   }, [ownerId]);
 
   const rankingContext = useMemo((): RecipeRankingContext => {
@@ -47,9 +56,10 @@ export function useRecipeRanking(options: {
       tabFilters,
       events,
       pricing,
+      engagementIndex,
       personalSignalsReady: personalSignalsReady(events),
     };
-  }, [dietPrefs, events, householdSize, pricing, tabFilters]);
+  }, [dietPrefs, engagementIndex, events, householdSize, pricing, tabFilters]);
 
   const logEvent = useCallback(
     (refKey: string, type: RecipeEngagementEventType) => {
@@ -61,6 +71,7 @@ export function useRecipeRanking(options: {
         events,
       );
       setEvents(next);
+      setEngagementIndex(readEngagementIndexForOwner(ownerId));
     },
     [events, ownerId],
   );
@@ -76,14 +87,25 @@ export function useRecipeRanking(options: {
   );
 
   const logOpen = useCallback((refKey: string) => logEvent(refKey, 'open'), [logEvent]);
-  const logCook = useCallback((refKey: string) => logEvent(refKey, 'cook'), [logEvent]);
+  const logCook = useCallback((refKey: string) => logEvent(refKey, 'cook_confirmed'), [logEvent]);
   const logSave = useCallback((refKey: string) => logEvent(refKey, 'save'), [logEvent]);
   const logSkip = useCallback((refKey: string) => logEvent(refKey, 'skip'), [logEvent]);
 
   const logSeamlessEvent = useCallback(
     (
       refKey: string,
-      type: Extract<RecipeEngagementEventType, 'plan' | 'cook_now' | 'just_save' | 'skip'>,
+      type: Extract<
+        RecipeEngagementEventType,
+        | 'plan'
+        | 'cook_now'
+        | 'just_save'
+        | 'skip'
+        | 'import'
+        | 'ghost_confirm'
+        | 'ghost_override'
+        | 'cook_confirmed'
+        | 'cook_declined'
+      >,
       v2: RecipeEngagementEventV2,
     ) => {
       const trimmed = refKey.trim();
@@ -94,8 +116,29 @@ export function useRecipeRanking(options: {
         events,
       );
       setEvents(next);
+      setEngagementIndex(readEngagementIndexForOwner(ownerId));
     },
     [events, ownerId],
+  );
+
+  const logImport = useCallback(
+    (recipe: Recipe, tags: string[] = []) => {
+      const refKey = refKeyForKitchenRecipe(recipe);
+      const group = recipeCategoryGroup({
+        category: recipe.tag,
+        title: recipe.name,
+        tags,
+      });
+      logSeamlessEvent(refKey, 'import', {
+        ts: Date.now(),
+        recipeId: recipe.id,
+        source: 'import',
+        group,
+        sheetId: `import-${recipe.id}`,
+        tags,
+      });
+    },
+    [logSeamlessEvent],
   );
 
   const markWontCook = useCallback(
@@ -109,6 +152,7 @@ export function useRecipeRanking(options: {
     (refKey: string) => {
       const next = clearWontCookForRef(ownerId, refKey, events);
       setEvents(next);
+      setEngagementIndex(readEngagementIndexForOwner(ownerId));
     },
     [events, ownerId],
   );
@@ -137,6 +181,7 @@ export function useRecipeRanking(options: {
 
   return {
     events,
+    engagementIndex,
     reloadEvents,
     rankingContext,
     logImpression,
@@ -145,6 +190,7 @@ export function useRecipeRanking(options: {
     logSave,
     logSkip,
     logSeamlessEvent,
+    logImport,
     markWontCook,
     undoWontCook,
     isWontCook,

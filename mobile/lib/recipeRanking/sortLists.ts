@@ -20,6 +20,7 @@ export function rankRecipesTabRows(
       ctx,
       costCache,
       nowMs,
+      ctx.engagementIndex,
     ),
   }));
   return scored
@@ -47,6 +48,7 @@ export function rankCreatorFeedModels(
       ctx,
       costCache,
       nowMs,
+      ctx.engagementIndex,
     ),
   }));
   return scored

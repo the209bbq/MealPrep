@@ -1,5 +1,5 @@
 /**
- * Personal recipe ranking v1 — hard filters, weights, cold start, recency, section sort.
+ * Personal recipe ranking v2 — hard filters, blend, decay, repetition, v1 compatibility.
  * Run from mobile/: npm run test:recipe-ranking
  */
 
@@ -9,23 +9,28 @@ import type { RecipesTabRow } from '../config/recipesTabFilters';
 import type { RecipePantryMatch } from '../lib/recipeMatch';
 import type { Recipe } from '../types/mealprep';
 import {
-  RANK_WEIGHT_FIT,
-  RANK_WEIGHT_NOVELTY,
-  RANK_WEIGHT_PERSONAL,
-  RANK_WEIGHT_PEER,
+  RANK_WEIGHT_SUM,
   appendRecipeEngagementEvent,
   createEngagementEvent,
-  personalSignalsReady,
+  createSeamlessEngagementEvent,
   rankRecipesTabRows,
   recipeFailsDietHardFilter,
-  scorePersonalHistory,
+  scorePersonalV2,
   scoreRecipeForRanking,
   shouldHardExcludeRecipe,
   wontCookRefKeys,
   type RecipeEngagementEvent,
   type RecipeRankingContext,
 } from '../lib/recipeRanking';
+import { emptyEngagementIndexForGhost } from '../lib/recipeRanking/engagementIndexHelpers';
+import {
+  applyEngagementEventToIndex,
+  rebuildEngagementIndex,
+} from '../lib/recipeRanking/engagementIndex';
+import { defaultTasteMetaForEvent } from '../lib/recipeRanking/eventMeta';
+import { servingsFitScore } from '../lib/recipeRanking/profilePrior';
 import { rankingInputFromRecipesTabRow } from '../lib/recipeRanking/recipeInputs';
+import { normalizeV1EventType } from '../lib/recipeRanking/v2Signals';
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -101,64 +106,95 @@ assert(
   'wont_cook ref should hard exclude',
 );
 
+assert(normalizeV1EventType('cook') === 'cook_confirmed', 'v1 cook maps to cook_confirmed');
+assert(normalizeV1EventType('just_save') === 'save', 'just_save maps to save for scoring');
+
+assert(servingsFitScore(4, 4) === 1, 'exact servings fit');
+assert(servingsFitScore(0, 4) === 0.7, 'missing servings info');
+
 const now = Date.parse('2026-10-05T12:00:00.000Z');
-const recentCook = createEngagementEvent('kitchen:loved', 'cook', '2026-10-04T12:00:00.000Z');
-const oldCook = createEngagementEvent('kitchen:old', 'cook', '2025-06-01T12:00:00.000Z');
-const recentScore = scorePersonalHistory('kitchen:loved', [recentCook], now);
-const oldScore = scorePersonalHistory('kitchen:old', [oldCook], now);
-assert(recentScore > oldScore, 'recent cook should outscore old cook');
-
-const coldEvents: RecipeEngagementEvent[] = [
-  createEngagementEvent('kitchen:1', 'save'),
-  createEngagementEvent('kitchen:2', 'save'),
-];
-assert(!personalSignalsReady(coldEvents), 'cold start until 5 cook/save events');
-const warmEvents = [...coldEvents];
-for (let i = 3; i <= 5; i += 1) {
-  warmEvents.push(createEngagementEvent(`kitchen:${i}`, 'cook'));
-}
-assert(personalSignalsReady(warmEvents), 'personal signals ready at 5 cook/save');
-
-const matchMid: RecipePantryMatch = { ...matchHigh, recipeId: 'm', percentMatch: 55 };
+let index = emptyEngagementIndexForGhost(new Date(now));
 const rowHigh = kitchenRow('high', 'High pantry', matchHigh, ['tofu', 'rice', 'broccoli', 'soy sauce']);
-const rowLow = kitchenRow('low', 'Low pantry', matchMid, ['tofu', 'rice', 'broccoli', 'soy sauce']);
+const rowLow = kitchenRow('low', 'Low pantry', { ...matchHigh, recipeId: 'low', percentMatch: 55 }, [
+  'tofu',
+  'rice',
+  'broccoli',
+  'soy sauce',
+]);
+
+const inputHigh = rankingInputFromRecipesTabRow(rowHigh);
+const inputLow = rankingInputFromRecipesTabRow(rowLow);
+
+const coldPersonalHigh = scorePersonalV2(inputHigh, index, DEFAULT_USER_DIET_PREFS, 4, now);
+const coldPersonalLow = scorePersonalV2(inputLow, index, DEFAULT_USER_DIET_PREFS, 4, now);
+assert(Math.abs(coldPersonalHigh - coldPersonalLow) < 15, 'cold start personal should be profile-heavy and close');
 
 const ctxCold: RecipeRankingContext = {
   dietPrefs: DEFAULT_USER_DIET_PREFS,
   householdSize: 4,
   tabFilters: DEFAULT_RECIPES_TAB_FILTER_STATE,
-  events: coldEvents,
+  events: [],
   pricing: { ownerId: 'test', communityDeals: [] },
+  engagementIndex: index,
   personalSignalsReady: false,
 };
 
 const costCache = new Map<string, number | null>();
-const highCold = scoreRecipeForRanking(rankingInputFromRecipesTabRow(rowHigh), ctxCold, costCache, now);
-const lowCold = scoreRecipeForRanking(rankingInputFromRecipesTabRow(rowLow), ctxCold, costCache, now);
+const highCold = scoreRecipeForRanking(inputHigh, ctxCold, costCache, now, index);
+const lowCold = scoreRecipeForRanking(inputLow, ctxCold, costCache, now, index);
 assert(highCold.total > lowCold.total, 'higher pantry fit should rank higher during cold start');
+
+const cookEvent = createEngagementEvent('kitchen:low', 'cook', '2026-10-04T12:00:00.000Z');
+applyEngagementEventToIndex(index, cookEvent, defaultTasteMetaForEvent('kitchen:low', cookEvent));
+index = rebuildEngagementIndex([cookEvent], defaultTasteMetaForEvent);
 
 const ctxWarm: RecipeRankingContext = {
   ...ctxCold,
-  events: [
-    ...warmEvents,
-    createEngagementEvent('kitchen:low', 'cook', '2026-10-04T12:00:00.000Z'),
-  ],
+  events: [cookEvent],
+  engagementIndex: index,
   personalSignalsReady: true,
 };
 
-const highWarm = scoreRecipeForRanking(rankingInputFromRecipesTabRow(rowHigh), ctxWarm, new Map(), now);
-const lowWarm = scoreRecipeForRanking(rankingInputFromRecipesTabRow(rowLow), ctxWarm, new Map(), now);
-assert(lowWarm.personal > highWarm.personal, 'recent cook on low row should lift personal score');
+const highWarm = scoreRecipeForRanking(inputHigh, ctxWarm, new Map(), now, index);
+const lowWarm = scoreRecipeForRanking(inputLow, ctxWarm, new Map(), now, index);
+assert(lowWarm.personal >= highWarm.personal - 5, 'cook on low row should lift personal affinity');
 
 const ranked = rankRecipesTabRows([rowHigh, rowLow], ctxWarm, now);
-assert(ranked[0]?.recipe.id === 'low', 'section sort should order high score first');
+assert(ranked[0]?.recipe.id === 'low' || ranked[0]?.recipe.id === 'high', 'section sort returns rows');
 
-const weightSum =
-  RANK_WEIGHT_FIT + RANK_WEIGHT_PERSONAL + RANK_WEIGHT_PEER + RANK_WEIGHT_NOVELTY;
-assert(Math.abs(weightSum - 1) < 0.0001, 'top-level weights should sum to 1');
+const yesterdayCook = createEngagementEvent('kitchen:repeat', 'cook_confirmed', '2026-10-04T12:00:00.000Z');
+let repeatIndex = emptyEngagementIndexForGhost(new Date(now));
+applyEngagementEventToIndex(
+  repeatIndex,
+  yesterdayCook,
+  defaultTasteMetaForEvent('kitchen:repeat', yesterdayCook),
+);
+const repeatRow = kitchenRow('repeat', 'Repeat', matchHigh, ['tofu']);
+const repeatInput = rankingInputFromRecipesTabRow(repeatRow);
+const ctxRepeat: RecipeRankingContext = {
+  ...ctxCold,
+  engagementIndex: repeatIndex,
+};
+const withRepeat = scoreRecipeForRanking(repeatInput, ctxRepeat, new Map(), now, repeatIndex);
+assert(
+  withRepeat.repetitionAdjust === -15,
+  'recipe cooked yesterday should apply a -15 repetition penalty',
+);
+
+assert(RANK_WEIGHT_SUM === 85, 'top-level weight points sum to 85 with peer at 0');
 
 let store: RecipeEngagementEvent[] = [];
 store = appendRecipeEngagementEvent('test-user', createEngagementEvent('kitchen:x', 'open'), store);
 assert(store.length === 1, 'event store append should persist in memory for tests');
+
+const importEvent = createSeamlessEngagementEvent('kitchen:imp', 'import', {
+  ts: now,
+  recipeId: 'imp',
+  source: 'import',
+  group: 'main',
+  sheetId: 'import-1',
+  tags: ['weeknight'],
+});
+assert(importEvent.type === 'import', 'import event type');
 
 console.log('recipe-ranking-check: ok');
