@@ -1,0 +1,14 @@
+[
+  { "idMeal": "1", "strMeal": "Baklava", "strCategory": "Dessert" },
+  { "idMeal": "2", "strMeal": "Apple & Blackberry Crumble", "strCategory": "Dessert" },
+  { "idMeal": "3", "strMeal": "Chelsea Buns", "strCategory": "Dessert" },
+  { "idMeal": "4", "strMeal": "Affogato (Italian Coffee Dessert)", "strCategory": "Dessert" },
+  { "idMeal": "5", "strMeal": "Æbleskiver", "strCategory": "Dessert" },
+  { "idMeal": "6", "strMeal": "Boterkoek", "strCategory": "Dessert" },
+  { "idMeal": "7", "strMeal": "Bajan Sweet Bread", "strCategory": "Dessert" },
+  { "idMeal": "8", "strMeal": "Fish pie", "strCategory": "Miscellaneous" },
+  { "idMeal": "9", "strMeal": "Cumberland Pie", "strCategory": "Beef" },
+  { "idMeal": "10", "strMeal": "Creamy Mustard Chicken", "strCategory": "Chicken" },
+  { "idMeal": "11", "strMeal": "Pork Chops in Creole Sauce", "strCategory": "Pork" },
+  { "idMeal": "12", "strMeal": "Egg Foo Young", "strCategory": "Vegetarian" }
+]

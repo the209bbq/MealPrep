@@ -231,7 +231,7 @@ export default function HomeScreen() {
   }, [handleSavedRecipeToggleOutcome, registerSavedRecipeToggleOutcome]);
 
   const creatorsCatalogEnabled =
-    creatorFeedEnabled && !searchQuery.trim() && !selectedCreator;
+    creatorFeedEnabled && !searching && !selectedCreator;
 
   const {
     creators,
@@ -253,7 +253,7 @@ export default function HomeScreen() {
     {
       enabled:
         creatorFeedEnabled &&
-        !searchQuery.trim() &&
+        !searching &&
         !selectedCreator &&
         sectionsExpanded.creators,
     },
@@ -266,7 +266,7 @@ export default function HomeScreen() {
     error: channelError,
     refresh: refreshCreatorChannel,
   } = useCreatorChannelVideos(session, selectedCreator?.youtubeChannelId ?? null, {
-    enabled: creatorFeedEnabled && Boolean(selectedCreator) && !searchQuery.trim(),
+    enabled: creatorFeedEnabled && Boolean(selectedCreator) && !searching,
   });
 
   const {
@@ -340,7 +340,7 @@ export default function HomeScreen() {
   }, [pantry, selectedClassicCategory]);
 
   const homeRecipesRefresh = useHomeRecipesRefresh({
-    enabled: showCreatorCatalogSections && !searchQuery.trim(),
+    enabled: showCreatorCatalogSections && !searching,
     pantry,
     session,
     creatorChannelIds: creatorBubbleChannelIds,
@@ -438,6 +438,10 @@ export default function HomeScreen() {
     if (!showCreatorCatalogSections) return [];
     const source = selectedClassicCategory ? classicCategoryRows : mealDbRows;
     const diet = filterRecipesTabRowsForDietPrefs(source, userDietPrefs);
+    const hasPendingStubs = diet.some(
+      (row) => row.kind === 'kitchen' && Boolean(row.pantryMatchPending),
+    );
+    if (hasPendingStubs) return diet;
     return rankTabRows(diet);
   }, [
     classicCategoryRows,

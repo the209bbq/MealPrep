@@ -146,7 +146,7 @@ function kitchenRecipe(partial: Partial<Recipe> & Pick<Recipe, 'id' | 'name'>): 
 }
 const boterkoek = kitchenRecipe({ id: 'c1', name: 'Boterkoek', tag: 'Dessert' });
 const aebleskiver = kitchenRecipe({ id: 'c2', name: 'Æbleskiver', tag: 'Dessert' });
-const sweetBread = kitchenRecipe({ id: 'c3', name: 'Bajan Sweet Bread', tag: 'Miscellaneous' });
+const sweetBread = kitchenRecipe({ id: 'c3', name: 'Bajan Sweet Bread', tag: 'Caribbean · Dessert' });
 const avocadoSauce = kitchenRecipe({ id: 'c4', name: 'Ají de Aguacate', tag: 'Starter' });
 assert.ok(!recipeSuitsMealPickerSlot(boterkoek, 'dinner'));
 assert.ok(!recipeSuitsMealPickerSlot(aebleskiver, 'dinner'));

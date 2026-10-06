@@ -10,6 +10,17 @@ import {
   compareMealPickerPantryRank,
   recipeSuitsMealPickerSlot,
 } from './mealPickerSlotFilter';
+import { isMealDbRecipeId } from '../mealdb/normalize';
+import { normalizeRecipeTitleForDedup } from '../recipes/unifiedFeed';
+
+export function canonicalMealPickerRecipeKey(recipe: Recipe): string {
+  const titleKey = normalizeRecipeTitleForDedup(recipe.name);
+  if (titleKey) return `title:${titleKey}`;
+  if (isMealDbRecipeId(recipe.id)) return recipe.id.toLowerCase();
+  const mealdbFromSlug = recipe.id.match(/^recipeapi-(\d+)/);
+  if (mealdbFromSlug) return mealDbRecipeId(mealdbFromSlug[1]!);
+  return recipe.id.toLowerCase();
+}
 
 export interface MealPickerRecipeOption {
   recipeId: string;
@@ -112,7 +123,16 @@ export function buildMealPickerRecipeOptions(
     ))
     .map((recipe) => recipe.id);
 
-  const orderedIds = [...new Set([...savedFirst, ...recommended, ...rest])].slice(0, maxRecipes);
+  const seenKeys = new Set<string>();
+  const orderedIds: string[] = [];
+  for (const recipeId of [...savedFirst, ...recommended, ...rest]) {
+    const recipe = kitchen.find((row) => row.id === recipeId);
+    const key = recipe ? canonicalMealPickerRecipeKey(recipe) : recipeId.toLowerCase();
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    orderedIds.push(recipeId);
+    if (orderedIds.length >= maxRecipes) break;
+  }
 
   return orderedIds.map((recipeId) => {
     const recipe = kitchen.find((row) => row.id === recipeId);

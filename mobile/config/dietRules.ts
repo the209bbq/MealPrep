@@ -9,8 +9,8 @@ export const PEANUT_INGREDIENT_KEYWORDS: string[] = [
   'peanut butter',
 ];
 
-/** Dish-title peanut signals (TheMealDB titles & creator video titles — not descriptions). */
-export const PEANUT_DISH_NAME_KEYWORDS: string[] = [
+/** Strong peanut dish names — match in creator video titles and descriptions. */
+export const PEANUT_DISH_NAME_STRONG: string[] = [
   'pad thai',
   'satay',
   'kung pao',
@@ -18,16 +18,26 @@ export const PEANUT_DISH_NAME_KEYWORDS: string[] = [
   'kung po',
   'gado-gado',
   'gado gado',
-  'nem',
-  'mee goreng',
+  'massaman',
+];
+
+/** Ambiguous peanut dish names — creator video titles only (not descriptions). */
+export const PEANUT_DISH_NAME_WEAK: string[] = [
   'bang bang',
   'nutter',
   'nutty',
-  'massaman',
+  'nem',
   'nasi lemak',
-  'apam balik',
   'caldereta',
+  'mee goreng',
   'pad see ew',
+  'apam balik',
+];
+
+/** Dish-title peanut signals (TheMealDB titles & creator video titles — not descriptions). */
+export const PEANUT_DISH_NAME_KEYWORDS: string[] = [
+  ...PEANUT_DISH_NAME_STRONG,
+  ...PEANUT_DISH_NAME_WEAK,
 ];
 
 /** Keyword → allergen(s). First match wins per allergen category; multiple allergens can apply. */

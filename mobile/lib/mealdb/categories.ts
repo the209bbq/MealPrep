@@ -170,17 +170,12 @@ export async function fetchMealDbCategoryFeedRows(
     options?.onRows?.(cached);
   }
 
-  const { summaries, listFetchFailed } = await mealDbCategoryFilterSummaries(
-    category,
-    bypassListCache,
-  );
-  if (listFetchFailed) {
-    return { rows: cached.length > 0 ? cached : [], listFetchFailed: true };
-  }
-
   if (isOffline()) {
+    const listSnapshot = bypassListCache ? [] : readMealDbCategoryListSnapshot(category);
     let offlineRows =
-      cached.length > 0 ? [...cached] : recipesTabRowsFromFilterSummaries(summaries, category);
+      cached.length > 0
+        ? [...cached]
+        : recipesTabRowsFromFilterSummaries(listSnapshot, category);
     offlineRows = kitchenCategoryRowsAvailableOffline(offlineRows, pantry);
     if (offlineRows.length > 0) {
       options?.onRows?.(offlineRows);
@@ -188,8 +183,16 @@ export async function fetchMealDbCategoryFeedRows(
     return {
       rows: offlineRows,
       listFetchFailed: false,
-      offlineCategoryEmpty: offlineRows.length === 0 && summaries.length > 0,
+      offlineCategoryEmpty: offlineRows.length === 0,
     };
+  }
+
+  const { summaries, listFetchFailed } = await mealDbCategoryFilterSummaries(
+    category,
+    bypassListCache,
+  );
+  if (listFetchFailed) {
+    return { rows: cached.length > 0 ? cached : [], listFetchFailed: true };
   }
 
   if (options?.listOnly) {

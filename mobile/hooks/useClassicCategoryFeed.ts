@@ -3,6 +3,7 @@ import type { RecipesTabRow } from '../config/recipesTabFilters';
 import type { MealDbCatalogCategory } from '../config/recipesTabSurface';
 import { readMealDbCategorySnapshot, clearMealDbCategoryFeedSnapshot } from '../lib/mealdb/categoryFeedCache';
 import { fetchMealDbCategoryFeedRows } from '../lib/mealdb/categories';
+import { kitchenCategoryRowsAvailableOffline } from '../lib/mealdb/offlineCategoryRows';
 import type { PantryItem } from '../types/mealprep';
 
 export function useClassicCategoryFeed(
@@ -26,6 +27,17 @@ export function useClassicCategoryFeed(
   const lastFailedCategoryRef = useRef<MealDbCatalogCategory | null>(null);
   const prevCategoryRef = useRef<MealDbCatalogCategory | null>(null);
   const forceBypassListCacheRef = useRef(false);
+
+  const applyOfflineRows = useCallback(() => {
+    if (!category) return;
+    setRows((prev) => {
+      const offline = kitchenCategoryRowsAvailableOffline(prev, pantry);
+      setOfflineCategoryEmpty(offline.length === 0);
+      setLoading(false);
+      setLoadFailed(false);
+      return offline;
+    });
+  }, [category, pantry]);
 
   const syncRow = useCallback((resolved: RecipesTabRow) => {
     setRows((prev) => {
@@ -53,6 +65,16 @@ export function useClassicCategoryFeed(
     setLoadFailed(false);
     setRetryTick((value) => value + 1);
   }, [category, pantry]);
+
+  useEffect(() => {
+    if (!category) return;
+    const onOffline = () => applyOfflineRows();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('offline', onOffline);
+      return () => window.removeEventListener('offline', onOffline);
+    }
+    return undefined;
+  }, [applyOfflineRows, category]);
 
   useEffect(() => {
     if (!category) {
