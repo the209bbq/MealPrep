@@ -4,8 +4,8 @@ import {
   PEANUT_DISH_NAME_WEAK,
   PEANUT_INGREDIENT_KEYWORDS,
 } from '../../config/dietRules';
-import { normalizeIngredientName } from '../recipeMatch/ingredientNormalize';
 import { haystackForLine, phraseMatchesHaystack } from './allergenMatch';
+import { dislikeMatchesHaystack } from './dislikeMatch';
 import { shouldHideRecipeForDietPrefs } from './conflicts';
 import { ingredientLinesFromRecipe } from './ingredientLines';
 import type { UserDietPrefs } from './types';
@@ -32,9 +32,7 @@ function peanutTitleShouldHide(prefs: UserDietPrefs, title: string): boolean {
 
 function dislikeIngredientInHaystack(haystack: string, dislikes: readonly string[]): boolean {
   for (const dislike of dislikes) {
-    const normalized = normalizeIngredientName(dislike);
-    if (!normalized) continue;
-    if (phraseMatchesHaystack(haystack, normalized)) return true;
+    if (dislikeMatchesHaystack(haystack, dislike)) return true;
   }
   return false;
 }

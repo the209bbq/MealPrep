@@ -8,6 +8,7 @@ import { localDateString } from '../../lib/mealCalendar/dates';
 import { findKitchenRecipeById } from '../../lib/mealPlan/kitchenRecipeLookup';
 import type { PantryMatchIndex } from '../../lib/recipeMatch';
 import type { SavedRecipeRecord } from '../../lib/savedRecipes/types';
+import { useApp } from '../../context/AppContext';
 
 interface AddMealPickerSheetProps {
   visible: boolean;
@@ -93,6 +94,7 @@ function AddMealPickerSheetForm({
   onClose,
   onPick,
 }: Omit<AddMealPickerSheetProps, 'visible'>) {
+  const { userDietPrefs } = useApp();
   const [query, setQuery] = useState('');
   const [slot, setSlot] = useState<MealSlot>(defaultSlot);
   const [makesLeftovers, setMakesLeftovers] = useState(false);
@@ -108,9 +110,10 @@ function AddMealPickerSheetForm({
         {
           mealSlot: slot,
           includeAllForSearch: query.trim().length > 0,
+          dietPrefs: userDietPrefs,
         },
       ),
-    [pantryMatches.ranked, query, recipes, savedRecipeIds, savedRecords, slot],
+    [pantryMatches.ranked, query, recipes, savedRecipeIds, savedRecords, slot, userDietPrefs],
   );
 
   const headerDate = formatMealPickerHeaderDate(isoDate, localDateString());

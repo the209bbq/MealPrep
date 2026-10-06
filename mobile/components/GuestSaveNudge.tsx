@@ -14,13 +14,13 @@ import {
 const { copy } = GUEST_SAVE_NUDGE_CONFIG;
 
 export function GuestSaveNudge({ className = 'mt-4' }: { className?: string }) {
-  const { demoMode, session, pantry, mealPlan, openAuthSheet } = useApp();
+  const { demoMode, session, pantry, mealPlan, openAuthSheet, authReady } = useApp();
   const hydrated = useHydrated();
   const [dismissedAtOverrideMs, setDismissedAtOverrideMs] = useState<number | null>(null);
   const dismissedAtMs =
     dismissedAtOverrideMs ?? (hydrated ? readGuestSaveNudgeDismissedAt() : null);
 
-  const visible = shouldShowGuestSaveNudge({
+  const visible = authReady && shouldShowGuestSaveNudge({
     demoMode,
     hasSession: session != null,
     kitchen: { pantryItemCount: pantry.length, mealPlanCount: mealPlan.length },

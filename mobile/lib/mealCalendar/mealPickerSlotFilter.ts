@@ -10,7 +10,7 @@ const CONDIMENT_DISH_START =
   /^\s*(aioli|aji|ají|mayo|mayonnaise|salsa|dip|sauce|gravy|pesto|chimichurri|tahini|hummus|guacamole|ketchup|mustard|relish|chutney|dressing|marinade|condiment)\b/i;
 
 const SWEET_FRIED_SIDE_TITLE =
-  /\b(sopaipillas?|buñuelos?|bunuelos?|jamaican festival|num e|ansom chek|churros?|beignets?|doughnuts?|donuts?|fritters?)\b/i;
+  /\b(sopaipillas?|buñuelos?|bunuelos?|jamaican festival|festival bread|sweet dumpling|num e|ansom chek|churros?|beignets?|doughnuts?|donuts?|fritters?)\b/i;
 
 const DINNER_SIDE_ALLOWED_TITLE =
   /\b(soup|chowder|stew|pierogi|mantu|burek|kumpir|callaloo|dumpling)\b/i;
@@ -116,6 +116,7 @@ function lunchDinnerExcludedByCategory(recipe: Recipe, slot: MealSlot): boolean 
   if (isDessertCategory(category)) return true;
   if (slot === 'dinner' && /^(starter|side)$/i.test(category)) {
     const normalized = normalizeTitleForKeywordMatch(recipe.name);
+    if (SWEET_FRIED_SIDE_TITLE.test(normalized)) return true;
     if (DINNER_SIDE_ALLOWED_TITLE.test(normalized)) return false;
     return true;
   }
@@ -127,7 +128,7 @@ function lunchDinnerExcludedByTitleFallback(name: string, slot: MealSlot): boole
   if (DESSERT_TITLE_FALLBACK.test(normalized)) return true;
   if (BREAKFAST_TITLE_FALLBACK.test(normalized)) return true;
   if (SWEET_BREAD_TITLE.test(normalized)) return true;
-  if (slot === 'lunch' && SWEET_FRIED_SIDE_TITLE.test(normalized)) return true;
+  if ((slot === 'lunch' || slot === 'dinner') && SWEET_FRIED_SIDE_TITLE.test(normalized)) return true;
   return false;
 }
 

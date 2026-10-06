@@ -970,7 +970,11 @@ export default function PantryScreen() {
 
         {actionError ? <Text className="mb-2 text-xs font-semibold text-danger">{actionError}</Text> : null}
 
-        {pantry.length === 0 ? (
+        {!profileReady ? (
+          <View className="mt-8 items-center justify-center py-8">
+            <ActivityIndicator color={THEME.primary} />
+          </View>
+        ) : pantry.length === 0 ? (
           <TabEmptyState tab="pantry" />
         ) : (
           <PantryFilteredItemList
