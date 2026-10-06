@@ -376,9 +376,6 @@ export function RecipeImportBox({
           )}
         </Pressable>
         {redditTip ? <Text className="mt-2 text-xs text-muted">{redditTip}</Text> : null}
-        {!loading && !error && !fallbacks && !redditTip ? (
-          <Text className="mt-1 text-xs text-muted">{RECIPE_IMPORT_COPY.importBoxHint}</Text>
-        ) : null}
         {loading ? (
           <Text className="mt-1 text-xs text-muted">{RECIPE_IMPORT_COPY.importing}</Text>
         ) : null}

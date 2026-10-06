@@ -33,7 +33,6 @@ export const CREATOR_RECIPES_FEED_MODE_SHORT_LABELS: Record<CreatorRecipesFeedMo
 
 export const CREATOR_RECIPES_COPY = {
   feedTitle: 'Recipes from creators you trust',
-  feedSubtitle: 'Classic ideas and creator videos — match what’s in your pantry',
   creatorsSectionTitle: 'See more creator recipes!',
   cardTapToImport: 'Tap to preview',
   sourceClassic: 'Classic',

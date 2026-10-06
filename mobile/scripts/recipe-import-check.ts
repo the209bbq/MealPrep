@@ -300,9 +300,14 @@ assert.ok(
   !importBoxSource.includes('Alert.alert'),
   'RecipeImportBox must not use Alert.alert (broken on web/PWA)',
 );
+const homeSource = fs.readFileSync(path.join(__dirname, '../app/(tabs)/index.tsx'), 'utf8');
 assert.ok(
-  importBoxSource.includes('importBoxHint'),
-  'RecipeImportBox should show import hint copy',
+  homeSource.includes('RECIPES_COPY.homeToolbarCard.subtitle'),
+  'Home toolbar should show paste/snap hint above import',
+);
+assert.ok(
+  !importBoxSource.includes('importBoxHint'),
+  'RecipeImportBox should not duplicate paste/snap hint under Import',
 );
 
 const pickPhotoNative = fs.readFileSync(
