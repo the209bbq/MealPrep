@@ -1,5 +1,6 @@
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { CREATOR_RECIPES_COPY } from '../../config/creatorRecipes';
+import { sizedCreatorAvatarUrl } from '../../lib/images/sizedCreatorAvatarUrl';
 import type { CreatorRotationSlot } from '../../lib/recipesTab/creatorRotation';
 import { HalfVisibleOnce } from './HalfVisibleOnce';
 
@@ -33,7 +34,7 @@ export function CreatorAvatarsRow({
           >
             {slot.creator.avatarUrl ? (
               <Image
-                source={{ uri: slot.creator.avatarUrl }}
+                source={{ uri: sizedCreatorAvatarUrl(slot.creator.avatarUrl, 56) ?? slot.creator.avatarUrl }}
                 className="h-14 w-14 rounded-full border border-border bg-card"
                 accessibilityIgnoresInvertColors
               />

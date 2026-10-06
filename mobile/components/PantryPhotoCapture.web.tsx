@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { preparePantryImageFromFile } from '../lib/pantryVision/prepareImage.web';
 import type { PreparedPantryImage } from '../lib/pantryVision/types';
 
 interface PantryPhotoCaptureProps {
@@ -17,7 +16,8 @@ export function PantryPhotoCapture({ onImagePrepared, onError, disabled }: Pantr
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    void preparePantryImageFromFile(file)
+    void import('../lib/pantryVision/prepareImage.web')
+      .then(({ preparePantryImageFromFile }) => preparePantryImageFromFile(file))
       .then(onImagePrepared)
       .catch((error: unknown) => {
         onError(error instanceof Error ? error.message : 'Could not prepare photo');

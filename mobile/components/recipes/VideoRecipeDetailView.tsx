@@ -8,6 +8,7 @@ import { RECIPES_COPY } from '../../config/recipesCopy';
 import { RECIPE_IMPORT_COPY } from '../../config/recipeImport';
 import { VIRAL_RECIPES_COPY } from '../../config/viralRecipes';
 import { formatIngredientText, formatQuantityWithUnit } from '../../lib/formatQuantity';
+import { sizedCreatorAvatarUrl } from '../../lib/images/sizedCreatorAvatarUrl';
 import { sanitizeHttpUrl } from '../../lib/recipeImport/safeHttpUrl';
 import type { RecipePantryMatch } from '../../lib/recipeMatch';
 import type { Recipe } from '../../types/mealprep';
@@ -119,7 +120,7 @@ function CreatorCreditRow({
     >
       {avatarUrl?.trim() ? (
         <Image
-          source={{ uri: avatarUrl.trim() }}
+          source={{ uri: sizedCreatorAvatarUrl(avatarUrl, 40) ?? avatarUrl.trim() }}
           style={{ width: 40, height: 40, borderRadius: 20 }}
           contentFit="cover"
           accessibilityIgnoresInvertColors
