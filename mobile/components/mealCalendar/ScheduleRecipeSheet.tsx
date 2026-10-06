@@ -24,6 +24,8 @@ import { MealCalendarMonthModal } from './MealCalendarMonthModal';
 import { RecipeThumbnail } from '../recipes/RecipeThumbnail';
 import { RECIPE_IMAGE } from '../../config/recipeImages';
 import { GUEST_OWNER_ID } from '../../config/guestMode';
+import { isMealDbRecipeId } from '../../lib/mealdb/normalize';
+import { rememberPlannedMealDbRecipe } from '../../lib/mealdb/plannedRecipeStore';
 
 type SheetStep = 'choose' | 'cook_missing' | 'plan';
 
@@ -81,6 +83,7 @@ function ScheduleRecipeSheetBody({
     notifyMealScheduled,
     removeMealPlanItem,
     beginCookViewSession,
+    feedKitchenRecipes,
   } = useApp();
 
   const ownerId = session?.user?.id ?? profile.id ?? (demoMode ? 'demo-user' : GUEST_OWNER_ID);
@@ -217,6 +220,11 @@ function ScheduleRecipeSheetBody({
         mealSlot: slot,
       });
 
+      const plannedRecipe = feedKitchenRecipes.find((row) => row.id === target.pantryRecipeId);
+      if (plannedRecipe && isMealDbRecipeId(plannedRecipe.id)) {
+        rememberPlannedMealDbRecipe(plannedRecipe);
+      }
+
       const link = {
         mealPlanItemId: result.parentId,
         scheduledOn: day,
@@ -237,6 +245,7 @@ function ScheduleRecipeSheetBody({
       onClose,
       ghostSuggestion,
       notifyMealScheduled,
+      feedKitchenRecipes,
       scheduleMealFromRecipe,
       target,
     ],

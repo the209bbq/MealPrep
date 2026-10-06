@@ -27,14 +27,13 @@ import {
   writeGroceryCombinePreference,
 } from '../../lib/grocery/grouping';
 import { localDateString } from '../../lib/mealCalendar/dates';
-import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { useGroceryCommunityDealBadges } from '../../lib/communityDeals/useCommunityDeals';
 import { PANTRY_CATEGORIES, type PantryCategory } from '../../types/mealprep';
 
 export default function GroceryScreen() {
   const {
     grocery,
-    recipes,
+    feedKitchenRecipes,
     toggleGroceryItem,
     toggleGroceryItemsChecked,
     mealPlan,
@@ -83,9 +82,8 @@ export default function GroceryScreen() {
   const { badges: communityBadges } = useGroceryCommunityDealBadges(openItemIds, grocery);
 
   const recipeNameById = useMemo(() => {
-    const kitchen = kitchenRecipesForPantryMatch(recipes);
-    return new Map(kitchen.map((r) => [r.id, r.name]));
-  }, [recipes]);
+    return new Map(feedKitchenRecipes.map((r) => [r.id, r.name]));
+  }, [feedKitchenRecipes]);
 
   function recipeLabelFor(item: (typeof grocery)[number]): string {
     if (item.sourceRecipeIds.length === 0) return '';

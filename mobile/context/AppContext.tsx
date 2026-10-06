@@ -115,6 +115,7 @@ import {
 import { scoreDiscoveryRecipeAgainstPantry } from '../lib/recipeDiscovery/scorePantry';
 import {
   kitchenRecipesForPantryMatch,
+  kitchenRecipesWithMealPlanContext,
   recipesForRecipesFeed,
 } from '../lib/recipeMatch/kitchenCatalogMerge';
 import { usePublishedLibraryRecipes } from '../hooks/usePublishedLibraryRecipes';
@@ -542,8 +543,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   } = usePublishedLibraryRecipes();
 
   const feedKitchenRecipes = useMemo(
-    () => recipesForRecipesFeed(recipes, libraryRecipes),
-    [libraryRecipes, recipes],
+    () => kitchenRecipesWithMealPlanContext(recipes, libraryRecipes, pantry, mealPlan),
+    [libraryRecipes, mealPlan, pantry, recipes],
   );
 
   const plannedRecipeIds = useMemo(
@@ -1850,11 +1851,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           if (merged.inserted.length > 0) {
             const saved = await insertPantryItems(supabase, userId, merged.inserted);
-            setPantry((prev) => {
-              const insertIds = new Set(merged.inserted.map((row) => row.id));
-              const without = prev.filter((row) => !insertIds.has(row.id));
-              return [...saved, ...without];
-            });
+            const reconciled = mergePantryStock(pantrySnapshot, saved).pantry;
+            setPantry(reconciled);
           }
         } catch (error: unknown) {
           setKitchenError(error instanceof Error ? error.message : 'Failed to update pantry');

@@ -49,6 +49,7 @@ export interface RecipeDetailSheetProps {
   importing?: boolean;
   importError?: string | null;
   onRetryImport?: () => void;
+  onStartImport?: () => void;
   onSignInForImport?: () => void;
   recipeSaved?: boolean;
   onToggleSaveRecipe?: () => void;
@@ -164,6 +165,7 @@ function ClassicRecipeDetailBody({
   importing: boolean;
   importError: string | null;
   onRetryImport?: () => void;
+  onStartImport?: () => void;
   onSignInForImport?: () => void;
   recipeSaved?: boolean;
   onToggleSaveRecipe?: () => void;
@@ -404,6 +406,7 @@ export function RecipeDetailSheet({
   importing = false,
   importError = null,
   onRetryImport,
+  onStartImport,
   onSignInForImport,
   recipeSaved,
   onToggleSaveRecipe,
@@ -443,6 +446,7 @@ export function RecipeDetailSheet({
           importError={importError}
           onClose={onClose}
           onRetryImport={onRetryImport}
+          onStartImport={onStartImport}
           onSignInForImport={onSignInForImport}
           recipeSaved={recipeSaved}
           onToggleSaveRecipe={onToggleSaveRecipe}
