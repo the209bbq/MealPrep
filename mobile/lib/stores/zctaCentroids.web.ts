@@ -1,3 +1,4 @@
+import appJson from '../../app.json';
 import { haversineMiles } from '../../config/smartShop';
 import type { GeocodedPoint } from './nominatim';
 
@@ -6,19 +7,29 @@ export type ZctaCentroidMap = Record<string, [number, number]>;
 let loaded: ZctaCentroidMap | null = null;
 let loadPromise: Promise<ZctaCentroidMap> | null = null;
 
-async function importZctaJsonBundled(): Promise<ZctaCentroidMap> {
-  const mod: unknown = await import('../../data/zcta-centroids.json');
-  if (mod && typeof mod === 'object' && 'default' in mod) {
-    return (mod as { default: ZctaCentroidMap }).default;
-  }
-  return mod as ZctaCentroidMap;
+function zctaPublicUrl(): string {
+  const baseUrl = appJson.expo?.experiments?.baseUrl;
+  const base =
+    typeof baseUrl === 'string' && baseUrl.length > 0
+      ? (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl)
+      : '';
+  return `${base}/zcta-centroids.json`;
 }
 
-/** Lazy-load bundled ZCTA JSON (native + Node tests). */
+async function loadZctaPayload(): Promise<ZctaCentroidMap> {
+  const url = zctaPublicUrl();
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to load ZCTA table (${res.status})`);
+  }
+  return (await res.json()) as ZctaCentroidMap;
+}
+
+/** Lazy-load ZCTA centroids from static JSON (not in web entry/common). */
 export async function loadZctaCentroids(): Promise<ZctaCentroidMap> {
   if (loaded) return loaded;
   if (!loadPromise) {
-    loadPromise = importZctaJsonBundled()
+    loadPromise = loadZctaPayload()
       .then((payload) => {
         loaded = payload;
         return payload;
