@@ -73,6 +73,7 @@
     "test:grocery-remove-persist": "npx tsx scripts/grocery-remove-persist-check.tsx",
     "test:qa-bugfixes": "npx tsx scripts/qa-bugfix-regression.ts && npx tsx scripts/viral-recipe-open-check.ts && npx tsx scripts/ingredient-match-check.ts && npx tsx scripts/pantry-expiry-check.ts && npx tsx scripts/account-offline-cache-check.ts",
     "test:simweek-regression": "npx tsx scripts/simweek-regression-check.ts",
+    "test:simweek-smaller": "npx tsx scripts/simweek-smaller-bugs-check.ts",
     "test:smart-shop": "npx tsx scripts/smart-shop-filter-examples.ts && npx tsx scripts/smart-shop-retailer-tests.ts && npx tsx scripts/smart-shop-honesty-tests.ts && npx tsx scripts/overpass-store-search-check.ts",
     "test:stores-tab": "npx tsx scripts/stores-tab-check.ts && npx tsx scripts/store-links-check.ts && npx tsx scripts/stores-origin-selection-check.ts && npx tsx scripts/stores-nearby-pipeline-check.ts",
     "test:store-links": "npx tsx scripts/store-links-check.ts",

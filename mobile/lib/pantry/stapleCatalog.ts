@@ -1,6 +1,9 @@
 import type { PantryCategory } from '../../types/mealprep';
 import { estimateExpiryFromShelfLife } from './expiry';
-import { suggestStorageLocationForCategory } from '../../config/pantryStorage';
+import {
+  suggestStorageLocationForCategory,
+  suggestStorageLocationForPantryItem,
+} from '../../config/pantryStorage';
 import type { PantryItem } from '../../types/mealprep';
 
 export const STAPLE_STORE_SECTIONS = [
@@ -331,7 +334,7 @@ export function stapleSelectionToPantryItem(
     category: staple.category,
     quantity,
     unit,
-    location: suggestStorageLocationForCategory(staple.category),
+    location: suggestStorageLocationForPantryItem(staple.name, staple.category),
     photoUri: null,
     expiresOn,
     updatedAt: now,

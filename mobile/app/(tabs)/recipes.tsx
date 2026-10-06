@@ -352,10 +352,11 @@ export default function RecipesScreen() {
   const searchResultsFiltered = useMemo(() => {
     const diet = filterRecipeSearchResultsForDietPrefs(searchResults, userDietPrefs);
     const main = applyMainIngredientToSearchResults(diet);
-    return rankSearchResults(main);
+    return rankSearchResults(main, searchQuery.trim());
   }, [
     applyMainIngredientToSearchResults,
     searchResults,
+    searchQuery,
     userDietPrefs,
     rankSearchResults,
   ]);

@@ -10,6 +10,7 @@ import {
 } from '../../lib/recipeRanking';
 import { formatIngredientText, formatQuantityWithUnit } from '../../lib/formatQuantity';
 import { localDateString } from '../../lib/mealCalendar/dates';
+import { formatMealPickerHeaderDate } from '../../lib/mealCalendar/formatScheduleDate';
 import { quickScheduleDayOptions } from '../../lib/mealCalendar/quickScheduleDays';
 import {
   categoryGroupForTarget,
@@ -298,7 +299,7 @@ function ScheduleRecipeSheetBody({
               {swapMatch ? (
                 <PrimaryActionButton
                   variant="secondary"
-                  label={SEAMLESS_FLOW_COPY.swapSuggestion(swapMatch.recipeName)}
+                  label={`${SEAMLESS_FLOW_COPY.swapIt} · ${swapMatch.recipeName}`}
                   onPress={() => {
                     markSettled();
                     onClose();
@@ -319,10 +320,11 @@ function ScheduleRecipeSheetBody({
   if (step === 'plan') {
     const ghostDay = ghostSuggestion.day;
     const ghostSlot = ghostSuggestion.slot;
-    const activeSlot = selectedSlot ?? ghostSlot;
-    const dayLabel =
-      dayOptions.find((d) => d.isoDate === ghostDay)?.label ??
-      ghostDay;
+    const activeSlot =
+      selectedSlot ?? (ghostSuggestion.showSlotGhost ? ghostSlot : null);
+    const dayLabel = formatMealPickerHeaderDate(ghostDay, today);
+    const slotLabel = activeSlot ? MEAL_CALENDAR.slotLabels[activeSlot] : '';
+    const showGhostPlanButton = ghostSuggestion.showSlotGhost && activeSlot != null;
     const showCompact =
       ghostSuggestion.compactPrompt &&
       ghostSuggestion.showSlotGhost &&
@@ -365,11 +367,19 @@ function ScheduleRecipeSheetBody({
             <Text className="text-lg font-bold text-ink">{SEAMLESS_FLOW_COPY.planIt}</Text>
             <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{target.title}</Text>
 
-            <View className="mt-4 flex-row gap-2">
+            {showGhostPlanButton && activeSlot ? (
+              <View className="mt-4">
+                <PrimaryActionButton
+                  label={SEAMLESS_FLOW_COPY.planForGhost(dayLabel, slotLabel)}
+                  onPress={() => void confirmPlan(ghostDay, activeSlot, true)}
+                />
+              </View>
+            ) : null}
+
+            <View className={`flex-row gap-2 ${showGhostPlanButton ? 'mt-3' : 'mt-4'}`}>
               {SEAMLESS_PLAN_SLOTS.map((slot) => {
                 const isGhost = slotGhostActive && ghostSuggestion.showSlotGhost && slot === ghostSlot;
                 const isSolid = selectedSlot === slot && !isGhost;
-                const disabledStyle = isGhost;
                 return (
                   <Pressable
                     key={slot}
@@ -377,27 +387,31 @@ function ScheduleRecipeSheetBody({
                       setSlotGhostActive(false);
                       setSelectedSlot(slot);
                     }}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      isGhost
+                        ? `Suggested ${MEAL_CALENDAR.slotLabels[slot]}`
+                        : MEAL_CALENDAR.slotLabels[slot]
+                    }
                     className={`flex-1 items-center rounded-full border py-2 ${
                       isSolid
                         ? 'border-primary bg-primary'
                         : isGhost
-                          ? 'border-border bg-paper'
+                          ? 'border-primary bg-primary-light'
                           : selectedSlot === slot
                             ? 'border-primary bg-primary'
                             : 'border-transparent bg-primary-light'
                     }`}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.85 : disabledStyle ? 0.55 : 1 })}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.88 : 1 })}
                   >
                     <Text
                       className={`text-xs font-bold ${
                         isSolid || (selectedSlot === slot && !isGhost)
                           ? 'text-on-primary'
-                          : isGhost
-                            ? 'text-muted'
-                            : 'text-primary-dark'
+                          : 'text-primary-dark'
                       }`}
                     >
-                      {MEAL_CALENDAR.slotLabels[slot]}
+                      {isGhost ? `Suggested · ${MEAL_CALENDAR.slotLabels[slot]}` : MEAL_CALENDAR.slotLabels[slot]}
                     </Text>
                   </Pressable>
                 );
@@ -408,31 +422,36 @@ function ScheduleRecipeSheetBody({
               {dayOptions.map((day) => {
                 const isGhostDay = day.isoDate === ghostDay;
                 const taken = takenSlotCodesForDay(mealPlan, day.isoDate);
-                const slotReady = selectedSlot != null || ghostSuggestion.showSlotGhost;
+                const slotReady = activeSlot != null;
+                const isSuggestedDay =
+                  isGhostDay && ghostSuggestion.showSlotGhost && slotGhostActive;
                 return (
                   <Pressable
                     key={day.isoDate}
                     disabled={!slotReady}
                     onPress={() => {
-                      if (!slotReady) return;
-                      const slot = selectedSlot ?? ghostSlot;
-                      void confirmPlan(day.isoDate, slot, isGhostDay);
+                      if (!activeSlot) return;
+                      void confirmPlan(day.isoDate, activeSlot, isSuggestedDay);
                     }}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      isSuggestedDay ? `Suggested day ${day.label}` : day.label
+                    }
                     className={`mr-2 min-w-[72px] rounded-2xl border px-3 py-2 ${
-                      isGhostDay
-                        ? 'border-border bg-paper'
+                      isSuggestedDay
+                        ? 'border-primary bg-primary-light'
                         : 'border-transparent bg-primary-light'
                     }`}
                     style={({ pressed }) => ({
-                      opacity: !slotReady ? 0.4 : pressed ? 0.85 : isGhostDay ? 0.6 : 1,
+                      opacity: !slotReady ? 0.4 : pressed ? 0.88 : 1,
                     })}
                   >
                     <Text
                       className={`text-center text-xs font-bold ${
-                        isGhostDay ? 'text-muted' : 'text-ink'
+                        isSuggestedDay ? 'text-primary-dark' : 'text-ink'
                       }`}
                     >
-                      {day.label}
+                      {isSuggestedDay ? `Suggested · ${day.label}` : day.label}
                     </Text>
                     {taken.length > 0 ? (
                       <Text className="mt-0.5 text-center text-[10px] text-muted">

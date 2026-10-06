@@ -13,10 +13,11 @@ import {
   staplesBySection,
   type StapleSelectionState,
 } from '../lib/pantry/stapleCatalog';
+import { filterStaplesForDietPrefs } from '../lib/pantry/filterStaplesForDiet';
 
 export default function PantryStaplesScreen() {
   const insets = useSafeAreaInsets();
-  const { addPantryStaples } = useApp();
+  const { addPantryStaples, userDietPrefs } = useApp();
   const [selections, setSelections] = useState<Map<string, StapleSelectionState>>(() => new Map());
   const [expandedFollowUpId, setExpandedFollowUpId] = useState<string | null>(null);
   const [dateInputOpenId, setDateInputOpenId] = useState<string | null>(null);
@@ -24,7 +25,13 @@ export default function PantryStaplesScreen() {
 
   const selectedCount = selections.size;
 
-  const sections = useMemo(() => staplesBySection(), []);
+  const sections = useMemo(() => {
+    const raw = staplesBySection();
+    return raw.map((section) => ({
+      ...section,
+      items: filterStaplesForDietPrefs(section.items, userDietPrefs),
+    }));
+  }, [userDietPrefs]);
 
   const toggleStaple = useCallback((stapleId: string) => {
     setSelections((prev) => {

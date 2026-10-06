@@ -97,6 +97,7 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
         maxLength={10}
         className="mt-2 rounded-xl border border-border bg-card px-3 py-2 text-ink"
         placeholder="ZIP"
+        accessibilityLabel={ACCOUNT_SHEET_COPY.homeZipLabel}
       />
       {zipLabel ? <Text className="mt-1 text-xs text-muted">{zipLabel}</Text> : null}
 
@@ -106,6 +107,7 @@ function PostSignupProfileForm({ onDone }: { onDone: () => void }) {
         onChangeText={setHouseholdSize}
         keyboardType="number-pad"
         className="mt-2 rounded-xl border border-border bg-card px-3 py-2 text-ink"
+        accessibilityLabel={ACCOUNT_SHEET_COPY.householdLabel}
       />
 
       <DietAllergiesSection value={dietPrefs} onChange={setDietPrefs} compact />

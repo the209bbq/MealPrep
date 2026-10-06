@@ -154,14 +154,20 @@ function normalizeIngredientNameCore(value: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-const PLURAL_KEEP_TOKENS = new Set(['beans']);
+const PLURAL_KEEP_TOKENS = new Set(['beans', 'gras']);
+
+/** Singular -ie nouns whose plural is -ies (cookies → cookie, not cooky). */
+const PLURAL_IES_TO_IE = new Set(['cookie', 'brownie', 'bogie']);
 
 function singularizeToken(token: string): string {
   if (token === 'halves') return 'half';
   if (PLURAL_KEEP_TOKENS.has(token)) return token;
   if (token.length <= 3) return token;
   if (token.endsWith('ies') && token.length > 4) {
-    return `${token.slice(0, -3)}y`;
+    const stem = token.slice(0, -3);
+    const asIe = `${stem}ie`;
+    if (PLURAL_IES_TO_IE.has(asIe)) return asIe;
+    return `${stem}y`;
   }
   if (token.endsWith('oes') && token.length > 4) {
     return token.slice(0, -2);
@@ -172,7 +178,13 @@ function singularizeToken(token: string): string {
       return stem;
     }
   }
-  if (token.endsWith('s') && !token.endsWith('ss')) {
+  if (
+    token.endsWith('s') &&
+    !token.endsWith('ss') &&
+    !token.endsWith('as') &&
+    !token.endsWith('us') &&
+    !token.endsWith('is')
+  ) {
     return token.slice(0, -1);
   }
   return token;

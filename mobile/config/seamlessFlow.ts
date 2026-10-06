@@ -15,6 +15,7 @@ export const SEAMLESS_FLOW_COPY = {
   ghostCompactPrompt: (dayLabel: string, slotLabel: string) => `${dayLabel} ${slotLabel}?`,
   ghostConfirm: 'Confirm',
   ghostChange: 'Change',
+  planForGhost: (dayLabel: string, slotLabel: string) => `Plan for ${dayLabel} ${slotLabel.toLowerCase()}`,
   cookConfirmQuestion: (title: string) => `Did you cook ${title}?`,
   cookConfirmYes: 'Yes',
   cookConfirmNotThisTime: 'Not this time',

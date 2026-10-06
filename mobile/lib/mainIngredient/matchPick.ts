@@ -1,4 +1,5 @@
 import { FUZZY_MATCH_THRESHOLD } from '../../config/recipeMatchingConfig';
+import { canonicalIngredientPhrase } from '../recipeMatch/ingredientNormalize';
 import { ingredientMatchScore, normalizeIngredientName, tokenizeIngredientName } from '../recipeMatch/normalize';
 import { titleTokensForSimilarity } from '../recipes/nearDuplicate';
 import { ingredientTextMatchesCategorySlug } from './categorySlugs';
@@ -28,10 +29,21 @@ export function ingredientNameMatchesPick(ingredientName: string, pick: MainIngr
     return true;
   }
 
+  const ingredientPhrase = canonicalIngredientPhrase(trimmed);
   let best = 0;
   for (const term of pick.matchTerms) {
     best = Math.max(best, ingredientMatchScore(trimmed, term));
     best = Math.max(best, ingredientMatchScore(term, trimmed));
+    const termPhrase = canonicalIngredientPhrase(term);
+    if (ingredientPhrase && termPhrase && ingredientPhrase === termPhrase) {
+      return true;
+    }
+    if (termPhrase && ingredientPhrase.includes(termPhrase)) {
+      best = Math.max(best, FUZZY_MATCH_THRESHOLD);
+    }
+    if (ingredientPhrase && termPhrase.includes(ingredientPhrase)) {
+      best = Math.max(best, FUZZY_MATCH_THRESHOLD);
+    }
   }
   return best >= FUZZY_MATCH_THRESHOLD;
 }

@@ -89,7 +89,15 @@ export const ALLERGEN_KEYWORD_RULES: { allergens: AllergenId[]; keywords: string
   },
   {
     allergens: ['peanuts'],
-    keywords: ['peanut', 'peanuts', 'groundnut'],
+    keywords: [
+      'peanut',
+      'peanuts',
+      'groundnut',
+      'pad thai',
+      'satay',
+      'kung pao',
+      'kung-pao',
+    ],
   },
   {
     allergens: ['wheat'],

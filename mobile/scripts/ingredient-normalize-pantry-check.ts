@@ -48,6 +48,11 @@ assert(
   'pancake syrup must not double-apply syrup synonym',
 );
 assert(canonicalIngredientPhrase('Peach Halves') === 'peach half', 'peach halves -> peach half');
+assert(
+  canonicalIngredientPhrase('Chocolate Sandwich Cookies') === 'chocolate sandwich cookie',
+  'cookies -> cookie not cooky',
+);
+assert(canonicalIngredientPhrase('foie gras') === 'foie gras', 'foie gras must not lose trailing s');
 assert(canonicalIngredientPhrase('Chili With Beans') === 'chili with beans', 'keep beans in chili with beans');
 assert(canonicalIngredientPhrase('Instant Oatmeal') === 'instant oatmeal', 'instant oatmeal stays whole phrase');
 

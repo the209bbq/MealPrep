@@ -27,6 +27,8 @@ import {
   writeGroceryCombinePreference,
 } from '../../lib/grocery/grouping';
 import { localDateString } from '../../lib/mealCalendar/dates';
+import { countUpcomingScheduledMeals } from '../../lib/mealCalendar/groupMeals';
+import { MEAL_CALENDAR } from '../../config/mealCalendar';
 import { useGroceryCommunityDealBadges } from '../../lib/communityDeals/useCommunityDeals';
 import { PANTRY_CATEGORIES, type PantryCategory } from '../../types/mealprep';
 
@@ -37,7 +39,6 @@ export default function GroceryScreen() {
     toggleGroceryItem,
     toggleGroceryItemsChecked,
     mealPlan,
-    plannedRecipeIds,
     featureFlags,
     refreshGrocery,
     addManualGroceryItem,
@@ -64,6 +65,12 @@ export default function GroceryScreen() {
     writeGroceryCombinePreference(combineList);
   }, [combineList]);
 
+  const todayIso = localDateString();
+  const upcomingPlannedMealCount = useMemo(
+    () => countUpcomingScheduledMeals(mealPlan, todayIso, MEAL_CALENDAR.daysAhead),
+    [mealPlan, todayIso],
+  );
+
   const showMealGrouping = hasMealPlanGroceryGrouping(mealPlan);
   const useCombinedView = showMealGrouping && combineList;
 
@@ -73,7 +80,7 @@ export default function GroceryScreen() {
   const checkedCount = done.length;
   const openSections = useMemo(() => groupGroceryByAisle(open), [open]);
   const openDayGroups = useMemo(
-    () => groupGroceryByDayAndMeal(open, mealPlan, localDateString()),
+    () => groupGroceryByDayAndMeal(open, mealPlan, todayIso),
     [open, mealPlan],
   );
   const openMerged = useMemo(() => mergeGroceryItemsForCombinedView(open), [open]);
@@ -152,7 +159,7 @@ export default function GroceryScreen() {
               <View className="h-full rounded-full bg-primary-accent" style={{ width: `${progressPct}%` }} />
             </View>
             <Text className="mt-2 text-sm text-on-primary-muted">
-              {GROCERY_COPY.plannedMealsLine(plannedRecipeIds.length)}
+              {GROCERY_COPY.plannedMealsLine(upcomingPlannedMealCount)}
             </Text>
             {showMealGrouping ? (
               <Pressable
