@@ -8,6 +8,8 @@ export interface CreatorListItem {
   channelUrl: string;
   avatarUrl: string | null;
   subscriberCount: number;
+  /** Total channel views (hand-filled in curator seed; used for rotation popularity prior). */
+  totalChannelViews?: number;
   rank: number | null;
   fit: string;
   source: string | null;

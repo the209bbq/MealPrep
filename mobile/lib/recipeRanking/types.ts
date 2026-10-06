@@ -35,6 +35,8 @@ export interface RecipeEngagementEventV2 {
   source: RecipeEngagementSource;
   group: RecipeCategoryGroup;
   sheetId: string;
+  creatorId?: string;
+  visitId?: string;
   day?: string;
   slot?: PlanSlotCode;
   ghostShown?: boolean;
