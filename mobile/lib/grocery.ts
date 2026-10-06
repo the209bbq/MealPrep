@@ -1,12 +1,25 @@
 import { CATEGORY_LABELS } from '../config/appConfig';
-import type { GroceryListItem, PantryCategory, PantryItem, Recipe } from '../types/mealprep';
+import type {
+  GroceryListItem,
+  GroceryPlannedMealLink,
+  MealPlanItem,
+  PantryCategory,
+  PantryItem,
+  Recipe,
+  RecipeIngredient,
+} from '../types/mealprep';
 import { inferGroceryCategoryFromName } from './grocery/categorize';
 import { isGroceryDismissed, isGroceryManualLineDismissed } from './grocery/dismissals';
+import { compareScheduledMeals } from './mealCalendar/groupMeals';
 import {
   findPantryItemsForIngredient,
+  ingredientShortfall,
   totalPantryQuantityInUnit,
 } from './recipeMatch/pantryStock';
 import { isGroceryOriginPinned, preferGroceryOrigin } from './grocery/origin';
+import { normalizePlannedMealLinks } from './grocery/grouping';
+import { resolveMealPlanRecipeId } from './mealPlan/resolve';
+import { convertQuantity, unitsAreConvertible } from './units/conversion';
 import { normalizeIngredientName } from './recipeMatch/normalize';
 
 /** Store aisle order for grouped grocery UI. */
@@ -71,6 +84,136 @@ function categoryForIngredient(
 
 export interface BuildGroceryListOptions {
   groceryDismissals?: Set<string>;
+  mealPlan?: MealPlanItem[];
+  userId?: string;
+}
+
+function activeMealsForGrocery(mealPlan: MealPlanItem[]): MealPlanItem[] {
+  return mealPlan
+    .filter((item) => !item.made && !item.leftoverOfId)
+    .sort((a, b) => {
+      const schedA = a.scheduledOn ?? '9999-12-31';
+      const schedB = b.scheduledOn ?? '9999-12-31';
+      if (schedA !== schedB) return schedA.localeCompare(schedB);
+      return compareScheduledMeals(a, b);
+    });
+}
+
+function clonePantryForSimulation(pantry: PantryItem[]): PantryItem[] {
+  return pantry.map((row) => ({ ...row }));
+}
+
+function consumePantryForIngredient(
+  pantry: PantryItem[],
+  ingredient: RecipeIngredient,
+  neededQuantity: number,
+): void {
+  let remaining = neededQuantity;
+  const matches = findPantryItemsForIngredient(ingredient, pantry);
+  for (const item of matches) {
+    if (remaining <= 0) break;
+    if (!unitsAreConvertible(item.unit, ingredient.unit)) continue;
+    const available = convertQuantity(item.quantity, item.unit, ingredient.unit);
+    if (available == null || available <= 0) continue;
+    const take = Math.min(remaining, available);
+    remaining = roundQty(remaining - take);
+    const takeInItemUnit = convertQuantity(take, ingredient.unit, item.unit);
+    if (takeInItemUnit == null) continue;
+    item.quantity = roundQty(Math.max(0, item.quantity - takeInItemUnit));
+  }
+}
+
+function mealLinkForItem(meal: MealPlanItem): GroceryPlannedMealLink {
+  return {
+    mealPlanItemId: meal.id,
+    scheduledOn: meal.scheduledOn,
+    mealSlot: meal.mealSlot,
+    mealTitle: meal.title,
+  };
+}
+
+function previousCheckedForMealLine(
+  previous: GroceryListItem[],
+  mealId: string,
+  name: string,
+  unit: string,
+  lineId: string,
+): boolean {
+  const byMeal = previous.find(
+    (row) =>
+      row.plannedMealLinks.some((link) => link.mealPlanItemId === mealId) &&
+      groceryLineKey(row) === groceryLineKey({ name, unit }),
+  );
+  if (byMeal) return byMeal.checked;
+  const byId = previous.find((row) => row.id === lineId);
+  if (byId) return byId.checked;
+  const legacy = previous.find((row) => groceryLineKey(row) === groceryLineKey({ name, unit }));
+  return legacy?.checked ?? false;
+}
+
+function buildGroceryListFromMealPlan(
+  recipes: Recipe[],
+  mealPlan: MealPlanItem[],
+  userId: string,
+  pantry: PantryItem[],
+  servingOverrides: Record<string, number>,
+  previous: GroceryListItem[],
+  dismissals: Set<string>,
+): GroceryListItem[] {
+  const simulatedPantry = clonePantryForSimulation(pantry);
+  const list: GroceryListItem[] = [];
+
+  for (const meal of activeMealsForGrocery(mealPlan)) {
+    const recipeId = resolveMealPlanRecipeId(meal, recipes, userId);
+    if (!recipeId) continue;
+    const recipe = recipes.find((row) => row.id === recipeId);
+    if (!recipe) continue;
+
+    const servings = servingOverrides[recipe.id] ?? recipe.servings;
+    const scale = recipe.servings > 0 ? servings / recipe.servings : 1;
+    const link = mealLinkForItem(meal);
+
+    for (const ingredient of recipe.ingredients) {
+      const scaled: RecipeIngredient = {
+        ...ingredient,
+        quantity: roundQty(ingredient.quantity * scale),
+      };
+      if (
+        isGroceryDismissed(dismissals, recipe.id, scaled.name, scaled.unit)
+      ) {
+        continue;
+      }
+
+      const shortfall = ingredientShortfall(scaled, simulatedPantry, scaled.quantity);
+      if (!shortfall || shortfall.missingQuantity <= 0) {
+        consumePantryForIngredient(simulatedPantry, scaled, scaled.quantity);
+        continue;
+      }
+
+      consumePantryForIngredient(simulatedPantry, scaled, scaled.quantity - shortfall.missingQuantity);
+
+      const ingredientId =
+        shortfall.matchedPantryItem?.ingredientId ??
+        (scaled.ingredientId ||
+          scaled.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40));
+      const lineId = `groc-${meal.id}-${ingredientId}::${scaled.unit}`;
+
+      list.push({
+        id: lineId,
+        ingredientId,
+        name: scaled.name,
+        category: categoryForIngredient(scaled.name, scaled.ingredientId, pantry),
+        quantity: shortfall.missingQuantity,
+        unit: scaled.unit,
+        checked: previousCheckedForMealLine(previous, meal.id, scaled.name, scaled.unit, lineId),
+        sourceRecipeIds: [recipe.id],
+        origin: 'plan',
+        plannedMealLinks: [link],
+      });
+    }
+  }
+
+  return list.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function buildGroceryList(
@@ -82,6 +225,32 @@ export function buildGroceryList(
   options?: BuildGroceryListOptions,
 ): GroceryListItem[] {
   const dismissals = options?.groceryDismissals ?? new Set<string>();
+  const normalizedPrevious = previous.map((row) => ({
+    ...row,
+    plannedMealLinks: normalizePlannedMealLinks(row.plannedMealLinks),
+  }));
+
+  if (options?.mealPlan?.length && options.userId) {
+    const active = activeMealsForGrocery(options.mealPlan);
+    if (active.length > 0) {
+      const pinnedItems = normalizedPrevious.filter(
+        (item) =>
+          isGroceryOriginPinned(item.origin) &&
+          !isGroceryManualLineDismissed(dismissals, item.name, item.unit),
+      );
+      const recipeItems = buildGroceryListFromMealPlan(
+        recipes,
+        options.mealPlan,
+        options.userId,
+        pantry,
+        servingOverrides,
+        normalizedPrevious,
+        dismissals,
+      );
+      return mergeManualGroceryLines(recipeItems, pinnedItems);
+    }
+  }
+
   const needed = new Map<
     string,
     { name: string; unit: string; quantity: number; recipeIds: string[]; category: GroceryListItem['category'] }
@@ -110,9 +279,14 @@ export function buildGroceryList(
     }
   }
 
-  const checked = new Map(previous.map((item) => [normalizeIngredientName(item.name) + '::' + item.unit.trim().toLowerCase(), item.checked]));
+  const checked = new Map(
+    normalizedPrevious.map((item) => [
+      normalizeIngredientName(item.name) + '::' + item.unit.trim().toLowerCase(),
+      item.checked,
+    ]),
+  );
 
-  const pinnedItems = previous.filter(
+  const pinnedItems = normalizedPrevious.filter(
     (item) =>
       isGroceryOriginPinned(item.origin) &&
       !isGroceryManualLineDismissed(dismissals, item.name, item.unit),
@@ -158,6 +332,7 @@ export function buildGroceryList(
         (recipeId) => !isGroceryDismissed(dismissals, recipeId, value.name, value.unit),
       ),
       origin: 'plan',
+      plannedMealLinks: [],
     });
   }
 
@@ -216,5 +391,6 @@ export function createManualGroceryItem(input: {
     checked: false,
     sourceRecipeIds: [],
     origin: 'manual',
+    plannedMealLinks: [],
   };
 }

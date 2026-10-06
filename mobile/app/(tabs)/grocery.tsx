@@ -1,6 +1,6 @@
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -19,6 +19,14 @@ import { GROCERY_COPY } from '../../config/grocery';
 import { useApp } from '../../context/AppContext';
 import { groupGroceryByAisle } from '../../lib/grocery';
 import { inferGroceryCategoryFromName } from '../../lib/grocery/categorize';
+import {
+  groupGroceryByDayAndMeal,
+  hasMealPlanGroceryGrouping,
+  mergeGroceryItemsForCombinedView,
+  readGroceryCombinePreference,
+  writeGroceryCombinePreference,
+} from '../../lib/grocery/grouping';
+import { localDateString } from '../../lib/mealCalendar/dates';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { useGroceryCommunityDealBadges } from '../../lib/communityDeals/useCommunityDeals';
 import { PANTRY_CATEGORIES, type PantryCategory } from '../../types/mealprep';
@@ -28,6 +36,8 @@ export default function GroceryScreen() {
     grocery,
     recipes,
     toggleGroceryItem,
+    toggleGroceryItemsChecked,
+    mealPlan,
     plannedRecipeIds,
     featureFlags,
     refreshGrocery,
@@ -48,12 +58,27 @@ export default function GroceryScreen() {
   const [aisleTouched, setAisleTouched] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [addError, setAddError] = useState<{ title: string; message: string } | null>(null);
+  const [combineList, setCombineList] = useState(() => readGroceryCombinePreference());
+  const [expandedMealHintKey, setExpandedMealHintKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    writeGroceryCombinePreference(combineList);
+  }, [combineList]);
+
+  const showMealGrouping = hasMealPlanGroceryGrouping(mealPlan);
+  const useCombinedView = showMealGrouping && combineList;
 
   const open = useMemo(() => grocery.filter((g) => !g.checked), [grocery]);
   const done = useMemo(() => grocery.filter((g) => g.checked), [grocery]);
   const totalCount = grocery.length;
   const checkedCount = done.length;
   const openSections = useMemo(() => groupGroceryByAisle(open), [open]);
+  const openDayGroups = useMemo(
+    () => groupGroceryByDayAndMeal(open, mealPlan, localDateString()),
+    [open, mealPlan],
+  );
+  const openMerged = useMemo(() => mergeGroceryItemsForCombinedView(open), [open]);
+  const doneMerged = useMemo(() => mergeGroceryItemsForCombinedView(done), [done]);
   const openItemIds = useMemo(() => open.map((g) => g.id), [open]);
   const { badges: communityBadges } = useGroceryCommunityDealBadges(openItemIds, grocery);
 
@@ -131,6 +156,23 @@ export default function GroceryScreen() {
             <Text className="mt-2 text-sm text-on-primary-muted">
               {GROCERY_COPY.plannedMealsLine(plannedRecipeIds.length)}
             </Text>
+            {showMealGrouping ? (
+              <Pressable
+                onPress={() => setCombineList((v) => !v)}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: combineList }}
+                className="mt-3 flex-row items-center justify-between rounded-2xl border border-on-primary-muted/30 bg-primary/20 px-3 py-2 active:opacity-90"
+              >
+                <Text className="text-sm font-semibold text-on-primary">{GROCERY_COPY.combineList}</Text>
+                <View
+                  className={`h-7 w-12 rounded-full p-0.5 ${combineList ? 'bg-primary-accent' : 'bg-on-primary-muted/40'}`}
+                >
+                  <View
+                    className={`h-6 w-6 rounded-full bg-card shadow-sm ${combineList ? 'ml-auto' : ''}`}
+                  />
+                </View>
+              </Pressable>
+            ) : null}
             <View className="mt-4 flex-row flex-wrap gap-2">
               <Pressable
                 onPress={() => {
@@ -165,6 +207,53 @@ export default function GroceryScreen() {
                 <View className="rounded-2xl border border-border bg-card px-4 py-5">
                   <Text className="text-center text-sm text-muted">{GROCERY_COPY.allSetHint}</Text>
                 </View>
+              ) : useCombinedView ? (
+                openMerged.map((line) => (
+                  <GroceryItemSwipeRow
+                    key={line.mergeKey}
+                    item={line.representative}
+                    quantityLabel={line.quantityLabel}
+                    recipeLabels=""
+                    hideSecondaryLine
+                    mealHint={line.mealHint}
+                    showMealHint={expandedMealHintKey === line.mergeKey}
+                    onRowBodyPress={() =>
+                      setExpandedMealHintKey((key) => (key === line.mergeKey ? null : line.mergeKey))
+                    }
+                    onToggle={() => toggleGroceryItemsChecked(line.underlyingIds)}
+                    onRemove={() => {
+                      for (const id of line.underlyingIds) {
+                        removeGroceryItem(id);
+                      }
+                    }}
+                    communityDeal={communityBadges.get(line.representative.id)}
+                  />
+                ))
+              ) : showMealGrouping ? (
+                openDayGroups.map((dayGroup) => (
+                  <View key={dayGroup.key} className="mb-5">
+                    <View className="mb-2 flex-row items-center gap-2">
+                      <View className="h-8 w-1 rounded-full bg-primary" />
+                      <Text className="text-base font-bold text-ink">{dayGroup.dayLabel}</Text>
+                    </View>
+                    {dayGroup.meals.map((mealGroup) => (
+                      <View key={mealGroup.mealPlanItemId ?? mealGroup.header} className="mb-3">
+                        <Text className="mb-2 text-sm font-semibold text-slate">{mealGroup.header}</Text>
+                        {mealGroup.items.map((item) => (
+                          <GroceryItemSwipeRow
+                            key={item.id}
+                            item={item}
+                            recipeLabels=""
+                            hideSecondaryLine
+                            onToggle={() => toggleGroceryItem(item.id)}
+                            onRemove={() => removeGroceryItem(item.id)}
+                            communityDeal={communityBadges.get(item.id)}
+                          />
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                ))
               ) : (
                 openSections.map((section) => (
                   <View key={section.category} className="mb-4">
@@ -200,16 +289,38 @@ export default function GroceryScreen() {
                     <Ionicons name={cartExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={THEME.muted} />
                   </Pressable>
                   {cartExpanded
-                    ? done.map((item) => (
-                        <GroceryItemSwipeRow
-                          key={item.id}
-                          item={item}
-                          recipeLabels={recipeLabelFor(item)}
-                          onToggle={() => toggleGroceryItem(item.id)}
-                          onRemove={() => removeGroceryItem(item.id)}
-                          dimmed
-                        />
-                      ))
+                    ? useCombinedView
+                      ? doneMerged.map((line) => (
+                          <GroceryItemSwipeRow
+                            key={line.mergeKey}
+                            item={{ ...line.representative, checked: true }}
+                            quantityLabel={line.quantityLabel}
+                            recipeLabels=""
+                            hideSecondaryLine
+                            mealHint={line.mealHint}
+                            showMealHint={expandedMealHintKey === line.mergeKey}
+                            onRowBodyPress={() =>
+                              setExpandedMealHintKey((key) => (key === line.mergeKey ? null : line.mergeKey))
+                            }
+                            onToggle={() => toggleGroceryItemsChecked(line.underlyingIds)}
+                            onRemove={() => {
+                              for (const id of line.underlyingIds) {
+                                removeGroceryItem(id);
+                              }
+                            }}
+                            dimmed
+                          />
+                        ))
+                      : done.map((item) => (
+                          <GroceryItemSwipeRow
+                            key={item.id}
+                            item={item}
+                            recipeLabels={recipeLabelFor(item)}
+                            onToggle={() => toggleGroceryItem(item.id)}
+                            onRemove={() => removeGroceryItem(item.id)}
+                            dimmed
+                          />
+                        ))
                     : null}
                   <Pressable
                     onPress={handleClearChecked}

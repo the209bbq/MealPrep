@@ -1,4 +1,5 @@
 import type { GroceryItemOrigin, GroceryListItem } from '../../types/mealprep';
+import { normalizePlannedMealLinks } from './grouping';
 
 const ORIGIN_RANK: Record<GroceryItemOrigin, number> = {
   plan: 1,
@@ -33,6 +34,7 @@ export function normalizeGroceryListItem(item: GroceryListItem): GroceryListItem
   return {
     ...item,
     origin: normalizeGroceryOrigin(item.origin, item.ingredientId),
+    plannedMealLinks: normalizePlannedMealLinks(item.plannedMealLinks),
   };
 }
 

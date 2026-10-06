@@ -14,10 +14,27 @@ interface GroceryItemRowProps {
   onRemove: () => void;
   dimmed?: boolean;
   communityDeal?: GroceryCommunityDealBadge;
+  quantityLabel?: string;
+  mealHint?: string;
+  showMealHint?: boolean;
+  hideSecondaryLine?: boolean;
+  onRowBodyPress?: () => void;
 }
 
-export function GroceryItemRow({ item, recipeLabels, onToggle, onRemove, dimmed, communityDeal }: GroceryItemRowProps) {
-  const qtyLabel = formatQuantityWithUnit(item.quantity, item.unit);
+export function GroceryItemRow({
+  item,
+  recipeLabels,
+  onToggle,
+  onRemove,
+  dimmed,
+  communityDeal,
+  quantityLabel,
+  mealHint,
+  showMealHint,
+  hideSecondaryLine,
+  onRowBodyPress,
+}: GroceryItemRowProps) {
+  const qtyLabel = quantityLabel ?? formatQuantityWithUnit(item.quantity, item.unit);
 
   return (
     <View
@@ -27,35 +44,41 @@ export function GroceryItemRow({ item, recipeLabels, onToggle, onRemove, dimmed,
         onPress={onToggle}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: item.checked }}
-        className="min-w-0 flex-1 flex-row items-center active:opacity-90"
+        className={`mr-3 h-11 w-11 items-center justify-center rounded-xl border-2 active:opacity-90 ${
+          item.checked ? 'border-primary bg-primary' : 'border-primary bg-primary-light'
+        }`}
       >
-        <View
-          className={`mr-3 h-11 w-11 items-center justify-center rounded-xl border-2 ${
-            item.checked ? 'border-primary bg-primary' : 'border-primary bg-primary-light'
-          }`}
-        >
-          {item.checked ? <Ionicons name="checkmark" size={24} color={THEME.onPrimary} /> : null}
-        </View>
-        <View className="min-w-0 flex-1">
-          <Text className={`text-base font-bold ${item.checked ? 'text-muted line-through' : 'text-ink'}`}>{item.name}</Text>
-          <Text className="mt-0.5 text-sm font-semibold text-primary-dark">{qtyLabel}</Text>
-          {communityDeal ? (
-            <View className="mt-1 self-start rounded-lg bg-amber-100 px-2 py-0.5">
-              <Text className="text-xs font-bold text-amber-950">
-                Deal: {formatMoney(communityDeal.deal.price)}
-                {communityDeal.deal.unit ? `/${communityDeal.deal.unit}` : ''} at {communityDeal.storeLabel}
-                {communityDeal.deal.isSample ? ' (SAMPLE)' : ''}
-              </Text>
-            </View>
-          ) : null}
-          {recipeLabels ? (
+        {item.checked ? <Ionicons name="checkmark" size={24} color={THEME.onPrimary} /> : null}
+      </Pressable>
+      <Pressable
+        onPress={onRowBodyPress ?? onToggle}
+        className="min-w-0 flex-1 active:opacity-90"
+      >
+        <Text className={`text-base font-bold ${item.checked ? 'text-muted line-through' : 'text-ink'}`}>{item.name}</Text>
+        <Text className="mt-0.5 text-sm font-semibold text-primary-dark">{qtyLabel}</Text>
+        {communityDeal ? (
+          <View className="mt-1 self-start rounded-lg bg-amber-100 px-2 py-0.5">
+            <Text className="text-xs font-bold text-amber-950">
+              Deal: {formatMoney(communityDeal.deal.price)}
+              {communityDeal.deal.unit ? `/${communityDeal.deal.unit}` : ''} at {communityDeal.storeLabel}
+              {communityDeal.deal.isSample ? ' (SAMPLE)' : ''}
+            </Text>
+          </View>
+        ) : null}
+        {showMealHint && mealHint ? (
+          <Text className="mt-1 text-xs font-medium text-slate" numberOfLines={2}>
+            {mealHint}
+          </Text>
+        ) : null}
+        {!hideSecondaryLine && !showMealHint ? (
+          recipeLabels ? (
             <Text className="mt-1 text-xs text-muted" numberOfLines={2}>
               {recipeLabels}
             </Text>
           ) : (
             <Text className="mt-1 text-xs text-muted">Added manually</Text>
-          )}
-        </View>
+          )
+        ) : null}
       </Pressable>
       <Pressable
         onPress={onRemove}

@@ -161,6 +161,19 @@ export interface Recipe {
 
 export type GroceryItemOrigin = 'plan' | 'add_missing' | 'manual';
 
+export const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+export type MealSlot = (typeof MEAL_SLOTS)[number];
+
+/** Links a grocery row to a scheduled (or queued) meal plan entry. */
+export interface GroceryPlannedMealLink {
+  mealPlanItemId: string;
+  /** Local calendar date (`YYYY-MM-DD`) when scheduled; null for unscheduled queue meals. */
+  scheduledOn: string | null;
+  mealSlot: MealSlot | null;
+  /** Display title for the meal (recipe name snapshot). */
+  mealTitle: string;
+}
+
 export interface GroceryListItem {
   id: string;
   ingredientId: string;
@@ -172,10 +185,9 @@ export interface GroceryListItem {
   sourceRecipeIds: string[];
   /** How the row was added; only `plan` rows are pruned on meal-plan rebuild. */
   origin: GroceryItemOrigin;
+  /** Planned meals this row satisfies (empty for manual / add-missing rows). */
+  plannedMealLinks: GroceryPlannedMealLink[];
 }
-
-export const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
-export type MealSlot = (typeof MEAL_SLOTS)[number];
 
 /** User meal plan row (kitchen slug and/or RecipeAPI id with display snapshot). */
 export interface MealPlanItem {

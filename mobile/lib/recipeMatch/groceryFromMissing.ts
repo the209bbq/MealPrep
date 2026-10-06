@@ -88,6 +88,7 @@ export function groceryItemsFromMissingIngredients(
           checked: false,
           sourceRecipeIds: [recipeId],
           origin: 'add_missing',
+          plannedMealLinks: [],
         },
         'add_missing',
       ),
@@ -138,6 +139,7 @@ export function mergeGroceryWithMissing(
         checked: false,
         sourceRecipeIds: [recipeId],
         origin: 'add_missing',
+        plannedMealLinks: [],
       },
       'add_missing',
     );

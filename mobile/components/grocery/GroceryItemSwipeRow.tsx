@@ -14,6 +14,11 @@ interface GroceryItemSwipeRowProps {
   onRemove: () => void;
   dimmed?: boolean;
   communityDeal?: GroceryCommunityDealBadge;
+  quantityLabel?: string;
+  mealHint?: string;
+  showMealHint?: boolean;
+  hideSecondaryLine?: boolean;
+  onRowBodyPress?: () => void;
 }
 
 function SwipeDeleteAction({ onPress }: { onPress: () => void }) {

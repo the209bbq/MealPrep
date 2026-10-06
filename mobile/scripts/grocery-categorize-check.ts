@@ -36,6 +36,8 @@ const riceOnly: GroceryListItem[] = [
     unit: 'lb',
     checked: false,
     sourceRecipeIds: [],
+    origin: 'manual',
+    plannedMealLinks: [],
   },
 ];
 

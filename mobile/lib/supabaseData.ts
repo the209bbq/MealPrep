@@ -103,6 +103,7 @@ type GroceryRow = {
   checked: boolean;
   source_recipe_ids: string[] | null;
   origin?: string | null;
+  planned_meal_links?: unknown;
 };
 
 type FlagRow = { key: string; enabled: boolean };
@@ -234,6 +235,30 @@ export function mapRecipe(row: RecipeRow): Recipe {
   };
 }
 
+function mapPlannedMealLinksFromRow(value: unknown): GroceryListItem['plannedMealLinks'] {
+  if (!Array.isArray(value)) return [];
+  const links: GroceryListItem['plannedMealLinks'] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const row = entry as Record<string, unknown>;
+    const mealPlanItemId = row.mealPlanItemId;
+    if (typeof mealPlanItemId !== 'string' || !mealPlanItemId) continue;
+    const mealTitle = typeof row.mealTitle === 'string' ? row.mealTitle : 'Meal';
+    const scheduledOn =
+      row.scheduledOn === null || typeof row.scheduledOn === 'string' ? (row.scheduledOn as string | null) : null;
+    const mealSlot =
+      row.mealSlot === null ||
+      row.mealSlot === 'breakfast' ||
+      row.mealSlot === 'lunch' ||
+      row.mealSlot === 'dinner' ||
+      row.mealSlot === 'snack'
+        ? (row.mealSlot as GroceryListItem['plannedMealLinks'][number]['mealSlot'])
+        : null;
+    links.push({ mealPlanItemId, scheduledOn, mealSlot, mealTitle });
+  }
+  return links;
+}
+
 export function mapGrocery(row: GroceryRow): GroceryListItem {
   return {
     id: row.id,
@@ -245,6 +270,7 @@ export function mapGrocery(row: GroceryRow): GroceryListItem {
     checked: row.checked,
     sourceRecipeIds: row.source_recipe_ids ?? [],
     origin: normalizeGroceryOrigin(row.origin, row.ingredient_id),
+    plannedMealLinks: mapPlannedMealLinksFromRow(row.planned_meal_links),
   };
 }
 
@@ -621,6 +647,7 @@ type GroceryWritePayload = {
   checked: boolean;
   source_recipe_ids: string[];
   origin: string;
+  planned_meal_links: GroceryListItem['plannedMealLinks'];
 };
 
 function groceryWritePayload(userId: string, item: GroceryListItem): GroceryWritePayload {
@@ -634,6 +661,7 @@ function groceryWritePayload(userId: string, item: GroceryListItem): GroceryWrit
     checked: item.checked,
     source_recipe_ids: item.sourceRecipeIds,
     origin: item.origin,
+    planned_meal_links: item.plannedMealLinks ?? [],
   };
 }
 
