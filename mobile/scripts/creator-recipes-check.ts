@@ -11,6 +11,7 @@ import { mergeRecipeSearchResults } from '../lib/recipes/mergeSearchResults';
 import { isRecipeLikeVideo } from '../supabase/functions/creator-videos/recipeVideoFilter.ts';
 import fs from 'node:fs';
 import path from 'node:path';
+import { creatorWebsiteForChannel } from '../config/creatorWebsites';
 
 assert.equal(RECIPE_SOURCES.creatorRecipesPrimaryFeed, true);
 assert.equal(RECIPE_SOURCES.viralRecipesPrimaryFeed, false);
@@ -35,7 +36,11 @@ const seedPath = path.join(process.cwd(), 'supabase/migrations/20261004130000_re
 assert.ok(fs.existsSync(seedPath), 'seed migration should exist');
 const seedSql = fs.readFileSync(seedPath, 'utf8');
 const insertCount = (seedSql.match(/\n  \(/g) ?? []).length;
-assert.equal(insertCount, 39, 'seed should include 39 creators');
+assert.equal(insertCount, 48, 'seed should include 48 creators');
+
+const kevmo = creatorWebsiteForChannel('UCx2cbCojhLK2QFIhwjNQYgA');
+assert.ok(kevmo?.url.includes('kevmoskitchen.com'), 'Kevmo website link configured');
+assert.ok(fs.readFileSync(seedPath, 'utf8').includes('UCx2cbCojhLK2QFIhwjNQYgA'), 'Kevmo in seed');
 
 assert.equal(
   compareCreatorsByFitAndSubscribers(
