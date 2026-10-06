@@ -82,6 +82,7 @@ import {
   readPantryStaplesPromptDismissed,
   writePantryStaplesPromptDismissed,
 } from '../../config/pantryStaples';
+import { PantryAddStaplesLink } from '../../components/pantry/PantryAddStaplesLink';
 import { PantryStaplesInviteCard } from '../../components/pantry/PantryStaplesInviteCard';
 import { addDaysToIsoDate, todayIsoDate } from '../../lib/pantry/expiry';
 import { STAPLE_EXPIRY_QUICK_CHIPS } from '../../lib/pantry/stapleCatalog';
@@ -799,9 +800,7 @@ export default function PantryScreen() {
           <View className="flex-1">
             <Text className="text-lg font-bold text-ink">Pantry</Text>
             <Text className="text-sm text-muted">Track what you own — fewer duplicate buys</Text>
-            <Pressable onPress={openPantryStaples} className="mt-2 self-start">
-              <Text className="text-xs font-bold text-primary-dark">{PANTRY_STAPLES_COPY.addStaplesLink}</Text>
-            </Pressable>
+            <PantryAddStaplesLink onPress={openPantryStaples} />
           </View>
           {pantry.length > 0 ? (
             <Pressable onPress={() => setOverflowOpen(true)} className="rounded-full border border-border bg-card p-2">
