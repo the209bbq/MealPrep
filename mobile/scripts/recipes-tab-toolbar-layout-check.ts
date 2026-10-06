@@ -11,7 +11,6 @@ import {
   CREATOR_RECIPES_FEED_MODES,
 } from '../config/creatorRecipes';
 
-const BOOKMARK_BUTTON_PX = 36;
 const DROPDOWN_TRIGGER_MAX_PX = 108;
 const TOOLBAR_GAP_PX = 6;
 const SCROLL_AND_CARD_HORIZONTAL_PADDING_PX = 16 * 4;
@@ -23,8 +22,7 @@ for (const mode of CREATOR_RECIPES_FEED_MODES) {
 
 for (const viewportWidth of [360, 412]) {
   const toolbarInnerWidth = viewportWidth - SCROLL_AND_CARD_HORIZONTAL_PADDING_PX;
-  const reserved =
-    BOOKMARK_BUTTON_PX + DROPDOWN_TRIGGER_MAX_PX + TOOLBAR_GAP_PX * 2;
+  const reserved = DROPDOWN_TRIGGER_MAX_PX + TOOLBAR_GAP_PX;
   const searchWidth = toolbarInnerWidth - reserved;
   assert.ok(
     searchWidth >= 72,
@@ -90,8 +88,7 @@ async function runPlaywrightLayoutCheck(): Promise<void> {
 
     for (const width of [360, 412]) {
       const page = await browser.newPage({ viewport: { width, height: 800 } });
-      await page.goto(`${origin}${basePath}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-      await page.goto(`${origin}${basePath}/recipes`, { waitUntil: 'networkidle', timeout: 60_000 });
+      await page.goto(`${origin}${basePath}/`, { waitUntil: 'networkidle', timeout: 60_000 });
       await page.waitForTimeout(800);
 
       const overflow = await page.evaluate(() => {

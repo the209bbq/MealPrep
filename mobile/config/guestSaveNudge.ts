@@ -1,4 +1,4 @@
-/** Guest “save across devices” nudge — Home tab only; see `GuestSaveNudge` + eligibility helpers. */
+/** Guest “save across devices” nudge — recipe Home feed only; see `GuestSaveNudge` + eligibility helpers. */
 export const GUEST_SAVE_NUDGE_CONFIG = {
   /** localStorage key for last dismiss timestamp (ms since epoch). */
   storageKey: 'mealprep.guestSaveNudge.dismissedAt',

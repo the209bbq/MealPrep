@@ -8,6 +8,7 @@ import { HydrationSafeIonicon } from '../../components/HydrationSafeIonicon';
 import { MaintenanceScreen } from '../../components/MaintenanceScreen';
 import { TABS, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
+import { HomeHubSheetProvider } from '../../context/HomeHubSheetContext';
 import { useHydrated } from '../../hooks/useHydrated';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
@@ -18,30 +19,35 @@ export default function TabsLayout() {
 
   if (!hydrated) {
     return (
-      <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
-        <AppHeader />
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color={THEME.primary} />
+      <HomeHubSheetProvider>
+        <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
+          <AppHeader />
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator color={THEME.primary} />
+          </View>
         </View>
-      </View>
+      </HomeHubSheetProvider>
     );
   }
 
   if (maintenanceActive) {
     return (
-      <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
-        <AppHeader />
-        <OfflineNotice />
-        <MaintenanceScreen />
-      </View>
+      <HomeHubSheetProvider>
+        <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
+          <AppHeader />
+          <OfflineNotice />
+          <MaintenanceScreen />
+        </View>
+      </HomeHubSheetProvider>
     );
   }
 
   return (
-    <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
-      <AppHeader />
-      <OfflineNotice />
-      <Tabs
+    <HomeHubSheetProvider>
+      <View className="mx-auto min-h-full w-full max-w-lg flex-1 bg-paper">
+        <AppHeader />
+        <OfflineNotice />
+        <Tabs
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: THEME.primary,
@@ -74,7 +80,9 @@ export default function TabsLayout() {
           />
         ))}
         <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
+        <Tabs.Screen name="recipes" options={{ href: null, title: 'Recipes' }} />
       </Tabs>
-    </View>
+      </View>
+    </HomeHubSheetProvider>
   );
 }

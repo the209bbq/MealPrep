@@ -257,7 +257,7 @@ assert.ok(clientSteps.includes('paste_caption'));
 const shareRoute = shareTargetImportRoute({
   text: 'Check this https://www.youtube.com/watch?v=abc123 extra',
 });
-assert.equal(shareRoute.path, '/recipes');
+assert.equal(shareRoute.path, '/');
 assert.equal(shareRoute.query.import, '1');
 assert.equal(shareRoute.query.url?.includes('youtube.com'), true);
 

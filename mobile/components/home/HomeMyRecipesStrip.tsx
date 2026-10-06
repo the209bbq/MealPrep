@@ -37,12 +37,12 @@ export function HomeMyRecipesStrip() {
         });
         const item = record ? savedCreatorItemFromRecord(record) : null;
         if (item?.watchUrl) {
-          router.push({ pathname: '/recipes', params: { url: item.watchUrl } });
+          router.push({ pathname: '/', params: { url: item.watchUrl } });
           return;
         }
       }
       if (row.kind === 'kitchen') {
-        router.push({ pathname: '/recipes', params: { recipeId: row.recipe.id } });
+        router.push({ pathname: '/', params: { recipeId: row.recipe.id } });
       }
     },
     [savedRecipes.records],

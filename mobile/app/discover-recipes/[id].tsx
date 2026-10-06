@@ -174,7 +174,7 @@ export default function DiscoverRecipeDetailScreen() {
                   scheduleTargetFromDiscoveryRecipe(recipe, pantryMatch, {
                     onOpenCookView: () =>
                       router.push({
-                        pathname: '/recipes',
+                        pathname: '/',
                         params: { recipeId: `recipeapi-${recipeId}` },
                       }),
                   }),

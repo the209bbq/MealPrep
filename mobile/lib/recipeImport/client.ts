@@ -294,12 +294,12 @@ export function extractUrlFromSharedText(text: string): string | null {
 export function shareTargetImportRoute(params: {
   url?: string;
   text?: string;
-}): { path: '/recipes'; query: Record<string, string> } {
+}): { path: '/'; query: Record<string, string> } {
   const direct = params.url?.trim() ?? '';
   const fromText = params.text ? extractUrlFromSharedText(params.text) : null;
   const url = direct || fromText || '';
   const query: Record<string, string> = { import: '1' };
   if (url) query.url = url;
   else if (params.text?.trim()) query.text = params.text.trim();
-  return { path: '/recipes', query };
+  return { path: '/', query };
 }

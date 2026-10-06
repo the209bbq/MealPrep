@@ -8,7 +8,6 @@ const base = process.env.APP_URL || 'http://127.0.0.1:8080';
 const shots = [
   { path: '/', file: 'tab_home.png' },
   { path: '/pantry', file: 'tab_pantry.png' },
-  { path: '/recipes', file: 'tab_recipes.png' },
   { path: '/grocery', file: 'tab_grocery.png' },
   { path: '/stores', file: 'tab_stores.png' },
   { path: '/admin', file: 'tab_admin_panel.png', role: 'admin' },
