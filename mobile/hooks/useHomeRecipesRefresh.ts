@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { RECIPES_COPY } from '../config/recipesCopy';
 import {
   HOME_RECIPES_REFRESH_DEBOUNCE_MS,
-  invalidateHomeRecipesCaches,
+  invalidateHomeRecipesCachesLight,
   shouldDebounceHomeRecipesRefresh,
   type HomeRecipesRefreshState,
 } from '../lib/home/homeRecipesRefresh';
@@ -12,6 +12,7 @@ import { runHomeRecipePrefetch } from '../lib/mealdb/homePrefetch';
 import type { PantryItem } from '../types/mealprep';
 
 const UPDATED_MESSAGE_MS = 2_500;
+const REFRESH_SPINNER_MAX_MS = 2_000;
 
 export function useHomeRecipesRefresh(options: {
   enabled: boolean;
@@ -67,22 +68,30 @@ export function useHomeRecipesRefresh(options: {
     setRefreshing(true);
     setStatusMessage(null);
 
-    invalidateHomeRecipesCaches();
+    invalidateHomeRecipesCachesLight();
     onRotationBump();
     onClassicCatalogRefresh();
     onCreatorsRefresh();
     onCategoryReselect?.();
 
+    const spinnerDone = setTimeout(() => setRefreshing(false), REFRESH_SPINNER_MAX_MS);
+
     void (async () => {
+      let prefetchOk = false;
       try {
         await runHomeRecipePrefetch({
           pantry,
           accessToken: session?.access_token ?? null,
           creatorChannelIds,
+          listOnly: true,
         });
-        setStatusMessage(RECIPES_COPY.homeToolbarCard.refreshUpdated);
+        prefetchOk = true;
       } finally {
+        clearTimeout(spinnerDone);
         setRefreshing(false);
+        if (prefetchOk) {
+          setStatusMessage(RECIPES_COPY.homeToolbarCard.refreshUpdated);
+        }
         if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
         statusTimerRef.current = setTimeout(() => setStatusMessage(null), UPDATED_MESSAGE_MS);
       }

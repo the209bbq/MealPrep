@@ -62,8 +62,11 @@ export function useMealDbRecipes(
       .then((result) => {
         if (cancelled) return;
         setRows(result.rows);
-        setError(result.errorMessage);
-        if (result.rows.length === 0 && !result.errorMessage) {
+        if (result.rows.length > 0) {
+          setError(null);
+        } else if (result.errorMessage) {
+          setError(result.errorMessage);
+        } else {
           setError(MEALDB_COPY.empty);
         }
       })

@@ -43,6 +43,7 @@ export const CREATOR_RECIPES_COPY = {
   emptyCreators: 'Creators are being added — check back soon.',
   emptyVideos: 'No videos in this feed yet.',
   emptySearch: 'No recipes matched your search.',
+  searchTypingHint: 'Searching recipes and creators…',
   error: 'Could not load creator recipes right now.',
   feedAccessibility: 'Choose recipe feed',
   creatorRowAccessibility: 'Browse recipes by creator',

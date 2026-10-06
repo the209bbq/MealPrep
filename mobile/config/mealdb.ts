@@ -25,8 +25,10 @@ export const MEALDB = {
   maxCatalogMeals: 24,
   /** Full lookups prefetched per home category chip after first paint. */
   homeCategoryPrefetchMealCount: 12,
-  /** Max meals loaded when a category chip is opened. */
-  homeCategoryFeedMealCount: 40,
+  /** Max meal lookups to await before returning when opening a category (stubs still list all). */
+  homeCategoryFeedLookupBatch: 12,
+  /** @deprecated use homeCategoryFeedLookupBatch */
+  homeCategoryFeedMealCount: 12,
   /** Concurrent MealDB lookups during home background prefetch. */
   homePrefetchLookupConcurrency: 3,
   /** How many home categories to warm at once during prefetch. */
@@ -42,6 +44,8 @@ export const MEALDB_COPY = {
   loading: 'Loading classic recipes…',
   empty: 'No recipes found. Try again later.',
   error: 'Could not load classic recipes right now.',
+  categoryLoadFailed: "Couldn't load recipes",
+  categoryRetry: 'Retry',
 } as const;
 
 export function mealDbApiBaseUrl(): string {

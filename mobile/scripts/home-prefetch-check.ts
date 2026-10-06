@@ -136,13 +136,14 @@ void (async () => {
   assert.equal(readMealDbCategoryListSnapshot('Pork').length, 2);
 
   const progressive: number[] = [];
-  const rows = await fetchMealDbCategoryFeedRows('Pork', [], {
+  const feed = await fetchMealDbCategoryFeedRows('Pork', [], {
     detailLimit: 2,
     onRows: (partial) => {
       progressive.push(partial.length);
     },
   });
-  assert.equal(rows.length, 2);
+  assert.equal(feed.rows.length, 2);
+  const rows = feed.rows;
   assert.ok(progressive.length >= 2, 'expected stub then enriched callbacks');
   assert.equal(progressive[0], 2, 'first paint should include filter summaries');
   assert.equal(filterCalls.length, 0, 'list snapshot should skip filter.php');
@@ -211,8 +212,13 @@ void (async () => {
     'Chicken',
   );
   const titleFiltered = filterRecipesTabRowsForDietPrefs(dietStubs, peanutPrefs);
-  assert.equal(titleFiltered.length, 1, 'stub title allergen filter');
-  assert.match(titleFiltered[0].recipe.name, /Salad/);
+  assert.equal(titleFiltered.length, 2, 'pending stubs kept until lookup for allergen users');
+  const resolvedPeanutRow = { ...dietStubs[0], pantryMatchPending: false };
+  assert.equal(
+    filterRecipesTabRowsForDietPrefs([resolvedPeanutRow], peanutPrefs).length,
+    0,
+    'resolved peanut title still filtered',
+  );
 
   const saladStub = dietStubs.find((row) => row.recipe.name.includes('Salad'));
   assert.ok(saladStub);
