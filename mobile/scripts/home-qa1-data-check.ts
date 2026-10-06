@@ -20,7 +20,7 @@ import { fetchMealDbCategoryFeedRows } from '../lib/mealdb/categories';
 
 assert.equal(MEALDB_COPY.categoryLoadFailed, "Couldn't load recipes");
 assert.equal(MEALDB_COPY.categoryRetry, 'Retry');
-assert.equal(CREATOR_RECIPES_COPY.searchTypingHint, 'Searching recipes and creators…');
+assert.equal(CREATOR_RECIPES_COPY.searchTypingHint, 'Type one more letter to search.');
 assert.equal(MEALDB.homeCategoryFeedLookupBatch, MEALDB.homeCategoryFeedMealCount);
 
 writeMealDbCategoryListSnapshot('Chicken', [

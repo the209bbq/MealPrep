@@ -26,6 +26,8 @@ interface RecipesUnifiedFeedCardProps {
   interactionLoading?: boolean;
   /** Hide recipe title until MealDB details resolve (allergen safety). */
   maskTitle?: boolean;
+  /** Hide thumbnail until safety check passes (paired with maskTitle). */
+  maskImage?: boolean;
 }
 
 function RecipesUnifiedFeedCardInner({
@@ -38,15 +40,15 @@ function RecipesUnifiedFeedCardInner({
   saveDisabled = false,
   interactionLoading = false,
   maskTitle = false,
+  maskImage = false,
 }: RecipesUnifiedFeedCardProps) {
   const name = maskTitle ? '' : row.recipe.name;
-  const imageUri = useMemo(
-    () =>
-      row.kind === 'kitchen'
-        ? resolveKitchenRecipeImageUrl(row.recipe)
-        : resolveDiscoveryRecipeImageUrl(row.recipe),
-    [row],
-  );
+  const imageUri = useMemo(() => {
+    if (maskImage) return null;
+    return row.kind === 'kitchen'
+      ? resolveKitchenRecipeImageUrl(row.recipe)
+      : resolveDiscoveryRecipeImageUrl(row.recipe);
+  }, [maskImage, row]);
   const matchPending = row.kind === 'kitchen' && Boolean(row.pantryMatchPending);
   const shopLine = useMemo(() => {
     if (matchPending) return RECIPES_COPY.recipeCard.checkingPantry;
@@ -65,12 +67,20 @@ function RecipesUnifiedFeedCardInner({
       className="relative mb-2 overflow-hidden rounded-xl border border-border bg-card"
     >
       <View className="relative">
-        <RecipeThumbnail
-          uri={imageUri}
-          accessibilityLabel=""
-          height={RECIPE_IMAGE.listHeight}
-          lazy
-        />
+        {maskImage ? (
+          <View
+            className="bg-border/40"
+            style={{ height: RECIPE_IMAGE.listHeight }}
+            accessibilityLabel=""
+          />
+        ) : (
+          <RecipeThumbnail
+            uri={imageUri}
+            accessibilityLabel=""
+            height={RECIPE_IMAGE.listHeight}
+            lazy
+          />
+        )}
         <DietAllergenBadge ingredientLines={ingredientLines} />
         {onToggleSave ? (
           <View className="absolute right-2 top-2">

@@ -20,6 +20,7 @@ export function useUnifiedRecipeSearch(options: {
   const { query, pantry, session, kitchenRecipes, pantryMatches, debounceMs = 350 } = options;
   const [results, setResults] = useState<RecipesSearchResultItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [debouncing, setDebouncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,11 +29,14 @@ export function useUnifiedRecipeSearch(options: {
       setResults([]);
       setError(null);
       setLoading(false);
+      setDebouncing(false);
       return;
     }
 
     let cancelled = false;
+    setDebouncing(true);
     const timer = setTimeout(() => {
+      setDebouncing(false);
       setLoading(true);
       setError(null);
       void (async () => {
@@ -64,8 +68,9 @@ export function useUnifiedRecipeSearch(options: {
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      setDebouncing(false);
     };
   }, [debounceMs, kitchenRecipes, pantry, pantryMatches, query, session?.access_token]);
 
-  return { results, loading, error };
+  return { results, loading, debouncing, error };
 }

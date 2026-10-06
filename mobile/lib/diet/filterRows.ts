@@ -3,7 +3,8 @@ import type { CreatorFeedCardModel } from '../recipes/creatorFeedRows';
 import type { RecipesSearchResultItem } from '../recipes/mergeSearchResults';
 import type { RecipePantryMatch } from '../recipeMatch';
 import { shouldHideRecipeForDietPrefs } from './conflicts';
-import { dietCheckLinesFromCreatorModel, dietCheckLinesFromRecipesTabRow } from './ingredientLines';
+import { shouldHideCreatorModelForDietPrefs } from './creatorAllergenCheck';
+import { dietCheckLinesFromRecipesTabRow } from './ingredientLines';
 import type { UserDietPrefs } from './types';
 import { userNeedsResolvedMealDbRowsBeforeDisplay } from './stubSafety';
 
@@ -30,10 +31,7 @@ export function filterCreatorFeedModelsForDietPrefs(
   prefs: UserDietPrefs,
 ): CreatorFeedCardModel[] {
   if (!prefs.hideConflicts) return [...models];
-  return models.filter((model) => {
-    const lines = dietCheckLinesFromCreatorModel(model);
-    return !shouldHideRecipeForDietPrefs(prefs, lines);
-  });
+  return models.filter((model) => !shouldHideCreatorModelForDietPrefs(prefs, model));
 }
 
 export function filterRecipeSearchResultsForDietPrefs(
@@ -46,8 +44,7 @@ export function filterRecipeSearchResultsForDietPrefs(
       const lines = dietCheckLinesFromRecipesTabRow(item.row);
       return !shouldHideRecipeForDietPrefs(prefs, lines);
     }
-    const lines = dietCheckLinesFromCreatorModel(item.model);
-    return !shouldHideRecipeForDietPrefs(prefs, lines);
+    return !shouldHideCreatorModelForDietPrefs(prefs, item.model);
   });
 }
 

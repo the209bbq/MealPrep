@@ -16,10 +16,12 @@ export function useClassicCategoryFeed(
   retryLoad: () => void;
   syncRow: (resolved: RecipesTabRow) => void;
   removeRowById: (recipeId: string) => void;
+  offlineCategoryEmpty: boolean;
 } {
   const [rows, setRows] = useState<RecipesTabRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [offlineCategoryEmpty, setOfflineCategoryEmpty] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
   const lastFailedCategoryRef = useRef<MealDbCatalogCategory | null>(null);
   const prevCategoryRef = useRef<MealDbCatalogCategory | null>(null);
@@ -58,6 +60,7 @@ export function useClassicCategoryFeed(
       setRows([]);
       setLoading(false);
       setLoadFailed(false);
+      setOfflineCategoryEmpty(false);
       return;
     }
 
@@ -79,6 +82,7 @@ export function useClassicCategoryFeed(
       setLoading(true);
     }
     setLoadFailed(false);
+    setOfflineCategoryEmpty(false);
 
     void fetchMealDbCategoryFeedRows(category, pantry, {
       bypassListCache,
@@ -91,6 +95,7 @@ export function useClassicCategoryFeed(
       .then((result) => {
         if (cancelled) return;
         setRows(result.rows);
+        setOfflineCategoryEmpty(Boolean(result.offlineCategoryEmpty));
         if (result.listFetchFailed) {
           lastFailedCategoryRef.current = category;
           setLoadFailed(true);
@@ -108,5 +113,5 @@ export function useClassicCategoryFeed(
     };
   }, [category, pantry, refreshSeed, retryTick]);
 
-  return { rows, loading, loadFailed, retryLoad, syncRow, removeRowById };
+  return { rows, loading, loadFailed, retryLoad, syncRow, removeRowById, offlineCategoryEmpty };
 }

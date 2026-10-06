@@ -46,6 +46,7 @@ export const MEALDB_COPY = {
   error: 'Could not load classic recipes right now.',
   categoryLoadFailed: "Couldn't load recipes",
   categoryRetry: 'Retry',
+  categoryOfflineEmpty: "This category isn't available offline yet",
 } as const;
 
 export function mealDbApiBaseUrl(): string {
