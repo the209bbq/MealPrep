@@ -20,7 +20,13 @@ export const RECENCY_HALF_LIFE_DAYS = 14;
 export const SIGNAL_WEIGHTS: Record<
   Exclude<
     RecipeEngagementEventType,
-    'impression' | 'wont_cook' | 'plan' | 'cook_now' | 'just_save'
+    | 'impression'
+    | 'wont_cook'
+    | 'plan'
+    | 'cook_now'
+    | 'just_save'
+    | 'cook_confirmed'
+    | 'cook_declined'
   >,
   number
 > = {

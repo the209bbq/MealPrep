@@ -12,4 +12,8 @@ export const SEAMLESS_FLOW_COPY = {
     count === 1 ? '1 thing missing' : `${count} things missing`,
   swapSuggestion: (name: string) => `Try ${name} instead`,
   plannedToast: (label: string) => `Planned for ${label}`,
+  cookConfirmQuestion: (title: string) => `Did you cook ${title}?`,
+  cookConfirmYes: 'Yes',
+  cookConfirmNotThisTime: 'Not this time',
+  pantryUpdatedToast: 'Pantry updated',
 } as const;
