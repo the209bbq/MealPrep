@@ -29,7 +29,7 @@ import { MEALDB } from '../../config/mealdb';
 import { isOffline } from '../network/isOffline';
 import { kitchenCategoryRowsAvailableOffline } from './offlineCategoryRows';
 import { mealDbCategoryFromRecipeTag } from '../recipesTab/categoryDiet';
-import { withMealDbUserVisibleLookups } from './lookupScheduler';
+import { beginMealDbUserVisibleLookups } from './lookupScheduler';
 import { wontCookRefKeys } from '../recipeRanking/hardFilter';
 import type { RecipeEngagementEvent } from '../recipeRanking/types';
 import { refKeyFromRecipesTabRow } from '../recipeRanking/recipeInputs';
@@ -120,6 +120,8 @@ export interface FetchMealDbCategoryFeedOptions {
   listOnly?: boolean;
   /** When false, lookups use background priority (home prefetch). Default true for on-screen category feed. */
   userVisibleLookups?: boolean;
+  /** When aborted, in-flight lookups stop and user-visible scheduler depth is released. */
+  signal?: AbortSignal;
 }
 
 export interface MealDbCategoryFeedResult {
@@ -232,6 +234,10 @@ export async function fetchMealDbCategoryFeedRows(
   const lookupConcurrency = options?.lookupConcurrency ?? MEALDB.maxConcurrentRequests;
   const userVisibleLookups = options?.userVisibleLookups ?? true;
   const lookupPriority = userVisibleLookups ? 'user-visible' : 'background';
+  const signal = options?.signal;
+  if (signal?.aborted) {
+    return { rows, listFetchFailed: false };
+  }
 
   const applyMeal = (meal: MealDbMealDetail) => {
     mealsAcc.push(meal);
@@ -245,17 +251,19 @@ export async function fetchMealDbCategoryFeedRows(
   };
 
   const runLookups = async (lookupIds: readonly string[]) => {
-    if (lookupIds.length === 0) return;
+    if (lookupIds.length === 0 || signal?.aborted) return;
     await mealDbLookupMeals(lookupIds, {
       concurrency: lookupConcurrency,
       priority: lookupPriority,
       onMeal: applyMeal,
       onFailed: applyFailed,
+      signal,
     });
   };
 
   const resolveAllLookups = async () => {
     await runLookups(awaitIds);
+    if (signal?.aborted) return;
     if (backgroundIds.length > 0) {
       if (userVisibleLookups) {
         await runLookups(backgroundIds);
@@ -265,10 +273,11 @@ export async function fetchMealDbCategoryFeedRows(
     }
   };
 
-  if (userVisibleLookups) {
-    await withMealDbUserVisibleLookups(resolveAllLookups);
-  } else {
+  const releaseUserVisible = userVisibleLookups ? beginMealDbUserVisibleLookups() : null;
+  try {
     await resolveAllLookups();
+  } finally {
+    releaseUserVisible?.();
   }
 
   if (mealsAcc.length > 0) {

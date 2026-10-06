@@ -87,6 +87,7 @@ export function useClassicCategoryFeed(
     }
 
     let cancelled = false;
+    const abortController = new AbortController();
     const reopenedAfterFailure =
       lastFailedCategoryRef.current === category && prevCategoryRef.current !== category;
     prevCategoryRef.current = category;
@@ -108,6 +109,7 @@ export function useClassicCategoryFeed(
 
     void fetchMealDbCategoryFeedRows(category, pantry, {
       bypassListCache,
+      signal: abortController.signal,
       onRows: (partial) => {
         if (cancelled || partial.length === 0) return;
         setRows(partial);
@@ -132,6 +134,7 @@ export function useClassicCategoryFeed(
 
     return () => {
       cancelled = true;
+      abortController.abort();
     };
   }, [category, pantry, refreshSeed, retryTick]);
 

@@ -1,5 +1,5 @@
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import { Ionicons } from '../../lib/icons/Ionicons';
+import { HydrationSafeIonicon } from '../HydrationSafeIonicon';
 import { THEME } from '../../config/appConfig';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 
@@ -34,7 +34,7 @@ export function HomeRecipesRefreshButton({
         {refreshing ? (
           <ActivityIndicator size="small" color={THEME.primary} />
         ) : (
-          <Ionicons name="refresh" size={20} color={THEME.primary} />
+          <HydrationSafeIonicon name="refresh" size={20} color={THEME.primary} />
         )}
       </Pressable>
     </View>

@@ -71,6 +71,9 @@ async function main(): Promise<void> {
     'Bajan Sweet Bread',
     'Blini Pancakes',
     'Challah',
+    'Ají de Aguacate',
+    'Chilean-Style Sopaipillas',
+    'Colombian Buñuelos',
   ];
   const dinnerAllowed = [
     'Fish pie',
@@ -129,6 +132,14 @@ async function main(): Promise<void> {
   });
   assert.ok(recipeSuitsMealPickerSlot(beetrootPancakes, 'breakfast'), 'title fallback breakfast');
 
+  const aebleskiverLigature = kitchenRecipe({
+    id: 'import-aebleskiver',
+    name: 'Æbleskiver',
+    tag: 'Imported · YouTube',
+    sourceType: 'import',
+  });
+  assert.ok(!recipeSuitsMealPickerSlot(aebleskiverLigature, 'dinner'), 'Æ ligature dessert block');
+
   assert.ok(PEANUT_DISH_NAME_STRONG.includes('dan dan'));
   assert.ok(PEANUT_DISH_NAME_STRONG.includes('dandan'));
 
@@ -155,7 +166,7 @@ async function main(): Promise<void> {
     return null;
   });
   assert.equal(result, null);
-  assert.equal(attempts, 4, 'lookup should retry four times before giving up');
+  assert.equal(attempts, 5, 'lookup should attempt five times (four retry delays)');
 
   inFlight = 0;
   maxInFlight = 0;

@@ -12,6 +12,7 @@ import { mealDbIdFromRecipeId } from './slug';
 export async function resolveKitchenRecipesTabRowDetails(
   row: RecipesTabRow,
   pantry: PantryItem[],
+  options?: { signal?: AbortSignal },
 ): Promise<RecipesTabRow | null> {
   if (row.kind !== 'kitchen') return row;
   if (!row.pantryMatchPending && !row.pantryMatchFailed) return row;
@@ -31,7 +32,10 @@ export async function resolveKitchenRecipesTabRowDetails(
     };
   }
 
-  const meal = await mealDbLookupMeal(idMeal, { priority: 'user-visible' });
+  const meal = await mealDbLookupMeal(idMeal, {
+    priority: 'user-visible',
+    signal: options?.signal,
+  });
   if (!meal) return null;
 
   const recipe = mealDbMealToAppRecipe(meal);

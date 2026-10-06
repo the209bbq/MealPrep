@@ -1,10 +1,14 @@
 import { MEALDB, mealDbApiBaseUrl } from '../../config/mealdb';
 import { mapWithConcurrency } from '../concurrency';
 import { listStorageKeysWithPrefix, readJson, removeStorageKey, writeJson } from '../storage';
+import { notifyMealDbKitchenCacheChanged } from './kitchenCacheNotify';
 import {
   fetchMealDbLookupWithRetries,
+  MEALDB_LOOKUP_SLOT_TIMEOUT_MS,
+  type MealDbLookupFetchOptions,
   type MealDbLookupPriority,
   resetMealDbLookupSchedulerForTests,
+  withMealDbLookupSlotTimeout,
 } from './lookupScheduler';
 import { mealDbMealToAppRecipe } from './normalize';
 import { mealDbIdFromRecipeId } from './slug';
@@ -24,7 +28,14 @@ interface CacheEntry {
 }
 
 const memoryCache = new Map<string, CacheEntry>();
-const inFlight = new Map<string, Promise<unknown>>();
+
+interface InFlightEntry {
+  promise: Promise<unknown>;
+  generation: number;
+}
+
+const inFlight = new Map<string, InFlightEntry>();
+let inFlightGeneration = 0;
 
 function persistentKey(key: string): string {
   return `${MEALDB.cacheKeyPrefix}:${key}`;
@@ -49,6 +60,9 @@ function writeCache(key: string, payload: unknown, ttlMs: number, failed = false
   };
   memoryCache.set(key, entry);
   writeJson(persistentKey(key), entry);
+  if (key.startsWith('lookup.php')) {
+    notifyMealDbKitchenCacheChanged();
+  }
 }
 
 function cacheEntryAgeMs(entry: CacheEntry, path: string): number {
@@ -70,13 +84,23 @@ function cacheTtlMsForPath(path: string): number {
   return MEALDB.filterCacheTtlMs;
 }
 
-async function fetchMealDbPath<T>(path: string): Promise<T | null> {
+async function fetchMealDbPath<T>(path: string, signal?: AbortSignal): Promise<T | null> {
   const cacheKey = path;
   const url = `${mealDbApiBaseUrl()}${path}`;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MEALDB.requestTimeoutMs);
+  const timeoutMs = path.startsWith('lookup.php')
+    ? MEALDB_LOOKUP_SLOT_TIMEOUT_MS
+    : MEALDB.requestTimeoutMs;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  if (signal) {
+    signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await withMealDbLookupSlotTimeout(
+      fetch(url, { signal: controller.signal }),
+      timeoutMs,
+      signal,
+    );
     if (!response.ok) {
       return null;
     }
@@ -94,6 +118,10 @@ function dropFailedCacheEntry(cacheKey: string): void {
   memoryCache.delete(cacheKey);
   inFlight.delete(cacheKey);
   removeStorageKey(persistentKey(cacheKey));
+}
+
+function dropInFlightEntry(cacheKey: string): void {
+  inFlight.delete(cacheKey);
 }
 
 async function mealDbFetch<T>(path: string): Promise<T | null> {
@@ -118,18 +146,42 @@ async function mealDbFetch<T>(path: string): Promise<T | null> {
 async function revalidateMealDbFetch<T>(
   path: string,
   priority: MealDbLookupPriority = 'background',
+  options?: MealDbLookupFetchOptions,
 ): Promise<T | null> {
   const cacheKey = path;
+  const signal = options?.signal;
+  if (signal?.aborted) return null;
+
   const existing = inFlight.get(cacheKey);
-  if (existing) return existing as Promise<T | null>;
+  if (existing && !signal) {
+    return existing.promise as Promise<T | null>;
+  }
+
+  const generation = ++inFlightGeneration;
   const promise = (path.startsWith('lookup.php')
-    ? fetchMealDbLookupWithRetries<T>(priority, () => fetchMealDbPath<T>(path))
+    ? fetchMealDbLookupWithRetries<T>(
+        priority,
+        () => {
+          if (signal?.aborted) return Promise.resolve(null);
+          return fetchMealDbPath<T>(path, signal);
+        },
+        { signal },
+      )
     : fetchMealDbPath<T>(path)
-  ).finally(() => {
-    inFlight.delete(cacheKey);
-  });
-  inFlight.set(cacheKey, promise);
-  return promise;
+  )
+    .catch((error: unknown) => {
+      if (signal?.aborted) return null;
+      throw error;
+    })
+    .finally(() => {
+      const entry = inFlight.get(cacheKey);
+      if (entry?.generation === generation) {
+        dropInFlightEntry(cacheKey);
+      }
+    });
+
+  inFlight.set(cacheKey, { promise, generation });
+  return promise as Promise<T | null>;
 }
 
 function encodeFilterIngredient(name: string): string {
@@ -176,6 +228,7 @@ export async function mealDbFetchCategories(): Promise<
 
 export interface MealDbLookupMealOptions {
   priority?: MealDbLookupPriority;
+  signal?: AbortSignal;
 }
 
 export async function mealDbLookupMeal(
@@ -184,15 +237,17 @@ export async function mealDbLookupMeal(
 ): Promise<MealDbMealDetail | null> {
   const path = `lookup.php?i=${encodeURIComponent(idMeal)}`;
   const priority = options?.priority ?? 'background';
+  const signal = options?.signal;
+  if (signal?.aborted) return null;
   const cached = readCacheEntry(path);
   if (cached && !cached.failed && cacheFresh(cached)) {
     if (shouldStaleRevalidate(cached, path)) {
-      void revalidateMealDbFetch<MealDbMealsResponse>(path, priority);
+      void revalidateMealDbFetch<MealDbMealsResponse>(path, priority, { signal });
     }
     const data = cached.payload as MealDbMealsResponse | null;
     return data?.meals?.[0] ?? null;
   }
-  const data = await revalidateMealDbFetch<MealDbMealsResponse>(path, priority);
+  const data = await revalidateMealDbFetch<MealDbMealsResponse>(path, priority, { signal });
   const meal = data?.meals?.[0];
   return meal ?? null;
 }
@@ -217,6 +272,7 @@ export interface MealDbLookupMealsOptions {
   onMeal?: (meal: MealDbMealDetail) => void;
   onFailed?: (idMeal: string) => void;
   priority?: MealDbLookupPriority;
+  signal?: AbortSignal;
 }
 
 export async function mealDbLookupMeals(
@@ -229,8 +285,11 @@ export async function mealDbLookupMeals(
   const priority = options?.priority ?? 'background';
   const meals: MealDbMealDetail[] = [];
 
+  const signal = options?.signal;
   await mapWithConcurrency(unique, options?.concurrency ?? unique.length, async (id) => {
-    const meal = await mealDbLookupMeal(id, { priority });
+    if (signal?.aborted) return;
+    const meal = await mealDbLookupMeal(id, { priority, signal });
+    if (signal?.aborted) return;
     if (!meal) {
       options?.onFailed?.(id);
       return;
@@ -246,6 +305,7 @@ export async function mealDbLookupMeals(
 export function resetMealDbClientCacheForTests(): void {
   memoryCache.clear();
   inFlight.clear();
+  inFlightGeneration = 0;
   resetMealDbLookupSchedulerForTests();
 }
 
@@ -258,7 +318,7 @@ function invalidateMealDbClientPaths(paths: readonly string[], prefixMatch?: (pa
   }
   for (const key of keysToDrop) {
     memoryCache.delete(key);
-    inFlight.delete(key);
+    dropInFlightEntry(key);
     removeStorageKey(persistentKey(key));
   }
   const storagePrefix = persistentKey('');

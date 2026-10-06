@@ -4,6 +4,7 @@ import {
   PEANUT_DISH_NAME_WEAK,
   PEANUT_INGREDIENT_KEYWORDS,
 } from '../../config/dietRules';
+import { normalizeIngredientName } from '../recipeMatch/ingredientNormalize';
 import { haystackForLine, phraseMatchesHaystack } from './allergenMatch';
 import { shouldHideRecipeForDietPrefs } from './conflicts';
 import { ingredientLinesFromRecipe } from './ingredientLines';
@@ -29,13 +30,29 @@ function peanutTitleShouldHide(prefs: UserDietPrefs, title: string): boolean {
   return peanutWeakDishInHaystack(haystack);
 }
 
-/** Creator video descriptions: peanut ingredients + strong dish names only. */
+function dislikeIngredientInHaystack(haystack: string, dislikes: readonly string[]): boolean {
+  for (const dislike of dislikes) {
+    const normalized = normalizeIngredientName(dislike);
+    if (!normalized) continue;
+    if (phraseMatchesHaystack(haystack, normalized)) return true;
+  }
+  return false;
+}
+
+/** Creator video descriptions: peanut ingredients + strong dish names; dislike ingredient words. */
 export function shouldHideCreatorDescriptionForDietPrefs(
   prefs: UserDietPrefs,
   description: string,
 ): boolean {
   const trimmed = description.trim();
   if (!trimmed || !prefs.hideConflicts) return false;
+
+  if (prefs.dislikes.length > 0) {
+    const dislikeHaystack = haystackForLine(trimmed);
+    if (dislikeIngredientInHaystack(dislikeHaystack, prefs.dislikes)) {
+      return true;
+    }
+  }
 
   if (prefs.allergens.includes('peanuts')) {
     const haystack = haystackForLine(trimmed);

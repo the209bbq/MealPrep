@@ -1,6 +1,8 @@
 import { RECIPE_SOURCES } from '../../config/recipeSources';
 import { catalogToRecipes } from '../../data/kitchenCatalog';
+import { MEALDB_CATALOG_CATEGORIES } from '../../config/recipesTabSurface';
 import { readMealDbCatalogSnapshot } from '../mealdb/catalogCache';
+import { readMealDbCategorySnapshot } from '../mealdb/categoryFeedCache';
 import { readCachedMealDbAppRecipe } from '../mealdb/client';
 import { isMealDbRecipeId } from '../mealdb/normalize';
 import { readRememberedMealDbRecipes } from '../mealdb/plannedRecipeStore';
@@ -83,6 +85,14 @@ export function kitchenRecipesWithMealPlanContext(
 
   for (const row of readMealDbCatalogSnapshot(pantry)) {
     if (row.kind === 'kitchen') extras.push(row.recipe);
+  }
+
+  for (const category of MEALDB_CATALOG_CATEGORIES) {
+    for (const row of readMealDbCategorySnapshot(category, pantry)) {
+      if (row.kind !== 'kitchen') continue;
+      if (row.pantryMatchPending) continue;
+      extras.push(row.recipe);
+    }
   }
   extras.push(...readRememberedMealDbRecipes());
 

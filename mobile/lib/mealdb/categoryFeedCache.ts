@@ -3,6 +3,7 @@ import type { MealDbCatalogCategory } from '../../config/recipesTabSurface';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 import type { PantryItem } from '../../types/mealprep';
 import { listStorageKeysWithPrefix, readJson, removeStorageKey, writeJson } from '../storage';
+import { notifyMealDbKitchenCacheChanged } from './kitchenCacheNotify';
 
 interface CategorySnapshot {
   rows: RecipesTabRow[];
@@ -41,6 +42,7 @@ export function writeMealDbCategorySnapshot(
     expiresAt: Date.now() + MEALDB.filterCacheTtlMs,
   };
   writeJson(`${MEALDB.cacheKeyPrefix}:${key}`, entry);
+  notifyMealDbKitchenCacheChanged();
 }
 
 export function clearMealDbCategoryFeedSnapshot(

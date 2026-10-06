@@ -137,6 +137,7 @@ export const RECIPES_COPY = {
     haveEverything: 'Ready to cook! 🎉',
     checkingPantry: 'Checking pantry…',
     lookupFailed: "Couldn't load — tap to retry",
+    lookupBookmarkNotReady: 'Still loading — try again in a moment',
     offlineDetailsUnavailable: "This recipe isn't saved on your device yet. Go online to open it.",
     previewNoIngredients: 'Get the recipe from this video to see ingredients',
     needItems: (count: number) => (count === 1 ? 'Missing 1 item' : `Missing ${count} items`),
