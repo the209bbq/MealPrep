@@ -496,9 +496,37 @@ export default function HomeScreen() {
         try {
           const resolved = await resolveKitchenRecipesTabRowDetails(row, pantry);
           if (!resolved) {
-            if (isOffline() && row.pantryMatchPending) {
+            if (isOffline() && (row.pantryMatchPending || row.pantryMatchFailed)) {
               notifyRecipeOfflineUnavailable();
+            } else if (row.pantryMatchPending || row.pantryMatchFailed) {
+              classicCategoryFeed.syncRow({
+                ...row,
+                pantryMatchPending: false,
+                pantryMatchFailed: true,
+              });
             }
+            return null;
+          }
+          working = resolved;
+        } finally {
+          setRowDetailLoadingId(null);
+        }
+      } else if (row.kind === 'kitchen' && row.pantryMatchFailed) {
+        setRowDetailLoadingId(row.recipe.id);
+        try {
+          const retryRow: RecipesTabRow = {
+            ...row,
+            pantryMatchPending: true,
+            pantryMatchFailed: false,
+          };
+          classicCategoryFeed.syncRow(retryRow);
+          const resolved = await resolveKitchenRecipesTabRowDetails(retryRow, pantry);
+          if (!resolved) {
+            classicCategoryFeed.syncRow({
+              ...row,
+              pantryMatchPending: false,
+              pantryMatchFailed: true,
+            });
             return null;
           }
           working = resolved;
@@ -513,7 +541,11 @@ export default function HomeScreen() {
         notifyRecipeHiddenForDietSettings();
         return null;
       }
-      if (row.kind === 'kitchen' && row.pantryMatchPending && working.kind === 'kitchen') {
+      if (
+        row.kind === 'kitchen' &&
+        (row.pantryMatchPending || row.pantryMatchFailed) &&
+        working.kind === 'kitchen'
+      ) {
         classicCategoryFeed.syncRow(working);
       }
       return working;

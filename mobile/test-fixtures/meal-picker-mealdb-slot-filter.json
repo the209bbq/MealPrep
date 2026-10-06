@@ -10,5 +10,14 @@
   { "idMeal": "9", "strMeal": "Cumberland Pie", "strCategory": "Beef" },
   { "idMeal": "10", "strMeal": "Creamy Mustard Chicken", "strCategory": "Chicken" },
   { "idMeal": "11", "strMeal": "Pork Chops in Creole Sauce", "strCategory": "Pork" },
-  { "idMeal": "12", "strMeal": "Egg Foo Young", "strCategory": "Vegetarian" }
+  { "idMeal": "12", "strMeal": "Egg Foo Young", "strCategory": "Vegetarian" },
+  { "idMeal": "13", "strMeal": "Pollo en Salsa", "strCategory": "Chicken" },
+  { "idMeal": "14", "strMeal": "Tahini Lentils", "strCategory": "Vegetarian" },
+  { "idMeal": "15", "strMeal": "Falafel Pita Sandwich with Tahini Sauce", "strCategory": "Vegetarian" },
+  { "idMeal": "16", "strMeal": "Beef Banh Mi Bowls with Sriracha Mayo", "strCategory": "Beef" },
+  { "idMeal": "17", "strMeal": "Clam chowder", "strCategory": "Starter" },
+  { "idMeal": "18", "strMeal": "Pierogi (cooked)", "strCategory": "Side" },
+  { "idMeal": "19", "strMeal": "Blini Pancakes", "strCategory": "Side" },
+  { "idMeal": "20", "strMeal": "Boxty Breakfast", "strCategory": "Pork" },
+  { "idMeal": "21", "strMeal": "Challah", "strCategory": "Miscellaneous" }
 ]

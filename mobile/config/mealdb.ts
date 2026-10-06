@@ -18,7 +18,7 @@ export const MEALDB = {
   clientCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   failureCacheTtlMs: 5 * 60 * 1000,
   cacheKeyPrefix: 'mealprep.mealdb',
-  maxConcurrentRequests: 6,
+  maxConcurrentRequests: 4,
   /** Max filter.php ingredient queries per pantry refresh. */
   maxPantryFilterQueries: 3,
   /** Max full meal lookups after filtering. */

@@ -14,7 +14,7 @@ export async function resolveKitchenRecipesTabRowDetails(
   pantry: PantryItem[],
 ): Promise<RecipesTabRow | null> {
   if (row.kind !== 'kitchen') return row;
-  if (!row.pantryMatchPending) return row;
+  if (!row.pantryMatchPending && !row.pantryMatchFailed) return row;
 
   const idMeal = mealDbIdFromRecipeId(row.recipe.id);
   if (!idMeal) return null;
@@ -27,10 +27,11 @@ export async function resolveKitchenRecipesTabRowDetails(
       recipe: cached,
       match: scoreRecipeAgainstPantry(cached, pantry),
       pantryMatchPending: false,
+      pantryMatchFailed: false,
     };
   }
 
-  const meal = await mealDbLookupMeal(idMeal);
+  const meal = await mealDbLookupMeal(idMeal, { priority: 'user-visible' });
   if (!meal) return null;
 
   const recipe = mealDbMealToAppRecipe(meal);
@@ -39,6 +40,7 @@ export async function resolveKitchenRecipesTabRowDetails(
     recipe,
     match: scoreRecipeAgainstPantry(recipe, pantry),
     pantryMatchPending: false,
+    pantryMatchFailed: false,
   };
 }
 

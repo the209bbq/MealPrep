@@ -1,6 +1,11 @@
 import { MEALDB, mealDbApiBaseUrl } from '../../config/mealdb';
 import { mapWithConcurrency } from '../concurrency';
 import { listStorageKeysWithPrefix, readJson, removeStorageKey, writeJson } from '../storage';
+import {
+  fetchMealDbLookupWithRetries,
+  type MealDbLookupPriority,
+  resetMealDbLookupSchedulerForTests,
+} from './lookupScheduler';
 import { mealDbMealToAppRecipe } from './normalize';
 import { mealDbIdFromRecipeId } from './slug';
 import type { Recipe } from '../../types/mealprep';
@@ -99,22 +104,28 @@ async function mealDbFetch<T>(path: string): Promise<T | null> {
       dropFailedCacheEntry(cacheKey);
     } else if (cacheFresh(cached)) {
       if (shouldStaleRevalidate(cached, path)) {
-        void revalidateMealDbFetch<T>(path);
+        void revalidateMealDbFetch<T>(path, 'background');
       }
       return cached.payload as T;
     } else {
-      void revalidateMealDbFetch<T>(path);
+      void revalidateMealDbFetch<T>(path, 'background');
       return cached.payload as T;
     }
   }
-  return revalidateMealDbFetch<T>(path);
+  return revalidateMealDbFetch<T>(path, 'background');
 }
 
-async function revalidateMealDbFetch<T>(path: string): Promise<T | null> {
+async function revalidateMealDbFetch<T>(
+  path: string,
+  priority: MealDbLookupPriority = 'background',
+): Promise<T | null> {
   const cacheKey = path;
   const existing = inFlight.get(cacheKey);
   if (existing) return existing as Promise<T | null>;
-  const promise = fetchMealDbPath<T>(path).finally(() => {
+  const promise = (path.startsWith('lookup.php')
+    ? fetchMealDbLookupWithRetries<T>(priority, () => fetchMealDbPath<T>(path))
+    : fetchMealDbPath<T>(path)
+  ).finally(() => {
     inFlight.delete(cacheKey);
   });
   inFlight.set(cacheKey, promise);
@@ -163,9 +174,25 @@ export async function mealDbFetchCategories(): Promise<
   }));
 }
 
-export async function mealDbLookupMeal(idMeal: string): Promise<MealDbMealDetail | null> {
+export interface MealDbLookupMealOptions {
+  priority?: MealDbLookupPriority;
+}
+
+export async function mealDbLookupMeal(
+  idMeal: string,
+  options?: MealDbLookupMealOptions,
+): Promise<MealDbMealDetail | null> {
   const path = `lookup.php?i=${encodeURIComponent(idMeal)}`;
-  const data = await mealDbFetch<MealDbMealsResponse>(path);
+  const priority = options?.priority ?? 'background';
+  const cached = readCacheEntry(path);
+  if (cached && !cached.failed && cacheFresh(cached)) {
+    if (shouldStaleRevalidate(cached, path)) {
+      void revalidateMealDbFetch<MealDbMealsResponse>(path, priority);
+    }
+    const data = cached.payload as MealDbMealsResponse | null;
+    return data?.meals?.[0] ?? null;
+  }
+  const data = await revalidateMealDbFetch<MealDbMealsResponse>(path, priority);
   const meal = data?.meals?.[0];
   return meal ?? null;
 }
@@ -188,6 +215,8 @@ export async function mealDbSearchByName(query: string): Promise<string[]> {
 export interface MealDbLookupMealsOptions {
   concurrency?: number;
   onMeal?: (meal: MealDbMealDetail) => void;
+  onFailed?: (idMeal: string) => void;
+  priority?: MealDbLookupPriority;
 }
 
 export async function mealDbLookupMeals(
@@ -197,12 +226,15 @@ export async function mealDbLookupMeals(
   const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
   if (unique.length === 0) return [];
 
-  const concurrency = options?.concurrency ?? MEALDB.maxConcurrentRequests;
+  const priority = options?.priority ?? 'background';
   const meals: MealDbMealDetail[] = [];
 
-  await mapWithConcurrency(unique, concurrency, async (id) => {
-    const meal = await mealDbLookupMeal(id);
-    if (!meal) return;
+  await mapWithConcurrency(unique, options?.concurrency ?? unique.length, async (id) => {
+    const meal = await mealDbLookupMeal(id, { priority });
+    if (!meal) {
+      options?.onFailed?.(id);
+      return;
+    }
     meals.push(meal);
     options?.onMeal?.(meal);
   });
@@ -214,6 +246,7 @@ export async function mealDbLookupMeals(
 export function resetMealDbClientCacheForTests(): void {
   memoryCache.clear();
   inFlight.clear();
+  resetMealDbLookupSchedulerForTests();
 }
 
 function invalidateMealDbClientPaths(paths: readonly string[], prefixMatch?: (pathKey: string) => boolean): void {

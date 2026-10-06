@@ -52,9 +52,63 @@ export function isCategoryHiddenByDislikes(
   return false;
 }
 
-export function mealDbCategoryFromRecipeTag(tag: string | null | undefined): string | null {
+export const MEALDB_KNOWN_CATEGORY_NAMES: readonly MealDbCatalogCategory[] = [
+  'Beef',
+  'Chicken',
+  'Dessert',
+  'Lamb',
+  'Miscellaneous',
+  'Pasta',
+  'Pork',
+  'Seafood',
+  'Side',
+  'Starter',
+  'Vegan',
+  'Vegetarian',
+  'Breakfast',
+  'Goat',
+] as const;
+
+const MEALDB_KNOWN_CATEGORY_LOOKUP = new Map(
+  MEALDB_KNOWN_CATEGORY_NAMES.map((name) => [name.toLowerCase(), name] as const),
+);
+
+function normalizeCategoryToken(token: string): string | null {
+  const hit = MEALDB_KNOWN_CATEGORY_LOOKUP.get(token.trim().toLowerCase());
+  return hit ?? null;
+}
+
+export interface MealDbCategoryFromTagOptions {
+  recipeId?: string | null;
+  sourceType?: string | null;
+}
+
+function isMealDbSourcedRecipe(options?: MealDbCategoryFromTagOptions): boolean {
+  if (options?.sourceType === 'themealdb') return true;
+  const id = options?.recipeId?.trim() ?? '';
+  return id.startsWith('mealdb-');
+}
+
+export function mealDbCategoryFromRecipeTag(
+  tag: string | null | undefined,
+  options?: MealDbCategoryFromTagOptions,
+): string | null {
   if (!tag) return null;
-  const parts = tag.split('·').map((part) => part.trim());
-  const candidate = parts[parts.length - 1] ?? parts[0];
-  return candidate || null;
+  const parts = tag
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+
+  for (const part of parts) {
+    const known = normalizeCategoryToken(part);
+    if (known) return known;
+  }
+
+  if (isMealDbSourcedRecipe(options)) {
+    const fallback = parts[parts.length - 1] ?? parts[0];
+    return fallback || null;
+  }
+
+  return null;
 }
