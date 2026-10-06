@@ -1,5 +1,35 @@
 import type { AllergenId, DietId } from '../lib/diet/types';
 
+/** Direct peanut ingredients — apply to MealDB ingredients and creator descriptions. */
+export const PEANUT_INGREDIENT_KEYWORDS: string[] = [
+  'peanut',
+  'peanuts',
+  'groundnut',
+  'groundnuts',
+  'peanut butter',
+];
+
+/** Dish-title peanut signals (TheMealDB titles & creator video titles — not descriptions). */
+export const PEANUT_DISH_NAME_KEYWORDS: string[] = [
+  'pad thai',
+  'satay',
+  'kung pao',
+  'kung-pao',
+  'kung po',
+  'gado-gado',
+  'gado gado',
+  'nem',
+  'mee goreng',
+  'bang bang',
+  'nutter',
+  'nutty',
+  'massaman',
+  'nasi lemak',
+  'apam balik',
+  'caldereta',
+  'pad see ew',
+];
+
 /** Keyword → allergen(s). First match wins per allergen category; multiple allergens can apply. */
 export const ALLERGEN_KEYWORD_RULES: { allergens: AllergenId[]; keywords: string[] }[] = [
   {
@@ -90,27 +120,8 @@ export const ALLERGEN_KEYWORD_RULES: { allergens: AllergenId[]; keywords: string
   {
     allergens: ['peanuts'],
     keywords: [
-      'peanut',
-      'peanuts',
-      'groundnut',
-      'groundnuts',
-      'pad thai',
-      'satay',
-      'kung pao',
-      'kung-pao',
-      'kung po',
-      'gado-gado',
-      'gado gado',
-      'nem',
-      'mee goreng',
-      'bang bang',
-      'nutter',
-      'nutty',
-      'massaman',
-      'nasi lemak',
-      'apam balik',
-      'caldereta',
-      'pad see ew',
+      ...PEANUT_INGREDIENT_KEYWORDS,
+      ...PEANUT_DISH_NAME_KEYWORDS,
     ],
   },
   {

@@ -1,4 +1,5 @@
 import type { AllergenId, DietId } from '../lib/diet/types';
+import { RECIPES_COPY } from './recipesCopy';
 
 export const DIET_PREF_COPY = {
   sectionTitle: 'Diet & allergies',
@@ -13,6 +14,7 @@ export const DIET_PREF_COPY = {
   estimateDisclaimer: 'Check labels — estimate only',
   skipAtSignup: 'Skip for now',
   hiddenForAllergySettingsToast: 'Hidden because of your allergy settings',
+  recipeOfflineUnavailableToast: RECIPES_COPY.recipeCard.offlineDetailsUnavailable,
 } as const;
 
 export const DIET_OPTIONS: { id: DietId; label: string }[] = [

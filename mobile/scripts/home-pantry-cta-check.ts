@@ -30,7 +30,9 @@ assert.match(
 );
 assert.match(ctaSource, /accessibilityRole="button"/);
 assert.match(ctaSource, /accessibilityLabel=\{buttonLabel\}/);
-assert.match(ctaSource, /pressed \? 0\.72/, 'button should have visible pressed opacity feedback');
+assert.match(ctaSource, /useState\(false\)/, 'button should track pressed state for web feedback');
+assert.match(ctaSource, /THEME\.primaryDark/, 'button should darken while pressed');
+assert.match(ctaSource, /scale: pressed \? 0\.96/, 'button should scale while pressed');
 assert.ok(!ctaSource.includes('numberOfLines'), 'pantry description should wrap fully');
 
 const homeSource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/index.tsx'), 'utf8');

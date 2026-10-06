@@ -137,6 +137,7 @@ export default function HomeScreen() {
     notifyRemovedFromMyRecipes,
     notifyMyRecipesSaveFailed,
     notifyRecipeHiddenForDietSettings,
+    notifyRecipeOfflineUnavailable,
     profile,
     savedRecipes,
     registerSavedRecipeToggleOutcome,
@@ -448,7 +449,7 @@ export default function HomeScreen() {
   ]);
 
   const browseVideoModels = useMemo(() => {
-    if (!creatorFeedEnabled || searchQuery.trim()) return [];
+    if (!creatorFeedEnabled || searching) return [];
     const videos = selectedCreator ? channelVideos : feedVideos;
     const models = buildCreatorFeedCardModels(videos, kitchenRecipes, pantryRecipeMatches);
     const diet = filterCreatorFeedModelsForDietPrefs(models, userDietPrefs);
@@ -465,8 +466,12 @@ export default function HomeScreen() {
     rankCreatorModels,
   ]);
 
-  const { results: searchResults, loading: searchLoading, error: searchError } =
-    useUnifiedRecipeSearch({
+  const {
+    results: searchResults,
+    loading: searchLoading,
+    debouncing: searchDebouncing,
+    error: searchError,
+  } = useUnifiedRecipeSearch({
       query: searchQuery,
       pantry,
       session,
@@ -486,7 +491,12 @@ export default function HomeScreen() {
         setRowDetailLoadingId(row.recipe.id);
         try {
           const resolved = await resolveKitchenRecipesTabRowDetails(row, pantry);
-          if (!resolved) return null;
+          if (!resolved) {
+            if (isOffline() && row.pantryMatchPending) {
+              notifyRecipeOfflineUnavailable();
+            }
+            return null;
+          }
           working = resolved;
         } finally {
           setRowDetailLoadingId(null);
@@ -507,6 +517,7 @@ export default function HomeScreen() {
     [
       classicCategoryFeed,
       notifyRecipeHiddenForDietSettings,
+      notifyRecipeOfflineUnavailable,
       pantry,
       userDietPrefs,
     ],
@@ -633,15 +644,17 @@ export default function HomeScreen() {
     feedLoading &&
     browseVideoModels.length === 0;
 
+  const searchInFlight = searching && (searchLoading || searchDebouncing);
+
   const listLoading =
-    (searching && searchLoading) ||
+    searchInFlight ||
     (showCreatorCatalogSections && selectedCreator && channelLoading) ||
     creatorFeedBlockingLoad ||
     mealDbBlockingLoad ||
     (showLegacyKitchenFeed && mealDbLoading && mealDbRows.length === 0);
 
   const showSearchEmpty =
-    searching && !searchLoading && searchResultsFiltered.length === 0;
+    searching && !searchLoading && !searchDebouncing && searchResultsFiltered.length === 0;
 
   const refKeyForCreatorOpen = useCallback(
     (videoId: string) => {
@@ -894,8 +907,9 @@ export default function HomeScreen() {
       refreshControl={homeScrollRefresh.refreshControl}
     >
       <HomeWebPullRefreshIndicator
-        visible={homeScrollRefresh.pullIndicatorOffset > 0}
+        visible={homeScrollRefresh.pullIndicatorOffset > 0 || homeRecipesRefresh.refreshing}
         refreshing={homeRecipesRefresh.refreshing}
+        pullDistance={homeScrollRefresh.pullDistance ?? 0}
       />
       {showCreatorCatalogSections && !searching ? <HomePantryCta /> : null}
       <InstallAppBanner />
@@ -999,7 +1013,7 @@ export default function HomeScreen() {
         <View className="mt-4 flex-row items-center gap-2">
           <ActivityIndicator color={THEME.primary} />
           <Text className="text-sm text-muted">
-            {searching ? RECIPES_COPY.discoveryPanel.searching : CREATOR_RECIPES_COPY.loading}
+            {searchInFlight ? RECIPES_COPY.discoveryPanel.searching : CREATOR_RECIPES_COPY.loading}
           </Text>
         </View>
       ) : null}
@@ -1023,7 +1037,9 @@ export default function HomeScreen() {
 
       {showFilterEmpty ? <RecipesTabFiltersEmptyState onClearAll={clearAllFilters} /> : null}
       {showSearchEmpty ? (
-        <Text className="mt-4 text-sm text-muted">{CREATOR_RECIPES_COPY.emptySearch}</Text>
+        <Text className="mt-4 text-sm text-muted">
+          {CREATOR_RECIPES_COPY.emptySearchForQuery(searchTrimmed)}
+        </Text>
       ) : null}
       {searching
         ? searchResultsFiltered.map((result) =>
@@ -1111,6 +1127,9 @@ export default function HomeScreen() {
                 <Text className="text-sm font-semibold text-primary">← All categories</Text>
               </Pressable>
             ) : null}
+            {classicCategoryFeed.offlineCategoryEmpty && classicRecipeRows.length === 0 ? (
+              <Text className="mb-2 text-sm text-muted">{MEALDB_COPY.categoryOfflineEmpty}</Text>
+            ) : null}
             {classicCategoryFeed.loadFailed && classicRecipeRows.length === 0 ? (
               <View className="mb-2">
                 <Text className="text-sm text-muted">{MEALDB_COPY.categoryLoadFailed}</Text>
@@ -1132,6 +1151,11 @@ export default function HomeScreen() {
                 key={row.recipe.id}
                 row={row}
                 maskTitle={
+                  maskClassicStubTitles &&
+                  row.kind === 'kitchen' &&
+                  Boolean(row.pantryMatchPending)
+                }
+                maskImage={
                   maskClassicStubTitles &&
                   row.kind === 'kitchen' &&
                   Boolean(row.pantryMatchPending)

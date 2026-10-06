@@ -398,6 +398,7 @@ interface AppContextValue {
   notifyRemovedFromMyRecipes: (onUndo: () => void) => void;
   notifyMyRecipesSaveFailed: () => void;
   notifyRecipeHiddenForDietSettings: () => void;
+  notifyRecipeOfflineUnavailable: () => void;
   savedRecipes: SavedRecipesController;
   registerSavedRecipeToggleOutcome: (handler: ((outcome: SavedRecipeToggleOutcome) => void) | null) => void;
   toggleGroceryItem: (id: string) => void;
@@ -2873,6 +2874,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const notifyRecipeOfflineUnavailable = useCallback(() => {
+    setUndoToast({
+      message: DIET_PREF_COPY.recipeOfflineUnavailableToast,
+      showUndo: false,
+      onUndo: () => setUndoToast(null),
+    });
+  }, []);
+
   const mealMadeReviewTitle = useMemo(() => {
     if (!mealMadeReview) return null;
     return mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)?.title ?? null;
@@ -2951,6 +2960,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifyRemovedFromMyRecipes,
       notifyMyRecipesSaveFailed,
       notifyRecipeHiddenForDietSettings,
+      notifyRecipeOfflineUnavailable,
       savedRecipes,
       registerSavedRecipeToggleOutcome,
       toggleGroceryItem,
@@ -3081,6 +3091,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifyRemovedFromMyRecipes,
       notifyMyRecipesSaveFailed,
       notifyRecipeHiddenForDietSettings,
+      notifyRecipeOfflineUnavailable,
       savedRecipes,
       registerSavedRecipeToggleOutcome,
       updateRecipe,

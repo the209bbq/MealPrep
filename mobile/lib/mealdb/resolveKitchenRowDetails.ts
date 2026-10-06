@@ -4,7 +4,8 @@ import { shouldHideRecipeForDietPrefs } from '../diet/conflicts';
 import type { UserDietPrefs } from '../diet/types';
 import { scoreRecipeAgainstPantry } from '../recipeMatch';
 import type { PantryItem } from '../../types/mealprep';
-import { mealDbLookupMeal } from './client';
+import { isOffline } from '../network/isOffline';
+import { mealDbLookupMeal, readCachedMealDbAppRecipe } from './client';
 import { mealDbMealToAppRecipe } from './normalize';
 import { mealDbIdFromRecipeId } from './slug';
 
@@ -17,6 +18,17 @@ export async function resolveKitchenRecipesTabRowDetails(
 
   const idMeal = mealDbIdFromRecipeId(row.recipe.id);
   if (!idMeal) return null;
+
+  if (isOffline()) {
+    const cached = readCachedMealDbAppRecipe(row.recipe.id);
+    if (!cached) return null;
+    return {
+      kind: 'kitchen',
+      recipe: cached,
+      match: scoreRecipeAgainstPantry(cached, pantry),
+      pantryMatchPending: false,
+    };
+  }
 
   const meal = await mealDbLookupMeal(idMeal);
   if (!meal) return null;

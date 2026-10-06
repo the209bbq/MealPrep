@@ -15,3 +15,4 @@ export * from './recipeFeatures';
 export * from './v2Signals';
 export * from './eventMeta';
 export { readEngagementIndexForOwner } from './eventStore';
+export { emptyEngagementIndexForGhost } from './engagementIndexHelpers';

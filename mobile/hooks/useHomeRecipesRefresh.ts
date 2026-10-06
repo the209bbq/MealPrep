@@ -74,28 +74,19 @@ export function useHomeRecipesRefresh(options: {
     onCreatorsRefresh();
     onCategoryReselect?.();
 
-    const spinnerDone = setTimeout(() => setRefreshing(false), REFRESH_SPINNER_MAX_MS);
+    if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
+    setTimeout(() => {
+      setRefreshing(false);
+      setStatusMessage(RECIPES_COPY.homeToolbarCard.refreshUpdated);
+      statusTimerRef.current = setTimeout(() => setStatusMessage(null), UPDATED_MESSAGE_MS);
+    }, REFRESH_SPINNER_MAX_MS);
 
-    void (async () => {
-      let prefetchOk = false;
-      try {
-        await runHomeRecipePrefetch({
-          pantry,
-          accessToken: session?.access_token ?? null,
-          creatorChannelIds,
-          listOnly: true,
-        });
-        prefetchOk = true;
-      } finally {
-        clearTimeout(spinnerDone);
-        setRefreshing(false);
-        if (prefetchOk) {
-          setStatusMessage(RECIPES_COPY.homeToolbarCard.refreshUpdated);
-        }
-        if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
-        statusTimerRef.current = setTimeout(() => setStatusMessage(null), UPDATED_MESSAGE_MS);
-      }
-    })();
+    void runHomeRecipePrefetch({
+      pantry,
+      accessToken: session?.access_token ?? null,
+      creatorChannelIds,
+      listOnly: true,
+    });
   }, [
     creatorChannelIds,
     enabled,

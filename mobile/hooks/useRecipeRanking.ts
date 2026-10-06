@@ -8,6 +8,7 @@ import {
   clearWontCookForRef,
   createEngagementEvent,
   createSeamlessEngagementEvent,
+  emptyEngagementIndexForGhost,
   personalSignalsReady,
   rankCreatorFeedModels,
   rankRecipeSearchResults,
@@ -35,7 +36,7 @@ export function useRecipeRanking(options: {
   const { ownerId, dietPrefs, householdSize, tabFilters, pricing } = options;
   const hydrated = useHydrated();
   const [events, setEvents] = useState<RecipeEngagementEvent[]>([]);
-  const [engagementIndex, setEngagementIndex] = useState(() => readEngagementIndexForOwner(''));
+  const [engagementIndex, setEngagementIndex] = useState(() => emptyEngagementIndexForGhost());
 
   useEffect(() => {
     if (!hydrated) return;

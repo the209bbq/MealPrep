@@ -10,6 +10,7 @@ export function useHomeScrollRefresh(options: {
   refreshControl: ReactElement<RefreshControlProps> | undefined;
   scrollViewProps: Record<string, unknown>;
   pullIndicatorOffset: number;
+  pullDistance: number;
 } {
   const { enabled, refreshing, onRefresh } = options;
   return {
@@ -25,12 +26,14 @@ export function useHomeScrollRefresh(options: {
       : undefined,
     scrollViewProps: {},
     pullIndicatorOffset: 0,
+    pullDistance: 0,
   };
 }
 
 export function HomeWebPullRefreshIndicator(_props: {
   visible: boolean;
   refreshing: boolean;
+  pullDistance?: number;
 }): null {
   return null;
 }

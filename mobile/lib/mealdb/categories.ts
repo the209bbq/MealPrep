@@ -25,6 +25,8 @@ import {
 } from './categoryStubRows';
 import { mealDbMealToAppRecipe } from './normalize';
 import { MEALDB } from '../../config/mealdb';
+import { isOffline } from '../network/isOffline';
+import { kitchenCategoryRowsAvailableOffline } from './offlineCategoryRows';
 import { mealDbCategoryFromRecipeTag } from '../recipesTab/categoryDiet';
 import { wontCookRefKeys } from '../recipeRanking/hardFilter';
 import type { RecipeEngagementEvent } from '../recipeRanking/types';
@@ -116,6 +118,8 @@ export interface FetchMealDbCategoryFeedOptions {
 export interface MealDbCategoryFeedResult {
   rows: RecipesTabRow[];
   listFetchFailed: boolean;
+  /** Offline and no cached meal details for this category. */
+  offlineCategoryEmpty?: boolean;
 }
 
 async function mealDbCategoryFilterSummaries(
@@ -172,6 +176,20 @@ export async function fetchMealDbCategoryFeedRows(
   );
   if (listFetchFailed) {
     return { rows: cached.length > 0 ? cached : [], listFetchFailed: true };
+  }
+
+  if (isOffline()) {
+    let offlineRows =
+      cached.length > 0 ? [...cached] : recipesTabRowsFromFilterSummaries(summaries, category);
+    offlineRows = kitchenCategoryRowsAvailableOffline(offlineRows, pantry);
+    if (offlineRows.length > 0) {
+      options?.onRows?.(offlineRows);
+    }
+    return {
+      rows: offlineRows,
+      listFetchFailed: false,
+      offlineCategoryEmpty: offlineRows.length === 0 && summaries.length > 0,
+    };
   }
 
   if (options?.listOnly) {
