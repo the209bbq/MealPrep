@@ -831,7 +831,11 @@ export default function PantryScreen() {
           </View>
         ) : null}
 
-        <Card className="mt-4" title="Pantry inventory" subtitle="Filter by category or scan new items">
+        <Card
+          className="mt-4"
+          title="Pantry inventory"
+          subtitle={PANTRY_SCAN_UI_COPY.inventoryCardSubtitle}
+        >
           {scanControlsVisible ? (
             <>
               <PantryStorageScanButtons
