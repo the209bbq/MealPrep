@@ -126,7 +126,9 @@ import {
   groceryItemsToPantryItems,
   mergePantryStock,
 } from '../lib/pantry/mergePantryStock';
+import { buildManualPantryItem } from '../lib/pantry/manualPantryItem';
 import { syncPantryToSnapshot } from '../lib/pantry/syncPantrySnapshot';
+import { writeAccountPantryCache } from '../lib/pantry/writeAccountPantryCache';
 import { PANTRY_RESTOCK_COPY } from '../config/pantryRestock';
 import { PANTRY_SCAN_UI_COPY, writeLastPantryScanLocation } from '../config/pantryScan';
 import { PANTRY_STAPLES_COPY } from '../config/pantryStaples';
@@ -2583,19 +2585,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       location: PantryStorageLocation;
       expiresOn?: string | null;
     }) => {
-      const slug = input.name.toLowerCase().replace(/\s+/g, '-');
-      const item: PantryItem = {
-        id: `manual-${Date.now()}`,
-        ingredientId: `manual-${slug}-${Date.now()}`,
-        name: input.name.trim(),
-        category: input.category,
-        quantity: input.quantity,
-        unit: input.unit.trim() || 'each',
-        location: input.location,
-        photoUri: null,
-        expiresOn: input.expiresOn ?? null,
-        updatedAt: new Date().toISOString(),
-      };
+      const item = buildManualPantryItem(input);
       if (demoMode || isGuest) {
         setPantry((prev) => [item, ...prev]);
         return;
@@ -2603,8 +2593,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!supabase || !userId) {
         throw new Error('Sign in to add pantry items.');
       }
-      const saved = await insertPantryItem(supabase, userId, item);
-      setPantry((prev) => [saved, ...prev]);
+
+      setPantry((prev) => {
+        const next = [item, ...prev];
+        writeAccountPantryCache(userId, next);
+        return next;
+      });
+
+      if (isOffline()) {
+        return;
+      }
+
+      try {
+        const saved = await insertPantryItem(supabase, userId, item);
+        setPantry((prev) => {
+          const next = prev.map((row) => (row.id === item.id ? saved : row));
+          writeAccountPantryCache(userId, next);
+          return next;
+        });
+      } catch (error: unknown) {
+        if (isOffline()) return;
+        setKitchenError(error instanceof Error ? error.message : 'Failed to add pantry item');
+      }
     },
     [demoMode, isGuest, supabase, userId],
   );
