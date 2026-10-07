@@ -51,6 +51,7 @@ export const PANTRY_LIST_COPY = {
   showAllFilters: 'Show all locations and categories',
   storageFilterLabel: 'Storage',
   allLocationsChipLabel: 'All',
+  overflowMenuA11y: 'More pantry actions',
 } as const;
 
 const LEGACY_FRIDGE_PATTERN = /\bfridge\b|\brefrigerator\b/i;

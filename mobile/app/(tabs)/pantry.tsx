@@ -39,6 +39,7 @@ import {
   previewResortFromDefaultPantry,
   suggestStorageLocationForCategory,
   suggestStorageLocationForPantryItem,
+  PANTRY_LIST_COPY,
   type PantryStorageLocation,
 } from '../../config/pantryStorage';
 import { inferGroceryCategoryFromName } from '../../lib/grocery/categorize';
@@ -803,7 +804,12 @@ export default function PantryScreen() {
             <PantryAddStaplesLink onPress={openPantryStaples} />
           </View>
           {pantry.length > 0 ? (
-            <Pressable onPress={() => setOverflowOpen(true)} className="rounded-full border border-border bg-card p-2">
+            <Pressable
+              onPress={() => setOverflowOpen(true)}
+              className="rounded-full border border-border bg-card p-2"
+              accessibilityRole="button"
+              accessibilityLabel={PANTRY_LIST_COPY.overflowMenuA11y}
+            >
               <Ionicons name="ellipsis-horizontal" size={22} color={THEME.ink} />
             </Pressable>
           ) : null}
