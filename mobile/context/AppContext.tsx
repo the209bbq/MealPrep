@@ -127,6 +127,16 @@ import {
   mergePantryStock,
 } from '../lib/pantry/mergePantryStock';
 import { buildManualPantryItem } from '../lib/pantry/manualPantryItem';
+import {
+  cancelManualInsert,
+  completeManualInsertTracking,
+  createManualInsertCoordinator,
+  isManualInsertCancelled,
+  isManualPantryLocalId,
+  mergeSavedManualPantryItem,
+  rollbackManualPantryItem,
+  trackManualInsert,
+} from '../lib/pantry/manualPantryInsertLifecycle';
 import { syncPantryToSnapshot } from '../lib/pantry/syncPantrySnapshot';
 import { writeAccountPantryCache } from '../lib/pantry/writeAccountPantryCache';
 import { PANTRY_RESTOCK_COPY } from '../config/pantryRestock';
@@ -495,6 +505,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const [kitchenError, setKitchenError] = useState<string | null>(null);
   const groceryRestockLedgerRef = useRef(new Map<string, { pantryItemId: string; quantityAdded: number; unit: string }>());
+  const pendingManualPantryInsertsRef = useRef(createManualInsertCoordinator());
   const [session, setSession] = useState<Session | null>(null);
   const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
 
@@ -2594,6 +2605,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Sign in to add pantry items.');
       }
 
+      trackManualInsert(pendingManualPantryInsertsRef.current, item.id);
+
       setPantry((prev) => {
         const next = [item, ...prev];
         writeAccountPantryCache(userId, next);
@@ -2606,14 +2619,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const saved = await insertPantryItem(supabase, userId, item);
+        const cancelled = isManualInsertCancelled(pendingManualPantryInsertsRef.current, item.id);
+        completeManualInsertTracking(pendingManualPantryInsertsRef.current, item.id);
+
+        let deleteServerId: string | null = null;
         setPantry((prev) => {
-          const next = prev.map((row) => (row.id === item.id ? saved : row));
+          const merged = mergeSavedManualPantryItem(prev, item.id, saved, cancelled);
+          deleteServerId = merged.shouldDeleteServerId;
+          if (merged.shouldDeleteServerId) {
+            return prev;
+          }
+          writeAccountPantryCache(userId, merged.pantry);
+          return merged.pantry;
+        });
+
+        if (deleteServerId) {
+          await deletePantryItemsByIds(supabase, userId, [deleteServerId]);
+        }
+      } catch (error: unknown) {
+        completeManualInsertTracking(pendingManualPantryInsertsRef.current, item.id);
+        if (isOffline()) return;
+        setPantry((prev) => {
+          const next = rollbackManualPantryItem(prev, item.id);
           writeAccountPantryCache(userId, next);
           return next;
         });
-      } catch (error: unknown) {
-        if (isOffline()) return;
-        setKitchenError(error instanceof Error ? error.message : 'Failed to add pantry item');
+        throw error instanceof Error ? error : new Error('Failed to add pantry item');
       }
     },
     [demoMode, isGuest, supabase, userId],
@@ -2636,6 +2667,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deletePantryItemEntry = useCallback(
     async (id: string) => {
+      cancelManualInsert(pendingManualPantryInsertsRef.current, id);
       if (demoMode || isGuest) {
         setPantry((prev) => prev.filter((row) => row.id !== id));
         return;
@@ -2643,8 +2675,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!supabase || !userId) {
         throw new Error('Sign in to update pantry.');
       }
-      await deletePantryItemsByIds(supabase, userId, [id]);
-      setPantry((prev) => prev.filter((row) => row.id !== id));
+      if (!isManualPantryLocalId(id)) {
+        await deletePantryItemsByIds(supabase, userId, [id]);
+      }
+      setPantry((prev) => {
+        const next = prev.filter((row) => row.id !== id);
+        writeAccountPantryCache(userId, next);
+        return next;
+      });
     },
     [demoMode, isGuest, supabase, userId],
   );
