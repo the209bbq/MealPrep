@@ -27,6 +27,7 @@ import { ProfileAvatar } from './ProfileAvatar';
 import { pickProfilePhotoFromLibrary } from './pickProfilePhoto';
 import { HomeZipField } from './HomeZipField';
 import { formatHomeZipInput, validateOptionalHomeZip } from '../../lib/profile/homeZip';
+import { resetForkinatorTips } from '../../lib/forkinator/resetForkinatorTips';
 
 type AccountSheetProps = {
   visible: boolean;
@@ -100,6 +101,30 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Could not update photo.');
     }
+  }
+
+  function runResetForkyTips() {
+    resetForkinatorTips();
+    setStatus(ACCOUNT_SHEET_COPY.resetForkyTipsDoneToast);
+  }
+
+  function confirmResetForkyTips() {
+    if (Platform.OS === 'web') {
+      const ok = window.confirm(
+        `${ACCOUNT_SHEET_COPY.resetForkyTipsConfirmTitle}\n\n${ACCOUNT_SHEET_COPY.resetForkyTipsConfirmBody}`,
+      );
+      if (ok) runResetForkyTips();
+      return;
+    }
+
+    Alert.alert(
+      ACCOUNT_SHEET_COPY.resetForkyTipsConfirmTitle,
+      ACCOUNT_SHEET_COPY.resetForkyTipsConfirmBody,
+      [
+        { text: ACCOUNT_SHEET_COPY.deleteAccountCancel, style: 'cancel' },
+        { text: ACCOUNT_SHEET_COPY.resetForkyTipsConfirmAction, onPress: runResetForkyTips },
+      ],
+    );
   }
 
   function confirmDelete() {
@@ -238,6 +263,22 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                   />
                 </View>
               ))}
+            </View>
+
+            <View className="mt-4 rounded-2xl border border-border bg-card px-4 py-3">
+              <Text className="text-sm font-bold text-ink">Forky</Text>
+              <Text className="mt-1 text-xs text-muted">
+                See Forky&apos;s greeting and tips again if you dismissed them.
+              </Text>
+              <Pressable
+                onPress={confirmResetForkyTips}
+                className="mt-3 rounded-xl border border-border bg-paper px-4 py-3"
+                accessibilityRole="button"
+              >
+                <Text className="text-center font-bold text-slate">
+                  {ACCOUNT_SHEET_COPY.resetForkyTipsLabel}
+                </Text>
+              </Pressable>
             </View>
 
             <InstallAppBanner />

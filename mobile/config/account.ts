@@ -26,6 +26,11 @@ export const ACCOUNT_SHEET_COPY = {
   changePhoto: 'Change photo',
   removePhoto: 'Remove photo',
   guestAvatarLabel: 'Sign in or create account',
+  resetForkyTipsLabel: 'Reset Forky tips',
+  resetForkyTipsConfirmTitle: 'Reset Forky tips?',
+  resetForkyTipsConfirmBody: 'Forky will show his greeting and tips again.',
+  resetForkyTipsConfirmAction: 'Reset',
+  resetForkyTipsDoneToast: "Forky's tips are reset.",
 } as const;
 
 export const LEGAL_LINKS = {
