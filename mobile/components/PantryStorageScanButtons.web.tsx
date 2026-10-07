@@ -116,10 +116,6 @@ export function PantryStorageScanButtons({
     void (async () => {
       const allowed = await runGateCheck();
       if (!allowed) return;
-      if (autoOpenScanMode === 'camera') {
-        await onPressPicker('camera');
-        return;
-      }
       setSourceMenuOpen(true);
     })();
   }, [autoOpenScanMode, disabled, onAutoOpenScanHandled]);

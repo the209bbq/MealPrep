@@ -60,6 +60,7 @@ import { createScanSessionId } from '../../lib/scanCorrections/session';
 import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
 import {
   consumeOpenPantryShelfScanRequest,
+  consumePantryWebShelfScanFile,
   subscribeOpenPantryShelfScan,
 } from '../../lib/pantry/openShelfScanRequest';
 import { readJson, writeJson } from '../../lib/storage';
@@ -183,7 +184,30 @@ export default function PantryScreen() {
   const scanSessionIdRef = useRef<string | null>(null);
   const aiBaselineRef = useRef<Map<string, { aiName: string }>>(new Map());
 
+  async function processWebShelfScanFile(file: File) {
+    const scanLocation = readLastPantryScanLocation();
+    try {
+      const { preparePantryImageFromFile } = await import('../../lib/pantryVision/prepareImage.web');
+      const prepared = await preparePantryImageFromFile(file);
+      setScanLocationHint(scanLocation);
+      await runVisionFromPrepared(prepared, scanLocation);
+    } catch (error) {
+      if (error instanceof PantryImageQualityError && error.reason === 'blank') {
+        handleWebPrepareError(error.message);
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Could not prepare photo';
+      handleWebPrepareError(message);
+    }
+  }
+
   const tryConsumeShelfScanRequest = useCallback(() => {
+    const webFile = consumePantryWebShelfScanFile();
+    if (webFile) {
+      if (phase !== 'idle') return;
+      void processWebShelfScanFile(webFile);
+      return;
+    }
     const mode = consumeOpenPantryShelfScanRequest();
     if (!mode) return;
     if (phase !== 'idle') return;

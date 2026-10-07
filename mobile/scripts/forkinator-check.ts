@@ -56,10 +56,12 @@ import {
   layoutScannerPrompt,
   scannerPromptBodySize,
 } from '../lib/forkinator/scannerPromptLayout';
+import { canSyncForkinatorWebCameraScan } from '../lib/forkinator/forkinatorWebCameraScan';
 import {
   consumeOpenPantryShelfScanRequest,
   requestOpenPantryShelfScan,
 } from '../lib/pantry/openShelfScanRequest';
+import { photoScanAccessState } from '../lib/plans/photoScanAccess';
 import { resolveForkinatorMascotPose } from '../lib/forkinator/forkinatorPose';
 import {
   layoutThinkingBubble,
@@ -226,6 +228,35 @@ assert.equal(consumeOpenPantryShelfScanRequest(), 'camera');
 assert.equal(consumeOpenPantryShelfScanRequest(), null);
 requestOpenPantryShelfScan('menu');
 assert.equal(consumeOpenPantryShelfScanRequest(), 'menu');
+assert.equal(
+  canSyncForkinatorWebCameraScan({
+    demoMode: false,
+    authReady: true,
+    hasSession: true,
+    plan: 'paid',
+    role: 'member',
+    profileReady: true,
+  }),
+  photoScanAccessState({
+    demoMode: false,
+    authReady: true,
+    hasSession: true,
+    plan: 'paid',
+    role: 'member',
+    profileReady: true,
+  }) === 'allowed',
+);
+assert.equal(
+  canSyncForkinatorWebCameraScan({
+    demoMode: false,
+    authReady: false,
+    hasSession: false,
+    plan: 'paid',
+    role: 'member',
+    profileReady: true,
+  }),
+  false,
+);
 
 const clamped = clampForkinatorPosition({ x: -50, y: 9999 }, bounds390);
 assert.equal(clamped.x, bounds390.insetLeft);
@@ -374,7 +405,15 @@ const scanButtonsWeb = fs.readFileSync(
   path.join(mobileRoot, 'components/PantryStorageScanButtons.web.tsx'),
   'utf8',
 );
-assert.match(scanButtonsWeb, /autoOpenScanMode === 'camera'/, 'web honors camera open mode');
+assert.ok(
+  !/autoOpenScanMode === 'camera'/.test(scanButtonsWeb),
+  'web should not open camera from post-navigation effect',
+);
+assert.match(scanButtonsWeb, /setSourceMenuOpen\(true\)/, 'web auto-open shows source menu only');
+assert.match(overlaySource, /pickWebImageFile/, 'web scan now opens camera picker in tap handler');
+assert.match(overlaySource, /openPantryWithWebShelfScanFile/, 'web hands picked file to pantry');
+assert.match(overlaySource, /canSyncForkinatorWebCameraScan/, 'web falls back when gate not sync-ready');
+assert.match(pantrySource, /consumePantryWebShelfScanFile/, 'pantry consumes web shelf scan handoff');
 assert.match(overlaySource, /openPantryCameraScanFromForkinator/, 'scanner prompt camera button opens camera mode');
 assert.match(overlaySource, /includeCameraButton: true/, 'scanner prompt layout reserves button space');
 assert.equal((overlaySource.match(/onCameraPress/g) ?? []).length, 1, 'only scanner prompt gets camera button');

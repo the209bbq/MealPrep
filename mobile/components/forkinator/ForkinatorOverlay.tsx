@@ -28,7 +28,11 @@ import {
 import {
   openPantryCameraScanFromForkinator,
   openPantryScannerFromForkinator,
+  openPantryWithWebShelfScanFile,
 } from '../../lib/forkinator/openPantryScanner';
+import { canSyncForkinatorWebCameraScan } from '../../lib/forkinator/forkinatorWebCameraScan';
+import { pickWebImageFile } from '../../lib/web/pickWebImageFile';
+import { useApp } from '../../context/AppContext';
 import { readForkinatorHasScanned } from '../../lib/forkinator/hasScanned';
 import {
   FORKINATOR_GREETING_A11Y_LABEL,
@@ -87,6 +91,18 @@ export function ForkinatorOverlay() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const reduceMotion = useReduceMotionEnabled();
+  const { demoMode, authReady, session, profile, profileReady, featureFlags } = useApp();
+  const photoScanAccess = useMemo(
+    () => ({
+      demoMode,
+      authReady,
+      hasSession: Boolean(session),
+      plan: profile.plan,
+      role: profile.role,
+      profileReady,
+    }),
+    [authReady, demoMode, profile.plan, profile.role, profileReady, session],
+  );
   const [position, setPosition] = useState<ForkinatorPosition | null>(null);
   const [thinkingVisible, setThinkingVisible] = useState(false);
   const [greetingPromptVisible, setGreetingPromptVisible] = useState(false);
@@ -233,6 +249,24 @@ export function ForkinatorOverlay() {
       includeCameraButton: true,
     });
   }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
+
+  const handleScannerCameraPress = useCallback(() => {
+    setScannerPromptVisible(false);
+    markForkinatorScannerNudgeShown();
+    if (!IS_WEB) {
+      openPantryCameraScanFromForkinator();
+      return;
+    }
+    if (!featureFlags.photoScan || !canSyncForkinatorWebCameraScan(photoScanAccess)) {
+      openPantryScannerFromForkinator();
+      return;
+    }
+    void (async () => {
+      const file = await pickWebImageFile({ capture: 'environment' });
+      if (!file) return;
+      openPantryWithWebShelfScanFile(file);
+    })();
+  }, [featureFlags.photoScan, photoScanAccess]);
 
   const handleMascotActivate = useCallback(() => {
     const action = resolveForkinatorMascotTapAction(
@@ -422,11 +456,7 @@ export function ForkinatorOverlay() {
             setScannerPromptVisible(false);
             openPantryScannerFromForkinator();
           }}
-          onCameraPress={() => {
-            setScannerPromptVisible(false);
-            markForkinatorScannerNudgeShown();
-            openPantryCameraScanFromForkinator();
-          }}
+          onCameraPress={handleScannerCameraPress}
         />
       ) : null}
       {thinkingLayout ? (
