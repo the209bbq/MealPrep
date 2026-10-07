@@ -56,6 +56,12 @@ import {
   layoutScannerPrompt,
   scannerPromptBodySize,
 } from '../lib/forkinator/scannerPromptLayout';
+import { canSyncForkinatorWebCameraScan } from '../lib/forkinator/forkinatorWebCameraScan';
+import {
+  consumeOpenPantryShelfScanRequest,
+  requestOpenPantryShelfScan,
+} from '../lib/pantry/openShelfScanRequest';
+import { photoScanAccessState } from '../lib/plans/photoScanAccess';
 import { resolveForkinatorMascotPose } from '../lib/forkinator/forkinatorPose';
 import {
   layoutThinkingBubble,
@@ -213,6 +219,44 @@ assert.ok(scannerPromptBodySize(320).bodyWidth <= 320 - 16);
 const greetingBody320 = scannerPromptBodySize(320, FORKINATOR_GREETING_MESSAGE);
 assert.ok(greetingBody320.bodyWidth <= 320 - 16);
 assert.ok(greetingBody320.bodyHeight <= 96, 'longer name should wrap in thought bubble on narrow phones');
+const scannerBody320 = scannerPromptBodySize(320, FORKINATOR_SCANNER_NUDGE_MESSAGE, true);
+assert.ok(scannerBody320.bodyWidth <= 320 - 16);
+assert.ok(scannerBody320.bodyHeight <= 120, 'scanner prompt with camera button fits narrow phones');
+
+requestOpenPantryShelfScan('camera');
+assert.equal(consumeOpenPantryShelfScanRequest(), 'camera');
+assert.equal(consumeOpenPantryShelfScanRequest(), null);
+requestOpenPantryShelfScan('menu');
+assert.equal(consumeOpenPantryShelfScanRequest(), 'menu');
+assert.equal(
+  canSyncForkinatorWebCameraScan({
+    demoMode: false,
+    authReady: true,
+    hasSession: true,
+    plan: 'paid',
+    role: 'member',
+    profileReady: true,
+  }),
+  photoScanAccessState({
+    demoMode: false,
+    authReady: true,
+    hasSession: true,
+    plan: 'paid',
+    role: 'member',
+    profileReady: true,
+  }) === 'allowed',
+);
+assert.equal(
+  canSyncForkinatorWebCameraScan({
+    demoMode: false,
+    authReady: false,
+    hasSession: false,
+    plan: 'paid',
+    role: 'member',
+    profileReady: true,
+  }),
+  false,
+);
 
 const clamped = clampForkinatorPosition({ x: -50, y: 9999 }, bounds390);
 assert.equal(clamped.x, bounds390.insetLeft);
@@ -347,13 +391,32 @@ assert.match(promptSource, /USE_NATIVE_DRIVER/, 'scanner prompt should gate nati
 assert.match(promptSource, /accessibilityRole="button"/);
 assert.match(promptSource, /TailCircles/, 'prompt should use thought-cloud tail circles');
 assert.ok(!promptSource.includes('SpeechPointer'), 'prompt should not use speech triangle pointer');
+assert.match(promptSource, /onCameraPress/, 'scanner prompt supports camera button');
+assert.match(promptSource, /FORKINATOR_SCANNER_CAMERA_BUTTON_LABEL/, 'camera pill label in prompt');
+assert.match(promptSource, /FORKINATOR_SCANNER_CAMERA_BUTTON_A11Y_LABEL/, 'camera button a11y');
 
 const appContextSource = fs.readFileSync(path.join(mobileRoot, 'context/AppContext.tsx'), 'utf8');
 assert.match(appContextSource, /markForkinatorPantryScanCompleted/, 'scan review save should set hasScanned');
 
 const pantrySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/pantry.tsx'), 'utf8');
 assert.match(pantrySource, /consumeOpenPantryShelfScanRequest/, 'pantry should honor Forkinator scan requests');
-assert.match(pantrySource, /autoOpenSourceMenu/, 'pantry should auto-open scan entry');
+assert.match(pantrySource, /autoOpenScanMode/, 'pantry should auto-open scan menu or camera');
+const scanButtonsWeb = fs.readFileSync(
+  path.join(mobileRoot, 'components/PantryStorageScanButtons.web.tsx'),
+  'utf8',
+);
+assert.ok(
+  !/autoOpenScanMode === 'camera'/.test(scanButtonsWeb),
+  'web should not open camera from post-navigation effect',
+);
+assert.match(scanButtonsWeb, /setSourceMenuOpen\(true\)/, 'web auto-open shows source menu only');
+assert.match(overlaySource, /pickWebImageFile/, 'web scan now opens camera picker in tap handler');
+assert.match(overlaySource, /openPantryWithWebShelfScanFile/, 'web hands picked file to pantry');
+assert.match(overlaySource, /canSyncForkinatorWebCameraScan/, 'web falls back when gate not sync-ready');
+assert.match(pantrySource, /consumePantryWebShelfScanFile/, 'pantry consumes web shelf scan handoff');
+assert.match(overlaySource, /openPantryCameraScanFromForkinator/, 'scanner prompt camera button opens camera mode');
+assert.match(overlaySource, /includeCameraButton: true/, 'scanner prompt layout reserves button space');
+assert.equal((overlaySource.match(/onCameraPress/g) ?? []).length, 1, 'only scanner prompt gets camera button');
 
 const accountSource = fs.readFileSync(path.join(mobileRoot, 'components/account/AccountSheet.tsx'), 'utf8');
 assert.ok(!/Forkinator/i.test(accountSource), 'Account settings should not include Forkinator toggle');

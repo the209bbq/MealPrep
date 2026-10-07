@@ -60,6 +60,7 @@ import { createScanSessionId } from '../../lib/scanCorrections/session';
 import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
 import {
   consumeOpenPantryShelfScanRequest,
+  consumePantryWebShelfScanFile,
   subscribeOpenPantryShelfScan,
 } from '../../lib/pantry/openShelfScanRequest';
 import { readJson, writeJson } from '../../lib/storage';
@@ -177,16 +178,40 @@ export default function PantryScreen() {
     readPantryStaplesPromptDismissed(),
   );
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
-  const [autoOpenScanSourceMenu, setAutoOpenScanSourceMenu] = useState(false);
+  const [autoOpenScanMode, setAutoOpenScanMode] = useState<'menu' | 'camera' | null>(null);
   const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
   const pantryScanUploadRef = useRef<Promise<string | null> | null>(null);
   const scanSessionIdRef = useRef<string | null>(null);
   const aiBaselineRef = useRef<Map<string, { aiName: string }>>(new Map());
 
+  async function processWebShelfScanFile(file: File) {
+    const scanLocation = readLastPantryScanLocation();
+    try {
+      const { preparePantryImageFromFile } = await import('../../lib/pantryVision/prepareImage.web');
+      const prepared = await preparePantryImageFromFile(file);
+      setScanLocationHint(scanLocation);
+      await runVisionFromPrepared(prepared, scanLocation);
+    } catch (error) {
+      if (error instanceof PantryImageQualityError && error.reason === 'blank') {
+        handleWebPrepareError(error.message);
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Could not prepare photo';
+      handleWebPrepareError(message);
+    }
+  }
+
   const tryConsumeShelfScanRequest = useCallback(() => {
-    if (!consumeOpenPantryShelfScanRequest()) return;
+    const webFile = consumePantryWebShelfScanFile();
+    if (webFile) {
+      if (phase !== 'idle') return;
+      void processWebShelfScanFile(webFile);
+      return;
+    }
+    const mode = consumeOpenPantryShelfScanRequest();
+    if (!mode) return;
     if (phase !== 'idle') return;
-    setAutoOpenScanSourceMenu(true);
+    setAutoOpenScanMode(mode);
   }, [phase]);
 
   useFocusEffect(
@@ -889,8 +914,8 @@ export default function PantryScreen() {
                 }}
                 onRequestNativeScan={(_location, source) => void handleNativeScan(source)}
                 onRequestSignIn={openAuthSheet}
-                autoOpenSourceMenu={autoOpenScanSourceMenu}
-                onAutoOpenSourceMenuHandled={() => setAutoOpenScanSourceMenu(false)}
+                autoOpenScanMode={autoOpenScanMode}
+                onAutoOpenScanHandled={() => setAutoOpenScanMode(null)}
               />
 
               {featureFlags.photoScan ? <PantryScanTip className="mt-2" /> : null}

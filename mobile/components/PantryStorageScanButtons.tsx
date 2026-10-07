@@ -23,17 +23,17 @@ export interface PantryStorageScanButtonsProps {
   onRequestNativeScan: (location: PantryStorageLocation, source: 'camera' | 'library') => void;
   onRequestSignIn?: () => void;
   scanLocation: PantryStorageLocation;
-  /** When true, open the same source menu as tapping Scan shelf (one-shot). */
-  autoOpenSourceMenu?: boolean;
-  onAutoOpenSourceMenuHandled?: () => void;
+  /** One-shot: open source menu or launch camera when pantry focuses. */
+  autoOpenScanMode?: 'menu' | 'camera' | null;
+  onAutoOpenScanHandled?: () => void;
 }
 
 export function PantryStorageScanButtons({
   disabled,
   onRequestNativeScan,
   scanLocation,
-  autoOpenSourceMenu,
-  onAutoOpenSourceMenuHandled,
+  autoOpenScanMode,
+  onAutoOpenScanHandled,
 }: PantryStorageScanButtonsProps) {
   function openSourceMenu() {
     Alert.alert(PANTRY_SCAN_UI_COPY.choosePhotoSourceTitle, PANTRY_SCAN_UI_COPY.choosePhotoSourceMessage, [
@@ -50,10 +50,14 @@ export function PantryStorageScanButtons({
   }
 
   useEffect(() => {
-    if (!autoOpenSourceMenu || disabled) return;
-    onAutoOpenSourceMenuHandled?.();
+    if (!autoOpenScanMode || disabled) return;
+    onAutoOpenScanHandled?.();
+    if (autoOpenScanMode === 'camera') {
+      onRequestNativeScan(scanLocation, 'camera');
+      return;
+    }
     openSourceMenu();
-  }, [autoOpenSourceMenu, disabled, onAutoOpenSourceMenuHandled, scanLocation]);
+  }, [autoOpenScanMode, disabled, onAutoOpenScanHandled, onRequestNativeScan, scanLocation]);
 
   return (
     <View className="mt-3">
