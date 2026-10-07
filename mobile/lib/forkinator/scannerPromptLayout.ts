@@ -42,6 +42,7 @@ export type ScannerPromptLayoutInput = {
   insetLeft: number;
   message?: string;
   includeCameraButton?: boolean;
+  includeActionButton?: boolean;
 };
 
 function estimateMessageLineCount(message: string, contentWidth: number): number {
@@ -54,6 +55,7 @@ export function scannerPromptBodySize(
   screenInnerWidth: number,
   message: string = FORKINATOR_SCANNER_NUDGE_MESSAGE,
   includeCameraButton = false,
+  includeActionButton = includeCameraButton,
 ): {
   bodyWidth: number;
   bodyHeight: number;
@@ -66,7 +68,7 @@ export function scannerPromptBodySize(
   const contentWidth = bodyWidth - SCANNER_PROMPT_HORIZONTAL_PADDING * 2;
   const lines = estimateMessageLineCount(message, contentWidth);
   const textHeight = lines * SCANNER_PROMPT_LINE_HEIGHT;
-  const buttonBlock = includeCameraButton ? SCANNER_PROMPT_CAMERA_BUTTON_BLOCK_HEIGHT : 0;
+  const buttonBlock = includeActionButton ? SCANNER_PROMPT_CAMERA_BUTTON_BLOCK_HEIGHT : 0;
   const bodyHeight = textHeight + SCANNER_PROMPT_VERTICAL_PADDING * 2 + buttonBlock;
   return { bodyWidth, bodyHeight };
 }
@@ -77,12 +79,13 @@ export function scannerPromptFootprint(input: {
   insetRight: number;
   message?: string;
   includeCameraButton?: boolean;
+  includeActionButton?: boolean;
 }): { width: number; height: number; bodyWidth: number; bodyHeight: number } {
   const screenInnerWidth = input.screenWidth - input.insetLeft - input.insetRight;
   const { bodyWidth, bodyHeight } = scannerPromptBodySize(
     screenInnerWidth,
     input.message,
-    input.includeCameraButton,
+    input.includeActionButton ?? input.includeCameraButton,
   );
   const tailBlock = THINKING_BUBBLE_TAIL_HEIGHT + THINKING_BUBBLE_TAIL_GAP;
   return {
@@ -101,7 +104,7 @@ export function layoutScannerPrompt(input: ScannerPromptLayoutInput): ScannerPro
       insetLeft: input.insetLeft,
       insetRight: input.insetRight,
       message,
-      includeCameraButton: input.includeCameraButton,
+      includeActionButton: input.includeActionButton ?? input.includeCameraButton,
     });
   const mascotCenterX = input.mascotX + input.mascotWidth / 2;
 

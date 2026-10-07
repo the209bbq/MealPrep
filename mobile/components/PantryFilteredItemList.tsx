@@ -11,18 +11,29 @@ interface PantryFilteredItemListProps {
   items: PantryItem[];
   categoryFilter: PantryCategory | 'all';
   locationFilter: PantryStorageLocation | 'all';
+  highlightItemIds?: ReadonlySet<string>;
   onPressItem: (item: PantryItem) => void;
   onResetFilters?: () => void;
 }
 
-function PantryItemRow({ item, onPress }: { item: PantryItem; onPress: () => void }) {
+function PantryItemRow({
+  item,
+  highlighted,
+  onPress,
+}: {
+  item: PantryItem;
+  highlighted: boolean;
+  onPress: () => void;
+}) {
   const expiryLabel = formatPantryExpiryShort(item.expiresOn);
   const expired = isPantryItemExpired(item);
   const soon = !expired && isExpiringSoon(item);
   return (
     <Pressable
       onPress={onPress}
-      className="mb-2 rounded-xl border border-border bg-paper px-3 py-3"
+      className={`mb-2 rounded-xl border bg-paper px-3 py-3 ${
+        highlighted ? 'border-primary border-2' : 'border-border'
+      }`}
     >
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-2">
@@ -49,6 +60,7 @@ export function PantryFilteredItemList({
   items,
   categoryFilter,
   locationFilter,
+  highlightItemIds,
   onPressItem,
   onResetFilters,
 }: PantryFilteredItemListProps) {
@@ -95,7 +107,12 @@ export function PantryFilteredItemList({
                   {group.label}
                 </Text>
                 {group.items.map((item) => (
-                  <PantryItemRow key={item.id} item={item} onPress={() => onPressItem(item)} />
+                  <PantryItemRow
+                    key={item.id}
+                    item={item}
+                    highlighted={highlightItemIds?.has(item.id) ?? false}
+                    onPress={() => onPressItem(item)}
+                  />
                 ))}
               </View>
             ))}

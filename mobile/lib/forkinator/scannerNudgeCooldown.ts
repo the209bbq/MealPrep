@@ -41,16 +41,5 @@ export function shouldAutoShowForkinatorScannerPrompt(
   return shouldShowForkinatorScannerNudge(hasScanned, nowMs, lastShownAtMs);
 }
 
-export type ForkinatorMascotTapAction =
-  | 'dismissGreetingPrompt'
-  | 'dismissScannerPrompt'
-  | 'toggleThinkingBubble';
-
-export function resolveForkinatorMascotTapAction(
-  greetingPromptVisible: boolean,
-  scannerPromptVisible: boolean,
-): ForkinatorMascotTapAction {
-  if (greetingPromptVisible) return 'dismissGreetingPrompt';
-  if (scannerPromptVisible) return 'dismissScannerPrompt';
-  return 'toggleThinkingBubble';
-}
+export type { ForkinatorMascotTapAction } from './forkinatorPromptTap';
+export { resolveForkinatorMascotTapAction } from './forkinatorPromptTap';
