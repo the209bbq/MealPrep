@@ -30,15 +30,21 @@ import { localDateString } from '../../lib/mealCalendar/dates';
 import { countUpcomingScheduledMeals } from '../../lib/mealCalendar/groupMeals';
 import { MEAL_CALENDAR } from '../../config/mealCalendar';
 import { useGroceryCommunityDealBadges } from '../../lib/communityDeals/useCommunityDeals';
+import { buildGroceryRecipeNameById, groceryRecipeSourceLabels } from '../../lib/grocery/recipeLabels';
 import { PANTRY_CATEGORIES, type PantryCategory } from '../../types/mealprep';
 
 export default function GroceryScreen() {
   const {
     grocery,
     feedKitchenRecipes,
+    catalogKitchenRecipes,
+    recipes,
+    savedRecipes,
+    pantryRecipeMatches,
+    mealPlan,
+    session,
     toggleGroceryItem,
     toggleGroceryItemsChecked,
-    mealPlan,
     featureFlags,
     refreshGrocery,
     addManualGroceryItem,
@@ -58,6 +64,7 @@ export default function GroceryScreen() {
   const [aisleTouched, setAisleTouched] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [addError, setAddError] = useState<{ title: string; message: string } | null>(null);
+  const [addSaving, setAddSaving] = useState(false);
   const [combineList, setCombineList] = useState(() => readGroceryCombinePreference());
   const [expandedMealHintKey, setExpandedMealHintKey] = useState<string | null>(null);
 
@@ -88,15 +95,29 @@ export default function GroceryScreen() {
   const openItemIds = useMemo(() => open.map((g) => g.id), [open]);
   const { badges: communityBadges } = useGroceryCommunityDealBadges(openItemIds, grocery);
 
-  const recipeNameById = useMemo(() => {
-    return new Map(feedKitchenRecipes.map((r) => [r.id, r.name]));
-  }, [feedKitchenRecipes]);
+  const recipeNameById = useMemo(
+    () =>
+      buildGroceryRecipeNameById({
+        recipes: [...feedKitchenRecipes, ...catalogKitchenRecipes, ...recipes],
+        pantryMatches: pantryRecipeMatches,
+        savedRecords: savedRecipes.records,
+        mealPlan,
+        mealPlanRecipes: feedKitchenRecipes,
+        ownerId: session?.user?.id ?? '',
+      }),
+    [
+      catalogKitchenRecipes,
+      feedKitchenRecipes,
+      mealPlan,
+      pantryRecipeMatches,
+      recipes,
+      savedRecipes.records,
+      session?.user?.id,
+    ],
+  );
 
   function recipeLabelFor(item: (typeof grocery)[number]): string {
-    if (item.sourceRecipeIds.length === 0) return '';
-    return item.sourceRecipeIds
-      .map((id) => recipeNameById.get(id) ?? id)
-      .join(', ');
+    return groceryRecipeSourceLabels(item.sourceRecipeIds, recipeNameById);
   }
 
   function handleClearChecked() {
@@ -109,7 +130,7 @@ export default function GroceryScreen() {
     clearCheckedGroceryItems();
   }
 
-  function submitManualItem() {
+  async function submitManualItem() {
     const qty = Number.parseFloat(manualQty);
     if (!manualName.trim()) {
       setAddError({ title: GROCERY_COPY.nameRequiredTitle, message: GROCERY_COPY.nameRequiredMessage });
@@ -120,18 +141,28 @@ export default function GroceryScreen() {
       return;
     }
     const inferred = inferGroceryCategoryFromName(manualName);
-    addManualGroceryItem({
-      name: manualName,
-      quantity: qty,
-      unit: manualUnit.trim() || 'each',
-      category: aisleTouched ? manualCategory : inferred,
-    });
-    setManualName('');
-    setManualQty('1');
-    setManualUnit('each');
-    setAisleTouched(false);
-    setManualCategory(inferGroceryCategoryFromName(''));
-    setAddOpen(false);
+    setAddSaving(true);
+    try {
+      await addManualGroceryItem({
+        name: manualName,
+        quantity: qty,
+        unit: manualUnit.trim() || 'each',
+        category: aisleTouched ? manualCategory : inferred,
+      });
+      setManualName('');
+      setManualQty('1');
+      setManualUnit('each');
+      setAisleTouched(false);
+      setManualCategory(inferGroceryCategoryFromName(''));
+      setAddOpen(false);
+    } catch (error) {
+      setAddError({
+        title: 'Could not add item',
+        message: error instanceof Error ? error.message : 'Failed to add grocery item',
+      });
+    } finally {
+      setAddSaving(false);
+    }
   }
 
   const progressPct = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
@@ -433,7 +464,11 @@ export default function GroceryScreen() {
               <Pressable onPress={() => setAddOpen(false)} className="flex-1 rounded-2xl border border-border py-3">
                 <Text className="text-center font-bold text-slate">{GROCERY_COPY.cancel}</Text>
               </Pressable>
-              <Pressable onPress={submitManualItem} className="flex-1 rounded-2xl bg-primary py-3">
+              <Pressable
+                disabled={addSaving}
+                onPress={() => void submitManualItem()}
+                className={`flex-1 rounded-2xl bg-primary py-3 ${addSaving ? 'opacity-50' : ''}`}
+              >
                 <Text className="text-center font-bold text-on-primary">{GROCERY_COPY.addToList}</Text>
               </Pressable>
             </View>

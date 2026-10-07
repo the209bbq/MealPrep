@@ -42,6 +42,18 @@ import {
   reverseGroceryCheckRestock,
 } from '../lib/grocery/restockLedger';
 import { bumpGroceryPersistGeneration, enqueueGroceryPersist } from '../lib/grocery/persistQueue';
+import {
+  cancelManualGroceryInsert,
+  completeManualGroceryInsertTracking,
+  createManualGroceryInsertCoordinator,
+  groceryListForServerSync,
+  isManualGroceryInsertCancelled,
+  isManualGroceryLocalId,
+  mergeSavedManualGroceryItem,
+  mergeServerGroceryWithPendingManual,
+  rollbackManualGroceryItem,
+  trackManualGroceryInsert,
+} from '../lib/grocery/manualGroceryInsertLifecycle';
 import { groceryListsEqual } from '../lib/grocery/fingerprint';
 import { buildGroceryList, createManualGroceryItem } from '../lib/grocery';
 import { pruneGroceryForRemovedMeals } from '../lib/grocery/grouping';
@@ -204,6 +216,7 @@ import {
 import { hydrateLocationFromProfile } from '../lib/smartShop/profileLocation';
 import {
   fetchLiveBundle,
+  deleteGroceryItems,
   deleteMealPlanItem,
   insertGroceryItem,
   insertMealPlanItem,
@@ -418,7 +431,12 @@ interface AppContextValue {
   registerSavedRecipeToggleOutcome: (handler: ((outcome: SavedRecipeToggleOutcome) => void) | null) => void;
   toggleGroceryItem: (id: string) => void;
   toggleGroceryItemsChecked: (ids: string[], checked?: boolean) => void;
-  addManualGroceryItem: (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => void;
+  addManualGroceryItem: (input: {
+    name: string;
+    quantity: number;
+    unit: string;
+    category: PantryCategory;
+  }) => Promise<void>;
   clearCheckedGroceryItems: () => void;
   removeGroceryItem: (id: string) => void;
   seedPantry: () => void;
@@ -506,6 +524,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [kitchenError, setKitchenError] = useState<string | null>(null);
   const groceryRestockLedgerRef = useRef(new Map<string, { pantryItemId: string; quantityAdded: number; unit: string }>());
   const pendingManualPantryInsertsRef = useRef(createManualInsertCoordinator());
+  const pendingManualGroceryInsertsRef = useRef(createManualGroceryInsertCoordinator());
   const [session, setSession] = useState<Session | null>(null);
   const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
 
@@ -684,7 +703,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...nextPantry.filter((row) => !insertIds.has(row.id)),
         ];
       }
-      nextGrocery = await replaceGroceryList(supabase, userId, nextGrocery);
+      nextGrocery = await replaceGroceryList(supabase, userId, groceryListForServerSync(nextGrocery));
 
       for (const guestRecipe of guestKitchen.recipes) {
         const recipeApiId = parseRecipeApiNumericId(guestRecipe.id);
@@ -1004,9 +1023,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return next;
         }
+        const toSync = groceryListForServerSync(next);
         void enqueueGroceryPersist(() =>
-          replaceGroceryList(supabase, userId, next).then((persisted) => {
-            setGrocery(persisted);
+          replaceGroceryList(supabase, userId, toSync).then((persisted) => {
+            setGrocery((current) => mergeServerGroceryWithPendingManual(current, persisted));
             return persisted;
           }),
         ).catch((error: unknown) => {
@@ -1321,9 +1341,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return;
         }
+        const toSync = groceryListForServerSync(next);
         void enqueueGroceryPersist(() =>
-          replaceGroceryList(supabase, userId, next).then((persisted) => {
-            setGrocery(persisted);
+          replaceGroceryList(supabase, userId, toSync).then((persisted) => {
+            setGrocery((current) => mergeServerGroceryWithPendingManual(current, persisted));
             return persisted;
           }),
         ).catch((error: unknown) => {
@@ -1458,7 +1479,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
         else if (isGuest) writeGuestGrocery(next);
         else if (supabase && userId) {
-          void enqueueGroceryPersist(() => replaceGroceryList(supabase, userId, next)).catch((error: unknown) => {
+          void enqueueGroceryPersist(() =>
+            replaceGroceryList(supabase, userId, groceryListForServerSync(next)),
+          ).catch((error: unknown) => {
             setKitchenError(error instanceof Error ? error.message : 'Failed to update grocery list');
           });
         }
@@ -2185,28 +2208,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addManualGroceryItem = useCallback(
-    (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => {
+    async (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => {
       const trimmed = input.name.trim();
       if (!trimmed) return;
       const unit = input.unit.trim() || 'each';
       removeGroceryDismissals(ownerId, [groceryManualLineDismissalKey(trimmed, unit)]);
       const item = createManualGroceryItem({ ...input, name: trimmed, unit });
-      setGrocery((prev) => {
-        const next = [...prev, item];
-        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
-        else if (isGuest) writeGuestGrocery(next);
-        if (supabase && userId) {
-          void enqueueGroceryPersist(() => insertGroceryItem(supabase, userId, item))
-            .then((saved) => {
-              if (!saved) return;
-              setGrocery((current) => [...current.filter((g) => g.id !== item.id), saved]);
-            })
-            .catch((error: unknown) => {
-              setKitchenError(error instanceof Error ? error.message : 'Failed to add grocery item');
-            });
+
+      if (demoMode || isGuest) {
+        setGrocery((prev) => {
+          const next = [...prev, item];
+          if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+          else writeGuestGrocery(next);
+          return next;
+        });
+        return;
+      }
+      if (!supabase || !userId) {
+        throw new Error('Sign in to add grocery items.');
+      }
+
+      trackManualGroceryInsert(pendingManualGroceryInsertsRef.current, item.id);
+      setGrocery((prev) => [...prev, item]);
+
+      if (isOffline()) {
+        const cached = readAccountKitchenCache(userId);
+        if (cached) {
+          writeAccountKitchenCache({
+            ...cached,
+            grocery: [...cached.grocery, item],
+            savedAt: new Date().toISOString(),
+          });
         }
-        return next;
-      });
+        return;
+      }
+
+      try {
+        const saved = await insertGroceryItem(supabase, userId, item);
+        const cancelled = isManualGroceryInsertCancelled(pendingManualGroceryInsertsRef.current, item.id);
+        completeManualGroceryInsertTracking(pendingManualGroceryInsertsRef.current, item.id);
+
+        let deleteServerId: string | null = null;
+        setGrocery((prev) => {
+          const merged = mergeSavedManualGroceryItem(prev, item.id, saved, cancelled);
+          deleteServerId = merged.shouldDeleteServerId;
+          if (merged.shouldDeleteServerId) {
+            return prev;
+          }
+          const next = merged.grocery;
+          const cached = readAccountKitchenCache(userId);
+          if (cached) {
+            writeAccountKitchenCache({ ...cached, grocery: next, savedAt: new Date().toISOString() });
+          }
+          return next;
+        });
+
+        if (deleteServerId) {
+          await deleteGroceryItems(supabase, userId, [deleteServerId]);
+        }
+      } catch (error: unknown) {
+        completeManualGroceryInsertTracking(pendingManualGroceryInsertsRef.current, item.id);
+        if (isOffline()) return;
+        setGrocery((prev) => {
+          const next = rollbackManualGroceryItem(prev, item.id);
+          const cached = readAccountKitchenCache(userId);
+          if (cached) {
+            writeAccountKitchenCache({ ...cached, grocery: next, savedAt: new Date().toISOString() });
+          }
+          return next;
+        });
+        throw error instanceof Error ? error : new Error('Failed to add grocery item');
+      }
     },
     [demoMode, isGuest, ownerId, supabase, userId],
   );
@@ -2297,6 +2369,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const removeGroceryItem = useCallback(
     (id: string) => {
+      cancelManualGroceryInsert(pendingManualGroceryInsertsRef.current, id);
       setGrocery((prev) => {
         const removed = prev.find((item) => item.id === id);
         if (!removed) return prev;
