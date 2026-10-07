@@ -9,6 +9,7 @@ import { readJson, writeJson } from '../lib/storage';
 export const PANTRY_LAST_SCAN_LOCATION_STORAGE_KEY = 'mealprep.pantryLastScanLocation';
 
 export const PANTRY_SCAN_UI_COPY = {
+  inventoryCardSubtitle: '🤳 Scan shelves with your camera to add items',
   scanShelf: 'Scan shelf',
   scanShelfA11y: 'Scan shelf with camera or photo library',
   addItems: (count: number) => `Add ${count} item${count === 1 ? '' : 's'}`,
