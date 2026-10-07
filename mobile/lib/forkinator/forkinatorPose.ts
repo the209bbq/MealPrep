@@ -9,11 +9,11 @@ export function resolveForkinatorMascotPose(input: {
   scannerPromptVisible: boolean;
   greetingPromptVisible: boolean;
 }): ForkinatorMascotPose {
-  if (input.thinkingVisible) return 'thinking';
   if (input.forkInRoadPromptVisible) return 'thinking';
   if (input.expirationPromptVisible) return 'sad';
   if (input.restockPromptVisible) return 'idea';
   if (input.aisleSortPromptVisible) return 'idea';
   if (input.scannerPromptVisible && !input.greetingPromptVisible) return 'idea';
+  if (input.thinkingVisible) return 'thinking';
   return 'full';
 }

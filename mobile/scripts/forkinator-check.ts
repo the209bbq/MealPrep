@@ -19,8 +19,10 @@ import {
 import {
   FORKINATOR_HIT_HEIGHT_PX,
   FORKINATOR_HIT_INSET_LEFT_PX,
+  FORKINATOR_HIT_INSET_TOP_PX,
   FORKINATOR_HIT_WIDTH_PX,
 } from '../lib/forkinator/hitArea';
+import { FORKINATOR_TAB_BAR_HEIGHT_PX } from '../lib/forkinator/forkinatorTabBar';
 import {
   clampForkinatorPosition,
   defaultForkinatorPosition,
@@ -218,12 +220,21 @@ assert.equal(
 assert.equal(
   resolveForkinatorMascotPose({
     ...poseBase,
-    thinkingVisible: true,
     expirationPromptVisible: true,
+    thinkingVisible: true,
     aisleSortPromptVisible: true,
     scannerPromptVisible: true,
   }),
-  'thinking',
+  'sad',
+);
+assert.equal(
+  resolveForkinatorMascotPose({
+    ...poseBase,
+    thinkingVisible: true,
+    scannerPromptVisible: true,
+  }),
+  'idea',
+  'auto prompt pose beats manual thinking bubble',
 );
 assert.equal(
   resolveForkinatorMascotPose({
@@ -281,9 +292,17 @@ assert.ok(
 const expectedDefaultY390 =
   bounds390.height -
   bounds390.insetBottom -
-  bounds390.mascotHeight -
+  FORKINATOR_TAB_BAR_HEIGHT_PX -
+  FORKINATOR_HIT_INSET_TOP_PX -
+  FORKINATOR_HIT_HEIGHT_PX -
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
-assert.equal(default390.y, expectedDefaultY390, 'default should sit above the tab bar');
+assert.equal(default390.y, expectedDefaultY390, 'default should clear tab bar hit area');
+const hitBottom390 =
+  default390.y + FORKINATOR_HIT_INSET_TOP_PX + FORKINATOR_HIT_HEIGHT_PX;
+assert.ok(
+  hitBottom390 <= bounds390.height - bounds390.insetBottom - FORKINATOR_TAB_BAR_HEIGHT_PX,
+  'mascot hit area must not overlap tab bar at 390',
+);
 assert.ok(
   default390.y > 500,
   'default should be in the lower screen (avoids mid-screen controls)',
@@ -450,7 +469,7 @@ assert.equal(
 
 const clamped = clampForkinatorPosition({ x: -50, y: 9999 }, bounds390);
 assert.equal(clamped.x, bounds390.insetLeft);
-assert.equal(clamped.y, bounds390.height - bounds390.insetBottom - bounds390.mascotHeight);
+assert.equal(clamped.y, expectedDefaultY390, 'clamp should respect tab bar and hit area');
 
 assert.equal(FORKINATOR_POSITION_STORAGE_KEY, 'mealprep.forkinator.position');
 assert.equal(FORKINATOR_HAS_SCANNED_STORAGE_KEY, 'mealprep.forkinator.hasScanned');
@@ -513,6 +532,7 @@ assert.equal(
 
 const overlaysSource = fs.readFileSync(path.join(mobileRoot, 'components/AppOverlays.tsx'), 'utf8');
 assert.match(overlaysSource, /ForkinatorOverlay/, 'Forkinator should mount from AppOverlays');
+assert.match(overlaysSource, /MealMadeReviewOverlay/);
 assert.match(overlaysSource, /pointerEvents="box-none"/, 'overlay root should not steal touches');
 
 const forkinatorDir = path.join(mobileRoot, 'components/forkinator');
@@ -528,6 +548,7 @@ assert.match(overlaySource, /accessibilityHint=\{FORKINATOR_ACCESSIBILITY_HINT\}
 assert.match(overlaySource, /forkinatorDragSurfaceWebStyle/, 'web drag surface should disable browser gestures');
 assert.match(overlaySource, /draggable: false/, 'mascot image should not be natively draggable on web');
 assert.match(overlaySource, /onPointerDown/, 'web should use pointer events for drag');
+assert.match(overlaySource, /onClick/, 'web should activate mascot on plain click for a11y');
 assert.match(overlaySource, /FORKINATOR_HIT_WIDTH_PX/, 'touch target should use reduced hit area');
 assert.match(overlaySource, /onKeyDown/, 'web keyboard should activate mascot');
 assert.match(overlaySource, /handleMascotActivate/, 'keyboard and tap share mascot activation');
@@ -539,7 +560,7 @@ assert.match(overlaySource, /const mascotReady = position !== null && width > 0 
 assert.match(overlaySource, /autoShowPromptTimerRef/, 'auto-show timer stored in ref');
 assert.match(
   overlaySource,
-  /autoShowScheduledRef\.current = true[\s\S]*?\}, \[mascotReady, pantry\]\)/,
+  /kitchenPantryReady[\s\S]*?\}, \[kitchenPantryReady, mascotReady, pantry, showAutoPrompt\]\)/,
   'auto-show effect must not depend on position',
 );
 assert.doesNotMatch(
@@ -593,6 +614,8 @@ assert.match(
   /scoreRecipeForPantryDeduction/,
   'meal made should score staples for pantry deduction',
 );
+assert.match(appContextSource, /kitchenPantryReady/);
+assert.match(appContextSource, /startMealMadeReview/);
 
 const grocerySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/grocery.tsx'), 'utf8');
 const pantrySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/pantry.tsx'), 'utf8');

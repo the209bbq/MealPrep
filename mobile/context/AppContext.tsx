@@ -323,14 +323,16 @@ interface UndoToastState {
 }
 
 interface MealMadeUndoState {
-  mealPlanItemId: string;
-  previousMeal: MealPlanItem;
+  mealPlanItemId: string | null;
+  previousMeal: MealPlanItem | null;
   pantrySnapshot: PantryItem[];
   deductionLines: PantryDeductionLine[];
 }
 
 interface MealMadeReviewState {
-  mealPlanItemId: string;
+  mealPlanItemId: string | null;
+  recipeId: string;
+  pendingCookEngagement: CookConfirmPromptState | null;
   selectedPantryIds: Set<string>;
 }
 
@@ -396,6 +398,8 @@ interface AppContextValue {
   declineCookConfirmPrompt: () => void;
   dismissCookConfirmPrompt: () => void;
   cookConfirmBusy: boolean;
+  /** Pantry/grocery hydration complete for Forkinator and guest kitchen. */
+  kitchenPantryReady: boolean;
   isOnMealPlan: (options: { recipeSlug?: string; recipeApiId?: number }) => boolean;
   scheduleMealFromRecipe: (input: {
     recipeId: string;
@@ -1510,23 +1514,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [demoMode, isGuest, mealPlan, supabase, userId],
   );
 
-  const openMealMadeReview = useCallback(
-    (mealPlanItemId: string) => {
-      const item = mealPlan.find((row) => row.id === mealPlanItemId);
-      if (!item || item.made) return;
-
-      const recipeId = resolveMealPlanRecipeId(item, feedKitchenRecipes, ownerId);
-      const recipe = recipeId ? feedKitchenRecipes.find((r) => r.id === recipeId) : undefined;
+  const startMealMadeReview = useCallback(
+    (
+      recipeId: string,
+      mealPlanItemId: string | null,
+      pendingCookEngagement: CookConfirmPromptState | null,
+    ) => {
+      const recipe = feedKitchenRecipes.find((row) => row.id === recipeId);
       if (!recipe) return;
+      if (mealPlanItemId) {
+        const item = mealPlan.find((row) => row.id === mealPlanItemId);
+        if (!item || item.made) return;
+      }
 
       const match = scoreRecipeForPantryDeduction(recipe, pantry);
       const rows = matchedRowsForReview(match);
       setMealMadeReview({
         mealPlanItemId,
+        recipeId,
+        pendingCookEngagement,
         selectedPantryIds: new Set(rows.map((row) => row.matchedPantryItem!.id)),
       });
     },
-    [feedKitchenRecipes, mealPlan, ownerId, pantry],
+    [feedKitchenRecipes, mealPlan, pantry],
+  );
+
+  const openMealMadeReview = useCallback(
+    (mealPlanItemId: string) => {
+      const item = mealPlan.find((row) => row.id === mealPlanItemId);
+      if (!item || item.made) return;
+      const recipeId = resolveMealPlanRecipeId(item, feedKitchenRecipes, ownerId);
+      if (!recipeId) return;
+      startMealMadeReview(recipeId, mealPlanItemId, null);
+    },
+    [feedKitchenRecipes, mealPlan, ownerId, startMealMadeReview],
   );
 
   const closeMealMadeReview = useCallback(() => {
@@ -1545,13 +1566,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const undoLastMealMade = useCallback(
     async (mealPlanItemId?: string) => {
-      const targetId = mealPlanItemId ?? mealMadeUndo?.mealPlanItemId;
-      if (!targetId || !mealMadeUndo || mealMadeUndo.mealPlanItemId !== targetId) return;
+      if (!mealMadeUndo) return;
+      const targetId = mealPlanItemId ?? mealMadeUndo.mealPlanItemId;
+      if (
+        targetId != null &&
+        mealMadeUndo.mealPlanItemId != null &&
+        mealMadeUndo.mealPlanItemId !== targetId
+      ) {
+        return;
+      }
 
       const { previousMeal, pantrySnapshot, deductionLines } = mealMadeUndo;
 
       setPantry(pantrySnapshot);
-      setMealPlan((prev) => prev.map((row) => (row.id === targetId ? previousMeal : row)));
+      if (targetId && previousMeal) {
+        setMealPlan((prev) => prev.map((row) => (row.id === targetId ? previousMeal : row)));
+      }
       setMealMadeUndo(null);
       setUndoToast(null);
 
@@ -1572,10 +1602,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             }
           }
-          await updateMealPlanItem(supabase, userId, targetId, {
-            made: previousMeal.made,
-            madeAt: previousMeal.madeAt,
-          });
+          if (targetId && previousMeal) {
+            await updateMealPlanItem(supabase, userId, targetId, {
+              made: previousMeal.made,
+              madeAt: previousMeal.madeAt,
+            });
+          }
         } catch (error: unknown) {
           setAuthError(error instanceof Error ? error.message : 'Failed to undo');
         }
@@ -1586,15 +1618,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const confirmMealMade = useCallback(async () => {
     if (!mealMadeReview) return;
-    const item = mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId);
-    if (!item) {
+    const recipe = feedKitchenRecipes.find((row) => row.id === mealMadeReview.recipeId);
+    if (!recipe) {
       setMealMadeReview(null);
       return;
     }
-
-    const recipeId = resolveMealPlanRecipeId(item, feedKitchenRecipes, ownerId);
-    const recipe = recipeId ? feedKitchenRecipes.find((r) => r.id === recipeId) : undefined;
-    if (!recipe) {
+    const item = mealMadeReview.mealPlanItemId
+      ? mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)
+      : null;
+    if (mealMadeReview.mealPlanItemId && !item) {
       setMealMadeReview(null);
       return;
     }
@@ -1615,18 +1647,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const pantrySnapshot = pantry.map((row) => ({ ...row }));
     const { nextPantry } = applyPantryDeductions(pantry, lines);
     const madeAt = new Date().toISOString();
-    const previousMeal = { ...item };
+    const previousMeal = item ? { ...item } : null;
+    const pendingCook = mealMadeReview.pendingCookEngagement;
 
     setMealMadeBusy(true);
     try {
       setPantry(nextPantry);
-      setMealPlan((prev) =>
-        prev.map((row) =>
-          row.id === item.id ? { ...row, made: true, madeAt } : row,
-        ),
-      );
+      if (item) {
+        setMealPlan((prev) =>
+          prev.map((row) =>
+            row.id === item.id ? { ...row, made: true, madeAt } : row,
+          ),
+        );
+      }
       setMealMadeUndo({
-        mealPlanItemId: item.id,
+        mealPlanItemId: item?.id ?? null,
         previousMeal,
         pantrySnapshot,
         deductionLines: lines,
@@ -1641,15 +1676,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             await deletePantryItemsByIds(supabase, userId, [line.pantryItemId]);
           }
         }
-        await updateMealPlanItem(supabase, userId, item.id, { made: true, madeAt });
+        if (item) {
+          await updateMealPlanItem(supabase, userId, item.id, { made: true, madeAt });
+        }
+      }
+
+      if (pendingCook) {
+        logCookEngagement(pendingCook, 'cook_confirmed');
+        markCookPromptAsked(ownerId, pendingCook.key);
+        setCookConfirmPrompt(null);
       }
 
       setMealMadeReview(null);
+      const toastTitle = item?.title ?? recipe.name;
       setUndoToast({
-        message: `Marked “${item.title}” as made`,
+        message: item ? `Marked “${toastTitle}” as made` : SEAMLESS_FLOW_COPY.pantryUpdatedToast,
         onUndo: () => {
-          void undoLastMealMade(item.id);
+          void undoLastMealMade(item?.id ?? undefined);
         },
+        showUndo: Boolean(item),
       });
 
       if (lines.some((line) => line.quantityApplied)) {
@@ -1661,7 +1706,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error: unknown) {
       setAuthError(error instanceof Error ? error.message : 'Failed to mark meal as made');
       setPantry(pantrySnapshot);
-      setMealPlan((prev) => prev.map((row) => (row.id === item.id ? previousMeal : row)));
+      if (item && previousMeal) {
+        setMealPlan((prev) => prev.map((row) => (row.id === item.id ? previousMeal : row)));
+      }
     } finally {
       setMealMadeBusy(false);
     }
@@ -1771,83 +1818,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const confirmCookConfirmPrompt = useCallback(async () => {
     if (!cookConfirmPrompt) return;
     const prompt = cookConfirmPrompt;
-
     const recipe = feedKitchenRecipes.find((row) => row.id === prompt.recipeId);
     if (!recipe) {
       dismissCookConfirmPrompt();
       return;
     }
-
-    const match = scoreRecipeForPantryDeduction(recipe, pantry);
-    const lines = buildPantryDeductionLines(
-      match,
-      recipe,
-      servingOverrides,
-      new Set(),
-      profile.householdSize,
-    );
-    const pantrySnapshot = pantry.map((row) => ({ ...row }));
-    const { nextPantry } = applyPantryDeductions(pantry, lines);
-    const madeAt = new Date().toISOString();
-
-    setCookConfirmBusy(true);
-    try {
-      setPantry(nextPantry);
-      if (prompt.mealPlanItemId) {
-        setMealPlan((prev) =>
-          prev.map((row) =>
-            row.id === prompt.mealPlanItemId ? { ...row, made: true, madeAt } : row,
-          ),
-        );
-      }
-
-      if (!demoMode && supabase && userId) {
-        for (const line of lines) {
-          const updated = nextPantry.find((row) => row.id === line.pantryItemId);
-          if (updated) {
-            await updatePantryItem(supabase, userId, updated);
-          } else {
-            await deletePantryItemsByIds(supabase, userId, [line.pantryItemId]);
-          }
-        }
-        if (prompt.mealPlanItemId) {
-          await updateMealPlanItem(supabase, userId, prompt.mealPlanItemId, { made: true, madeAt });
-        }
-      }
-
-      logCookEngagement(prompt, 'cook_confirmed');
-      markCookPromptAsked(ownerId, prompt.key);
-      setCookConfirmPrompt(null);
-      setUndoToast({
-        message: SEAMLESS_FLOW_COPY.pantryUpdatedToast,
-        onUndo: () => setUndoToast(null),
-        showUndo: false,
-      });
-    } catch (error: unknown) {
-      setAuthError(error instanceof Error ? error.message : 'Failed to update pantry');
-      setPantry(pantrySnapshot);
-    } finally {
-      setCookConfirmBusy(false);
-    }
-  }, [
-    cookConfirmPrompt,
-    demoMode,
-    dismissCookConfirmPrompt,
-    feedKitchenRecipes,
-    logCookEngagement,
-    ownerId,
-    pantry,
-    profile.householdSize,
-    servingOverrides,
-    supabase,
-    userId,
-  ]);
+    startMealMadeReview(prompt.recipeId, prompt.mealPlanItemId, prompt);
+    setCookConfirmPrompt(null);
+  }, [cookConfirmPrompt, dismissCookConfirmPrompt, feedKitchenRecipes, startMealMadeReview]);
 
   useEffect(() => {
     if (cookConfirmPrompt) {
-      const stillPlanned = mealPlan.some((row) => row.id === cookConfirmPrompt.mealPlanItemId);
-      if (!stillPlanned) {
-        setCookConfirmPrompt(null);
+      if (cookConfirmPrompt.mealPlanItemId) {
+        const stillPlanned = mealPlan.some((row) => row.id === cookConfirmPrompt.mealPlanItemId);
+        if (!stillPlanned) {
+          setCookConfirmPrompt(null);
+        }
       }
       return;
     }
@@ -3069,20 +3055,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const kitchenPantryReady =
+    demoMode || (userId ? liveDataLoaded : guestKitchenHydrated);
+
   const mealMadeReviewTitle = useMemo(() => {
     if (!mealMadeReview) return null;
-    return mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)?.title ?? null;
-  }, [mealMadeReview, mealPlan]);
+    if (mealMadeReview.mealPlanItemId) {
+      const fromPlan = mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId)?.title;
+      if (fromPlan) return fromPlan;
+    }
+    return feedKitchenRecipes.find((row) => row.id === mealMadeReview.recipeId)?.name ?? null;
+  }, [feedKitchenRecipes, mealMadeReview, mealPlan]);
 
   const mealMadeReviewRows = useMemo(() => {
     if (!mealMadeReview) return [];
-    const item = mealPlan.find((row) => row.id === mealMadeReview.mealPlanItemId);
-    if (!item) return [];
-    const recipeId = resolveMealPlanRecipeId(item, feedKitchenRecipes, ownerId);
-    const recipe = recipeId ? feedKitchenRecipes.find((r) => r.id === recipeId) : undefined;
+    const recipe = feedKitchenRecipes.find((row) => row.id === mealMadeReview.recipeId);
     if (!recipe) return [];
     return matchedRowsForReview(scoreRecipeForPantryDeduction(recipe, pantry));
-  }, [feedKitchenRecipes, mealMadeReview, mealPlan, ownerId, pantry]);
+  }, [feedKitchenRecipes, mealMadeReview, pantry]);
 
   const value = useMemo(
     () => ({
@@ -3131,6 +3121,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       declineCookConfirmPrompt,
       dismissCookConfirmPrompt,
       cookConfirmBusy,
+      kitchenPantryReady,
       isOnMealPlan,
       scheduleMealFromRecipe,
       notifyMealScheduled,
@@ -3264,6 +3255,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       declineCookConfirmPrompt,
       dismissCookConfirmPrompt,
       cookConfirmBusy,
+      kitchenPantryReady,
       isOnMealPlan,
       scheduleMealFromRecipe,
       notifyMealScheduled,

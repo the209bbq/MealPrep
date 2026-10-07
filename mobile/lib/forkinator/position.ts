@@ -1,4 +1,9 @@
 import { readJson, writeJson } from '../storage';
+import {
+  FORKINATOR_HIT_HEIGHT_PX,
+  FORKINATOR_HIT_INSET_TOP_PX,
+} from './hitArea';
+import { FORKINATOR_TAB_BAR_HEIGHT_PX } from './forkinatorTabBar';
 
 export const FORKINATOR_POSITION_STORAGE_KEY = 'mealprep.forkinator.position';
 
@@ -27,17 +32,24 @@ export type ForkinatorBounds = {
   mascotHeight: number;
 };
 
+function maxForkinatorPositionY(bounds: ForkinatorBounds): number {
+  return (
+    bounds.height -
+    bounds.insetBottom -
+    FORKINATOR_TAB_BAR_HEIGHT_PX -
+    FORKINATOR_HIT_INSET_TOP_PX -
+    FORKINATOR_HIT_HEIGHT_PX -
+    FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX
+  );
+}
+
 export function defaultForkinatorPosition(bounds: ForkinatorBounds): ForkinatorPosition {
   const x =
     bounds.width -
     bounds.insetRight -
     bounds.mascotWidth -
     FORKINATOR_DEFAULT_RIGHT_INSET_PX;
-  const y =
-    bounds.height -
-    bounds.insetBottom -
-    bounds.mascotHeight -
-    FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
+  const y = maxForkinatorPositionY(bounds);
   return clampForkinatorPosition({ x, y }, bounds);
 }
 
@@ -48,7 +60,7 @@ export function clampForkinatorPosition(
   const minX = bounds.insetLeft;
   const maxX = Math.max(minX, bounds.width - bounds.insetRight - bounds.mascotWidth);
   const minY = bounds.insetTop;
-  const maxY = Math.max(minY, bounds.height - bounds.insetBottom - bounds.mascotHeight);
+  const maxY = Math.max(minY, maxForkinatorPositionY(bounds));
   return {
     x: Math.min(maxX, Math.max(minX, position.x)),
     y: Math.min(maxY, Math.max(minY, position.y)),
