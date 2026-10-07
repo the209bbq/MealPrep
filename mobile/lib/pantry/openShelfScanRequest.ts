@@ -1,5 +1,7 @@
-/** One-shot signal: Pantry screen should open the shelf scan entry when focused. */
-let pendingOpenShelfScan = false;
+/** One-shot signal: Pantry screen should open shelf scan when focused. */
+export type PantryShelfScanOpenMode = 'menu' | 'camera';
+
+let pendingOpenShelfScan: PantryShelfScanOpenMode | null = null;
 
 const listeners = new Set<() => void>();
 
@@ -10,15 +12,16 @@ export function subscribeOpenPantryShelfScan(listener: () => void): () => void {
   };
 }
 
-export function requestOpenPantryShelfScan(): void {
-  pendingOpenShelfScan = true;
+export function requestOpenPantryShelfScan(mode: PantryShelfScanOpenMode = 'menu'): void {
+  pendingOpenShelfScan = mode;
   for (const listener of listeners) {
     listener();
   }
 }
 
-export function consumeOpenPantryShelfScanRequest(): boolean {
-  if (!pendingOpenShelfScan) return false;
-  pendingOpenShelfScan = false;
-  return true;
+export function consumeOpenPantryShelfScanRequest(): PantryShelfScanOpenMode | null {
+  if (!pendingOpenShelfScan) return null;
+  const mode = pendingOpenShelfScan;
+  pendingOpenShelfScan = null;
+  return mode;
 }

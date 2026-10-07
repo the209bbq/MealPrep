@@ -25,7 +25,10 @@ import {
   markForkinatorGreetingShown,
   readForkinatorGreetingShown,
 } from '../../lib/forkinator/greetingShown';
-import { openPantryScannerFromForkinator } from '../../lib/forkinator/openPantryScanner';
+import {
+  openPantryCameraScanFromForkinator,
+  openPantryScannerFromForkinator,
+} from '../../lib/forkinator/openPantryScanner';
 import { readForkinatorHasScanned } from '../../lib/forkinator/hasScanned';
 import {
   FORKINATOR_GREETING_A11Y_LABEL,
@@ -227,6 +230,7 @@ export function ForkinatorOverlay() {
       insetBottom: insets.bottom,
       insetLeft: insets.left,
       message: FORKINATOR_SCANNER_NUDGE_MESSAGE,
+      includeCameraButton: true,
     });
   }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 
@@ -417,6 +421,11 @@ export function ForkinatorOverlay() {
           onPress={() => {
             setScannerPromptVisible(false);
             openPantryScannerFromForkinator();
+          }}
+          onCameraPress={() => {
+            setScannerPromptVisible(false);
+            markForkinatorScannerNudgeShown();
+            openPantryCameraScanFromForkinator();
           }}
         />
       ) : null}

@@ -23,8 +23,8 @@ export function PantryStorageScanButtons({
   contextSession,
   onRequestSignIn,
   scanLocation,
-  autoOpenSourceMenu,
-  onAutoOpenSourceMenuHandled,
+  autoOpenScanMode,
+  onAutoOpenScanHandled,
 }: PantryStorageScanButtonsProps) {
   const [guestGateOpen, setGuestGateOpen] = useState(false);
   const [plusGateOpen, setPlusGateOpen] = useState(false);
@@ -111,13 +111,18 @@ export function PantryStorageScanButtons({
   }
 
   useEffect(() => {
-    if (!autoOpenSourceMenu || disabled) return;
-    onAutoOpenSourceMenuHandled?.();
+    if (!autoOpenScanMode || disabled) return;
+    onAutoOpenScanHandled?.();
     void (async () => {
       const allowed = await runGateCheck();
-      if (allowed) setSourceMenuOpen(true);
+      if (!allowed) return;
+      if (autoOpenScanMode === 'camera') {
+        await onPressPicker('camera');
+        return;
+      }
+      setSourceMenuOpen(true);
     })();
-  }, [autoOpenSourceMenu, disabled, onAutoOpenSourceMenuHandled]);
+  }, [autoOpenScanMode, disabled, onAutoOpenScanHandled]);
 
   return (
     <View className="mt-3">

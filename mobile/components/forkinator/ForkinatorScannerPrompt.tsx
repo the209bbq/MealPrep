@@ -1,8 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, Pressable, Text, View } from 'react-native';
 import { THEME } from '../../config/appConfig';
+import { Ionicons } from '../../lib/icons/Ionicons';
+import {
+  FORKINATOR_SCANNER_CAMERA_BUTTON_A11Y_LABEL,
+  FORKINATOR_SCANNER_CAMERA_BUTTON_LABEL,
+} from '../../lib/forkinator/scannerNudgeCopy';
 import {
   SCANNER_PROMPT_BORDER_RADIUS,
+  SCANNER_PROMPT_CAMERA_BUTTON_HEIGHT,
+  SCANNER_PROMPT_CAMERA_BUTTON_MARGIN_TOP,
   SCANNER_PROMPT_FONT_SIZE,
   SCANNER_PROMPT_HORIZONTAL_PADDING,
   SCANNER_PROMPT_LINE_HEIGHT,
@@ -21,6 +28,7 @@ type ForkinatorScannerPromptProps = {
   message: string;
   accessibilityLabel: string;
   onPress: () => void;
+  onCameraPress?: () => void;
 };
 
 function TailCircles({ placement }: { placement: ScannerPromptPlacement }) {
@@ -61,6 +69,7 @@ export function ForkinatorScannerPrompt({
   message,
   accessibilityLabel,
   onPress,
+  onCameraPress,
 }: ForkinatorScannerPromptProps) {
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -102,25 +111,56 @@ export function ForkinatorScannerPrompt({
   };
 
   const body = (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={bodyStyle}
-    >
-      <Text
-        pointerEvents="none"
-        style={{
-          width: '100%',
-          fontSize: SCANNER_PROMPT_FONT_SIZE,
-          lineHeight: SCANNER_PROMPT_LINE_HEIGHT,
-          color: THEME.ink,
-          textAlign: 'center',
-        }}
+    <View style={bodyStyle}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
       >
-        {message}
-      </Text>
-    </Pressable>
+        <Text
+          pointerEvents="none"
+          style={{
+            width: '100%',
+            fontSize: SCANNER_PROMPT_FONT_SIZE,
+            lineHeight: SCANNER_PROMPT_LINE_HEIGHT,
+            color: THEME.ink,
+            textAlign: 'center',
+          }}
+        >
+          {message}
+        </Text>
+      </Pressable>
+      {onCameraPress ? (
+        <Pressable
+          onPress={onCameraPress}
+          accessibilityRole="button"
+          accessibilityLabel={FORKINATOR_SCANNER_CAMERA_BUTTON_A11Y_LABEL}
+          style={{
+            marginTop: SCANNER_PROMPT_CAMERA_BUTTON_MARGIN_TOP,
+            height: SCANNER_PROMPT_CAMERA_BUTTON_HEIGHT,
+            borderRadius: SCANNER_PROMPT_CAMERA_BUTTON_HEIGHT / 2,
+            backgroundColor: THEME.primary,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            paddingHorizontal: 10,
+          }}
+        >
+          <Ionicons name="camera-outline" size={14} color={THEME.onPrimary} />
+          <Text
+            pointerEvents="none"
+            style={{
+              fontSize: 11,
+              fontWeight: '700',
+              color: THEME.onPrimary,
+            }}
+          >
+            {FORKINATOR_SCANNER_CAMERA_BUTTON_LABEL}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 
   return (

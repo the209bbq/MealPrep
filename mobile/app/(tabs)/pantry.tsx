@@ -177,16 +177,17 @@ export default function PantryScreen() {
     readPantryStaplesPromptDismissed(),
   );
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
-  const [autoOpenScanSourceMenu, setAutoOpenScanSourceMenu] = useState(false);
+  const [autoOpenScanMode, setAutoOpenScanMode] = useState<'menu' | 'camera' | null>(null);
   const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
   const pantryScanUploadRef = useRef<Promise<string | null> | null>(null);
   const scanSessionIdRef = useRef<string | null>(null);
   const aiBaselineRef = useRef<Map<string, { aiName: string }>>(new Map());
 
   const tryConsumeShelfScanRequest = useCallback(() => {
-    if (!consumeOpenPantryShelfScanRequest()) return;
+    const mode = consumeOpenPantryShelfScanRequest();
+    if (!mode) return;
     if (phase !== 'idle') return;
-    setAutoOpenScanSourceMenu(true);
+    setAutoOpenScanMode(mode);
   }, [phase]);
 
   useFocusEffect(
@@ -889,8 +890,8 @@ export default function PantryScreen() {
                 }}
                 onRequestNativeScan={(_location, source) => void handleNativeScan(source)}
                 onRequestSignIn={openAuthSheet}
-                autoOpenSourceMenu={autoOpenScanSourceMenu}
-                onAutoOpenSourceMenuHandled={() => setAutoOpenScanSourceMenu(false)}
+                autoOpenScanMode={autoOpenScanMode}
+                onAutoOpenScanHandled={() => setAutoOpenScanMode(null)}
               />
 
               {featureFlags.photoScan ? <PantryScanTip className="mt-2" /> : null}
