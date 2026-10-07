@@ -12,6 +12,8 @@ interface QueueJob {
   priority: MealDbLookupPriority;
   run: () => Promise<void>;
   signal?: AbortSignal;
+  /** When set, background jobs can be promoted for a later user-visible deduped fetch. */
+  dedupeKey?: string;
 }
 
 const queue: QueueJob[] = [];
@@ -77,7 +79,7 @@ function pumpQueue(): void {
 export function runMealDbLookupTask<T>(
   priority: MealDbLookupPriority,
   task: () => Promise<T>,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; dedupeKey?: string },
 ): Promise<T> {
   const signal = options?.signal;
   if (signal?.aborted) {
@@ -88,6 +90,7 @@ export function runMealDbLookupTask<T>(
     const job: QueueJob = {
       priority,
       signal,
+      dedupeKey: options?.dedupeKey,
       run: async () => {
         if (signal?.aborted) {
           reject(abortError(signal));
@@ -163,6 +166,17 @@ export function beginMealDbUserVisibleLookups(): () => void {
 
 export interface MealDbLookupFetchOptions {
   signal?: AbortSignal;
+  dedupeKey?: string;
+}
+
+/** Promote a queued background lookup so user-visible work sharing its dedupe key can run. */
+export function promoteMealDbLookupDedupeKey(dedupeKey: string): void {
+  for (const job of queue) {
+    if (job.dedupeKey === dedupeKey && job.priority === 'background') {
+      job.priority = 'user-visible';
+    }
+  }
+  pumpQueue();
 }
 
 export async function fetchMealDbLookupWithRetries<T>(
@@ -187,7 +201,7 @@ export async function fetchMealDbLookupWithRetries<T>(
       }
       return null;
     },
-    { signal },
+    { signal, dedupeKey: options?.dedupeKey },
   );
 }
 

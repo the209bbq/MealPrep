@@ -13,7 +13,8 @@ export function sizedCreatorAvatarUrl(
 
   if (trimmed.includes('ggpht.com') || trimmed.includes('yt3.')) {
     if (/=s\d+/i.test(trimmed)) {
-      return trimmed.replace(/=s\d+(-[a-z-]+)?/i, `=s${target}`);
+      // Resize only the =sNNN token; suffixes like -c-k-c0x00ffffff-no-rj contain digits.
+      return trimmed.replace(/=s\d+/i, `=s${target}`);
     }
     const join = trimmed.includes('?') ? '&' : '?';
     return `${trimmed}${join}s${target}`;

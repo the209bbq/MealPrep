@@ -8,6 +8,7 @@ import { phraseMatchesHaystack, haystackForLine } from '../lib/diet/allergenMatc
 import { filterRecipesTabRowsForDietPrefs } from '../lib/diet/filterRows';
 import { userNeedsResolvedMealDbRowsBeforeDisplay } from '../lib/diet/stubSafety';
 import type { UserDietPrefs } from '../lib/diet/types';
+import { RECIPES_COPY } from '../config/recipesCopy';
 import { recipeListShopLine } from '../lib/recipes/recipeListShopLine';
 import { resetMealDbClientCacheForTests } from '../lib/mealdb/client';
 import {
@@ -50,7 +51,8 @@ assert.equal(
     matched: [],
     missing: [],
   }),
-  'Checking pantry…',
+  RECIPES_COPY.recipeCard.previewNoIngredients,
+  'pending rows use pantryMatchPending on the card; shop line is neutral when ingredients are unknown',
 );
 
 resetMealDbClientCacheForTests();

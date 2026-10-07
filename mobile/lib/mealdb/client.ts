@@ -7,6 +7,7 @@ import {
   MEALDB_LOOKUP_SLOT_TIMEOUT_MS,
   type MealDbLookupFetchOptions,
   type MealDbLookupPriority,
+  promoteMealDbLookupDedupeKey,
   resetMealDbLookupSchedulerForTests,
   withMealDbLookupSlotTimeout,
 } from './lookupScheduler';
@@ -32,6 +33,7 @@ const memoryCache = new Map<string, CacheEntry>();
 interface InFlightEntry {
   promise: Promise<unknown>;
   generation: number;
+  priority: MealDbLookupPriority;
 }
 
 const inFlight = new Map<string, InFlightEntry>();
@@ -154,6 +156,10 @@ async function revalidateMealDbFetch<T>(
 
   const existing = inFlight.get(cacheKey);
   if (existing) {
+    if (priority === 'user-visible' && existing.priority === 'background') {
+      existing.priority = 'user-visible';
+      promoteMealDbLookupDedupeKey(cacheKey);
+    }
     const shared = existing.promise as Promise<T | null>;
     if (!signal) return shared;
     const result = await shared;
@@ -168,7 +174,7 @@ async function revalidateMealDbFetch<T>(
           if (signal?.aborted) return Promise.resolve(null);
           return fetchMealDbPath<T>(path, signal);
         },
-        { signal },
+        { signal, dedupeKey: cacheKey },
       )
     : fetchMealDbPath<T>(path)
   )
@@ -183,7 +189,7 @@ async function revalidateMealDbFetch<T>(
       }
     });
 
-  inFlight.set(cacheKey, { promise, generation });
+  inFlight.set(cacheKey, { promise, generation, priority });
   return promise as Promise<T | null>;
 }
 
