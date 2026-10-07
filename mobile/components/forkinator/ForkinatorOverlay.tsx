@@ -1,8 +1,24 @@
 import { Image } from 'expo-image';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  PanResponder,
+  Platform,
+  useWindowDimensions,
+  View,
+  type ViewProps,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotionEnabled } from '../../hooks/useReduceMotionEnabled';
+import {
+  FORKINATOR_ACCESSIBILITY_HINT,
+  FORKINATOR_ACCESSIBILITY_LABEL,
+} from '../../lib/forkinator/a11y';
+import {
+  FORKINATOR_HIT_HEIGHT_PX,
+  FORKINATOR_HIT_INSET_LEFT_PX,
+  FORKINATOR_HIT_INSET_TOP_PX,
+  FORKINATOR_HIT_WIDTH_PX,
+} from '../../lib/forkinator/hitArea';
 import {
   clampForkinatorPosition,
   defaultForkinatorPosition,
@@ -15,9 +31,22 @@ import {
 } from '../../lib/forkinator/position';
 import { isForkinatorTapRelease } from '../../lib/forkinator/tapGesture';
 import { layoutThinkingBubble } from '../../lib/forkinator/thinkingBubbleLayout';
+import {
+  forkinatorDragSurfaceWebStyle,
+  forkinatorMascotImageWebStyle,
+} from '../../lib/forkinator/webTouchStyle';
 import { ForkinatorThinkingBubble } from './ForkinatorThinkingBubble';
 
 const MASCOT_SOURCE = require('../../assets/forkinator/forkinator-full.png');
+const IS_WEB = Platform.OS === 'web';
+
+type PointerTrack = {
+  pointerId: number;
+  startPageX: number;
+  startPageY: number;
+  startedAt: number;
+  maxDistance: number;
+};
 
 export function ForkinatorOverlay() {
   const insets = useSafeAreaInsets();
@@ -28,6 +57,8 @@ export function ForkinatorOverlay() {
   const positionRef = useRef<ForkinatorPosition | null>(null);
   const dragOrigin = useRef<ForkinatorPosition>({ x: 0, y: 0 });
   const pressStartedAt = useRef(0);
+  const pointerTrackRef = useRef<PointerTrack | null>(null);
+  const dragSurfaceRef = useRef<View>(null);
 
   const bounds: ForkinatorBounds = useMemo(
     () => ({
@@ -74,45 +105,153 @@ export function ForkinatorOverlay() {
     });
   }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          pressStartedAt.current = Date.now();
-          const current = positionRef.current ?? defaultForkinatorPosition(bounds);
-          dragOrigin.current = current;
-        },
-        onPanResponderMove: (_event, gesture) => {
-          const base = dragOrigin.current;
-          const next = clampForkinatorPosition(
-            { x: base.x + gesture.dx, y: base.y + gesture.dy },
-            bounds,
-          );
-          setPosition(next);
-        },
-        onPanResponderRelease: (_event, gesture) => {
-          const base = dragOrigin.current;
-          const next = clampForkinatorPosition(
-            { x: base.x + gesture.dx, y: base.y + gesture.dy },
-            bounds,
-          );
-          dragOrigin.current = next;
-          setPosition(next);
-          writeForkinatorPosition(next);
-
-          const durationMs = Date.now() - pressStartedAt.current;
-          if (isForkinatorTapRelease(gesture.dx, gesture.dy, durationMs)) {
-            setThinkingVisible((show) => !show);
-          }
-        },
-        onPanResponderTerminationRequest: () => false,
-      }),
+  const applyDragDelta = useCallback(
+    (dx: number, dy: number) => {
+      const base = dragOrigin.current;
+      const next = clampForkinatorPosition({ x: base.x + dx, y: base.y + dy }, bounds);
+      setPosition(next);
+    },
     [bounds],
   );
 
+  const finishInteraction = useCallback((dx: number, dy: number, durationMs: number) => {
+    const base = dragOrigin.current;
+    const next = clampForkinatorPosition({ x: base.x + dx, y: base.y + dy }, bounds);
+    dragOrigin.current = next;
+    setPosition(next);
+    writeForkinatorPosition(next);
+
+    if (isForkinatorTapRelease(dx, dy, durationMs)) {
+      setThinkingVisible((show) => !show);
+    }
+  }, [bounds]);
+
+  const toggleThinkingBubble = useCallback(() => {
+    setThinkingVisible((show) => !show);
+  }, []);
+
+  const panResponder = useMemo(() => {
+    if (IS_WEB) {
+      return PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: () => false,
+      });
+    }
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        pressStartedAt.current = Date.now();
+        const current = positionRef.current ?? defaultForkinatorPosition(bounds);
+        dragOrigin.current = current;
+      },
+      onPanResponderMove: (_event, gesture) => {
+        applyDragDelta(gesture.dx, gesture.dy);
+      },
+      onPanResponderRelease: (_event, gesture) => {
+        const durationMs = Date.now() - pressStartedAt.current;
+        finishInteraction(gesture.dx, gesture.dy, durationMs);
+      },
+      onPanResponderTerminationRequest: () => false,
+    });
+  }, [applyDragDelta, bounds, finishInteraction]);
+
+  const endPointerInteraction = useCallback(
+    (track: PointerTrack, pageX: number, pageY: number) => {
+      const dx = pageX - track.startPageX;
+      const dy = pageY - track.startPageY;
+      const durationMs = Date.now() - track.startedAt;
+      finishInteraction(dx, dy, durationMs);
+      pointerTrackRef.current = null;
+    },
+    [finishInteraction],
+  );
+
+  const onPointerDown: NonNullable<ViewProps['onPointerDown']> = useCallback((event) => {
+      if (!IS_WEB) return;
+      const native = event.nativeEvent;
+      const pointerId = native.pointerId ?? 0;
+      pressStartedAt.current = Date.now();
+      const current = positionRef.current ?? defaultForkinatorPosition(bounds);
+      dragOrigin.current = current;
+      pointerTrackRef.current = {
+        pointerId,
+        startPageX: native.pageX,
+        startPageY: native.pageY,
+        startedAt: Date.now(),
+        maxDistance: 0,
+      };
+      const node = dragSurfaceRef.current as unknown as {
+        setPointerCapture?: (id: number) => void;
+      } | null;
+      node?.setPointerCapture?.(pointerId);
+      event.preventDefault();
+    },
+  [bounds],
+  );
+
+  const onPointerMove: NonNullable<ViewProps['onPointerMove']> = useCallback((event) => {
+      if (!IS_WEB) return;
+      const track = pointerTrackRef.current;
+      if (!track) return;
+      const native = event.nativeEvent;
+      if (native.pointerId !== track.pointerId) return;
+      const dx = native.pageX - track.startPageX;
+      const dy = native.pageY - track.startPageY;
+      track.maxDistance = Math.max(track.maxDistance, Math.hypot(dx, dy));
+      applyDragDelta(dx, dy);
+      event.preventDefault();
+    },
+  [applyDragDelta],
+  );
+
+  const onPointerUp: NonNullable<ViewProps['onPointerUp']> = useCallback((event) => {
+      if (!IS_WEB) return;
+      const track = pointerTrackRef.current;
+      if (!track) return;
+      const native = event.nativeEvent;
+      if (native.pointerId !== track.pointerId) return;
+      endPointerInteraction(track, native.pageX, native.pageY);
+      event.preventDefault();
+    },
+  [endPointerInteraction],
+  );
+
+  const onPointerCancel: NonNullable<ViewProps['onPointerCancel']> = useCallback((event) => {
+      if (!IS_WEB) return;
+      const track = pointerTrackRef.current;
+      if (!track) return;
+      endPointerInteraction(track, event.nativeEvent.pageX, event.nativeEvent.pageY);
+    },
+  [endPointerInteraction],
+  );
+
+  const onKeyDown = useCallback(
+    (event: { nativeEvent: { key: string }; preventDefault: () => void }) => {
+      if (!IS_WEB) return;
+      const key = event.nativeEvent.key;
+      if (key !== 'Enter' && key !== ' ' && key !== 'Spacebar') return;
+      event.preventDefault();
+      toggleThinkingBubble();
+    },
+    [toggleThinkingBubble],
+  );
+
   if (!position || width <= 0 || height <= 0) return null;
+
+  const webDragStyle = forkinatorDragSurfaceWebStyle();
+  const imageWebStyle = forkinatorMascotImageWebStyle();
+
+  const dragInteractionProps: ViewProps = IS_WEB
+    ? ({
+        onPointerDown,
+        onPointerMove,
+        onPointerUp,
+        onPointerCancel,
+        onKeyDown,
+        tabIndex: 0,
+      } as ViewProps)
+    : panResponder.panHandlers;
 
   return (
     <View
@@ -128,10 +267,7 @@ export function ForkinatorOverlay() {
         />
       ) : null}
       <View
-        {...panResponder.panHandlers}
-        accessible
-        accessibilityRole="image"
-        accessibilityLabel="Forkinator"
+        pointerEvents="box-none"
         style={{
           position: 'absolute',
           left: position.x,
@@ -142,9 +278,31 @@ export function ForkinatorOverlay() {
       >
         <Image
           source={MASCOT_SOURCE}
-          style={{ width: FORKINATOR_WIDTH_PX, height: FORKINATOR_HEIGHT_PX }}
+          style={[
+            { width: FORKINATOR_WIDTH_PX, height: FORKINATOR_HEIGHT_PX },
+            imageWebStyle,
+          ]}
           contentFit="contain"
           accessibilityIgnoresInvertColors
+          pointerEvents="none"
+          {...(IS_WEB ? ({ draggable: false } as object) : null)}
+        />
+        <View
+          ref={dragSurfaceRef}
+          {...dragInteractionProps}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={FORKINATOR_ACCESSIBILITY_LABEL}
+          accessibilityHint={FORKINATOR_ACCESSIBILITY_HINT}
+          focusable
+          style={{
+            position: 'absolute',
+            left: FORKINATOR_HIT_INSET_LEFT_PX,
+            top: FORKINATOR_HIT_INSET_TOP_PX,
+            width: FORKINATOR_HIT_WIDTH_PX,
+            height: FORKINATOR_HIT_HEIGHT_PX,
+            ...webDragStyle,
+          }}
         />
       </View>
     </View>
