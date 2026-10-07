@@ -8,7 +8,7 @@ export function AppOverlays() {
   const { undoToast, dismissUndoToast } = useApp();
 
   return (
-    <View pointerEvents="box-none" className="absolute inset-0 z-50">
+    <View pointerEvents="box-none" className="absolute inset-0 z-[100000]">
       <AccountOverlays />
       {undoToast ? (
         <UndoToast

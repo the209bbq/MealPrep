@@ -195,10 +195,16 @@ async function main(): Promise<void> {
   const hubSheet = fs.readFileSync(path.join(mobileRoot, 'components/home/HomeHubSheet.tsx'), 'utf8');
   assert.match(hubSheet, /if \(!visible\) return null/);
   assert.match(hubSheet, /onToggleSave/);
+  assert.match(hubSheet, /aria-selected/);
 
   const undoToast = fs.readFileSync(path.join(mobileRoot, 'components/UndoToast.tsx'), 'utf8');
   assert.match(undoToast, /accessibilityRole="button"/);
-  assert.match(undoToast, /<Modal visible transparent/);
+  assert.doesNotMatch(undoToast, /<Modal visible/);
+  assert.match(undoToast, /pointerEvents/);
+
+  const savedRecipesHook = fs.readFileSync(path.join(mobileRoot, 'hooks/useSavedRecipes.ts'), 'utf8');
+  assert.doesNotMatch(savedRecipesHook, /token === persistRef\.current/);
+  assert.match(savedRecipesHook, /persistAccountCache/);
 
   const scheduleCtx = fs.readFileSync(
     path.join(mobileRoot, 'context/ScheduleRecipeSheetContext.tsx'),
