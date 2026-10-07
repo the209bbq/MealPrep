@@ -5,14 +5,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   clampForkinatorPosition,
   defaultForkinatorPosition,
-  FORKINATOR_SIZE_PX,
+  FORKINATOR_HEIGHT_PX,
+  FORKINATOR_WIDTH_PX,
   readForkinatorPosition,
   writeForkinatorPosition,
   type ForkinatorBounds,
   type ForkinatorPosition,
 } from '../../lib/forkinator/position';
 
-const MASCOT_SOURCE = require('../../assets/forkinator/forkinator-head.png');
+const MASCOT_SOURCE = require('../../assets/forkinator/forkinator-full.png');
 
 export function ForkinatorOverlay() {
   const insets = useSafeAreaInsets();
@@ -29,7 +30,8 @@ export function ForkinatorOverlay() {
       insetRight: insets.right,
       insetBottom: insets.bottom,
       insetLeft: insets.left,
-      size: FORKINATOR_SIZE_PX,
+      mascotWidth: FORKINATOR_WIDTH_PX,
+      mascotHeight: FORKINATOR_HEIGHT_PX,
     }),
     [height, insets.bottom, insets.left, insets.right, insets.top, width],
   );
@@ -98,13 +100,13 @@ export function ForkinatorOverlay() {
           position: 'absolute',
           left: position.x,
           top: position.y,
-          width: FORKINATOR_SIZE_PX,
-          height: FORKINATOR_SIZE_PX,
+          width: FORKINATOR_WIDTH_PX,
+          height: FORKINATOR_HEIGHT_PX,
         }}
       >
         <Image
           source={MASCOT_SOURCE}
-          style={{ width: FORKINATOR_SIZE_PX, height: FORKINATOR_SIZE_PX }}
+          style={{ width: FORKINATOR_WIDTH_PX, height: FORKINATOR_HEIGHT_PX }}
           contentFit="contain"
           accessibilityIgnoresInvertColors
         />
