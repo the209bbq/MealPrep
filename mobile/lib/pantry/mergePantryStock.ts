@@ -67,6 +67,23 @@ export interface MergePantryStockResult {
  * Merge incoming pantry rows into a list using ingredient identity rules
  * (specific satisfies generic; generic does not satisfy specific).
  */
+/**
+ * After a signed-in kitchen fetch, server rows win. Keep only local rows that are
+ * not on the server yet (optimistic inserts during load), never sum quantities.
+ */
+export function reconcilePantryAfterServerLoad(
+  serverPantry: PantryItem[],
+  previousLocal: PantryItem[],
+): PantryItem[] {
+  const serverIds = new Set(serverPantry.map((row) => row.id));
+  const pendingLocalOnly = previousLocal.filter((row) => {
+    if (serverIds.has(row.id)) return false;
+    if (serverPantry.some((serverRow) => pantryItemsMatch(serverRow, row))) return false;
+    return true;
+  });
+  return [...serverPantry, ...pendingLocalOnly];
+}
+
 export function mergePantryStock(
   accountPantry: PantryItem[],
   incoming: PantryItem[],

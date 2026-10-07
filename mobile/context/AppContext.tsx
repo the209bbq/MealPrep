@@ -137,6 +137,7 @@ import { findKitchenRecipeById } from '../lib/mealPlan/kitchenRecipeLookup';
 import {
   groceryItemsToPantryItems,
   mergePantryStock,
+  reconcilePantryAfterServerLoad,
 } from '../lib/pantry/mergePantryStock';
 import { buildManualPantryItem } from '../lib/pantry/manualPantryItem';
 import {
@@ -751,7 +752,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     removeStorageKey(STORAGE_KEYS.recipes);
     let mergedPantry = nextPantry;
     setPantry((prev) => {
-      mergedPantry = mergePantryStock(nextPantry, prev).pantry;
+      mergedPantry = reconcilePantryAfterServerLoad(nextPantry, prev);
       return mergedPantry;
     });
     setRecipes(nextRecipes);
