@@ -832,6 +832,17 @@ export function ForkinatorOverlay() {
     [handleMascotActivate],
   );
 
+  const onWebClick = useCallback(
+    (event: { preventDefault: () => void }) => {
+      if (!IS_WEB) return;
+      const track = pointerTrackRef.current;
+      if (track && track.maxDistance > 0) return;
+      event.preventDefault();
+      handleMascotActivate();
+    },
+    [handleMascotActivate],
+  );
+
   if (!position || width <= 0 || height <= 0) return null;
 
   const webDragStyle = forkinatorDragSurfaceWebStyle();
@@ -846,17 +857,6 @@ export function ForkinatorOverlay() {
     greetingPromptVisible,
   });
   const mascotSource = FORKINATOR_MASCOT_POSE_SOURCES[mascotPose];
-
-  const onWebClick = useCallback(
-    (event: { preventDefault: () => void }) => {
-      if (!IS_WEB) return;
-      const track = pointerTrackRef.current;
-      if (track && track.maxDistance > 0) return;
-      event.preventDefault();
-      handleMascotActivate();
-    },
-    [handleMascotActivate],
-  );
 
   const dragInteractionProps: ViewProps = IS_WEB
     ? ({
