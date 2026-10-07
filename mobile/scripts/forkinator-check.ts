@@ -263,6 +263,17 @@ assert.match(overlaySource, /resolveForkinatorMascotTapAction/, 'prompt visible 
 assert.match(overlaySource, /ForkinatorScannerPrompt/, 'speech prompts share one component');
 assert.match(overlaySource, /FORKINATOR_GREETING_MESSAGE/, 'greeting uses speech prompt');
 assert.match(overlaySource, /FORKINATOR_GREETING_AUTO_HIDE_MS/, 'greeting auto-hides');
+assert.match(overlaySource, /const mascotReady = position !== null && width > 0 && height > 0/);
+assert.match(overlaySource, /autoShowPromptTimerRef/, 'auto-show timer stored in ref');
+assert.match(
+  overlaySource,
+  /autoShowScheduledRef\.current = true[\s\S]*?\}, \[mascotReady\]\)/,
+  'auto-show effect must not depend on position',
+);
+assert.doesNotMatch(
+  overlaySource,
+  /autoShowScheduledRef\.current = true[\s\S]{0,1200}\[height, position, width\]/,
+);
 assert.match(overlaySource, /blockScannerThisSessionRef/, 'scanner waits until after greeting session');
 assert.match(overlaySource, /greetingPromptVisible/, 'only one prompt visible at a time');
 assert.match(overlaySource, /FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS/, 'prompt auto-shows after delay');

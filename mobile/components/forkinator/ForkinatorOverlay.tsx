@@ -84,6 +84,7 @@ export function ForkinatorOverlay() {
   const pointerTrackRef = useRef<PointerTrack | null>(null);
   const dragSurfaceRef = useRef<View>(null);
   const autoShowScheduledRef = useRef(false);
+  const autoShowPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blockScannerThisSessionRef = useRef(false);
   const greetingPromptVisibleRef = useRef(false);
   const scannerPromptVisibleRef = useRef(false);
@@ -131,32 +132,43 @@ export function ForkinatorOverlay() {
     return () => clearTimeout(timer);
   }, [greetingPromptVisible]);
 
+  const mascotReady = position !== null && width > 0 && height > 0;
+
   useEffect(() => {
-    if (!position || width <= 0 || height <= 0) return;
+    if (!mascotReady) return;
     if (autoShowScheduledRef.current) return;
     autoShowScheduledRef.current = true;
 
     if (!readForkinatorGreetingShown()) {
       blockScannerThisSessionRef.current = true;
-      const timer = setTimeout(() => {
+      autoShowPromptTimerRef.current = setTimeout(() => {
+        autoShowPromptTimerRef.current = null;
         markForkinatorGreetingShown();
         setGreetingPromptVisible(true);
       }, FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS);
-      return () => clearTimeout(timer);
+      return;
     }
 
     if (blockScannerThisSessionRef.current) return;
     if (!shouldAutoShowForkinatorScannerPrompt(readForkinatorHasScanned())) return;
 
-    const timer = setTimeout(() => {
+    autoShowPromptTimerRef.current = setTimeout(() => {
+      autoShowPromptTimerRef.current = null;
       if (blockScannerThisSessionRef.current) return;
       if (!shouldAutoShowForkinatorScannerPrompt(readForkinatorHasScanned())) return;
       markForkinatorScannerNudgeShown();
       setScannerPromptVisible(true);
     }, FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS);
+  }, [mascotReady]);
 
-    return () => clearTimeout(timer);
-  }, [height, position, width]);
+  useEffect(() => {
+    return () => {
+      if (autoShowPromptTimerRef.current != null) {
+        clearTimeout(autoShowPromptTimerRef.current);
+        autoShowPromptTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const thinkingLayout = useMemo(() => {
     if (!position) return null;
