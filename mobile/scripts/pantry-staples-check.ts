@@ -48,6 +48,12 @@ assert.ok(onionRows.some((row) => row.name === 'White onion'));
 assert.ok(onionRows.some((row) => row.name === 'Red onion'));
 assert.ok(onionRows.some((row) => row.name === 'Shallots'));
 
+const twoOnions = { ...onionPick, varietyOptionIds: ['yellow'], quantity: 2 };
+const twoOnionRows = stapleSelectionToPantryItems(twoOnions);
+assert.equal(twoOnionRows.length, 1);
+assert.equal(twoOnionRows[0].quantity, 2);
+assert.equal(twoOnionRows[0].unit, 'each');
+
 const milk = getStapleById('milk');
 assert.ok(milk);
 const milkDefault = defaultStapleSelection(milk!);
@@ -116,5 +122,15 @@ assert.equal(milkRows.length, 2);
 assert.equal(milkRows[0].unit, 'gal');
 assert.equal(milkRows[0].quantity, 0.5);
 assert.ok(milkRows.some((row) => row.name === 'Skim milk'));
+
+const twoHalfGallons = stapleSelectionToPantryItems({
+  stapleId: 'milk',
+  sizeOptionId: 'half_gallon',
+  varietyOptionIds: ['whole'],
+  quantity: 2,
+});
+assert.equal(twoHalfGallons.length, 1);
+assert.equal(twoHalfGallons[0].quantity, 1);
+assert.equal(twoHalfGallons[0].unit, 'gal');
 
 console.log('pantry-staples-check: ok');

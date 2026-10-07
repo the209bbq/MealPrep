@@ -60,6 +60,11 @@ export interface StapleSelectionState {
   sizeOptionId?: string;
   /** Selected subtype ids (multi-select). Empty uses default variety when saving. */
   varietyOptionIds?: string[];
+  /**
+   * User-facing count: pack count when size options exist, otherwise pantry amount.
+   * Omitted → 1 pack or catalog `defaultQuantity`.
+   */
+  quantity?: number;
   /** `YYYY-MM-DD` or null when user skipped expiry. */
   expiresOn?: string | null;
   /** When true, expiry row was shown and user explicitly cleared it. */
@@ -341,6 +346,21 @@ export function getStapleVarietyOption(
   return staple.varietyOptions?.find((opt) => opt.id === varietyId);
 }
 
+export function stapleHasSizeOptions(staple: StapleCatalogEntry): boolean {
+  return (staple.sizeOptions?.length ?? 0) > 0;
+}
+
+/** Value shown in the staple picker quantity control (before unit resolution). */
+export function resolveStaplePickerQuantity(
+  staple: StapleCatalogEntry,
+  selection: StapleSelectionState,
+): number {
+  if (stapleHasSizeOptions(staple)) {
+    return selection.quantity ?? 1;
+  }
+  return selection.quantity ?? staple.defaultQuantity;
+}
+
 export function resolveStapleQuantityUnit(
   staple: StapleCatalogEntry,
   selection: StapleSelectionState,
@@ -348,9 +368,13 @@ export function resolveStapleQuantityUnit(
   const sizeId = selection.sizeOptionId ?? staple.defaultSizeId;
   const size = staple.sizeOptions?.find((opt) => opt.id === sizeId);
   if (size) {
-    return { quantity: size.quantity, unit: size.unit };
+    const packs = selection.quantity ?? 1;
+    return { quantity: size.quantity * packs, unit: size.unit };
   }
-  return { quantity: staple.defaultQuantity, unit: staple.defaultUnit };
+  return {
+    quantity: selection.quantity ?? staple.defaultQuantity,
+    unit: staple.defaultUnit,
+  };
 }
 
 function newPantryRowId(): string {
