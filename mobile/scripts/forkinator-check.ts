@@ -537,6 +537,23 @@ assert.match(overlaysSource, /pointerEvents="box-none"/, 'overlay root should no
 
 const forkinatorDir = path.join(mobileRoot, 'components/forkinator');
 const overlaySource = fs.readFileSync(path.join(forkinatorDir, 'ForkinatorOverlay.tsx'), 'utf8');
+const forkinatorEarlyReturn =
+  'if (!position || width <= 0 || height <= 0) return null;';
+const forkinatorEarlyReturnIdx = overlaySource.indexOf(forkinatorEarlyReturn);
+assert.ok(forkinatorEarlyReturnIdx >= 0, 'ForkinatorOverlay size guard early return');
+const onWebClickIdx = overlaySource.indexOf('const onWebClick = useCallback');
+assert.ok(
+  onWebClickIdx >= 0 && onWebClickIdx < forkinatorEarlyReturnIdx,
+  'onWebClick must be declared before early return (React hooks order)',
+);
+const afterForkinatorEarlyReturn = overlaySource.slice(
+  forkinatorEarlyReturnIdx + forkinatorEarlyReturn.length,
+);
+assert.doesNotMatch(
+  afterForkinatorEarlyReturn,
+  /\buse(?:State|Effect|Memo|Callback|Ref|Context|Reducer|LayoutEffect|ImperativeHandle|Id)\s*\(/,
+  'no React hooks after ForkinatorOverlay early return null',
+);
 assert.match(overlaySource, /forkinatorPose/, 'overlay should resolve mascot pose');
 assert.match(overlaySource, /resolveForkinatorMascotPose/, 'overlay should map prompt state to pose');
 assert.match(overlaySource, /FORKINATOR_MASCOT_POSE_SOURCES/, 'all pose assets required up front');
