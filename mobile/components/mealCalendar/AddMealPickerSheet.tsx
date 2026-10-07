@@ -165,7 +165,13 @@ function AddMealPickerSheetForm({
                 key={row.recipeId}
                 onPress={() => {
                   const refs = resolveRecipeRefs(row.recipeId, recipes);
-                  onPick({ ...refs, recipeId: row.recipeId, mealSlot: slot, makesLeftovers });
+                  onPick({
+                    ...refs,
+                    recipeId: row.recipeId,
+                    title: row.title,
+                    mealSlot: slot,
+                    makesLeftovers,
+                  });
                   onClose();
                 }}
                 className="border-t border-border py-3"

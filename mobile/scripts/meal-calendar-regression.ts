@@ -17,6 +17,10 @@ import {
 import { formatAddedToCalendarMessage } from '../lib/mealCalendar/formatScheduleToast';
 import { quickScheduleDayOptions } from '../lib/mealCalendar/quickScheduleDays';
 import { mealPlanItemsInWeekWindow, recipeIdsForScheduledMeals } from '../lib/mealCalendar/weekGroceries';
+import { buildMealPickerRecipeOptions } from '../lib/mealCalendar/recipePickerOptions';
+import { resolveMealPlanItemDisplayTitle } from '../lib/mealPlan/displayTitle';
+import { savedKitchenRecipeIdsFromRecords } from '../lib/savedRecipes/pickerRecipeIds';
+import type { SavedRecipeRecord } from '../lib/savedRecipes/types';
 import { MEAL_SLOTS, type MealPlanItem } from '../types/mealprep';
 
 function assert(condition: boolean, message: string): void {
@@ -155,6 +159,55 @@ function main(): void {
   assert(afterParentRemove.length === 0, 'remove parent drops linked leftover');
   const afterChildRemove = applyMealPlanRemoval([parent, child], 'c1');
   assert(afterChildRemove.length === 1 && afterChildRemove[0].linkedLeftoverId === null, 'remove leftover clears parent link');
+
+  const savedDinnerMain: SavedRecipeRecord = {
+    refKey: 'mealdb:53155',
+    title: 'Spanish chicken pie',
+    imageUrl: null,
+    savedAt: '2026-10-01T12:00:00.000Z',
+    sourceType: 'mealdb',
+    preview: {
+      kind: 'mealdb',
+      shape: {
+        id: '53155',
+        name: 'Spanish chicken pie',
+        tag: 'Chicken',
+        description: '',
+        servings: 4,
+        minutes: 45,
+        ingredients: [],
+        steps: [],
+        isMaster: true,
+      },
+    },
+  };
+  const savedIds = savedKitchenRecipeIdsFromRecords([savedDinnerMain]);
+  const breakfastPicker = buildMealPickerRecipeOptions([], [], 50, savedIds, [savedDinnerMain], {
+    mealSlot: 'breakfast',
+  });
+  assert(
+    !breakfastPicker.some((row) => row.title === 'Spanish chicken pie'),
+    'saved dinner mains excluded from breakfast picker',
+  );
+  const dinnerPicker = buildMealPickerRecipeOptions([], [], 50, savedIds, [savedDinnerMain], {
+    mealSlot: 'dinner',
+  });
+  assert(
+    dinnerPicker.some((row) => row.title === 'Spanish chicken pie'),
+    'saved dinner mains still appear for dinner slot',
+  );
+
+  const legacyPlanRow = planRow({
+    id: 'legacy-mealdb',
+    title: 'mealdb-53155',
+    recipeSlug: 'mealdb-53155',
+    scheduledOn: weekStart,
+    mealSlot: 'dinner',
+  });
+  assert(
+    resolveMealPlanItemDisplayTitle(legacyPlanRow, [], [savedDinnerMain]) === 'Spanish chicken pie',
+    'legacy mealdb id title resolves from saved bookmark',
+  );
 
   console.log('OK meal-calendar regression');
 }

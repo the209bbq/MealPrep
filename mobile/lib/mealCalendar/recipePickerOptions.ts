@@ -87,6 +87,10 @@ export function buildMealPickerRecipeOptions(
 
   const savedFirst = kitchen
     .filter((recipe) => savedIds.has(recipe.id) || isUserImportedKitchenRecipe(recipe))
+    .filter((recipe) => {
+      if (!mealSlot || options?.includeAllForSearch) return true;
+      return recipeSuitsMealPickerSlot(recipe, mealSlot);
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((recipe) => recipe.id);
 
