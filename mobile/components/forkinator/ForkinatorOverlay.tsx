@@ -42,6 +42,7 @@ import { readForkinatorHasScanned } from '../../lib/forkinator/hasScanned';
 import {
   markForkinatorAisleSortPromptShown,
   markForkinatorAisleSortUsed,
+  readForkinatorAisleSortUsed,
   shouldAutoShowForkinatorAisleSortPrompt,
 } from '../../lib/forkinator/aisleSortPrompt';
 import {
@@ -94,7 +95,10 @@ import {
   resolveForkinatorMascotTapAction,
   shouldAutoShowForkinatorScannerPrompt,
 } from '../../lib/forkinator/scannerNudgeCooldown';
-import { isForkinatorTapRelease } from '../../lib/forkinator/tapGesture';
+import {
+  FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS,
+  isForkinatorTapRelease,
+} from '../../lib/forkinator/tapGesture';
 import { layoutThinkingBubble } from '../../lib/forkinator/thinkingBubbleLayout';
 import {
   forkinatorDragSurfaceWebStyle,
@@ -137,6 +141,7 @@ import { subscribeForkInRoadHomeIdleReady } from '../../lib/forkinator/forkInRoa
 import { buildForkInRoadCandidateRows } from '../../lib/forkinator/forkInRoadQuiz';
 import { filterRecipesTabRowsForDietPrefs } from '../../lib/diet/filterRows';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
+import { readGuestPantry } from '../../lib/guest/localKitchenStore';
 import { readJson } from '../../lib/storage';
 import type { ForkinatorAutoPromptKind } from '../../lib/forkinator/forkinatorActivePrompt';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
@@ -165,6 +170,7 @@ export function ForkinatorOverlay() {
   const pathname = usePathname();
   const {
     demoMode,
+    isGuest,
     authReady,
     session,
     profile,
@@ -181,6 +187,12 @@ export function ForkinatorOverlay() {
     userDietPrefs,
     kitchenPantryReady,
   } = useApp();
+  const pantryForForkinator = useMemo(() => {
+    if (!isGuest || pantry.length > 0) return pantry;
+    if (!kitchenPantryReady) return pantry;
+    return readGuestPantry();
+  }, [isGuest, kitchenPantryReady, pantry]);
+
   const photoScanAccess = useMemo(
     () => ({
       demoMode,
@@ -209,7 +221,10 @@ export function ForkinatorOverlay() {
   const pressStartedAt = useRef(0);
   const pointerTrackRef = useRef<PointerTrack | null>(null);
   const dragSurfaceRef = useRef<View>(null);
-  const autoShowScheduledRef = useRef(false);
+  const greetingAutoShowStartedRef = useRef(false);
+  const expirationAutoShowStartedRef = useRef(false);
+  const scannerAutoShowStartedRef = useRef(false);
+  const lastPointerActivateAtRef = useRef(0);
   const autoShowPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blockScannerThisSessionRef = useRef(false);
   const greetingPromptVisibleRef = useRef(false);
@@ -299,9 +314,16 @@ export function ForkinatorOverlay() {
   const openGroceryCount = useMemo(() => grocery.filter((item) => !item.checked).length, [grocery]);
   const groceryCombineByAisle = readGroceryCombinePreference();
   const showMealGrouping = hasMealPlanGroceryGrouping(mealPlan);
-  const isGroceryScreen = pathname === '/grocery' || pathname.endsWith('/grocery');
+  const isGroceryScreen =
+    pathname === '/grocery' ||
+    pathname.endsWith('/grocery') ||
+    pathname.includes('/(tabs)/grocery');
   const isHomeScreen =
-    pathname === '/' || pathname === '/index' || pathname.endsWith('/index');
+    pathname === '/' ||
+    pathname === '/index' ||
+    pathname.endsWith('/index') ||
+    pathname === '/(tabs)' ||
+    pathname.endsWith('/(tabs)');
   const expirationExpirationMessage = useMemo(
     () => buildForkinatorExpirationPromptMessage(expirationPromptItems),
     [expirationPromptItems],
@@ -317,12 +339,12 @@ export function ForkinatorOverlay() {
 
   useEffect(() => {
     if (!mascotReady || !kitchenPantryReady) return;
-    if (autoShowScheduledRef.current) return;
-    autoShowScheduledRef.current = true;
 
     const delay = FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS;
 
     if (!readForkinatorGreetingShown()) {
+      if (greetingAutoShowStartedRef.current) return;
+      greetingAutoShowStartedRef.current = true;
       blockScannerThisSessionRef.current = true;
       autoShowPromptTimerRef.current = setTimeout(() => {
         autoShowPromptTimerRef.current = null;
@@ -332,10 +354,10 @@ export function ForkinatorOverlay() {
       return;
     }
 
-    if (blockScannerThisSessionRef.current) return;
-
-    const expirationPlan = shouldAutoShowForkinatorExpirationPrompt(pantry);
+    const expirationPlan = shouldAutoShowForkinatorExpirationPrompt(pantryForForkinator);
     if (expirationPlan.show) {
+      if (expirationAutoShowStartedRef.current) return;
+      expirationAutoShowStartedRef.current = true;
       autoShowPromptTimerRef.current = setTimeout(() => {
         autoShowPromptTimerRef.current = null;
         setExpirationPromptItems(expirationPlan.items);
@@ -345,8 +367,11 @@ export function ForkinatorOverlay() {
       return;
     }
 
+    if (blockScannerThisSessionRef.current) return;
+    if (scannerAutoShowStartedRef.current) return;
     if (!shouldAutoShowForkinatorScannerPrompt(readForkinatorHasScanned())) return;
 
+    scannerAutoShowStartedRef.current = true;
     autoShowPromptTimerRef.current = setTimeout(() => {
       autoShowPromptTimerRef.current = null;
       if (blockScannerThisSessionRef.current) return;
@@ -354,7 +379,7 @@ export function ForkinatorOverlay() {
       markForkinatorScannerNudgeShown();
       showAutoPrompt('scanner');
     }, delay);
-  }, [kitchenPantryReady, mascotReady, pantry, showAutoPrompt]);
+  }, [kitchenPantryReady, mascotReady, pantryForForkinator, showAutoPrompt]);
 
   useEffect(() => {
     if (!isGroceryScreen) {
@@ -364,16 +389,22 @@ export function ForkinatorOverlay() {
     if (!mascotReady || !kitchenPantryReady) return;
     if (sessionAutoPromptShownRef.current) return;
     if (aisleCheckedOnPathRef.current) return;
-    aisleCheckedOnPathRef.current = true;
-    if (
-      !shouldAutoShowForkinatorAisleSortPrompt({
-        openGroceryItemCount: openGroceryCount,
-        showMealGrouping,
-        combineByAisle: groceryCombineByAisle,
-      })
-    ) {
+    const aisleEligible = shouldAutoShowForkinatorAisleSortPrompt({
+      openGroceryItemCount: openGroceryCount,
+      showMealGrouping,
+      combineByAisle: groceryCombineByAisle,
+    });
+    if (!aisleEligible) {
+      if (
+        readForkinatorAisleSortUsed() ||
+        groceryCombineByAisle ||
+        (showMealGrouping && openGroceryCount >= 5)
+      ) {
+        aisleCheckedOnPathRef.current = true;
+      }
       return;
     }
+    aisleCheckedOnPathRef.current = true;
     markForkinatorAisleSortPromptShown();
     showAutoPrompt('aisleSort');
   }, [
@@ -727,6 +758,7 @@ export function ForkinatorOverlay() {
       writeForkinatorPosition(next);
 
       if (isForkinatorTapRelease(dx, dy, durationMs)) {
+        lastPointerActivateAtRef.current = Date.now();
         handleMascotActivate();
       }
     },
@@ -835,8 +867,12 @@ export function ForkinatorOverlay() {
   const onWebClick = useCallback(
     (event: { preventDefault: () => void }) => {
       if (!IS_WEB) return;
-      const track = pointerTrackRef.current;
-      if (track && track.maxDistance > 0) return;
+      if (pointerTrackRef.current) return;
+      const sincePointerActivate = Date.now() - lastPointerActivateAtRef.current;
+      if (sincePointerActivate < FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS) {
+        event.preventDefault();
+        return;
+      }
       event.preventDefault();
       handleMascotActivate();
     },

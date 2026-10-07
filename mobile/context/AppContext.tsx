@@ -3056,7 +3056,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const kitchenPantryReady =
-    demoMode || (userId ? liveDataLoaded : guestKitchenHydrated);
+    demoMode ||
+    (hydrated &&
+      authReady &&
+      (userId ? liveDataLoaded : guestKitchenHydrated));
 
   const mealMadeReviewTitle = useMemo(() => {
     if (!mealMadeReview) return null;

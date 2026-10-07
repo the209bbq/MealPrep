@@ -566,6 +566,12 @@ assert.match(overlaySource, /forkinatorDragSurfaceWebStyle/, 'web drag surface s
 assert.match(overlaySource, /draggable: false/, 'mascot image should not be natively draggable on web');
 assert.match(overlaySource, /onPointerDown/, 'web should use pointer events for drag');
 assert.match(overlaySource, /onClick/, 'web should activate mascot on plain click for a11y');
+assert.match(overlaySource, /lastPointerActivateAtRef/, 'web pointer tap records activation time');
+assert.match(
+  overlaySource,
+  /sincePointerActivate < FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS/,
+  'web click must ignore duplicate activation after pointer-up tap',
+);
 assert.match(overlaySource, /FORKINATOR_HIT_WIDTH_PX/, 'touch target should use reduced hit area');
 assert.match(overlaySource, /onKeyDown/, 'web keyboard should activate mascot');
 assert.match(overlaySource, /handleMascotActivate/, 'keyboard and tap share mascot activation');
@@ -632,6 +638,11 @@ assert.match(
   'meal made should score staples for pantry deduction',
 );
 assert.match(appContextSource, /kitchenPantryReady/);
+assert.match(
+  appContextSource,
+  /kitchenPantryReady[\s\S]*hydrated[\s\S]*authReady/,
+  'kitchenPantryReady should wait for hydration and auth',
+);
 assert.match(appContextSource, /startMealMadeReview/);
 
 const grocerySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/grocery.tsx'), 'utf8');
@@ -657,6 +668,9 @@ assert.match(overlaySource, /FORKINATOR_AISLE_SORT_MESSAGE/);
 assert.match(overlaySource, /buildForkinatorExpirationPromptMessage/);
 assert.match(overlaySource, /forkinator-sad\.png/);
 assert.match(overlaySource, /sessionAutoPromptShownRef/);
+assert.match(overlaySource, /\/\(tabs\)\/grocery/, 'grocery tab pathname must trigger aisle prompt');
+assert.match(overlaySource, /greetingAutoShowStartedRef/, 'greeting auto-show uses its own latch');
+assert.doesNotMatch(overlaySource, /autoShowScheduledRef/, 'global auto-show latch removed');
 assert.match(overlaySource, /restockPromptVisible/);
 assert.match(overlaySource, /forkInRoadPromptVisible/);
 assert.match(overlaySource, /emitForkinatorRestockAfterCook|subscribeForkinatorRestockAfterCook/);
