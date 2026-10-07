@@ -80,6 +80,33 @@ import {
 import { photoScanAccessState } from '../lib/plans/photoScanAccess';
 import { resolveForkinatorMascotPose } from '../lib/forkinator/forkinatorPose';
 import {
+  buildRestockReminderMessage,
+  isStaplePantryQuantityLow,
+  parseStapleIngredientId,
+  planStapleRestockLines,
+  STAPLE_LOW_STOCK_FRACTION,
+  stapleReferenceQuantity,
+} from '../lib/forkinator/restockReminders';
+import { getStapleById } from '../lib/pantry/stapleCatalog';
+import {
+  FORKINATOR_FORK_IN_ROAD_HOME_IDLE_MS,
+  resetForkInRoadHomeIdleTimer,
+  setForkInRoadHomeFocused,
+} from '../lib/forkinator/forkInRoadIdle';
+import {
+  markForkInRoadPromptDismissed,
+  shouldAutoShowForkInRoadPrompt,
+  FORKINATOR_FORK_IN_ROAD_LAST_SHOWN_DAY_KEY,
+  FORKINATOR_FORK_IN_ROAD_COOLDOWN_UNTIL_DAY_KEY,
+} from '../lib/forkinator/forkInRoadPrompt';
+import {
+  pickForkInRoadRecipes,
+  scoreForkInRoadKitchenRecipe,
+  type ForkInRoadQuizAnswers,
+} from '../lib/forkinator/forkInRoadQuiz';
+import type { PantryItem, Recipe } from '../types/mealprep';
+import type { RecipePantryMatch } from '../lib/recipeMatch';
+import {
   layoutThinkingBubble,
   THINKING_BUBBLE_TAIL_HEIGHT,
 } from '../lib/forkinator/thinkingBubbleLayout';
@@ -118,112 +145,122 @@ const nextSession = forkinatorPromptSessionPlan(true, true);
 assert.equal(nextSession.showGreeting, false);
 assert.equal(nextSession.showScanner, true, 'scanner eligible on a later session');
 
+const tapNone = {
+  greetingPromptVisible: false,
+  expirationPromptVisible: false,
+  restockPromptVisible: false,
+  forkInRoadPromptVisible: false,
+  aisleSortPromptVisible: false,
+  scannerPromptVisible: false,
+};
+
 assert.equal(
   resolveForkinatorMascotTapAction({
+    ...tapNone,
     greetingPromptVisible: true,
-    expirationPromptVisible: false,
-    aisleSortPromptVisible: false,
-    scannerPromptVisible: false,
   }),
   'dismissGreetingPrompt',
 );
 assert.equal(
   resolveForkinatorMascotTapAction({
-    greetingPromptVisible: false,
+    ...tapNone,
     expirationPromptVisible: true,
-    aisleSortPromptVisible: false,
-    scannerPromptVisible: false,
   }),
   'dismissExpirationPrompt',
 );
 assert.equal(
   resolveForkinatorMascotTapAction({
-    greetingPromptVisible: false,
-    expirationPromptVisible: false,
+    ...tapNone,
+    restockPromptVisible: true,
+  }),
+  'dismissRestockPrompt',
+);
+assert.equal(
+  resolveForkinatorMascotTapAction({
+    ...tapNone,
+    forkInRoadPromptVisible: true,
+  }),
+  'dismissForkInRoadPrompt',
+);
+assert.equal(
+  resolveForkinatorMascotTapAction({
+    ...tapNone,
     aisleSortPromptVisible: true,
-    scannerPromptVisible: false,
   }),
   'dismissAisleSortPrompt',
 );
 assert.equal(
   resolveForkinatorMascotTapAction({
-    greetingPromptVisible: false,
-    expirationPromptVisible: false,
-    aisleSortPromptVisible: false,
+    ...tapNone,
     scannerPromptVisible: true,
   }),
   'dismissScannerPrompt',
 );
-assert.equal(
-  resolveForkinatorMascotTapAction({
-    greetingPromptVisible: false,
-    expirationPromptVisible: false,
-    aisleSortPromptVisible: false,
-    scannerPromptVisible: false,
-  }),
-  'toggleThinkingBubble',
-);
+assert.equal(resolveForkinatorMascotTapAction(tapNone), 'toggleThinkingBubble');
+
+const poseBase = {
+  thinkingVisible: false,
+  expirationPromptVisible: false,
+  restockPromptVisible: false,
+  forkInRoadPromptVisible: false,
+  aisleSortPromptVisible: false,
+  scannerPromptVisible: false,
+  greetingPromptVisible: false,
+};
 
 assert.equal(
   resolveForkinatorMascotPose({
-    thinkingVisible: false,
-    expirationPromptVisible: false,
-    aisleSortPromptVisible: false,
+    ...poseBase,
     scannerPromptVisible: true,
-    greetingPromptVisible: false,
   }),
   'idea',
 );
 assert.equal(
   resolveForkinatorMascotPose({
+    ...poseBase,
     thinkingVisible: true,
     expirationPromptVisible: true,
     aisleSortPromptVisible: true,
     scannerPromptVisible: true,
-    greetingPromptVisible: false,
   }),
   'thinking',
 );
 assert.equal(
   resolveForkinatorMascotPose({
-    thinkingVisible: false,
+    ...poseBase,
+    forkInRoadPromptVisible: true,
+  }),
+  'thinking',
+);
+assert.equal(
+  resolveForkinatorMascotPose({
+    ...poseBase,
     expirationPromptVisible: true,
-    aisleSortPromptVisible: false,
-    scannerPromptVisible: false,
-    greetingPromptVisible: false,
   }),
   'sad',
 );
 assert.equal(
   resolveForkinatorMascotPose({
-    thinkingVisible: false,
-    expirationPromptVisible: false,
-    aisleSortPromptVisible: true,
-    scannerPromptVisible: false,
-    greetingPromptVisible: false,
+    ...poseBase,
+    restockPromptVisible: true,
   }),
   'idea',
 );
 assert.equal(
   resolveForkinatorMascotPose({
-    thinkingVisible: false,
-    expirationPromptVisible: false,
-    aisleSortPromptVisible: false,
-    scannerPromptVisible: false,
+    ...poseBase,
+    aisleSortPromptVisible: true,
+  }),
+  'idea',
+);
+assert.equal(
+  resolveForkinatorMascotPose({
+    ...poseBase,
     greetingPromptVisible: true,
   }),
   'full',
 );
-assert.equal(
-  resolveForkinatorMascotPose({
-    thinkingVisible: false,
-    expirationPromptVisible: false,
-    aisleSortPromptVisible: false,
-    scannerPromptVisible: false,
-    greetingPromptVisible: false,
-  }),
-  'full',
-);
+assert.equal(resolveForkinatorMascotPose(poseBase), 'full');
 const bounds390 = {
   width: 390,
   height: 844,
@@ -550,6 +587,7 @@ assert.match(promptSource, /actionButton\.accessibilityLabel/, 'prompt pill uses
 
 const appContextSource = fs.readFileSync(path.join(mobileRoot, 'context/AppContext.tsx'), 'utf8');
 assert.match(appContextSource, /markForkinatorPantryScanCompleted/, 'scan review save should set hasScanned');
+assert.match(appContextSource, /emitForkinatorRestockAfterCook/, 'cook flow should queue restock check');
 
 const grocerySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/grocery.tsx'), 'utf8');
 const pantrySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/pantry.tsx'), 'utf8');
@@ -574,9 +612,163 @@ assert.match(overlaySource, /FORKINATOR_AISLE_SORT_MESSAGE/);
 assert.match(overlaySource, /buildForkinatorExpirationPromptMessage/);
 assert.match(overlaySource, /forkinator-sad\.png/);
 assert.match(overlaySource, /sessionAutoPromptShownRef/);
+assert.match(overlaySource, /restockPromptVisible/);
+assert.match(overlaySource, /forkInRoadPromptVisible/);
+assert.match(overlaySource, /emitForkinatorRestockAfterCook|subscribeForkinatorRestockAfterCook/);
 assert.match(grocerySource, /markForkinatorAisleSortUsed/);
 assert.match(pantrySource, /consumePantryExpiringHighlightRequest/);
 assert.equal(FORKINATOR_AISLE_SORT_MESSAGE.includes('aisle'), true);
+
+const homeSource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/index.tsx'), 'utf8');
+assert.match(homeSource, /useForkInRoadHomeIdle/);
+assert.match(homeSource, /resetForkInRoadHomeIdleTimer/);
+
+assert.equal(STAPLE_LOW_STOCK_FRACTION, 0.25);
+assert.deepEqual(parseStapleIngredientId('staple-milk'), { stapleId: 'milk' });
+assert.deepEqual(parseStapleIngredientId('staple-eggs-12'), { stapleId: 'eggs', varietyId: '12' });
+const milkStaple = getStapleById('milk');
+assert.ok(milkStaple);
+const milkRef = stapleReferenceQuantity(milkStaple!);
+assert.equal(isStaplePantryQuantityLow(milkStaple!, 0, 'gal'), true);
+assert.equal(isStaplePantryQuantityLow(milkStaple!, milkRef * STAPLE_LOW_STOCK_FRACTION, 'gal'), true);
+assert.equal(isStaplePantryQuantityLow(milkStaple!, milkRef * 0.5, 'gal'), false);
+
+const lowPantry: PantryItem[] = [
+  {
+    id: 'p1',
+    ingredientId: 'staple-milk',
+    name: 'Milk',
+    category: 'dairy',
+    quantity: 0.1,
+    unit: 'gal',
+    location: 'fridge',
+    photoUri: null,
+    expiresOn: null,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'p2',
+    ingredientId: 'staple-eggs',
+    name: 'Eggs',
+    category: 'dairy',
+    quantity: 2,
+    unit: 'each',
+    location: 'fridge',
+    photoUri: null,
+    expiresOn: null,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+];
+const restockPlan = planStapleRestockLines(lowPantry, []);
+assert.equal(restockPlan.length, 2);
+assert.equal(
+  buildRestockReminderMessage(['milk', 'eggs']),
+  "You're running low on milk and eggs, so I added them to your grocery list.",
+);
+assert.equal(
+  buildRestockReminderMessage(['milk', 'eggs', 'butter']),
+  "You're running low on milk, eggs, and 1 more, so I added them to your grocery list.",
+);
+const deduped = planStapleRestockLines(lowPantry, [
+  {
+    id: 'g1',
+    ingredientId: 'manual-milk',
+    name: 'Milk',
+    category: 'dairy',
+    quantity: 1,
+    unit: 'gal',
+    checked: false,
+    sourceRecipeIds: [],
+    origin: 'manual',
+    plannedMealLinks: [],
+  },
+]);
+assert.equal(deduped.length, 1);
+assert.equal(deduped[0]?.stapleId, 'eggs');
+
+assert.equal(FORKINATOR_FORK_IN_ROAD_HOME_IDLE_MS, 10_000);
+setForkInRoadHomeFocused(false);
+resetForkInRoadHomeIdleTimer();
+setForkInRoadHomeFocused(true);
+
+removeStorageKey(FORKINATOR_FORK_IN_ROAD_LAST_SHOWN_DAY_KEY);
+removeStorageKey(FORKINATOR_FORK_IN_ROAD_COOLDOWN_UNTIL_DAY_KEY);
+const forkDay = new Date(Date.UTC(2026, 9, 7, 12, 0, 0));
+assert.equal(shouldAutoShowForkInRoadPrompt(forkDay), true);
+markForkInRoadPromptDismissed(forkDay);
+markForkInRoadPromptDismissed(forkDay);
+assert.equal(shouldAutoShowForkInRoadPrompt(forkDay), false);
+assert.equal(
+  readJson<string | null>(FORKINATOR_FORK_IN_ROAD_COOLDOWN_UNTIL_DAY_KEY, null),
+  '2026-10-10',
+);
+
+const fastRecipe: Recipe = {
+  id: 'r-fast',
+  name: 'Quick chicken stir-fry',
+  tag: 'dinner',
+  description: 'Fast weeknight chicken',
+  servings: 4,
+  minutes: 20,
+  calories: 400,
+  protein: 30,
+  carbs: 20,
+  fat: 10,
+  ingredients: [{ ingredientId: 'i1', name: 'chicken breast', quantity: 1, unit: 'lb' }],
+  steps: ['Cook'],
+  isMaster: false,
+  createdAt: '',
+};
+const fancyRecipe: Recipe = {
+  ...fastRecipe,
+  id: 'r-fancy',
+  name: 'Beef wellington',
+  description: 'Fancy beef dinner',
+  minutes: 90,
+  ingredients: Array.from({ length: 12 }, (_, index) => ({
+    ingredientId: `i${index}`,
+    name: `ingredient ${index}`,
+    quantity: 1,
+    unit: 'cup',
+  })),
+  steps: Array.from({ length: 10 }, () => 'Step'),
+};
+const zeroMatch = (recipe: Recipe): RecipePantryMatch => ({
+  recipeId: recipe.id,
+  recipeName: recipe.name,
+  totalIngredients: recipe.ingredients.length,
+  matchedCount: 0,
+  missingCount: recipe.ingredients.length,
+  percentMatch: 0,
+  matched: [],
+  missing: recipe.ingredients,
+});
+const fullMatch: RecipePantryMatch = {
+  ...zeroMatch(fastRecipe),
+  matchedCount: 1,
+  missingCount: 0,
+  percentMatch: 100,
+  matched: [],
+  missing: [],
+};
+const quizAnswers: ForkInRoadQuizAnswers = {
+  mood: 'fast',
+  pantry: 'use_pantry',
+  protein: 'chicken',
+};
+assert.ok(
+  scoreForkInRoadKitchenRecipe(fastRecipe, fullMatch, quizAnswers) >
+    scoreForkInRoadKitchenRecipe(fancyRecipe, zeroMatch(fancyRecipe), quizAnswers),
+);
+const picks = pickForkInRoadRecipes(
+  [
+    { kind: 'kitchen', recipe: fancyRecipe, match: zeroMatch(fancyRecipe) },
+    { kind: 'kitchen', recipe: fastRecipe, match: fullMatch },
+  ],
+  quizAnswers,
+  2,
+);
+assert.equal(picks[0]?.recipe.id, 'r-fast');
 
 const accountSource = fs.readFileSync(path.join(mobileRoot, 'components/account/AccountSheet.tsx'), 'utf8');
 assert.ok(!/Forkinator/i.test(accountSource), 'Account settings should not include Forkinator toggle');

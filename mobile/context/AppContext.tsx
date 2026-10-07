@@ -154,6 +154,7 @@ import { writeAccountPantryCache } from '../lib/pantry/writeAccountPantryCache';
 import { PANTRY_RESTOCK_COPY } from '../config/pantryRestock';
 import { PANTRY_SCAN_UI_COPY, writeLastPantryScanLocation } from '../config/pantryScan';
 import { markForkinatorPantryScanCompleted } from '../lib/forkinator/hasScanned';
+import { emitForkinatorRestockAfterCook } from '../lib/forkinator/restockAfterCookEvent';
 import { PANTRY_STAPLES_COPY } from '../config/pantryStaples';
 import { stapleSelectionsToPantryItems, type StapleSelectionState } from '../lib/pantry/stapleCatalog';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
@@ -1649,6 +1650,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void undoLastMealMade(item.id);
         },
       });
+
+      if (lines.some((line) => line.quantityApplied)) {
+        emitForkinatorRestockAfterCook({
+          nextPantry,
+          pantryDeductionApplied: true,
+        });
+      }
     } catch (error: unknown) {
       setAuthError(error instanceof Error ? error.message : 'Failed to mark meal as made');
       setPantry(pantrySnapshot);
