@@ -56,6 +56,7 @@ import {
   layoutScannerPrompt,
   scannerPromptBodySize,
 } from '../lib/forkinator/scannerPromptLayout';
+import { resolveForkinatorMascotPose } from '../lib/forkinator/forkinatorPose';
 import {
   layoutThinkingBubble,
   THINKING_BUBBLE_TAIL_HEIGHT,
@@ -99,6 +100,38 @@ assert.equal(resolveForkinatorMascotTapAction(true, false), 'dismissGreetingProm
 assert.equal(resolveForkinatorMascotTapAction(false, true), 'dismissScannerPrompt');
 assert.equal(resolveForkinatorMascotTapAction(false, false), 'toggleThinkingBubble');
 
+assert.equal(
+  resolveForkinatorMascotPose({
+    thinkingVisible: false,
+    scannerPromptVisible: true,
+    greetingPromptVisible: false,
+  }),
+  'idea',
+);
+assert.equal(
+  resolveForkinatorMascotPose({
+    thinkingVisible: true,
+    scannerPromptVisible: true,
+    greetingPromptVisible: false,
+  }),
+  'thinking',
+);
+assert.equal(
+  resolveForkinatorMascotPose({
+    thinkingVisible: false,
+    scannerPromptVisible: false,
+    greetingPromptVisible: true,
+  }),
+  'full',
+);
+assert.equal(
+  resolveForkinatorMascotPose({
+    thinkingVisible: false,
+    scannerPromptVisible: false,
+    greetingPromptVisible: false,
+  }),
+  'full',
+);
 const bounds390 = {
   width: 390,
   height: 844,
@@ -247,7 +280,9 @@ assert.match(overlaysSource, /pointerEvents="box-none"/, 'overlay root should no
 
 const forkinatorDir = path.join(mobileRoot, 'components/forkinator');
 const overlaySource = fs.readFileSync(path.join(forkinatorDir, 'ForkinatorOverlay.tsx'), 'utf8');
-assert.match(overlaySource, /forkinator-full\.png/, 'overlay should use full-body asset');
+assert.match(overlaySource, /forkinatorPose/, 'overlay should resolve mascot pose');
+assert.match(overlaySource, /resolveForkinatorMascotPose/, 'overlay should map prompt state to pose');
+assert.match(overlaySource, /FORKINATOR_MASCOT_POSE_SOURCES/, 'all pose assets required up front');
 assert.match(overlaySource, /readForkinatorPosition/, 'overlay should restore saved position');
 assert.match(overlaySource, /writeForkinatorPosition/, 'overlay should persist position on release');
 assert.match(overlaySource, /pointerEvents="box-none"/, 'Forkinator overlay wrapper passes touches through');
@@ -260,8 +295,8 @@ assert.match(overlaySource, /FORKINATOR_HIT_WIDTH_PX/, 'touch target should use 
 assert.match(overlaySource, /onKeyDown/, 'web keyboard should activate mascot');
 assert.match(overlaySource, /handleMascotActivate/, 'keyboard and tap share mascot activation');
 assert.match(overlaySource, /resolveForkinatorMascotTapAction/, 'prompt visible dismisses without thinking bubble');
-assert.match(overlaySource, /ForkinatorScannerPrompt/, 'speech prompts share one component');
-assert.match(overlaySource, /FORKINATOR_GREETING_MESSAGE/, 'greeting uses speech prompt');
+assert.match(overlaySource, /ForkinatorScannerPrompt/, 'greeting and scanner prompts share one component');
+assert.match(overlaySource, /FORKINATOR_GREETING_MESSAGE/, 'greeting uses thought-style prompt');
 assert.match(overlaySource, /FORKINATOR_GREETING_AUTO_HIDE_MS/, 'greeting auto-hides');
 assert.match(overlaySource, /const mascotReady = position !== null && width > 0 && height > 0/);
 assert.match(overlaySource, /autoShowPromptTimerRef/, 'auto-show timer stored in ref');
@@ -307,7 +342,8 @@ assert.equal(
 );
 assert.match(promptSource, /USE_NATIVE_DRIVER/, 'scanner prompt should gate native driver on web');
 assert.match(promptSource, /accessibilityRole="button"/);
-assert.ok(!promptSource.includes('TailCircles'), 'speech prompt should not use thinking tail circles');
+assert.match(promptSource, /TailCircles/, 'prompt should use thought-cloud tail circles');
+assert.ok(!promptSource.includes('SpeechPointer'), 'prompt should not use speech triangle pointer');
 
 const appContextSource = fs.readFileSync(path.join(mobileRoot, 'context/AppContext.tsx'), 'utf8');
 assert.match(appContextSource, /markForkinatorPantryScanCompleted/, 'scan review save should set hasScanned');
@@ -330,5 +366,11 @@ assert.ok(!fs.existsSync(path.join(libForkinatorDir, 'engine.ts')), 'tip engine 
 
 const assetsDir = path.join(mobileRoot, 'assets/forkinator');
 assert.ok(fs.existsSync(path.join(assetsDir, 'forkinator-full.png')), 'full-body asset should exist');
+for (const poseFile of ['forkinator-idea.png', 'forkinator-thinking.png', 'forkinator-sad.png']) {
+  const posePath = path.join(assetsDir, poseFile);
+  assert.ok(fs.existsSync(posePath), `${poseFile} should exist`);
+  const stat = fs.statSync(posePath);
+  assert.ok(stat.size <= 150_000, `${poseFile} should stay under ~150KB`);
+}
 
 console.log('forkinator-check: ok');
