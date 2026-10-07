@@ -7,6 +7,10 @@ export const FORKINATOR_WIDTH_PX = 44;
 export const FORKINATOR_HEIGHT_PX = 120;
 export const FORKINATOR_ASPECT_WIDTH_TO_HEIGHT = FORKINATOR_WIDTH_PX / FORKINATOR_HEIGHT_PX;
 
+/** Default dock: above the bottom tab bar, hugging the right edge. */
+export const FORKINATOR_DEFAULT_RIGHT_INSET_PX = 8;
+export const FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX = 16;
+
 export type ForkinatorPosition = {
   x: number;
   y: number;
@@ -24,9 +28,16 @@ export type ForkinatorBounds = {
 };
 
 export function defaultForkinatorPosition(bounds: ForkinatorBounds): ForkinatorPosition {
-  const innerHeight = bounds.height - bounds.insetTop - bounds.insetBottom;
-  const x = bounds.width - bounds.insetRight - bounds.mascotWidth - 8;
-  const y = bounds.insetTop + innerHeight / 2 - bounds.mascotHeight / 2;
+  const x =
+    bounds.width -
+    bounds.insetRight -
+    bounds.mascotWidth -
+    FORKINATOR_DEFAULT_RIGHT_INSET_PX;
+  const y =
+    bounds.height -
+    bounds.insetBottom -
+    bounds.mascotHeight -
+    FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
   return clampForkinatorPosition({ x, y }, bounds);
 }
 

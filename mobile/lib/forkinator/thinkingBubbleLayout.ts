@@ -4,7 +4,8 @@ export const THINKING_BUBBLE_TAIL_GAP = 4;
 export const THINKING_BUBBLE_MASCOT_GAP = 6;
 
 /** Vertical space for tail circles below/above the cloud. */
-export const THINKING_BUBBLE_TAIL_HEIGHT = 22;
+/** Tail circles (10+7+5) plus inter-circle margins (3+3). */
+export const THINKING_BUBBLE_TAIL_HEIGHT = 28;
 
 export type ThinkingBubblePlacement = 'above' | 'below';
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, View } from 'react-native';
+import { Animated, Easing, Platform, View } from 'react-native';
 import { THEME } from '../../config/appConfig';
 import {
   THINKING_BUBBLE_CLOUD_HEIGHT,
@@ -11,6 +11,7 @@ import {
 
 const DOT_SIZE = 6;
 const OUTLINE = '#D1D5DB';
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 type ForkinatorThinkingBubbleProps = {
   layout: ThinkingBubbleLayout;
@@ -70,13 +71,13 @@ function ThinkingDots({ reduceMotion }: { reduceMotion: boolean }) {
             toValue: 1,
             duration: 320,
             easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
           Animated.timing(value, {
             toValue: 0.35,
             duration: 320,
             easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
         ]),
       );
@@ -139,13 +140,13 @@ export function ForkinatorThinkingBubble({
         toValue: 1,
         duration: 160,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
       Animated.timing(scale, {
         toValue: 1,
         duration: 160,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
     ]).start();
   }, [opacity, reduceMotion, scale, visible]);
