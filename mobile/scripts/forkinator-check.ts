@@ -588,6 +588,11 @@ assert.match(promptSource, /actionButton\.accessibilityLabel/, 'prompt pill uses
 const appContextSource = fs.readFileSync(path.join(mobileRoot, 'context/AppContext.tsx'), 'utf8');
 assert.match(appContextSource, /markForkinatorPantryScanCompleted/, 'scan review save should set hasScanned');
 assert.match(appContextSource, /emitForkinatorRestockAfterCook/, 'cook flow should queue restock check');
+assert.match(
+  appContextSource,
+  /scoreRecipeForPantryDeduction/,
+  'meal made should score staples for pantry deduction',
+);
 
 const grocerySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/grocery.tsx'), 'utf8');
 const pantrySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/pantry.tsx'), 'utf8');

@@ -1,4 +1,5 @@
 import type { PantryItem, Recipe, RecipeIngredient } from '../../types/mealprep';
+import { isIngredientUnmeasurableForDeduction } from '../mealPlan/deductionIngredient';
 import {
   DEFAULT_MIN_MATCHED_INGREDIENTS,
   KITCHEN_LIST_DEFAULT_MIN_PERCENT,
@@ -140,6 +141,67 @@ function findPantryMatch(
   }
 
   return { item: null, reason: 'fuzzy_name', score: bestScore };
+}
+
+/**
+ * Pantry matching for cook / Made-it deductions. Includes configured staples and
+ * catalog staple pantry rows; skips unmeasurable lines (to taste, pinch, etc.).
+ */
+export function scoreRecipeForPantryDeduction(
+  recipe: Recipe,
+  pantry: PantryItem[],
+  context?: PantryMatchContext,
+): RecipePantryMatch {
+  const matchContext = context ?? getPantryMatchContext(pantry);
+  const usedPantryIds = new Set<string>();
+  const matched: MatchedIngredient[] = [];
+  const missing: RecipeIngredient[] = [];
+  let scorableCount = 0;
+
+  for (const ingredient of recipe.ingredients) {
+    if (isIngredientUnmeasurableForDeduction(ingredient)) {
+      continue;
+    }
+    scorableCount += 1;
+
+    const result = findPantryMatch(ingredient, pantry, usedPantryIds, matchContext);
+    if (result.item) {
+      const pantryMatches = findPantryItemsForIngredient(ingredient, pantry);
+      const have = totalPantryQuantityInUnit(pantryMatches, ingredient.unit, ingredient.name);
+      if (have !== null && have < ingredient.quantity) {
+        const missingQty = Math.round((ingredient.quantity - have) * 100) / 100;
+        missing.push({ ...ingredient, quantity: missingQty });
+      } else {
+        usedPantryIds.add(result.item.id);
+        matched.push({
+          ingredient,
+          matchedPantryItem: result.item,
+          matchReason: result.reason,
+          score: result.score,
+        });
+      }
+    } else {
+      missing.push(ingredient);
+    }
+  }
+
+  const matchedCount = matched.length;
+  const missingCount = missing.length;
+  const percentMatch =
+    scorableCount > 0 && pantry.length > 0
+      ? Math.round((matchedCount / scorableCount) * 100)
+      : 0;
+
+  return {
+    recipeId: recipe.id,
+    recipeName: recipe.name,
+    totalIngredients: scorableCount,
+    matchedCount,
+    missingCount,
+    percentMatch,
+    matched,
+    missing,
+  };
 }
 
 export function scoreRecipeAgainstPantry(

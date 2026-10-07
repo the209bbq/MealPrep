@@ -36,7 +36,7 @@ export function MealMadeReviewSheet({
           <Text className="text-lg font-bold text-ink">Made it</Text>
           <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{mealTitle}</Text>
           <Text className="mt-3 text-xs text-muted">
-            Uncheck anything you did not use from the pantry (staples are never deducted).
+            Uncheck anything you did not use from the pantry, including staples.
           </Text>
 
           <ScrollView className="mt-3 max-h-72">

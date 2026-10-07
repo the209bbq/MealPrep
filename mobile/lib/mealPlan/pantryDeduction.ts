@@ -1,3 +1,4 @@
+import { isIngredientUnmeasurableForDeduction } from './deductionIngredient';
 import { resolveRecipeServings } from '../profile/servings';
 import type { PantryItem, Recipe, RecipeIngredient } from '../../types/mealprep';
 import type { MatchedIngredient, RecipePantryMatch } from '../recipeMatch/match';
@@ -6,6 +7,12 @@ import {
   convertIngredientQuantity,
   ingredientUnitsConvertible,
 } from '../units/ingredientUnitBridge';
+
+export { isIngredientUnmeasurableForDeduction } from './deductionIngredient';
+
+export function isPantryCatalogStapleRow(item: PantryItem): boolean {
+  return item.ingredientId.startsWith('staple-');
+}
 
 export interface PantryDeductionLine {
   pantryItemId: string;
@@ -44,6 +51,7 @@ export function buildPantryDeductionLines(
     const pantryItem = row.matchedPantryItem;
     if (!pantryItem) continue;
     if (excludedPantryItemIds.has(pantryItem.id)) continue;
+    if (isIngredientUnmeasurableForDeduction(row.ingredient)) continue;
 
     const deductQuantity = roundQty(row.ingredient.quantity * scale);
     if (deductQuantity <= 0) continue;
@@ -53,6 +61,7 @@ export function buildPantryDeductionLines(
       pantryItem.unit,
       row.ingredient.unit,
     );
+    if (!convertible) continue;
     lines.push({
       pantryItemId: pantryItem.id,
       ingredient: row.ingredient,
@@ -129,5 +138,14 @@ export function restorePantryFromDeductions(pantry: PantryItem[], lines: PantryD
 }
 
 export function matchedRowsForReview(match: RecipePantryMatch): MatchedIngredient[] {
-  return match.matched.filter((row) => row.matchedPantryItem);
+  return match.matched.filter((row) => {
+    const pantryItem = row.matchedPantryItem;
+    if (!pantryItem) return false;
+    if (isIngredientUnmeasurableForDeduction(row.ingredient)) return false;
+    return ingredientUnitsConvertible(
+      row.ingredient.name,
+      pantryItem.unit,
+      row.ingredient.unit,
+    );
+  });
 }
