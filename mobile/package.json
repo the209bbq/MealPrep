@@ -96,6 +96,7 @@
     "test:pantry-staples": "npx tsx scripts/pantry-staples-check.ts",
     "test:pantry-offline-manual-add": "npx tsx scripts/pantry-offline-manual-add-check.ts",
     "test:pantry-manual-add-race": "npx tsx scripts/pantry-manual-add-race-check.ts",
+    "test:pantry-load-merge": "npx tsx scripts/pantry-load-merge-check.ts",
     "test:pantry-staples-link": "npx tsx scripts/pantry-staples-link-check.ts",
     "test:pantry-scan-restock": "npx tsx scripts/pantry-scan-restock-regression.ts",
     "test:pantry-scan-review": "npx tsx scripts/pantry-scan-review-dedupe-check.ts",

@@ -980,7 +980,7 @@ export default function PantryScreen() {
 
         {actionError ? <Text className="mb-2 text-xs font-semibold text-danger">{actionError}</Text> : null}
 
-        {!profileReady ? (
+        {!profileReady && pantry.length === 0 ? (
           <View className="mt-8 items-center justify-center py-8">
             <ActivityIndicator color={THEME.primary} />
           </View>
