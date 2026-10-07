@@ -19,8 +19,20 @@ import {
   FORKINATOR_HIT_INSET_TOP_PX,
   FORKINATOR_HIT_WIDTH_PX,
 } from '../../lib/forkinator/hitArea';
+import {
+  FORKINATOR_GREETING_AUTO_HIDE_MS,
+  FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS,
+  markForkinatorGreetingShown,
+  readForkinatorGreetingShown,
+} from '../../lib/forkinator/greetingShown';
 import { openPantryScannerFromForkinator } from '../../lib/forkinator/openPantryScanner';
 import { readForkinatorHasScanned } from '../../lib/forkinator/hasScanned';
+import {
+  FORKINATOR_GREETING_A11Y_LABEL,
+  FORKINATOR_GREETING_MESSAGE,
+  FORKINATOR_SCANNER_NUDGE_A11Y_LABEL,
+  FORKINATOR_SCANNER_NUDGE_MESSAGE,
+} from '../../lib/forkinator/scannerNudgeCopy';
 import {
   clampForkinatorPosition,
   defaultForkinatorPosition,
@@ -64,6 +76,7 @@ export function ForkinatorOverlay() {
   const reduceMotion = useReduceMotionEnabled();
   const [position, setPosition] = useState<ForkinatorPosition | null>(null);
   const [thinkingVisible, setThinkingVisible] = useState(false);
+  const [greetingPromptVisible, setGreetingPromptVisible] = useState(false);
   const [scannerPromptVisible, setScannerPromptVisible] = useState(false);
   const positionRef = useRef<ForkinatorPosition | null>(null);
   const dragOrigin = useRef<ForkinatorPosition>({ x: 0, y: 0 });
@@ -71,6 +84,8 @@ export function ForkinatorOverlay() {
   const pointerTrackRef = useRef<PointerTrack | null>(null);
   const dragSurfaceRef = useRef<View>(null);
   const autoShowScheduledRef = useRef(false);
+  const blockScannerThisSessionRef = useRef(false);
+  const greetingPromptVisibleRef = useRef(false);
   const scannerPromptVisibleRef = useRef(false);
 
   const bounds: ForkinatorBounds = useMemo(
@@ -103,17 +118,38 @@ export function ForkinatorOverlay() {
   }, [position]);
 
   useEffect(() => {
+    greetingPromptVisibleRef.current = greetingPromptVisible;
+  }, [greetingPromptVisible]);
+
+  useEffect(() => {
     scannerPromptVisibleRef.current = scannerPromptVisible;
   }, [scannerPromptVisible]);
+
+  useEffect(() => {
+    if (!greetingPromptVisible) return;
+    const timer = setTimeout(() => setGreetingPromptVisible(false), FORKINATOR_GREETING_AUTO_HIDE_MS);
+    return () => clearTimeout(timer);
+  }, [greetingPromptVisible]);
 
   useEffect(() => {
     if (!position || width <= 0 || height <= 0) return;
     if (autoShowScheduledRef.current) return;
     autoShowScheduledRef.current = true;
 
+    if (!readForkinatorGreetingShown()) {
+      blockScannerThisSessionRef.current = true;
+      const timer = setTimeout(() => {
+        markForkinatorGreetingShown();
+        setGreetingPromptVisible(true);
+      }, FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
+
+    if (blockScannerThisSessionRef.current) return;
     if (!shouldAutoShowForkinatorScannerPrompt(readForkinatorHasScanned())) return;
 
     const timer = setTimeout(() => {
+      if (blockScannerThisSessionRef.current) return;
       if (!shouldAutoShowForkinatorScannerPrompt(readForkinatorHasScanned())) return;
       markForkinatorScannerNudgeShown();
       setScannerPromptVisible(true);
@@ -138,6 +174,23 @@ export function ForkinatorOverlay() {
     });
   }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 
+  const greetingPromptLayout = useMemo(() => {
+    if (!position) return null;
+    return layoutScannerPrompt({
+      mascotX: position.x,
+      mascotY: position.y,
+      mascotWidth: FORKINATOR_WIDTH_PX,
+      mascotHeight: FORKINATOR_HEIGHT_PX,
+      screenWidth: width,
+      screenHeight: height,
+      insetTop: insets.top,
+      insetRight: insets.right,
+      insetBottom: insets.bottom,
+      insetLeft: insets.left,
+      message: FORKINATOR_GREETING_MESSAGE,
+    });
+  }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
+
   const scannerPromptLayout = useMemo(() => {
     if (!position) return null;
     return layoutScannerPrompt({
@@ -151,14 +204,20 @@ export function ForkinatorOverlay() {
       insetRight: insets.right,
       insetBottom: insets.bottom,
       insetLeft: insets.left,
+      message: FORKINATOR_SCANNER_NUDGE_MESSAGE,
     });
   }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 
   const handleMascotActivate = useCallback(() => {
-    if (
-      resolveForkinatorMascotTapAction(scannerPromptVisibleRef.current) ===
-      'dismissScannerPrompt'
-    ) {
+    const action = resolveForkinatorMascotTapAction(
+      greetingPromptVisibleRef.current,
+      scannerPromptVisibleRef.current,
+    );
+    if (action === 'dismissGreetingPrompt') {
+      setGreetingPromptVisible(false);
+      return;
+    }
+    if (action === 'dismissScannerPrompt') {
       setScannerPromptVisible(false);
       return;
     }
@@ -310,11 +369,23 @@ export function ForkinatorOverlay() {
       className="absolute inset-0"
       style={{ zIndex: 100001 }}
     >
+      {greetingPromptLayout ? (
+        <ForkinatorScannerPrompt
+          layout={greetingPromptLayout}
+          visible={greetingPromptVisible}
+          reduceMotion={reduceMotion}
+          message={FORKINATOR_GREETING_MESSAGE}
+          accessibilityLabel={FORKINATOR_GREETING_A11Y_LABEL}
+          onPress={() => setGreetingPromptVisible(false)}
+        />
+      ) : null}
       {scannerPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={scannerPromptLayout}
-          visible={scannerPromptVisible}
+          visible={scannerPromptVisible && !greetingPromptVisible}
           reduceMotion={reduceMotion}
+          message={FORKINATOR_SCANNER_NUDGE_MESSAGE}
+          accessibilityLabel={FORKINATOR_SCANNER_NUDGE_A11Y_LABEL}
           onPress={() => {
             setScannerPromptVisible(false);
             openPantryScannerFromForkinator();

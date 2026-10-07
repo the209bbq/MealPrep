@@ -31,6 +31,17 @@ import {
   FORKINATOR_WIDTH_PX,
 } from '../lib/forkinator/position';
 import {
+  FORKINATOR_GREETING_AUTO_HIDE_MS,
+  FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS,
+  FORKINATOR_GREETING_SHOWN_STORAGE_KEY,
+  forkinatorPromptSessionPlan,
+  markForkinatorGreetingShown,
+  readForkinatorGreetingShown,
+  shouldAutoShowForkinatorGreeting,
+} from '../lib/forkinator/greetingShown';
+import {
+  FORKINATOR_GREETING_A11Y_LABEL,
+  FORKINATOR_GREETING_MESSAGE,
   FORKINATOR_SCANNER_NUDGE_MESSAGE,
 } from '../lib/forkinator/scannerNudgeCopy';
 import {
@@ -63,6 +74,30 @@ assert.equal(FORKINATOR_WIDTH_PX, 44);
 assert.equal(FORKINATOR_HEIGHT_PX, 120);
 assert.equal(THINKING_BUBBLE_TAIL_HEIGHT, 28);
 assert.equal(FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS, 2000);
+assert.equal(FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS, 2000);
+assert.equal(FORKINATOR_GREETING_AUTO_HIDE_MS, 8000);
+assert.equal(FORKINATOR_GREETING_SHOWN_STORAGE_KEY, 'mealprep.forkinator.greetingShown');
+assert.equal(
+  FORKINATOR_GREETING_MESSAGE,
+  "Hey there! The name's Forks. I'm here to help.",
+);
+assert.equal(FORKINATOR_GREETING_A11Y_LABEL, 'Dismiss greeting');
+
+removeStorageKey(FORKINATOR_GREETING_SHOWN_STORAGE_KEY);
+assert.equal(shouldAutoShowForkinatorGreeting(false), true);
+const firstSession = forkinatorPromptSessionPlan(false, true);
+assert.equal(firstSession.showGreeting, true);
+assert.equal(firstSession.showScanner, false, 'first open: greeting only, no scanner');
+markForkinatorGreetingShown();
+assert.equal(readForkinatorGreetingShown(), true);
+assert.equal(shouldAutoShowForkinatorGreeting(true), false, 'greeting never shows again');
+const nextSession = forkinatorPromptSessionPlan(true, true);
+assert.equal(nextSession.showGreeting, false);
+assert.equal(nextSession.showScanner, true, 'scanner eligible on a later session');
+
+assert.equal(resolveForkinatorMascotTapAction(true, false), 'dismissGreetingPrompt');
+assert.equal(resolveForkinatorMascotTapAction(false, true), 'dismissScannerPrompt');
+assert.equal(resolveForkinatorMascotTapAction(false, false), 'toggleThinkingBubble');
 
 const bounds390 = {
   width: 390,
@@ -174,8 +209,6 @@ writeForkinatorScannerNudgeLastShownAt(now - FORKINATOR_SCANNER_NUDGE_COOLDOWN_M
 assert.equal(shouldAutoShowForkinatorScannerPrompt(false, now), true);
 assert.equal(shouldAutoShowForkinatorScannerPrompt(true, now, null), false);
 
-assert.equal(resolveForkinatorMascotTapAction(true), 'dismissScannerPrompt');
-assert.equal(resolveForkinatorMascotTapAction(false), 'toggleThinkingBubble');
 
 assert.ok(FORKINATOR_HIT_WIDTH_PX < FORKINATOR_WIDTH_PX, 'hit area narrower than asset');
 assert.ok(FORKINATOR_HIT_HEIGHT_PX < FORKINATOR_HEIGHT_PX, 'hit area shorter than asset');
@@ -227,7 +260,11 @@ assert.match(overlaySource, /FORKINATOR_HIT_WIDTH_PX/, 'touch target should use 
 assert.match(overlaySource, /onKeyDown/, 'web keyboard should activate mascot');
 assert.match(overlaySource, /handleMascotActivate/, 'keyboard and tap share mascot activation');
 assert.match(overlaySource, /resolveForkinatorMascotTapAction/, 'prompt visible dismisses without thinking bubble');
-assert.match(overlaySource, /ForkinatorScannerPrompt/, 'scanner speech prompt is separate');
+assert.match(overlaySource, /ForkinatorScannerPrompt/, 'speech prompts share one component');
+assert.match(overlaySource, /FORKINATOR_GREETING_MESSAGE/, 'greeting uses speech prompt');
+assert.match(overlaySource, /FORKINATOR_GREETING_AUTO_HIDE_MS/, 'greeting auto-hides');
+assert.match(overlaySource, /blockScannerThisSessionRef/, 'scanner waits until after greeting session');
+assert.match(overlaySource, /greetingPromptVisible/, 'only one prompt visible at a time');
 assert.match(overlaySource, /FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS/, 'prompt auto-shows after delay');
 assert.match(overlaySource, /layoutScannerPrompt/, 'prompt follows mascot position');
 assert.match(overlaySource, /tabIndex: 0/, 'web mascot should be focusable');
@@ -251,7 +288,8 @@ assert.ok(
 assert.ok(!bubbleSource.includes('tip'), 'bubble should not include tip copy');
 
 const promptSource = fs.readFileSync(path.join(forkinatorDir, 'ForkinatorScannerPrompt.tsx'), 'utf8');
-assert.match(promptSource, /FORKINATOR_SCANNER_NUDGE_MESSAGE/);
+assert.match(promptSource, /message/);
+assert.match(promptSource, /accessibilityLabel/);
 assert.equal(
   FORKINATOR_SCANNER_NUDGE_MESSAGE,
   "Let's see what you're working with. Scan your fridge and I'll find dinner.",
@@ -276,6 +314,7 @@ assert.ok(fs.existsSync(path.join(libForkinatorDir, 'hitArea.ts')), 'hit area he
 assert.ok(fs.existsSync(path.join(libForkinatorDir, 'hasScanned.ts')), 'hasScanned helpers should exist');
 assert.ok(fs.existsSync(path.join(libForkinatorDir, 'scannerNudgeCooldown.ts')));
 assert.ok(fs.existsSync(path.join(libForkinatorDir, 'scannerPromptLayout.ts')));
+assert.ok(fs.existsSync(path.join(libForkinatorDir, 'greetingShown.ts')));
 assert.ok(!fs.existsSync(path.join(libForkinatorDir, 'engine.ts')), 'tip engine should not exist');
 
 const assetsDir = path.join(mobileRoot, 'assets/forkinator');

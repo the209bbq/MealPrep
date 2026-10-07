@@ -41,10 +41,16 @@ export function shouldAutoShowForkinatorScannerPrompt(
   return shouldShowForkinatorScannerNudge(hasScanned, nowMs, lastShownAtMs);
 }
 
-export type ForkinatorMascotTapAction = 'dismissScannerPrompt' | 'toggleThinkingBubble';
+export type ForkinatorMascotTapAction =
+  | 'dismissGreetingPrompt'
+  | 'dismissScannerPrompt'
+  | 'toggleThinkingBubble';
 
 export function resolveForkinatorMascotTapAction(
+  greetingPromptVisible: boolean,
   scannerPromptVisible: boolean,
 ): ForkinatorMascotTapAction {
-  return scannerPromptVisible ? 'dismissScannerPrompt' : 'toggleThinkingBubble';
+  if (greetingPromptVisible) return 'dismissGreetingPrompt';
+  if (scannerPromptVisible) return 'dismissScannerPrompt';
+  return 'toggleThinkingBubble';
 }

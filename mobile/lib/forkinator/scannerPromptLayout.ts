@@ -34,6 +34,7 @@ export type ScannerPromptLayoutInput = {
   insetRight: number;
   insetBottom: number;
   insetLeft: number;
+  message?: string;
 };
 
 function estimateMessageLineCount(message: string, contentWidth: number): number {
@@ -42,7 +43,10 @@ function estimateMessageLineCount(message: string, contentWidth: number): number
   return Math.max(1, Math.ceil(message.length / charsPerLine));
 }
 
-export function scannerPromptBodySize(screenInnerWidth: number): {
+export function scannerPromptBodySize(
+  screenInnerWidth: number,
+  message: string = FORKINATOR_SCANNER_NUDGE_MESSAGE,
+): {
   bodyWidth: number;
   bodyHeight: number;
 } {
@@ -52,7 +56,7 @@ export function scannerPromptBodySize(screenInnerWidth: number): {
   );
   const bodyWidth = maxBodyWidth;
   const contentWidth = bodyWidth - SCANNER_PROMPT_HORIZONTAL_PADDING * 2;
-  const lines = estimateMessageLineCount(FORKINATOR_SCANNER_NUDGE_MESSAGE, contentWidth);
+  const lines = estimateMessageLineCount(message, contentWidth);
   const textHeight = lines * SCANNER_PROMPT_LINE_HEIGHT;
   const bodyHeight = textHeight + SCANNER_PROMPT_VERTICAL_PADDING * 2;
   return { bodyWidth, bodyHeight };
@@ -62,9 +66,10 @@ export function scannerPromptFootprint(input: {
   screenWidth: number;
   insetLeft: number;
   insetRight: number;
+  message?: string;
 }): { width: number; height: number; bodyWidth: number; bodyHeight: number } {
   const screenInnerWidth = input.screenWidth - input.insetLeft - input.insetRight;
-  const { bodyWidth, bodyHeight } = scannerPromptBodySize(screenInnerWidth);
+  const { bodyWidth, bodyHeight } = scannerPromptBodySize(screenInnerWidth, input.message);
   const pointerBlock = SCANNER_PROMPT_POINTER_HEIGHT + SCANNER_PROMPT_POINTER_GAP;
   return {
     width: bodyWidth,
@@ -75,11 +80,13 @@ export function scannerPromptFootprint(input: {
 }
 
 export function layoutScannerPrompt(input: ScannerPromptLayoutInput): ScannerPromptLayout {
+  const message = input.message ?? FORKINATOR_SCANNER_NUDGE_MESSAGE;
   const { width: bubbleWidth, height: bubbleHeight, bodyWidth, bodyHeight } =
     scannerPromptFootprint({
       screenWidth: input.screenWidth,
       insetLeft: input.insetLeft,
       insetRight: input.insetRight,
+      message,
     });
   const mascotCenterX = input.mascotX + input.mascotWidth / 2;
 

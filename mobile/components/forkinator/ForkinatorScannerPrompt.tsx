@@ -2,10 +2,6 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, Pressable, Text, View } from 'react-native';
 import { THEME } from '../../config/appConfig';
 import {
-  FORKINATOR_SCANNER_NUDGE_A11Y_LABEL,
-  FORKINATOR_SCANNER_NUDGE_MESSAGE,
-} from '../../lib/forkinator/scannerNudgeCopy';
-import {
   SCANNER_PROMPT_BORDER_RADIUS,
   SCANNER_PROMPT_FONT_SIZE,
   SCANNER_PROMPT_HORIZONTAL_PADDING,
@@ -23,6 +19,8 @@ type ForkinatorScannerPromptProps = {
   layout: ScannerPromptLayout;
   visible: boolean;
   reduceMotion: boolean;
+  message: string;
+  accessibilityLabel: string;
   onPress: () => void;
 };
 
@@ -55,6 +53,8 @@ export function ForkinatorScannerPrompt({
   layout,
   visible,
   reduceMotion,
+  message,
+  accessibilityLabel,
   onPress,
 }: ForkinatorScannerPromptProps) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -96,6 +96,28 @@ export function ForkinatorScannerPrompt({
     shadowOffset: { width: 0, height: 1 },
   };
 
+  const body = (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={bodyStyle}
+    >
+      <Text
+        pointerEvents="none"
+        style={{
+          width: '100%',
+          fontSize: SCANNER_PROMPT_FONT_SIZE,
+          lineHeight: SCANNER_PROMPT_LINE_HEIGHT,
+          color: THEME.ink,
+          textAlign: 'center',
+        }}
+      >
+        {message}
+      </Text>
+    </Pressable>
+  );
+
   return (
     <Animated.View
       pointerEvents="box-none"
@@ -111,47 +133,11 @@ export function ForkinatorScannerPrompt({
       {bodyFirst ? (
         <>
           <SpeechPointer placement={layout.placement} />
-          <Pressable
-            onPress={onPress}
-            accessibilityRole="button"
-            accessibilityLabel={FORKINATOR_SCANNER_NUDGE_A11Y_LABEL}
-            style={bodyStyle}
-          >
-            <Text
-              pointerEvents="none"
-              style={{
-                width: '100%',
-                fontSize: SCANNER_PROMPT_FONT_SIZE,
-                lineHeight: SCANNER_PROMPT_LINE_HEIGHT,
-                color: THEME.ink,
-                textAlign: 'center',
-              }}
-            >
-              {FORKINATOR_SCANNER_NUDGE_MESSAGE}
-            </Text>
-          </Pressable>
+          {body}
         </>
       ) : (
         <>
-          <Pressable
-            onPress={onPress}
-            accessibilityRole="button"
-            accessibilityLabel={FORKINATOR_SCANNER_NUDGE_A11Y_LABEL}
-            style={bodyStyle}
-          >
-            <Text
-              pointerEvents="none"
-              style={{
-                width: '100%',
-                fontSize: SCANNER_PROMPT_FONT_SIZE,
-                lineHeight: SCANNER_PROMPT_LINE_HEIGHT,
-                color: THEME.ink,
-                textAlign: 'center',
-              }}
-            >
-              {FORKINATOR_SCANNER_NUDGE_MESSAGE}
-            </Text>
-          </Pressable>
+          {body}
           <SpeechPointer placement={layout.placement} />
         </>
       )}
