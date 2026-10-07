@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { THEME } from '../../config/appConfig';
@@ -46,6 +46,7 @@ function HubSegment({
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
+      {...(Platform.OS === 'web' ? { 'aria-selected': active } : {})}
       className={`flex-1 items-center rounded-xl px-2 py-2.5 ${active ? 'bg-primary' : 'bg-paper'}`}
       style={({ pressed }) => (pressed ? { opacity: 0.85 } : undefined)}
     >

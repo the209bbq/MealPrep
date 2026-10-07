@@ -27,6 +27,11 @@ import {
   writeAccountSavedRecipesCache,
 } from '../lib/savedRecipes/accountCache';
 import {
+  readHiddenImportedKitchenIds,
+  writeHiddenImportedKitchenIds,
+} from '../lib/savedRecipes/hiddenImportedKitchen';
+import { isUserImportedKitchenRecipe } from '../lib/recipeImport/mapToAppRecipe';
+import {
   deleteUserSavedRecipe,
   fetchUserSavedRecipes,
   upsertUserSavedRecipe,
@@ -74,6 +79,9 @@ export function useSavedRecipes(options: {
   const supabase = getSupabase();
   const [records, setRecords] = useState<SavedRecipeRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [hiddenImportedKitchenIds, setHiddenImportedKitchenIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [pendingRefKeys, setPendingRefKeys] = useState<Set<string>>(() => new Set());
   const savedKeys = useMemo(() => new Set(records.map((row) => row.refKey)), [records]);
   const onToggleOutcomeRef = useRef(onToggleOutcome);
@@ -112,7 +120,14 @@ export function useSavedRecipes(options: {
     void load();
   }, [load, liveDataLoaded]);
 
-  const persistRef = useRef(0);
+  useEffect(() => {
+    if (isGuest || !userId) {
+      setHiddenImportedKitchenIds(new Set());
+      return;
+    }
+    setHiddenImportedKitchenIds(readHiddenImportedKitchenIds(userId));
+  }, [isGuest, userId]);
+
   const recordsRef = useRef(records);
   recordsRef.current = records;
   const toggleRefKeyRef = useRef<
@@ -131,6 +146,42 @@ export function useSavedRecipes(options: {
   const emitOutcome = useCallback((outcome: SavedRecipeToggleOutcome) => {
     onToggleOutcomeRef.current?.(outcome);
   }, []);
+
+  const persistAccountCache = useCallback(
+    (rows: SavedRecipeRecord[]) => {
+      if (!demoMode && !isGuest && userId) {
+        writeAccountSavedRecipesCache(userId, rows);
+      }
+    },
+    [demoMode, isGuest, userId],
+  );
+
+  const hideImportedKitchenFromHub = useCallback(
+    (recipeId: string) => {
+      if (isGuest || !userId) return;
+      setHiddenImportedKitchenIds((prev) => {
+        const next = new Set(prev);
+        next.add(recipeId);
+        writeHiddenImportedKitchenIds(userId, next);
+        return next;
+      });
+    },
+    [isGuest, userId],
+  );
+
+  const unhideImportedKitchenFromHub = useCallback(
+    (recipeId: string) => {
+      if (isGuest || !userId) return;
+      setHiddenImportedKitchenIds((prev) => {
+        if (!prev.has(recipeId)) return prev;
+        const next = new Set(prev);
+        next.delete(recipeId);
+        writeHiddenImportedKitchenIds(userId, next);
+        return next;
+      });
+    },
+    [isGuest, userId],
+  );
 
   const toggleRefKey = useCallback(
     async (refKey: string, nextRecord: SavedRecipeRecord | null) => {
@@ -181,16 +232,16 @@ export function useSavedRecipes(options: {
 
       const optimistic = applySavedToggle(priorRecords, refKey, nextRecord);
       setRecords(optimistic);
-
-      persistRef.current += 1;
-      const token = persistRef.current;
+      persistAccountCache(optimistic);
 
       try {
         if (nextRecord) {
           await upsertUserSavedRecipe(supabase, userId, nextRecord, { accountRecipeIds });
+          persistAccountCache(recordsRef.current);
           finish({ status: 'saved', refKey });
         } else {
           await deleteUserSavedRecipe(supabase, userId, refKey);
+          persistAccountCache(recordsRef.current);
           finish({
             status: 'removed',
             undo: () => {
@@ -199,17 +250,16 @@ export function useSavedRecipes(options: {
           });
         }
       } catch {
-        if (token === persistRef.current) {
-          setRecords((current) => {
-            if (nextRecord) {
-              return applySavedToggle(current, refKey, null);
-            }
-            if (removedRecord) {
-              return applySavedToggle(current, refKey, removedRecord);
-            }
-            return current;
-          });
-        }
+        setRecords((current) => {
+          const rolled =
+            nextRecord != null
+              ? applySavedToggle(current, refKey, null)
+              : removedRecord != null
+                ? applySavedToggle(current, refKey, removedRecord)
+                : current;
+          persistAccountCache(rolled);
+          return rolled;
+        });
         finish({ status: 'error' });
       }
     },
@@ -227,11 +277,13 @@ export function useSavedRecipes(options: {
 
   const isKitchenSaved = useCallback(
     (recipe: Recipe) => {
+      if (hiddenImportedKitchenIds.has(recipe.id)) return false;
       const mealdbId = mealDbIdFromKitchenRecipe(recipe);
       if (mealdbId && savedKeys.has(savedRefKeyMealDb(mealdbId))) return true;
-      return savedKeys.has(savedRefKeyKitchen(recipe.id));
+      if (savedKeys.has(savedRefKeyKitchen(recipe.id))) return true;
+      return isUserImportedKitchenRecipe(recipe);
     },
-    [savedKeys],
+    [hiddenImportedKitchenIds, savedKeys],
   );
 
   const isCreatorSaved = useCallback(
@@ -256,14 +308,43 @@ export function useSavedRecipes(options: {
   const toggleKitchenRecipe = useCallback(
     (recipe: Recipe) => {
       const refKey = refKeyForKitchenRecipe(recipe);
+      const hasBookmark = isSavedRef(refKey);
+      const importedInHub =
+        isUserImportedKitchenRecipe(recipe) && !hiddenImportedKitchenIds.has(recipe.id);
+      const saved = hasBookmark || importedInHub;
+
+      if (saved) {
+        if (importedInHub) {
+          hideImportedKitchenFromHub(recipe.id);
+        }
+        if (hasBookmark) {
+          void toggleRefKey(refKey, null);
+          return;
+        }
+        emitOutcome({
+          status: 'removed',
+          undo: () => {
+            unhideImportedKitchenFromHub(recipe.id);
+          },
+        });
+        return;
+      }
+
+      unhideImportedKitchenFromHub(recipe.id);
       const record =
         isMealDbRecipeId(recipe.id) || recipe.sourceType === 'themealdb'
           ? savedRecordFromMealDbRecipe(recipe)
           : savedRecordFromKitchenRecipe(recipe);
-      const saved = isSavedRef(refKey);
-      void toggleRefKey(refKey, saved ? null : { ...record, refKey });
+      void toggleRefKey(refKey, { ...record, refKey });
     },
-    [isSavedRef, toggleRefKey],
+    [
+      emitOutcome,
+      hiddenImportedKitchenIds,
+      hideImportedKitchenFromHub,
+      isSavedRef,
+      toggleRefKey,
+      unhideImportedKitchenFromHub,
+    ],
   );
 
   const toggleViralItem = useCallback(
@@ -302,11 +383,12 @@ export function useSavedRecipes(options: {
     for (const row of imported) {
       const id = row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`;
       if (seen.has(id)) continue;
+      if (row.kind === 'kitchen' && hiddenImportedKitchenIds.has(row.recipe.id)) continue;
       seen.add(id);
       merged.push(row);
     }
     return merged;
-  }, [kitchenRecipes, pantry, pantryMatches, records]);
+  }, [hiddenImportedKitchenIds, kitchenRecipes, pantry, pantryMatches, records]);
 
   const openCreatorFromSaved = useCallback(
     (record: SavedRecipeRecord) => savedCreatorItemFromRecord(record),
