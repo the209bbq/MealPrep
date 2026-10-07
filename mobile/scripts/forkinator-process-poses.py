@@ -300,7 +300,7 @@ def main() -> None:
     for name, src in SOURCES.items():
         if not src.exists():
             raise SystemExit(f"missing source: {src}")
-        if name == "forkinator-sad.png" and (OUT_DIR / name).exists():
+        if name in ("forkinator-idea.png", "forkinator-sad.png") and (OUT_DIR / name).exists():
             print(f"{name}: skipped (unchanged)")
             continue
         process(name, src)
