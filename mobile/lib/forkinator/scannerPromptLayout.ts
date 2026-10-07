@@ -1,5 +1,9 @@
 import { FORKINATOR_SCANNER_NUDGE_MESSAGE } from './scannerNudgeCopy';
-import { THINKING_BUBBLE_MASCOT_GAP } from './thinkingBubbleLayout';
+import {
+  THINKING_BUBBLE_MASCOT_GAP,
+  THINKING_BUBBLE_TAIL_GAP,
+  THINKING_BUBBLE_TAIL_HEIGHT,
+} from './thinkingBubbleLayout';
 
 export const SCANNER_PROMPT_HORIZONTAL_PADDING = 10;
 export const SCANNER_PROMPT_VERTICAL_PADDING = 8;
@@ -7,9 +11,7 @@ export const SCANNER_PROMPT_FONT_SIZE = 12;
 export const SCANNER_PROMPT_LINE_HEIGHT = 16;
 export const SCANNER_PROMPT_MAX_WIDTH = 220;
 export const SCANNER_PROMPT_SCREEN_EDGE_INSET = 8;
-export const SCANNER_PROMPT_POINTER_HEIGHT = 6;
-export const SCANNER_PROMPT_POINTER_GAP = 2;
-export const SCANNER_PROMPT_BORDER_RADIUS = 12;
+export const SCANNER_PROMPT_BORDER_RADIUS = 16;
 
 export type ScannerPromptPlacement = 'above' | 'below';
 
@@ -70,10 +72,10 @@ export function scannerPromptFootprint(input: {
 }): { width: number; height: number; bodyWidth: number; bodyHeight: number } {
   const screenInnerWidth = input.screenWidth - input.insetLeft - input.insetRight;
   const { bodyWidth, bodyHeight } = scannerPromptBodySize(screenInnerWidth, input.message);
-  const pointerBlock = SCANNER_PROMPT_POINTER_HEIGHT + SCANNER_PROMPT_POINTER_GAP;
+  const tailBlock = THINKING_BUBBLE_TAIL_HEIGHT + THINKING_BUBBLE_TAIL_GAP;
   return {
     width: bodyWidth,
-    height: bodyHeight + pointerBlock,
+    height: bodyHeight + tailBlock,
     bodyWidth,
     bodyHeight,
   };

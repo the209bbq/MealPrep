@@ -6,11 +6,10 @@ import {
   SCANNER_PROMPT_FONT_SIZE,
   SCANNER_PROMPT_HORIZONTAL_PADDING,
   SCANNER_PROMPT_LINE_HEIGHT,
-  SCANNER_PROMPT_POINTER_GAP,
-  SCANNER_PROMPT_POINTER_HEIGHT,
   type ScannerPromptLayout,
   type ScannerPromptPlacement,
 } from '../../lib/forkinator/scannerPromptLayout';
+import { THINKING_BUBBLE_TAIL_GAP } from '../../lib/forkinator/thinkingBubbleLayout';
 
 const OUTLINE = '#D1D5DB';
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -24,28 +23,34 @@ type ForkinatorScannerPromptProps = {
   onPress: () => void;
 };
 
-function SpeechPointer({ placement }: { placement: ScannerPromptPlacement }) {
-  const half = 6;
-  const height = SCANNER_PROMPT_POINTER_HEIGHT;
-  const pointsDown = placement === 'above';
+function TailCircles({ placement }: { placement: ScannerPromptPlacement }) {
+  const sizes = [10, 7, 5];
+  const isAbove = placement === 'above';
   return (
     <View
       pointerEvents="none"
       style={{
-        width: 0,
-        height: 0,
-        marginTop: pointsDown ? SCANNER_PROMPT_POINTER_GAP : 0,
-        marginBottom: pointsDown ? 0 : SCANNER_PROMPT_POINTER_GAP,
-        borderLeftWidth: half,
-        borderRightWidth: half,
-        borderTopWidth: pointsDown ? height : 0,
-        borderBottomWidth: pointsDown ? 0 : height,
-        borderLeftColor: 'transparent',
-        borderRightColor: 'transparent',
-        borderTopColor: pointsDown ? '#FFFFFF' : 'transparent',
-        borderBottomColor: pointsDown ? 'transparent' : '#FFFFFF',
+        alignItems: 'center',
+        marginTop: isAbove ? THINKING_BUBBLE_TAIL_GAP : 0,
+        marginBottom: isAbove ? 0 : THINKING_BUBBLE_TAIL_GAP,
+        transform: isAbove ? undefined : [{ scaleY: -1 }],
       }}
-    />
+    >
+      {sizes.map((size) => (
+        <View
+          key={size}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: '#FFFFFF',
+            borderWidth: 1,
+            borderColor: OUTLINE,
+            marginTop: size === sizes[0] ? 0 : 3,
+          }}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -79,7 +84,7 @@ export function ForkinatorScannerPrompt({
 
   if (!visible) return null;
 
-  const bodyFirst = layout.placement === 'below';
+  const cloudFirst = layout.placement === 'below';
 
   const bodyStyle = {
     width: layout.bodyWidth,
@@ -130,15 +135,15 @@ export function ForkinatorScannerPrompt({
         alignItems: 'center',
       }}
     >
-      {bodyFirst ? (
+      {cloudFirst ? (
         <>
-          <SpeechPointer placement={layout.placement} />
+          <TailCircles placement={layout.placement} />
           {body}
         </>
       ) : (
         <>
           {body}
-          <SpeechPointer placement={layout.placement} />
+          <TailCircles placement={layout.placement} />
         </>
       )}
     </Animated.View>

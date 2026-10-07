@@ -56,10 +56,20 @@ import {
   forkinatorDragSurfaceWebStyle,
   forkinatorMascotImageWebStyle,
 } from '../../lib/forkinator/webTouchStyle';
+import {
+  resolveForkinatorMascotPose,
+  type ForkinatorMascotPose,
+} from '../../lib/forkinator/forkinatorPose';
 import { ForkinatorScannerPrompt } from './ForkinatorScannerPrompt';
 import { ForkinatorThinkingBubble } from './ForkinatorThinkingBubble';
 
-const MASCOT_SOURCE = require('../../assets/forkinator/forkinator-full.png');
+const FORKINATOR_MASCOT_POSE_SOURCES: Record<ForkinatorMascotPose, number> = {
+  full: require('../../assets/forkinator/forkinator-full.png'),
+  idea: require('../../assets/forkinator/forkinator-idea.png'),
+  thinking: require('../../assets/forkinator/forkinator-thinking.png'),
+};
+require('../../assets/forkinator/forkinator-sad.png');
+
 const IS_WEB = Platform.OS === 'web';
 
 type PointerTrack = {
@@ -363,6 +373,12 @@ export function ForkinatorOverlay() {
 
   const webDragStyle = forkinatorDragSurfaceWebStyle();
   const imageWebStyle = forkinatorMascotImageWebStyle();
+  const mascotPose = resolveForkinatorMascotPose({
+    thinkingVisible,
+    scannerPromptVisible,
+    greetingPromptVisible,
+  });
+  const mascotSource = FORKINATOR_MASCOT_POSE_SOURCES[mascotPose];
 
   const dragInteractionProps: ViewProps = IS_WEB
     ? ({
@@ -422,7 +438,7 @@ export function ForkinatorOverlay() {
         }}
       >
         <Image
-          source={MASCOT_SOURCE}
+          source={mascotSource}
           style={[
             { width: FORKINATOR_WIDTH_PX, height: FORKINATOR_HEIGHT_PX },
             imageWebStyle,
