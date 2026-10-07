@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReduceMotionEnabled } from '../../hooks/useReduceMotionEnabled';
 import {
   clampForkinatorPosition,
   defaultForkinatorPosition,
@@ -12,15 +13,21 @@ import {
   type ForkinatorBounds,
   type ForkinatorPosition,
 } from '../../lib/forkinator/position';
+import { isForkinatorTapRelease } from '../../lib/forkinator/tapGesture';
+import { layoutThinkingBubble } from '../../lib/forkinator/thinkingBubbleLayout';
+import { ForkinatorThinkingBubble } from './ForkinatorThinkingBubble';
 
 const MASCOT_SOURCE = require('../../assets/forkinator/forkinator-full.png');
 
 export function ForkinatorOverlay() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const reduceMotion = useReduceMotionEnabled();
   const [position, setPosition] = useState<ForkinatorPosition | null>(null);
+  const [thinkingVisible, setThinkingVisible] = useState(false);
   const positionRef = useRef<ForkinatorPosition | null>(null);
   const dragOrigin = useRef<ForkinatorPosition>({ x: 0, y: 0 });
+  const pressStartedAt = useRef(0);
 
   const bounds: ForkinatorBounds = useMemo(
     () => ({
@@ -51,12 +58,29 @@ export function ForkinatorOverlay() {
     positionRef.current = position;
   }, [position]);
 
+  const thinkingLayout = useMemo(() => {
+    if (!position) return null;
+    return layoutThinkingBubble({
+      mascotX: position.x,
+      mascotY: position.y,
+      mascotWidth: FORKINATOR_WIDTH_PX,
+      mascotHeight: FORKINATOR_HEIGHT_PX,
+      screenWidth: width,
+      screenHeight: height,
+      insetTop: insets.top,
+      insetRight: insets.right,
+      insetBottom: insets.bottom,
+      insetLeft: insets.left,
+    });
+  }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
+          pressStartedAt.current = Date.now();
           const current = positionRef.current ?? defaultForkinatorPosition(bounds);
           dragOrigin.current = current;
         },
@@ -77,6 +101,11 @@ export function ForkinatorOverlay() {
           dragOrigin.current = next;
           setPosition(next);
           writeForkinatorPosition(next);
+
+          const durationMs = Date.now() - pressStartedAt.current;
+          if (isForkinatorTapRelease(gesture.dx, gesture.dy, durationMs)) {
+            setThinkingVisible((show) => !show);
+          }
         },
         onPanResponderTerminationRequest: () => false,
       }),
@@ -91,6 +120,13 @@ export function ForkinatorOverlay() {
       className="absolute inset-0"
       style={{ zIndex: 100001 }}
     >
+      {thinkingLayout ? (
+        <ForkinatorThinkingBubble
+          layout={thinkingLayout}
+          visible={thinkingVisible}
+          reduceMotion={reduceMotion}
+        />
+      ) : null}
       <View
         {...panResponder.panHandlers}
         accessible
