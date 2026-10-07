@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '../../lib/icons/Ionicons';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
 import {
   ActivityIndicator,
@@ -58,6 +58,10 @@ import {
 } from '../../lib/scanCorrections/client';
 import { createScanSessionId } from '../../lib/scanCorrections/session';
 import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
+import {
+  consumeOpenPantryShelfScanRequest,
+  subscribeOpenPantryShelfScan,
+} from '../../lib/pantry/openShelfScanRequest';
 import { readJson, writeJson } from '../../lib/storage';
 import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
 import { PantryImageQualityError } from '../../lib/pantryVision/prepareImageShared';
@@ -173,10 +177,33 @@ export default function PantryScreen() {
     readPantryStaplesPromptDismissed(),
   );
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
+  const [autoOpenScanSourceMenu, setAutoOpenScanSourceMenu] = useState(false);
   const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
   const pantryScanUploadRef = useRef<Promise<string | null> | null>(null);
   const scanSessionIdRef = useRef<string | null>(null);
   const aiBaselineRef = useRef<Map<string, { aiName: string }>>(new Map());
+
+  const tryConsumeShelfScanRequest = useCallback(() => {
+    if (!consumeOpenPantryShelfScanRequest()) return;
+    if (phase !== 'idle') return;
+    setAutoOpenScanSourceMenu(true);
+  }, [phase]);
+
+  useFocusEffect(
+    useCallback(() => {
+      tryConsumeShelfScanRequest();
+    }, [tryConsumeShelfScanRequest]),
+  );
+
+  useEffect(() => {
+    return subscribeOpenPantryShelfScan(() => {
+      tryConsumeShelfScanRequest();
+    });
+  }, [tryConsumeShelfScanRequest]);
+
+  useEffect(() => {
+    tryConsumeShelfScanRequest();
+  }, [phase, tryConsumeShelfScanRequest]);
 
   const visionReady = isPantryVisionConfigured();
   const accessToken = session?.access_token ?? null;
@@ -862,6 +889,8 @@ export default function PantryScreen() {
                 }}
                 onRequestNativeScan={(_location, source) => void handleNativeScan(source)}
                 onRequestSignIn={openAuthSheet}
+                autoOpenSourceMenu={autoOpenScanSourceMenu}
+                onAutoOpenSourceMenuHandled={() => setAutoOpenScanSourceMenu(false)}
               />
 
               {featureFlags.photoScan ? <PantryScanTip className="mt-2" /> : null}
