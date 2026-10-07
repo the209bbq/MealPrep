@@ -200,7 +200,15 @@ export function useSavedRecipes(options: {
         }
       } catch {
         if (token === persistRef.current) {
-          setRecords(priorRecords);
+          setRecords((current) => {
+            if (nextRecord) {
+              return applySavedToggle(current, refKey, null);
+            }
+            if (removedRecord) {
+              return applySavedToggle(current, refKey, removedRecord);
+            }
+            return current;
+          });
         }
         finish({ status: 'error' });
       }

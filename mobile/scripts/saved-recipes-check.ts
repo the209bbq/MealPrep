@@ -125,4 +125,15 @@ const replaced = applySavedToggle(afterSave, record.refKey, { ...record, title: 
 assert.equal(replaced.length, 1);
 assert.equal(replaced[0]?.title, 'Updated title');
 
+const recordB = savedRecordFromKitchenRecipe({
+  ...kitchenOnly,
+  id: 'link-import-2',
+  name: 'Second save',
+});
+let twoSaved = applySavedToggle(afterSave, recordB.refKey, recordB);
+assert.equal(twoSaved.length, 2);
+const rollbackB = applySavedToggle(twoSaved, recordB.refKey, null);
+assert.equal(rollbackB.length, 1);
+assert.ok(isRefKeySaved(rollbackB, record.refKey), 'rollback one save must keep other saved rows');
+
 console.log('saved-recipes-check: ok');

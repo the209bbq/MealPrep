@@ -26,6 +26,19 @@ function assertAvatarSizing(): void {
   const sized = sizedCreatorAvatarUrl(yt, 56);
   assert(sized?.includes('=s112'), `expected 2×56 -> s112, got ${sized}`);
   assert(!sized?.includes('=s800'), 'must downsize s800');
+  assert.equal(
+    sized,
+    'https://yt3.ggpht.com/ytc/AIdro_kabc=s112-c-k-c0x00ffffff-no-rj',
+    'must preserve ggpht size suffix after hex color token',
+  );
+
+  const yt88 = 'https://yt3.ggpht.com/ytc/APYwI0Y5abc=s88-c-k-c0x00ffffff-no-rj';
+  const sized88 = sizedCreatorAvatarUrl(yt88, 40);
+  assert.equal(
+    sized88,
+    'https://yt3.ggpht.com/ytc/APYwI0Y5abc=s80-c-k-c0x00ffffff-no-rj',
+    'realistic yt3 path with =s88…-c0x00ffffff-no-rj suffix',
+  );
 
   const plain = sizedCreatorAvatarUrl('https://example.com/avatar.png', 40);
   assert.equal(plain, 'https://example.com/avatar.png');

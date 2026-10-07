@@ -23,6 +23,7 @@ import {
   resetMealDbLookupSchedulerForTests,
 } from '../lib/mealdb/lookupScheduler';
 import {
+  mealDbLookupMeal,
   mealDbLookupMeals,
   resetMealDbClientCacheForTests,
 } from '../lib/mealdb/client';
@@ -162,6 +163,43 @@ async function runLookupSchedulerRegression(): Promise<void> {
   assert.equal(mealDbLookupSchedulerStatsForTests().queued, 0);
 
   globalThis.fetch = originalFetch;
+}
+
+/** MR1-1: user-visible meal lookup must not deadlock on a deduped background prefetch. */
+async function assertSharedBackgroundLookupPromoted(): Promise<void> {
+  resetMealDbLookupSchedulerForTests();
+  resetMealDbClientCacheForTests();
+
+  let fetchCount = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (!url.includes('lookup.php?i=99')) {
+      return { ok: false, json: async () => null } as Response;
+    }
+    fetchCount += 1;
+    await sleep(80);
+    return {
+      ok: true,
+      json: async () => ({
+        meals: [mealDetail('99', 'Promoted meal')],
+      }),
+    } as Response;
+  }) as typeof fetch;
+
+  const release = beginMealDbUserVisibleLookups();
+  const background = mealDbLookupMeal('99', { priority: 'background' });
+  await sleep(20);
+  const visible = await mealDbLookupMeal('99', { priority: 'user-visible' });
+  release();
+  await background;
+
+  assert.ok(visible, 'deduped user-visible lookup must finish while category is open');
+  assert.equal(fetchCount, 1, 'promoted lookup should only hit the network once');
+
+  globalThis.fetch = originalFetch;
+  resetMealDbLookupSchedulerForTests();
+  resetMealDbClientCacheForTests();
 }
 
 function assertFailedRowMasking(): void {
@@ -341,6 +379,7 @@ function runHydrationPlaywright(): { htmlSizes: Record<string, number> } {
 
 async function main(): Promise<void> {
   await runLookupSchedulerRegression();
+  await assertSharedBackgroundLookupPromoted();
   assertFailedRowMasking();
   assertCreatorDislikeDescription();
   assertPickerLiveCache();

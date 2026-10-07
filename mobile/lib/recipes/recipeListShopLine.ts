@@ -5,7 +5,7 @@ import { recipeMissingShopCount } from '../recipeMatch/missingShopCount';
 /** One-line shop hint for recipe list cards (from precomputed pantry match). */
 export function recipeListShopLine(match: RecipePantryMatch): string {
   if (match.totalIngredients === 0) {
-    return RECIPES_COPY.recipeCard.checkingPantry;
+    return RECIPES_COPY.recipeCard.previewNoIngredients;
   }
   const missing = recipeMissingShopCount(match);
   if (missing === 0) {
