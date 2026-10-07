@@ -18,6 +18,7 @@ import { RecipesUnifiedFeedCard } from '../recipes/RecipesUnifiedFeedCard';
 import { useApp } from '../../context/AppContext';
 import { savedCreatorItemFromRecord } from '../../lib/savedRecipes/resolveRows';
 import { useHomeHubSheet } from '../../context/HomeHubSheetContext';
+import { UndoToastModalHost } from '../UndoToastHosts';
 
 function hubRowDietAccessibilityWarning(
   row: RecipesTabRow,
@@ -197,6 +198,7 @@ export function HomeHubSheet({
             <MealWeekCalendarCard />
           </ScrollView>
         )}
+        <UndoToastModalHost />
       </View>
     </Modal>
   );

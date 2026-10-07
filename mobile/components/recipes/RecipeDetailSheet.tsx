@@ -35,6 +35,7 @@ import { RecipeDietNotice } from '../diet/RecipeDietNotice';
 import { ingredientLinesFromRecipe } from '../../lib/diet/ingredientLines';
 import { isVideoRecipeDetailContext, VideoRecipeDetailView } from './VideoRecipeDetailView';
 import { RecipeCostPerServingForRecipe } from './RecipeCostPerServingForRecipe';
+import { UndoToastModalHost } from '../UndoToastHosts';
 
 export interface RecipeDetailSheetProps {
   visible: boolean;
@@ -484,6 +485,7 @@ export function RecipeDetailSheet({
           initialDetailSection={initialDetailSection}
         />
       )}
+      <UndoToastModalHost />
     </Modal>
   );
 }

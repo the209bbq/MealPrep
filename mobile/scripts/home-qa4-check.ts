@@ -201,6 +201,20 @@ async function main(): Promise<void> {
   assert.match(undoToast, /accessibilityRole="button"/);
   assert.doesNotMatch(undoToast, /<Modal visible/);
   assert.match(undoToast, /pointerEvents/);
+  assert.match(undoToast, /createPortal/);
+  assert.match(undoToast, /document\.body/);
+  assert.match(undoToast, /pointerEvents:\s*'none'/);
+
+  const undoToastHosts = fs.readFileSync(path.join(mobileRoot, 'components/UndoToastHosts.tsx'), 'utf8');
+  assert.match(undoToastHosts, /UndoToastModalHost/);
+  assert.match(undoToastHosts, /UndoToastAppHost/);
+
+  const detailSheet = fs.readFileSync(
+    path.join(mobileRoot, 'components/recipes/RecipeDetailSheet.tsx'),
+    'utf8',
+  );
+  assert.match(detailSheet, /UndoToastModalHost/);
+  assert.match(hubSheet, /UndoToastModalHost/);
 
   const savedRecipesHook = fs.readFileSync(path.join(mobileRoot, 'hooks/useSavedRecipes.ts'), 'utf8');
   assert.doesNotMatch(savedRecipesHook, /token === persistRef\.current/);
