@@ -35,6 +35,12 @@ const VOLUME_TO_ML: Record<string, number> = {
   tablespoons: 14.7868,
   cup: 236.588,
   cups: 236.588,
+  qt: 946.353,
+  quart: 946.353,
+  quarts: 946.353,
+  gal: 3785.41,
+  gallon: 3785.41,
+  gallons: 3785.41,
   pinch: 0.3,
 };
 

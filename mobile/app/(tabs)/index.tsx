@@ -1,7 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { GuestSaveNudge } from '../../components/GuestSaveNudge';
 import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { CookConfirmBanner } from '../../components/home/CookConfirmBanner';
@@ -69,6 +78,8 @@ import type { MealDbCategoryChip } from '../../lib/recipesTab/categoryRotation';
 import { useMealDbRecipes } from '../../hooks/useMealDbRecipes';
 import { useHomeRecipePrefetch } from '../../hooks/useHomeRecipePrefetch';
 import { useHomeRecipesRefresh } from '../../hooks/useHomeRecipesRefresh';
+import { useForkInRoadHomeIdle } from '../../hooks/useForkInRoadHomeIdle';
+import { resetForkInRoadHomeIdleTimer } from '../../lib/forkinator/forkInRoadIdle';
 import {
   HomeWebPullRefreshIndicator,
   useHomeScrollRefresh,
@@ -584,6 +595,7 @@ export default function HomeScreen() {
 
   const openDetail = useCallback(
     (row: RecipesTabRow) => {
+      resetForkInRoadHomeIdleTimer();
       void (async () => {
         const resolved = await resolveRowBeforeUserAction(row);
         if (!resolved) return;
@@ -655,6 +667,8 @@ export default function HomeScreen() {
     if (!match) return null;
     return { kind: 'kitchen' as const, recipe: kitchen, match };
   }, [feedKitchenRecipes, filterBaseRows, pantryRecipeMatches.byRecipeId, pickedDetailRow, routeRecipeId, viralOpenState]);
+
+  const { onHomeScroll } = useForkInRoadHomeIdle({ recipeDetailOpen: detailRow != null });
 
   const detailMatch = useMemo(() => {
     if (!detailRow) return undefined;
@@ -952,10 +966,21 @@ export default function HomeScreen() {
     return <ScrollView className="flex-1 bg-paper" />;
   }
 
+  const homeScrollProps = homeScrollRefresh.scrollViewProps;
+  const homeScrollOnScroll = homeScrollProps.onScroll as
+    | ((event: NativeSyntheticEvent<NativeScrollEvent>) => void)
+    | undefined;
+  const mergedHomeOnScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    homeScrollOnScroll?.(event);
+    onHomeScroll();
+  };
+
   return (
     <ScrollView
       className="flex-1 bg-paper px-4 pb-8"
-      {...homeScrollRefresh.scrollViewProps}
+      {...homeScrollProps}
+      onScroll={mergedHomeOnScroll}
+      scrollEventThrottle={16}
       refreshControl={homeScrollRefresh.refreshControl}
     >
       <HomeWebPullRefreshIndicator

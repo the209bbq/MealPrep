@@ -111,7 +111,7 @@ import {
   matchedRowsForReview,
   type PantryDeductionLine,
 } from '../lib/mealPlan/pantryDeduction';
-import { scoreRecipeAgainstPantry } from '../lib/recipeMatch/match';
+import { scoreRecipeAgainstPantry, scoreRecipeForPantryDeduction } from '../lib/recipeMatch/match';
 import {
   filterRankedMatches,
   updatePantryMatchIndex,
@@ -154,6 +154,7 @@ import { writeAccountPantryCache } from '../lib/pantry/writeAccountPantryCache';
 import { PANTRY_RESTOCK_COPY } from '../config/pantryRestock';
 import { PANTRY_SCAN_UI_COPY, writeLastPantryScanLocation } from '../config/pantryScan';
 import { markForkinatorPantryScanCompleted } from '../lib/forkinator/hasScanned';
+import { emitForkinatorRestockAfterCook } from '../lib/forkinator/restockAfterCookEvent';
 import { PANTRY_STAPLES_COPY } from '../config/pantryStaples';
 import { stapleSelectionsToPantryItems, type StapleSelectionState } from '../lib/pantry/stapleCatalog';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
@@ -1517,7 +1518,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const recipe = recipeId ? feedKitchenRecipes.find((r) => r.id === recipeId) : undefined;
       if (!recipe) return;
 
-      const match = scoreRecipeAgainstPantry(recipe, pantry);
+      const match = scoreRecipeForPantryDeduction(recipe, pantry);
       const rows = matchedRowsForReview(match);
       setMealMadeReview({
         mealPlanItemId,
@@ -1597,7 +1598,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const match = scoreRecipeAgainstPantry(recipe, pantry);
+    const match = scoreRecipeForPantryDeduction(recipe, pantry);
     const excluded = new Set(
       matchedRowsForReview(match)
         .map((row) => row.matchedPantryItem!.id)
@@ -1649,6 +1650,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void undoLastMealMade(item.id);
         },
       });
+
+      if (lines.some((line) => line.quantityApplied)) {
+        emitForkinatorRestockAfterCook({
+          nextPantry,
+          pantryDeductionApplied: true,
+        });
+      }
     } catch (error: unknown) {
       setAuthError(error instanceof Error ? error.message : 'Failed to mark meal as made');
       setPantry(pantrySnapshot);
@@ -1769,7 +1777,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const match = scoreRecipeAgainstPantry(recipe, pantry);
+    const match = scoreRecipeForPantryDeduction(recipe, pantry);
     const lines = buildPantryDeductionLines(
       match,
       recipe,
@@ -3072,7 +3080,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const recipeId = resolveMealPlanRecipeId(item, feedKitchenRecipes, ownerId);
     const recipe = recipeId ? feedKitchenRecipes.find((r) => r.id === recipeId) : undefined;
     if (!recipe) return [];
-    return matchedRowsForReview(scoreRecipeAgainstPantry(recipe, pantry));
+    return matchedRowsForReview(scoreRecipeForPantryDeduction(recipe, pantry));
   }, [feedKitchenRecipes, mealMadeReview, mealPlan, ownerId, pantry]);
 
   const value = useMemo(
