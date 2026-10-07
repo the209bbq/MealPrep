@@ -120,6 +120,7 @@ import {
   consumeForkinatorRestockAfterCook,
   subscribeForkinatorRestockAfterCook,
 } from '../../lib/forkinator/restockAfterCookEvent';
+import { subscribeForkinatorTipsReset } from '../../lib/forkinator/resetForkinatorTipsEvent';
 import {
   FORKINATOR_RESTOCK_PROMPT_A11Y_LABEL,
   FORKINATOR_RESTOCK_UNDO_BUTTON_A11Y_LABEL,
@@ -216,6 +217,7 @@ export function ForkinatorOverlay() {
   const [forkInRoadPromptVisible, setForkInRoadPromptVisible] = useState(false);
   const [forkInRoadQuizVisible, setForkInRoadQuizVisible] = useState(false);
   const [expirationPromptItems, setExpirationPromptItems] = useState<PantryItem[]>([]);
+  const [tipsAutoShowEpoch, setTipsAutoShowEpoch] = useState(0);
   const positionRef = useRef<ForkinatorPosition | null>(null);
   const dragOrigin = useRef<ForkinatorPosition>({ x: 0, y: 0 });
   const pressStartedAt = useRef(0);
@@ -335,6 +337,33 @@ export function ForkinatorOverlay() {
     return () => clearTimeout(timer);
   }, [greetingPromptVisible]);
 
+  useEffect(() => {
+    return subscribeForkinatorTipsReset(() => {
+      if (autoShowPromptTimerRef.current != null) {
+        clearTimeout(autoShowPromptTimerRef.current);
+        autoShowPromptTimerRef.current = null;
+      }
+      greetingAutoShowStartedRef.current = false;
+      expirationAutoShowStartedRef.current = false;
+      scannerAutoShowStartedRef.current = false;
+      blockScannerThisSessionRef.current = false;
+      sessionAutoPromptShownRef.current = false;
+      aisleCheckedOnPathRef.current = false;
+      setThinkingVisible(false);
+      setGreetingPromptVisible(false);
+      setScannerPromptVisible(false);
+      setExpirationPromptVisible(false);
+      setAisleSortPromptVisible(false);
+      setRestockPromptVisible(false);
+      setForkInRoadPromptVisible(false);
+      setForkInRoadQuizVisible(false);
+      setExpirationPromptItems([]);
+      setRestockPromptMessage('');
+      setRestockUndoLines([]);
+      setTipsAutoShowEpoch((epoch) => epoch + 1);
+    });
+  }, []);
+
   const mascotReady = position !== null && width > 0 && height > 0;
 
   useEffect(() => {
@@ -379,7 +408,7 @@ export function ForkinatorOverlay() {
       markForkinatorScannerNudgeShown();
       showAutoPrompt('scanner');
     }, delay);
-  }, [kitchenPantryReady, mascotReady, pantryForForkinator, showAutoPrompt]);
+  }, [kitchenPantryReady, mascotReady, pantryForForkinator, showAutoPrompt, tipsAutoShowEpoch]);
 
   useEffect(() => {
     if (!isGroceryScreen) {

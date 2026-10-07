@@ -31,7 +31,15 @@ import {
   FORKINATOR_HEIGHT_PX,
   FORKINATOR_POSITION_STORAGE_KEY,
   FORKINATOR_WIDTH_PX,
+  readForkinatorPosition,
+  writeForkinatorPosition,
 } from '../lib/forkinator/position';
+import {
+  FORKINATOR_TIPS_PRESERVED_STORAGE_KEYS,
+  FORKINATOR_TIPS_RESET_STORAGE_KEYS,
+  resetForkinatorTipsStorage,
+} from '../lib/forkinator/resetForkinatorTips';
+import { writeJson } from '../lib/storage';
 import {
   FORKINATOR_GREETING_AUTO_HIDE_MS,
   FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS,
@@ -566,6 +574,8 @@ assert.match(overlaySource, /forkinatorDragSurfaceWebStyle/, 'web drag surface s
 assert.match(overlaySource, /draggable: false/, 'mascot image should not be natively draggable on web');
 assert.match(overlaySource, /onPointerDown/, 'web should use pointer events for drag');
 assert.match(overlaySource, /onClick/, 'web should activate mascot on plain click for a11y');
+assert.match(overlaySource, /subscribeForkinatorTipsReset/);
+assert.match(overlaySource, /tipsAutoShowEpoch/);
 assert.match(overlaySource, /lastPointerActivateAtRef/, 'web pointer tap records activation time');
 assert.match(
   overlaySource,
@@ -583,7 +593,7 @@ assert.match(overlaySource, /const mascotReady = position !== null && width > 0 
 assert.match(overlaySource, /autoShowPromptTimerRef/, 'auto-show timer stored in ref');
 assert.match(
   overlaySource,
-  /kitchenPantryReady[\s\S]*?\}, \[kitchenPantryReady, mascotReady, pantry, showAutoPrompt\]\)/,
+  /kitchenPantryReady[\s\S]*?\}, \[kitchenPantryReady, mascotReady, pantryForForkinator, showAutoPrompt, tipsAutoShowEpoch\]\)/,
   'auto-show effect must not depend on position',
 );
 assert.doesNotMatch(
@@ -830,7 +840,31 @@ const picks = pickForkInRoadRecipes(
 assert.equal(picks[0]?.recipe.id, 'r-fast');
 
 const accountSource = fs.readFileSync(path.join(mobileRoot, 'components/account/AccountSheet.tsx'), 'utf8');
-assert.ok(!/Forkinator/i.test(accountSource), 'Account settings should not include Forkinator toggle');
+assert.match(accountSource, /resetForkinatorTips/);
+assert.match(accountSource, /resetForkyTipsLabel/);
+assert.match(accountSource, /confirmResetForkyTips/);
+
+markForkinatorGreetingShown();
+markForkinatorPantryScanCompleted();
+writeForkinatorPosition({ x: 12, y: 34 });
+for (const key of FORKINATOR_TIPS_RESET_STORAGE_KEYS) {
+  if (key.endsWith('Day') || key.includes('Fingerprint') || key.includes('CooldownUntil')) {
+    writeJson(key, '2026-01-01');
+  } else if (key.includes('LastShownAt') || key.includes('Dismissals')) {
+    writeJson(key, 1);
+  } else {
+    writeJson(key, true);
+  }
+}
+resetForkinatorTipsStorage();
+assert.equal(readForkinatorGreetingShown(), false);
+assert.equal(readForkinatorHasScanned(), true);
+assert.deepEqual(readForkinatorPosition(), { x: 12, y: 34 });
+for (const key of FORKINATOR_TIPS_RESET_STORAGE_KEYS) {
+  assert.ok(!FORKINATOR_TIPS_PRESERVED_STORAGE_KEYS.includes(key));
+}
+assert.ok(FORKINATOR_TIPS_PRESERVED_STORAGE_KEYS.includes(FORKINATOR_POSITION_STORAGE_KEY));
+assert.ok(FORKINATOR_TIPS_PRESERVED_STORAGE_KEYS.includes(FORKINATOR_HAS_SCANNED_STORAGE_KEY));
 
 const libForkinatorDir = path.join(mobileRoot, 'lib/forkinator');
 assert.ok(fs.existsSync(path.join(libForkinatorDir, 'position.ts')), 'position helpers should exist');
