@@ -56,7 +56,23 @@ import {
   layoutScannerPrompt,
   scannerPromptBodySize,
 } from '../lib/forkinator/scannerPromptLayout';
+import {
+  markForkinatorAisleSortUsed,
+  readForkinatorAisleSortUsed,
+  shouldAutoShowForkinatorAisleSortPrompt,
+} from '../lib/forkinator/aisleSortPrompt';
+import { FORKINATOR_AISLE_SORT_MESSAGE } from '../lib/forkinator/aisleSortPromptCopy';
+import {
+  markForkinatorExpirationPromptShown,
+  shouldAutoShowForkinatorExpirationPrompt,
+} from '../lib/forkinator/expirationPrompt';
+import { buildForkinatorExpirationPromptMessage } from '../lib/forkinator/expirationPromptCopy';
 import { canSyncForkinatorWebCameraScan } from '../lib/forkinator/forkinatorWebCameraScan';
+import {
+  filterPantryExpiringWithinOneDay,
+  isPantryItemExpiringWithinOneDay,
+} from '../lib/pantry/expiringWithinOneDay';
+import { addDaysToIsoDate, todayIsoDate } from '../lib/pantry/expiry';
 import {
   consumeOpenPantryShelfScanRequest,
   requestOpenPantryShelfScan,
@@ -102,13 +118,57 @@ const nextSession = forkinatorPromptSessionPlan(true, true);
 assert.equal(nextSession.showGreeting, false);
 assert.equal(nextSession.showScanner, true, 'scanner eligible on a later session');
 
-assert.equal(resolveForkinatorMascotTapAction(true, false), 'dismissGreetingPrompt');
-assert.equal(resolveForkinatorMascotTapAction(false, true), 'dismissScannerPrompt');
-assert.equal(resolveForkinatorMascotTapAction(false, false), 'toggleThinkingBubble');
+assert.equal(
+  resolveForkinatorMascotTapAction({
+    greetingPromptVisible: true,
+    expirationPromptVisible: false,
+    aisleSortPromptVisible: false,
+    scannerPromptVisible: false,
+  }),
+  'dismissGreetingPrompt',
+);
+assert.equal(
+  resolveForkinatorMascotTapAction({
+    greetingPromptVisible: false,
+    expirationPromptVisible: true,
+    aisleSortPromptVisible: false,
+    scannerPromptVisible: false,
+  }),
+  'dismissExpirationPrompt',
+);
+assert.equal(
+  resolveForkinatorMascotTapAction({
+    greetingPromptVisible: false,
+    expirationPromptVisible: false,
+    aisleSortPromptVisible: true,
+    scannerPromptVisible: false,
+  }),
+  'dismissAisleSortPrompt',
+);
+assert.equal(
+  resolveForkinatorMascotTapAction({
+    greetingPromptVisible: false,
+    expirationPromptVisible: false,
+    aisleSortPromptVisible: false,
+    scannerPromptVisible: true,
+  }),
+  'dismissScannerPrompt',
+);
+assert.equal(
+  resolveForkinatorMascotTapAction({
+    greetingPromptVisible: false,
+    expirationPromptVisible: false,
+    aisleSortPromptVisible: false,
+    scannerPromptVisible: false,
+  }),
+  'toggleThinkingBubble',
+);
 
 assert.equal(
   resolveForkinatorMascotPose({
     thinkingVisible: false,
+    expirationPromptVisible: false,
+    aisleSortPromptVisible: false,
     scannerPromptVisible: true,
     greetingPromptVisible: false,
   }),
@@ -117,6 +177,8 @@ assert.equal(
 assert.equal(
   resolveForkinatorMascotPose({
     thinkingVisible: true,
+    expirationPromptVisible: true,
+    aisleSortPromptVisible: true,
     scannerPromptVisible: true,
     greetingPromptVisible: false,
   }),
@@ -125,6 +187,28 @@ assert.equal(
 assert.equal(
   resolveForkinatorMascotPose({
     thinkingVisible: false,
+    expirationPromptVisible: true,
+    aisleSortPromptVisible: false,
+    scannerPromptVisible: false,
+    greetingPromptVisible: false,
+  }),
+  'sad',
+);
+assert.equal(
+  resolveForkinatorMascotPose({
+    thinkingVisible: false,
+    expirationPromptVisible: false,
+    aisleSortPromptVisible: true,
+    scannerPromptVisible: false,
+    greetingPromptVisible: false,
+  }),
+  'idea',
+);
+assert.equal(
+  resolveForkinatorMascotPose({
+    thinkingVisible: false,
+    expirationPromptVisible: false,
+    aisleSortPromptVisible: false,
     scannerPromptVisible: false,
     greetingPromptVisible: true,
   }),
@@ -133,6 +217,8 @@ assert.equal(
 assert.equal(
   resolveForkinatorMascotPose({
     thinkingVisible: false,
+    expirationPromptVisible: false,
+    aisleSortPromptVisible: false,
     scannerPromptVisible: false,
     greetingPromptVisible: false,
   }),
@@ -228,6 +314,73 @@ assert.equal(consumeOpenPantryShelfScanRequest(), 'camera');
 assert.equal(consumeOpenPantryShelfScanRequest(), null);
 requestOpenPantryShelfScan('menu');
 assert.equal(consumeOpenPantryShelfScanRequest(), 'menu');
+const today = todayIsoDate();
+const tomorrow = addDaysToIsoDate(today, 1);
+const dayAfter = addDaysToIsoDate(today, 2);
+const yesterday = addDaysToIsoDate(today, -1);
+assert.equal(isPantryItemExpiringWithinOneDay({ expiresOn: today }), true);
+assert.equal(isPantryItemExpiringWithinOneDay({ expiresOn: tomorrow }), true);
+assert.equal(isPantryItemExpiringWithinOneDay({ expiresOn: dayAfter }), false);
+assert.equal(isPantryItemExpiringWithinOneDay({ expiresOn: yesterday }), false);
+const expiringSample = filterPantryExpiringWithinOneDay([
+  {
+    id: 'a',
+    name: 'Spinach',
+    expiresOn: today,
+    quantity: 1,
+    unit: 'bag',
+    category: 'produce',
+    location: 'fridge',
+    photoUri: null,
+  },
+  {
+    id: 'b',
+    name: 'Rice',
+    expiresOn: dayAfter,
+    quantity: 1,
+    unit: 'cup',
+    category: 'dry_goods',
+    location: 'pantry',
+    photoUri: null,
+  },
+] as import('../types/mealprep').PantryItem[]);
+assert.equal(expiringSample.length, 1);
+assert.match(buildForkinatorExpirationPromptMessage(expiringSample), /Spinach/);
+assert.equal(
+  shouldAutoShowForkinatorAisleSortPrompt({
+    openGroceryItemCount: 5,
+    showMealGrouping: true,
+    combineByAisle: false,
+    aisleSortUsed: false,
+  }),
+  true,
+);
+assert.equal(
+  shouldAutoShowForkinatorAisleSortPrompt({
+    openGroceryItemCount: 4,
+    showMealGrouping: true,
+    combineByAisle: false,
+    aisleSortUsed: false,
+  }),
+  false,
+);
+markForkinatorAisleSortUsed();
+assert.equal(readForkinatorAisleSortUsed(), true);
+const expirationPlan = shouldAutoShowForkinatorExpirationPrompt([
+  {
+    id: 'spinach-1',
+    name: 'Spinach',
+    expiresOn: today,
+    quantity: 1,
+    unit: 'bag',
+    category: 'produce',
+    location: 'fridge',
+    photoUri: null,
+  },
+] as import('../types/mealprep').PantryItem[]);
+assert.equal(expirationPlan.show, true);
+markForkinatorExpirationPromptShown(['spinach-1']);
+assert.equal(shouldAutoShowForkinatorExpirationPrompt(expirationPlan.items).show, false);
 assert.equal(
   canSyncForkinatorWebCameraScan({
     demoMode: false,
@@ -349,7 +502,7 @@ assert.match(overlaySource, /const mascotReady = position !== null && width > 0 
 assert.match(overlaySource, /autoShowPromptTimerRef/, 'auto-show timer stored in ref');
 assert.match(
   overlaySource,
-  /autoShowScheduledRef\.current = true[\s\S]*?\}, \[mascotReady\]\)/,
+  /autoShowScheduledRef\.current = true[\s\S]*?\}, \[mascotReady, pantry\]\)/,
   'auto-show effect must not depend on position',
 );
 assert.doesNotMatch(
@@ -391,13 +544,14 @@ assert.match(promptSource, /USE_NATIVE_DRIVER/, 'scanner prompt should gate nati
 assert.match(promptSource, /accessibilityRole="button"/);
 assert.match(promptSource, /TailCircles/, 'prompt should use thought-cloud tail circles');
 assert.ok(!promptSource.includes('SpeechPointer'), 'prompt should not use speech triangle pointer');
-assert.match(promptSource, /onCameraPress/, 'scanner prompt supports camera button');
-assert.match(promptSource, /FORKINATOR_SCANNER_CAMERA_BUTTON_LABEL/, 'camera pill label in prompt');
-assert.match(promptSource, /FORKINATOR_SCANNER_CAMERA_BUTTON_A11Y_LABEL/, 'camera button a11y');
+assert.match(promptSource, /actionButton/, 'thought prompt supports action pill button');
+assert.match(promptSource, /actionButton\.label/, 'prompt pill uses action button label');
+assert.match(promptSource, /actionButton\.accessibilityLabel/, 'prompt pill uses action button a11y');
 
 const appContextSource = fs.readFileSync(path.join(mobileRoot, 'context/AppContext.tsx'), 'utf8');
 assert.match(appContextSource, /markForkinatorPantryScanCompleted/, 'scan review save should set hasScanned');
 
+const grocerySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/grocery.tsx'), 'utf8');
 const pantrySource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/pantry.tsx'), 'utf8');
 assert.match(pantrySource, /consumeOpenPantryShelfScanRequest/, 'pantry should honor Forkinator scan requests');
 assert.match(pantrySource, /autoOpenScanMode/, 'pantry should auto-open scan menu or camera');
@@ -416,7 +570,13 @@ assert.match(overlaySource, /canSyncForkinatorWebCameraScan/, 'web falls back wh
 assert.match(pantrySource, /consumePantryWebShelfScanFile/, 'pantry consumes web shelf scan handoff');
 assert.match(overlaySource, /openPantryCameraScanFromForkinator/, 'scanner prompt camera button opens camera mode');
 assert.match(overlaySource, /includeCameraButton: true/, 'scanner prompt layout reserves button space');
-assert.equal((overlaySource.match(/onCameraPress/g) ?? []).length, 1, 'only scanner prompt gets camera button');
+assert.match(overlaySource, /FORKINATOR_AISLE_SORT_MESSAGE/);
+assert.match(overlaySource, /buildForkinatorExpirationPromptMessage/);
+assert.match(overlaySource, /forkinator-sad\.png/);
+assert.match(overlaySource, /sessionAutoPromptShownRef/);
+assert.match(grocerySource, /markForkinatorAisleSortUsed/);
+assert.match(pantrySource, /consumePantryExpiringHighlightRequest/);
+assert.equal(FORKINATOR_AISLE_SORT_MESSAGE.includes('aisle'), true);
 
 const accountSource = fs.readFileSync(path.join(mobileRoot, 'components/account/AccountSheet.tsx'), 'utf8');
 assert.ok(!/Forkinator/i.test(accountSource), 'Account settings should not include Forkinator toggle');

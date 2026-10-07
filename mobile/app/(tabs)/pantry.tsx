@@ -63,6 +63,10 @@ import {
   consumePantryWebShelfScanFile,
   subscribeOpenPantryShelfScan,
 } from '../../lib/pantry/openShelfScanRequest';
+import {
+  consumePantryExpiringHighlightRequest,
+  subscribePantryExpiringHighlight,
+} from '../../lib/pantry/openExpiringHighlightRequest';
 import { readJson, writeJson } from '../../lib/storage';
 import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
 import { PantryImageQualityError } from '../../lib/pantryVision/prepareImageShared';
@@ -179,6 +183,7 @@ export default function PantryScreen() {
   );
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
   const [autoOpenScanMode, setAutoOpenScanMode] = useState<'menu' | 'camera' | null>(null);
+  const [highlightItemIds, setHighlightItemIds] = useState<Set<string>>(() => new Set());
   const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
   const pantryScanUploadRef = useRef<Promise<string | null> | null>(null);
   const scanSessionIdRef = useRef<string | null>(null);
@@ -201,6 +206,14 @@ export default function PantryScreen() {
     }
   }
 
+  const tryConsumeExpiringHighlight = useCallback(() => {
+    const ids = consumePantryExpiringHighlightRequest();
+    if (!ids?.length) return;
+    setHighlightItemIds(new Set(ids));
+    selectLocationFilter('all');
+    setFilter('all');
+  }, []);
+
   const tryConsumeShelfScanRequest = useCallback(() => {
     const webFile = consumePantryWebShelfScanFile();
     if (webFile) {
@@ -216,8 +229,9 @@ export default function PantryScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      tryConsumeExpiringHighlight();
       tryConsumeShelfScanRequest();
-    }, [tryConsumeShelfScanRequest]),
+    }, [tryConsumeExpiringHighlight, tryConsumeShelfScanRequest]),
   );
 
   useEffect(() => {
@@ -227,8 +241,15 @@ export default function PantryScreen() {
   }, [tryConsumeShelfScanRequest]);
 
   useEffect(() => {
+    return subscribePantryExpiringHighlight(() => {
+      tryConsumeExpiringHighlight();
+    });
+  }, [tryConsumeExpiringHighlight]);
+
+  useEffect(() => {
+    tryConsumeExpiringHighlight();
     tryConsumeShelfScanRequest();
-  }, [phase, tryConsumeShelfScanRequest]);
+  }, [phase, tryConsumeExpiringHighlight, tryConsumeShelfScanRequest]);
 
   const visionReady = isPantryVisionConfigured();
   const accessToken = session?.access_token ?? null;
@@ -1045,6 +1066,7 @@ export default function PantryScreen() {
             items={pantry}
             categoryFilter={filter}
             locationFilter={locationFilter}
+            highlightItemIds={highlightItemIds}
             onPressItem={openEditModal}
             onResetFilters={() => {
               selectLocationFilter('all');

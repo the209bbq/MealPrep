@@ -3,10 +3,6 @@ import { Animated, Easing, Platform, Pressable, Text, View } from 'react-native'
 import { THEME } from '../../config/appConfig';
 import { Ionicons } from '../../lib/icons/Ionicons';
 import {
-  FORKINATOR_SCANNER_CAMERA_BUTTON_A11Y_LABEL,
-  FORKINATOR_SCANNER_CAMERA_BUTTON_LABEL,
-} from '../../lib/forkinator/scannerNudgeCopy';
-import {
   SCANNER_PROMPT_BORDER_RADIUS,
   SCANNER_PROMPT_CAMERA_BUTTON_HEIGHT,
   SCANNER_PROMPT_CAMERA_BUTTON_MARGIN_TOP,
@@ -21,6 +17,13 @@ import { THINKING_BUBBLE_TAIL_GAP } from '../../lib/forkinator/thinkingBubbleLay
 const OUTLINE = '#D1D5DB';
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
+export type ForkinatorPromptActionButton = {
+  label: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+  icon?: 'camera';
+};
+
 type ForkinatorScannerPromptProps = {
   layout: ScannerPromptLayout;
   visible: boolean;
@@ -28,7 +31,7 @@ type ForkinatorScannerPromptProps = {
   message: string;
   accessibilityLabel: string;
   onPress: () => void;
-  onCameraPress?: () => void;
+  actionButton?: ForkinatorPromptActionButton;
 };
 
 function TailCircles({ placement }: { placement: ScannerPromptPlacement }) {
@@ -69,7 +72,7 @@ export function ForkinatorScannerPrompt({
   message,
   accessibilityLabel,
   onPress,
-  onCameraPress,
+  actionButton,
 }: ForkinatorScannerPromptProps) {
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -130,11 +133,11 @@ export function ForkinatorScannerPrompt({
           {message}
         </Text>
       </Pressable>
-      {onCameraPress ? (
+      {actionButton ? (
         <Pressable
-          onPress={onCameraPress}
+          onPress={actionButton.onPress}
           accessibilityRole="button"
-          accessibilityLabel={FORKINATOR_SCANNER_CAMERA_BUTTON_A11Y_LABEL}
+          accessibilityLabel={actionButton.accessibilityLabel}
           style={{
             marginTop: SCANNER_PROMPT_CAMERA_BUTTON_MARGIN_TOP,
             height: SCANNER_PROMPT_CAMERA_BUTTON_HEIGHT,
@@ -147,7 +150,9 @@ export function ForkinatorScannerPrompt({
             paddingHorizontal: 10,
           }}
         >
-          <Ionicons name="camera-outline" size={14} color={THEME.onPrimary} />
+          {actionButton.icon === 'camera' ? (
+            <Ionicons name="camera-outline" size={14} color={THEME.onPrimary} />
+          ) : null}
           <Text
             pointerEvents="none"
             style={{
@@ -156,7 +161,7 @@ export function ForkinatorScannerPrompt({
               color: THEME.onPrimary,
             }}
           >
-            {FORKINATOR_SCANNER_CAMERA_BUTTON_LABEL}
+            {actionButton.label}
           </Text>
         </Pressable>
       ) : null}
