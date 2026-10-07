@@ -5,6 +5,9 @@ import {
   suggestStorageLocationForPantryItem,
 } from '../../config/pantryStorage';
 import type { PantryItem } from '../../types/mealprep';
+import { attachStapleVarieties, type StapleVarietyOption } from './stapleVarietyOptions';
+
+export type { StapleVarietyOption };
 
 export const STAPLE_STORE_SECTIONS = [
   'produce',
@@ -45,6 +48,8 @@ export interface StapleCatalogEntry {
   defaultUnit: string;
   sizeOptions?: StapleSizeOption[];
   defaultSizeId?: string;
+  varietyOptions?: StapleVarietyOption[];
+  defaultVarietyId?: string;
   perishable?: boolean;
   /** Typical shelf life in days for default expiry chip. */
   shelfLifeDays?: number;
@@ -53,6 +58,8 @@ export interface StapleCatalogEntry {
 export interface StapleSelectionState {
   stapleId: string;
   sizeOptionId?: string;
+  /** Selected subtype ids (multi-select). Empty uses default variety when saving. */
+  varietyOptionIds?: string[];
   /** `YYYY-MM-DD` or null when user skipped expiry. */
   expiresOn?: string | null;
   /** When true, expiry row was shown and user explicitly cleared it. */
@@ -90,7 +97,7 @@ const OIL_SIZES: StapleSizeOption[] = [
   { id: '48oz', label: '48 oz', quantity: 48, unit: 'oz' },
 ];
 
-export const STAPLE_CATALOG: StapleCatalogEntry[] = [
+const STAPLE_CATALOG_BASE: StapleCatalogEntry[] = [
   { id: 'onions', name: 'Onions', emoji: '🧅', category: 'produce', section: 'produce', defaultQuantity: 3, defaultUnit: 'each', perishable: true, shelfLifeDays: 21 },
   { id: 'garlic', name: 'Garlic', emoji: '🧄', category: 'produce', section: 'produce', defaultQuantity: 1, defaultUnit: 'head', perishable: true, shelfLifeDays: 21 },
   { id: 'potatoes', name: 'Potatoes', emoji: '🥔', category: 'produce', section: 'produce', defaultQuantity: 5, defaultUnit: 'lb', perishable: true, shelfLifeDays: 14 },
@@ -271,6 +278,10 @@ export const STAPLE_CATALOG: StapleCatalogEntry[] = [
   { id: 'bagels', name: 'Bagels', emoji: '🥯', category: 'dry_goods', section: 'bakery', defaultQuantity: 6, defaultUnit: 'each', perishable: true, shelfLifeDays: 5 },
 ];
 
+export const STAPLE_CATALOG: StapleCatalogEntry[] = STAPLE_CATALOG_BASE.map((entry) =>
+  attachStapleVarieties(entry),
+);
+
 /** Popular staples shown beside the Pantry “Add staples” chip (emoji pulled from catalog). */
 export const PANTRY_STAPLES_LINK_PREVIEW_IDS = ['eggs', 'milk', 'onions', 'rice', 'bread'] as const;
 
@@ -301,10 +312,33 @@ export function defaultStapleSelection(staple: StapleCatalogEntry, now = new Dat
   if (staple.defaultSizeId) {
     selection.sizeOptionId = staple.defaultSizeId;
   }
+  if (staple.varietyOptions?.length) {
+    const defaultId = staple.defaultVarietyId ?? staple.varietyOptions[0].id;
+    selection.varietyOptionIds = [defaultId];
+  }
   if (staple.perishable && staple.shelfLifeDays) {
     selection.expiresOn = estimateExpiryFromShelfLife(staple.shelfLifeDays, now);
   }
   return selection;
+}
+
+export function resolveStapleVarietyIds(
+  staple: StapleCatalogEntry,
+  selection: StapleSelectionState,
+): string[] {
+  if (!staple.varietyOptions?.length) return [];
+  const valid = new Set(staple.varietyOptions.map((opt) => opt.id));
+  const picked = (selection.varietyOptionIds ?? []).filter((id) => valid.has(id));
+  if (picked.length > 0) return picked;
+  const fallback = staple.defaultVarietyId ?? staple.varietyOptions[0].id;
+  return [fallback];
+}
+
+export function getStapleVarietyOption(
+  staple: StapleCatalogEntry,
+  varietyId: string,
+): StapleVarietyOption | undefined {
+  return staple.varietyOptions?.find((opt) => opt.id === varietyId);
 }
 
 export function resolveStapleQuantityUnit(
@@ -326,39 +360,64 @@ function newPantryRowId(): string {
   return `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14)}${Math.random().toString(16).slice(2, 6)}`;
 }
 
-export function stapleSelectionToPantryItem(
+function stapleSelectionToPantryItemRow(
   selection: StapleSelectionState,
-  now = new Date().toISOString(),
-): PantryItem | null {
-  const staple = getStapleById(selection.stapleId);
-  if (!staple) return null;
+  staple: StapleCatalogEntry,
+  varietyId: string | null,
+  now: string,
+): PantryItem {
   const { quantity, unit } = resolveStapleQuantityUnit(staple, selection);
   const expiresOn =
     selection.expirySkipped ? null : selection.expiresOn !== undefined ? selection.expiresOn : staple.perishable && staple.shelfLifeDays
       ? estimateExpiryFromShelfLife(staple.shelfLifeDays)
       : null;
 
+  const variety = varietyId ? getStapleVarietyOption(staple, varietyId) : undefined;
+  const displayName = variety?.pantryName ?? staple.name;
+  const ingredientId = varietyId ? `staple-${staple.id}-${varietyId}` : `staple-${staple.id}`;
+
   return {
     id: newPantryRowId(),
-    ingredientId: `staple-${staple.id}`,
-    name: staple.name,
+    ingredientId,
+    name: displayName,
     category: staple.category,
     quantity,
     unit,
-    location: suggestStorageLocationForPantryItem(staple.name, staple.category),
+    location: suggestStorageLocationForPantryItem(displayName, staple.category),
     photoUri: null,
     expiresOn,
     updatedAt: now,
   };
 }
 
+/** One pantry row per selected variety (or a single row when the staple has no varieties). */
+export function stapleSelectionToPantryItems(
+  selection: StapleSelectionState,
+  now = new Date().toISOString(),
+): PantryItem[] {
+  const staple = getStapleById(selection.stapleId);
+  if (!staple) return [];
+  const varietyIds = resolveStapleVarietyIds(staple, selection);
+  if (varietyIds.length === 0) {
+    return [stapleSelectionToPantryItemRow(selection, staple, null, now)];
+  }
+  return varietyIds.map((varietyId) => stapleSelectionToPantryItemRow(selection, staple, varietyId, now));
+}
+
+/** First pantry row for a staple pick (for simple assertions). */
+export function stapleSelectionToPantryItem(
+  selection: StapleSelectionState,
+  now = new Date().toISOString(),
+): PantryItem | null {
+  const rows = stapleSelectionToPantryItems(selection, now);
+  return rows[0] ?? null;
+}
+
 export function stapleSelectionsToPantryItems(
   selections: StapleSelectionState[],
   now = new Date().toISOString(),
 ): PantryItem[] {
-  return selections
-    .map((selection) => stapleSelectionToPantryItem(selection, now))
-    .filter((row): row is PantryItem => row !== null);
+  return selections.flatMap((selection) => stapleSelectionToPantryItems(selection, now));
 }
 
 export const STAPLE_EXPIRY_QUICK_CHIPS = [

@@ -9,9 +9,12 @@ import {
   defaultStapleSelection,
   getStapleById,
   resolveStapleQuantityUnit,
+  resolveStapleVarietyIds,
   stapleSelectionToPantryItem,
+  stapleSelectionToPantryItems,
   stapleSelectionsToPantryItems,
 } from '../lib/pantry/stapleCatalog.ts';
+import { STAPLE_VARIETY_OPTIONS } from '../lib/pantry/stapleVarietyOptions.ts';
 import { addDaysToIsoDate, estimateExpiryFromShelfLife, isExpiringSoon, todayIsoDate } from '../lib/pantry/expiry.ts';
 import { mergeStapleSelectionsIntoPantry } from '../lib/pantry/stapleMerge.ts';
 import type { PantryItem } from '../types/mealprep.ts';
@@ -26,6 +29,24 @@ for (const section of STAPLE_STORE_SECTIONS) {
   const count = STAPLE_CATALOG.filter((row) => row.section === section).length;
   assert.ok(count > 0, `empty section ${section}`);
 }
+
+for (const staple of STAPLE_CATALOG) {
+  const varieties = STAPLE_VARIETY_OPTIONS[staple.id];
+  assert.ok(varieties && varieties.length >= 2, `${staple.id} missing variety options`);
+  assert.ok(staple.varietyOptions?.length === varieties.length, `${staple.id} variety attach`);
+  assert.ok(staple.defaultVarietyId, `${staple.id} missing defaultVarietyId`);
+}
+
+const onions = getStapleById('onions');
+assert.ok(onions);
+const onionPick = defaultStapleSelection(onions!);
+assert.deepEqual(resolveStapleVarietyIds(onions!, onionPick), ['yellow']);
+onionPick.varietyOptionIds = ['white', 'red', 'shallot'];
+const onionRows = stapleSelectionToPantryItems(onionPick);
+assert.equal(onionRows.length, 3);
+assert.ok(onionRows.some((row) => row.name === 'White onion'));
+assert.ok(onionRows.some((row) => row.name === 'Red onion'));
+assert.ok(onionRows.some((row) => row.name === 'Shallots'));
 
 const milk = getStapleById('milk');
 assert.ok(milk);
@@ -58,8 +79,8 @@ assert.equal(isExpiringSoon(soonItem, 7, new Date('2026-10-06T12:00:00Z')), true
 
 const existing: PantryItem = {
   id: 'existing-milk',
-  ingredientId: 'staple-milk',
-  name: 'Milk',
+  ingredientId: 'staple-milk-whole',
+  name: 'Whole milk',
   category: 'dairy',
   quantity: 1,
   unit: 'gal',
@@ -83,6 +104,17 @@ const rows = stapleSelectionsToPantryItems([
 assert.equal(rows.length, 2);
 const riceRow = stapleSelectionToPantryItem(defaultStapleSelection(rice!));
 assert.ok(riceRow);
-assert.equal(riceRow!.ingredientId, 'staple-rice');
+assert.equal(riceRow!.ingredientId, 'staple-rice-white');
+assert.equal(riceRow!.name, 'White rice');
+
+const milkRows = stapleSelectionToPantryItems({
+  stapleId: 'milk',
+  sizeOptionId: 'half_gallon',
+  varietyOptionIds: ['whole', 'skim'],
+});
+assert.equal(milkRows.length, 2);
+assert.equal(milkRows[0].unit, 'gal');
+assert.equal(milkRows[0].quantity, 0.5);
+assert.ok(milkRows.some((row) => row.name === 'Skim milk'));
 
 console.log('pantry-staples-check: ok');
