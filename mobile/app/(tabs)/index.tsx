@@ -158,6 +158,7 @@ export default function HomeScreen() {
     savedRecipes,
     registerSavedRecipeToggleOutcome,
     finishCookViewSession,
+    beginCookViewSession,
     cookConfirmPrompt,
     confirmCookConfirmPrompt,
     declineCookConfirmPrompt,
@@ -600,11 +601,18 @@ export default function HomeScreen() {
         const resolved = await resolveRowBeforeUserAction(row);
         if (!resolved) return;
         logOpen(refKeyFromRecipesTabRow(resolved));
+        if (resolved.kind === 'kitchen') {
+          beginCookViewSession(
+            scheduleTargetFromRecipesTabRow(resolved, {
+              onOpenCookView: () => {},
+            }),
+          );
+        }
         setDetailInitialSection('ingredients');
         setPickedDetailRow(resolved);
       })();
     },
-    [logOpen, resolveRowBeforeUserAction],
+    [beginCookViewSession, logOpen, resolveRowBeforeUserAction],
   );
 
   const openSwapRecipe = useCallback(

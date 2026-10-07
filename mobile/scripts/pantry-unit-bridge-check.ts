@@ -11,6 +11,7 @@ import {
 } from '../lib/mealPlan/pantryDeduction';
 import { isIngredientUnmeasurableForDeduction } from '../lib/mealPlan/deductionIngredient';
 import { planStapleRestockLines } from '../lib/forkinator/restockReminders';
+import { findPantryItemsForIngredient } from '../lib/recipeMatch/pantryStock';
 import { scoreRecipeForPantryDeduction } from '../lib/recipeMatch/match';
 import { ingredientShortfall } from '../lib/recipeMatch/pantryStock';
 import type { PantryItem, Recipe } from '../types/mealprep';
@@ -137,5 +138,11 @@ const lowEggPantry: PantryItem[] = [{ ...stapleEggPantry[0], quantity: 1 }];
 const restock = planStapleRestockLines(lowEggPantry, []);
 assert.equal(restock.length, 1, 'staple at 25% or below triggers restock plan');
 assert.equal(restock[0]?.stapleId, 'eggs');
+
+const yolkMatches = findPantryItemsForIngredient(
+  { name: 'Egg yolk', ingredientId: 'egg-yolk', quantity: 1, unit: 'each' },
+  stapleEggPantry,
+);
+assert.equal(yolkMatches.length, 1, 'egg yolk maps to eggs staple pantry row');
 
 console.log('pantry-unit-bridge-check: ok');

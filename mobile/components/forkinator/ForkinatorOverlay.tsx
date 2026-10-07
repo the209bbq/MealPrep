@@ -136,7 +136,9 @@ import {
 import { subscribeForkInRoadHomeIdleReady } from '../../lib/forkinator/forkInRoadIdle';
 import { buildForkInRoadCandidateRows } from '../../lib/forkinator/forkInRoadQuiz';
 import { filterRecipesTabRowsForDietPrefs } from '../../lib/diet/filterRows';
+import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { readJson } from '../../lib/storage';
+import type { ForkinatorAutoPromptKind } from '../../lib/forkinator/forkinatorActivePrompt';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 
 const FORKINATOR_MASCOT_POSE_SOURCES: Record<ForkinatorMascotPose, number> = {
@@ -174,8 +176,10 @@ export function ForkinatorOverlay() {
     addManualGroceryItem,
     removeGroceryItem,
     feedKitchenRecipes,
+    recipes,
     pantryRecipeMatches,
     userDietPrefs,
+    kitchenPantryReady,
   } = useApp();
   const photoScanAccess = useMemo(
     () => ({
@@ -216,7 +220,28 @@ export function ForkinatorOverlay() {
   const forkInRoadPromptVisibleRef = useRef(false);
   const sessionAutoPromptShownRef = useRef(false);
   const restockHandledForCookRef = useRef(false);
-  const aisleAutoShowCheckedRef = useRef(false);
+  const aisleCheckedOnPathRef = useRef(false);
+
+  const showAutoPrompt = useCallback((kind: ForkinatorAutoPromptKind) => {
+    setThinkingVisible(false);
+    const setters: Record<ForkinatorAutoPromptKind, (v: boolean) => void> = {
+      greeting: setGreetingPromptVisible,
+      expiration: setExpirationPromptVisible,
+      restock: setRestockPromptVisible,
+      aisleSort: setAisleSortPromptVisible,
+      scanner: setScannerPromptVisible,
+      forkInRoad: setForkInRoadPromptVisible,
+    };
+    const setter = setters[kind];
+    setGreetingPromptVisible(false);
+    setExpirationPromptVisible(false);
+    setRestockPromptVisible(false);
+    setAisleSortPromptVisible(false);
+    setScannerPromptVisible(false);
+    setForkInRoadPromptVisible(false);
+    setter(true);
+    sessionAutoPromptShownRef.current = true;
+  }, []);
 
   const bounds: ForkinatorBounds = useMemo(
     () => ({
@@ -291,17 +316,18 @@ export function ForkinatorOverlay() {
   const mascotReady = position !== null && width > 0 && height > 0;
 
   useEffect(() => {
-    if (!mascotReady) return;
+    if (!mascotReady || !kitchenPantryReady) return;
     if (autoShowScheduledRef.current) return;
     autoShowScheduledRef.current = true;
+
+    const delay = FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS;
 
     if (!readForkinatorGreetingShown()) {
       blockScannerThisSessionRef.current = true;
       autoShowPromptTimerRef.current = setTimeout(() => {
         autoShowPromptTimerRef.current = null;
         markForkinatorGreetingShown();
-        sessionAutoPromptShownRef.current = true;
-        setGreetingPromptVisible(true);
+        showAutoPrompt('greeting');
       }, FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS);
       return;
     }
@@ -312,11 +338,10 @@ export function ForkinatorOverlay() {
     if (expirationPlan.show) {
       autoShowPromptTimerRef.current = setTimeout(() => {
         autoShowPromptTimerRef.current = null;
-        sessionAutoPromptShownRef.current = true;
         setExpirationPromptItems(expirationPlan.items);
         markForkinatorExpirationPromptShown(expirationPlan.items.map((item) => item.id));
-        setExpirationPromptVisible(true);
-      }, FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS);
+        showAutoPrompt('expiration');
+      }, delay);
       return;
     }
 
@@ -327,16 +352,19 @@ export function ForkinatorOverlay() {
       if (blockScannerThisSessionRef.current) return;
       if (!shouldAutoShowForkinatorScannerPrompt(readForkinatorHasScanned())) return;
       markForkinatorScannerNudgeShown();
-      sessionAutoPromptShownRef.current = true;
-      setScannerPromptVisible(true);
-    }, FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS);
-  }, [mascotReady, pantry]);
+      showAutoPrompt('scanner');
+    }, delay);
+  }, [kitchenPantryReady, mascotReady, pantry, showAutoPrompt]);
 
   useEffect(() => {
-    if (!mascotReady || !isGroceryScreen) return;
+    if (!isGroceryScreen) {
+      aisleCheckedOnPathRef.current = false;
+      return;
+    }
+    if (!mascotReady || !kitchenPantryReady) return;
     if (sessionAutoPromptShownRef.current) return;
-    if (aisleAutoShowCheckedRef.current) return;
-    aisleAutoShowCheckedRef.current = true;
+    if (aisleCheckedOnPathRef.current) return;
+    aisleCheckedOnPathRef.current = true;
     if (
       !shouldAutoShowForkinatorAisleSortPrompt({
         openGroceryItemCount: openGroceryCount,
@@ -347,15 +375,23 @@ export function ForkinatorOverlay() {
       return;
     }
     markForkinatorAisleSortPromptShown();
-    sessionAutoPromptShownRef.current = true;
-    setAisleSortPromptVisible(true);
+    showAutoPrompt('aisleSort');
   }, [
     groceryCombineByAisle,
     isGroceryScreen,
+    kitchenPantryReady,
     mascotReady,
     openGroceryCount,
     showMealGrouping,
+    showAutoPrompt,
   ]);
+
+  useEffect(() => {
+    if (!greetingPromptVisible) return;
+    setAisleSortPromptVisible(false);
+    setScannerPromptVisible(false);
+    setThinkingVisible(false);
+  }, [greetingPromptVisible]);
 
   useEffect(() => {
     return () => {
@@ -387,11 +423,8 @@ export function ForkinatorOverlay() {
     const messageNames = lines.map((line) => stapleDisplayNameForMessage(line.stapleId, line.name));
     setRestockUndoLines(lines.map((line) => ({ name: line.name, unit: line.unit })));
     setRestockPromptMessage(buildRestockReminderMessage(messageNames));
-    setScannerPromptVisible(false);
-    setAisleSortPromptVisible(false);
-    setForkInRoadPromptVisible(false);
-    setRestockPromptVisible(true);
-  }, [addManualGroceryItem, grocery]);
+    showAutoPrompt('restock');
+  }, [addManualGroceryItem, grocery, showAutoPrompt]);
 
   useEffect(() => {
     const unsubscribe = subscribeForkinatorRestockAfterCook(() => {
@@ -405,13 +438,17 @@ export function ForkinatorOverlay() {
     const filterState = parseStoredRecipesTabFilterState(
       readJson(RECIPES_TAB_FILTERS_STORAGE_KEY, null),
     );
+    const kitchenSource =
+      feedKitchenRecipes.length > 0
+        ? feedKitchenRecipes
+        : kitchenRecipesForPantryMatch(recipes);
     const rows = buildForkInRoadCandidateRows({
-      kitchenRecipes: feedKitchenRecipes,
+      kitchenRecipes: kitchenSource,
       pantryMatches: pantryRecipeMatches,
       filterState,
     });
     return filterRecipesTabRowsForDietPrefs(rows, userDietPrefs);
-  }, [feedKitchenRecipes, pantryRecipeMatches, userDietPrefs]);
+  }, [feedKitchenRecipes, pantryRecipeMatches, recipes, userDietPrefs]);
 
   const tryShowForkInRoadPrompt = useCallback(() => {
     if (!mascotReady || !isHomeScreen) return;
@@ -424,8 +461,8 @@ export function ForkinatorOverlay() {
     if (!shouldAutoShowForkInRoadPrompt()) return;
     if (forkInRoadCandidateRows.length === 0) return;
     markForkInRoadPromptShown();
-    setForkInRoadPromptVisible(true);
-  }, [forkInRoadCandidateRows.length, isHomeScreen, mascotReady]);
+    showAutoPrompt('forkInRoad');
+  }, [forkInRoadCandidateRows.length, isHomeScreen, mascotReady, showAutoPrompt]);
 
   useEffect(() => {
     return subscribeForkInRoadHomeIdleReady(() => {
@@ -810,6 +847,17 @@ export function ForkinatorOverlay() {
   });
   const mascotSource = FORKINATOR_MASCOT_POSE_SOURCES[mascotPose];
 
+  const onWebClick = useCallback(
+    (event: { preventDefault: () => void }) => {
+      if (!IS_WEB) return;
+      const track = pointerTrackRef.current;
+      if (track && track.maxDistance > 0) return;
+      event.preventDefault();
+      handleMascotActivate();
+    },
+    [handleMascotActivate],
+  );
+
   const dragInteractionProps: ViewProps = IS_WEB
     ? ({
         onPointerDown,
@@ -817,8 +865,9 @@ export function ForkinatorOverlay() {
         onPointerUp,
         onPointerCancel,
         onKeyDown,
+        onClick: onWebClick,
         tabIndex: 0,
-      } as ViewProps)
+      } as ViewProps & { onClick?: typeof onWebClick; tabIndex?: number })
     : panResponder.panHandlers;
 
   return (
