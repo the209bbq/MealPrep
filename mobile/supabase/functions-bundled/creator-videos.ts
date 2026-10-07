@@ -202,24 +202,41 @@ function isVisibleInCreatorFeed(row, hideOverrides) {
     isShort: row.is_short
   });
 }
-async function loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides) {
+function channelIdsWithVisibleFeedVideos(rows, hideOverrides) {
   const channelIds = /* @__PURE__ */ new Set();
-  let offset = 0;
-  while (true) {
-    const from = offset;
-    const to = offset + POSTGREST_PAGE_SIZE - 1;
-    const { data, error } = await admin.from("creator_videos").select("video_id, channel_id, title, description_snippet, is_short").order("video_id", { ascending: true }).range(from, to);
-    if (error) throw error;
-    const page = data ?? [];
-    for (const row of page) {
-      if (isVisibleInCreatorFeed(row, hideOverrides)) {
-        channelIds.add(row.channel_id);
-      }
+  for (const row of rows) {
+    if (isVisibleInCreatorFeed(row, hideOverrides)) {
+      channelIds.add(row.channel_id);
     }
-    if (page.length < POSTGREST_PAGE_SIZE) break;
-    offset += POSTGREST_PAGE_SIZE;
   }
   return channelIds;
+}
+async function fetchCreatorListVideoPage(admin, pageIndex) {
+  const from = pageIndex * POSTGREST_PAGE_SIZE;
+  const to = from + POSTGREST_PAGE_SIZE - 1;
+  const { data, error } = await admin.from("creator_videos").select("video_id, channel_id, title, description_snippet, is_short").order("video_id", { ascending: true }).range(from, to);
+  if (error) throw error;
+  return data ?? [];
+}
+async function loadCreatorListVideoRows(admin) {
+  const firstPage = await fetchCreatorListVideoPage(admin, 0);
+  if (firstPage.length < POSTGREST_PAGE_SIZE) return firstPage;
+  const { count, error: countError } = await admin.from("creator_videos").select("video_id", { count: "exact", head: true });
+  if (countError) throw countError;
+  const total = count ?? firstPage.length;
+  const pageCount = Math.ceil(total / POSTGREST_PAGE_SIZE);
+  if (pageCount <= 1) return firstPage;
+  const restPages = await Promise.all(
+    Array.from(
+      { length: pageCount - 1 },
+      (_, index) => fetchCreatorListVideoPage(admin, index + 1)
+    )
+  );
+  return firstPage.concat(...restPages);
+}
+async function loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides) {
+  const rows = await loadCreatorListVideoRows(admin);
+  return channelIdsWithVisibleFeedVideos(rows, hideOverrides);
 }
 
 // supabase/functions/creator-videos/fitOrder.ts
@@ -614,7 +631,8 @@ async function refreshAndPersistCreator(admin, apiKey, channelId, options) {
 // supabase/functions/creator-videos/index.ts
 var corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-creator-admin-secret"
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-creator-admin-secret",
+  "Access-Control-Max-Age": "86400"
 };
 var ADMIN_SECRET_HEADER = "x-creator-admin-secret";
 function creatorToDto(row) {
@@ -626,6 +644,7 @@ function creatorToDto(row) {
     channelUrl: row.channel_url,
     avatarUrl: row.avatar_url,
     subscriberCount: row.subscriber_count,
+    totalChannelViews: row.total_views ?? 0,
     rank: row.rank,
     fit: row.fit ?? "Medium",
     source: row.source
@@ -696,7 +715,7 @@ function parseFeedMode(input) {
 }
 async function loadCreatorsMap(admin) {
   const { data, error } = await admin.from("recipe_creators").select(
-    "id, youtube_channel_id, display_name, handle, channel_url, avatar_url, subscriber_count, avg_views, rank, fit, source"
+    "id, youtube_channel_id, display_name, handle, channel_url, avatar_url, subscriber_count, total_views, avg_views, rank, fit, source"
   ).eq("enabled", true);
   if (error) throw error;
   const sorted = [...data ?? []].sort(compareCreatorsByFitAndSubscribers);
@@ -706,7 +725,7 @@ async function loadCreatorsMap(admin) {
   }
   return map;
 }
-async function readFeedVideos(admin, mode, channelFitWeight, creatorsMap, hideOverrides) {
+async function queryFeedVideoRows(admin, mode) {
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1e3).toISOString();
   let query = admin.from("creator_videos").select(
     "video_id, channel_id, title, description_snippet, thumbnail_url, published_at, view_count, like_count, duration_seconds, is_short, url"
@@ -720,7 +739,10 @@ async function readFeedVideos(admin, mode, channelFitWeight, creatorsMap, hideOv
   }
   const { data, error } = await query;
   if (error) throw error;
-  let rows = applyHideOverrides(data ?? [], hideOverrides);
+  return data ?? [];
+}
+function processFeedVideoRows(rawRows, mode, channelFitWeight, creatorsMap, hideOverrides) {
+  let rows = applyHideOverrides(rawRows, hideOverrides);
   if (mode === "popular") {
     rows = rows.filter(
       (row) => !isLowQualityFeedVideo(row.title, row.description_snippet ?? "", {
@@ -757,14 +779,24 @@ async function readFeedVideos(admin, mode, channelFitWeight, creatorsMap, hideOv
   return mixCreatorFeed(rows, { channelFitWeight }).slice(0, 60);
 }
 async function handlePublicAction(admin, body, limitKey) {
-  const creatorsMap = await loadCreatorsMap(admin);
-  const hideOverrides = await loadCreatorVideoOverrides(admin);
+  const creatorsMapPromise = loadCreatorsMap(admin);
+  const hideOverridesPromise = loadCreatorVideoOverrides(admin);
   if (body.action === "creators") {
-    const channelsWithVideos = await loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides);
+    const channelsPromise = hideOverridesPromise.then(
+      (hideOverrides) => loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides)
+    );
+    const [creatorsMap, channelsWithVideos] = await Promise.all([
+      creatorsMapPromise,
+      channelsPromise
+    ]);
     const creators = [...creatorsMap.values()].filter((row) => channelsWithVideos.has(row.youtube_channel_id)).sort(compareCreatorsByFitAndSubscribers).map(creatorToDto);
     return jsonResponse({ creators });
   }
   if (body.action === "creator") {
+    const [creatorsMap, hideOverrides] = await Promise.all([
+      creatorsMapPromise,
+      hideOverridesPromise
+    ]);
     const handle = typeof body.handle === "string" ? body.handle.trim() : "";
     const channelId = typeof body.channelId === "string" && body.channelId.trim() ? body.channelId.trim() : "";
     let creator;
@@ -789,8 +821,14 @@ async function handlePublicAction(admin, body, limitKey) {
   }
   if (body.action === "feed") {
     const mode = parseFeedMode(body.mode);
+    const feedRowsPromise = queryFeedVideoRows(admin, mode);
+    const [creatorsMap, hideOverrides, rawRows] = await Promise.all([
+      creatorsMapPromise,
+      hideOverridesPromise,
+      feedRowsPromise
+    ]);
     const fitWeights = buildChannelFitWeightMap(creatorsMap.values());
-    const rows = await readFeedVideos(admin, mode, fitWeights, creatorsMap, hideOverrides);
+    const rows = processFeedVideoRows(rawRows, mode, fitWeights, creatorsMap, hideOverrides);
     const videos = rows.map((row) => videoToDto(row, creatorsMap.get(row.channel_id)));
     return jsonResponse({ mode, videos });
   }
@@ -805,6 +843,10 @@ async function handlePublicAction(admin, body, limitKey) {
         429
       );
     }
+    const [creatorsMap, hideOverrides] = await Promise.all([
+      creatorsMapPromise,
+      hideOverridesPromise
+    ]);
     const { data, error } = await admin.rpc("search_creator_videos", { p_query: q, p_limit: 40 });
     if (error) throw error;
     const rows = applyHideOverrides(data ?? [], hideOverrides);

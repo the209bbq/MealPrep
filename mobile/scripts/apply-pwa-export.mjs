@@ -27,6 +27,40 @@ const ROUTE_NAMES = [
   'terms',
 ];
 
+/** Lazy-cached on first navigation — keep install lean and deploy-tolerant. */
+const LAZY_ROUTE_CHUNK_NAMES = new Set(ROUTE_NAMES);
+
+const LAZY_STATIC_DENY_SUBSTRINGS = ['heic2any', 'AdminScreen', 'SmartShopScreen'];
+
+const PRECACHE_JS_ALLOW_SUBSTRINGS = [
+  '__common-',
+  'entry-',
+  '__expo-metro-runtime-',
+  '_layout-',
+  'index-',
+];
+
+function shouldPrecacheExpoStatic(posix) {
+  if (!posix.startsWith('_expo/static/')) return false;
+  if (posix.endsWith('.css')) return true;
+  if (!posix.endsWith('.js')) return false;
+
+  const fileName = posix.split('/').pop() ?? '';
+  if (LAZY_STATIC_DENY_SUBSTRINGS.some((needle) => fileName.includes(needle))) {
+    return false;
+  }
+  for (const route of LAZY_ROUTE_CHUNK_NAMES) {
+    if (fileName.includes(route)) return false;
+  }
+  return PRECACHE_JS_ALLOW_SUBSTRINGS.some((needle) => fileName.includes(needle));
+}
+
+function shouldPrecacheHtml(posix) {
+  if (posix === 'index.html') return true;
+  if (posix.endsWith('/(tabs)/index.html') || posix === '(tabs)/index.html') return true;
+  return false;
+}
+
 function walkFiles(dir, acc = []) {
   if (!fs.existsSync(dir)) return acc;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -49,10 +83,10 @@ function collectPrecacheUrls() {
     const rel = path.relative(distDir, file);
     if (rel.startsWith('..')) continue;
     const posix = rel.split(path.sep).join('/');
-    if (posix.endsWith('.html') && !posix.includes('(tabs)')) {
+    if (posix.endsWith('.html') && shouldPrecacheHtml(posix)) {
       urls.add(toPublicUrl(posix));
     }
-    if (posix.startsWith('_expo/static/')) {
+    if (shouldPrecacheExpoStatic(posix)) {
       urls.add(toPublicUrl(posix));
     }
     if (posix.startsWith('icons/')) {
@@ -64,10 +98,6 @@ function collectPrecacheUrls() {
   }
 
   urls.add(toPublicUrl('index.html'));
-  for (const route of ROUTE_NAMES) {
-    urls.add(toPublicUrl(`${route}/index.html`));
-    urls.add(toPublicUrl(`${route}.html`));
-  }
 
   return [...urls].sort();
 }

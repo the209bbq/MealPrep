@@ -24,6 +24,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type, x-creator-admin-secret',
+  'Access-Control-Max-Age': '86400',
 };
 
 const ADMIN_SECRET_HEADER = 'x-creator-admin-secret';
@@ -208,12 +209,9 @@ async function loadCreatorsMap(
   return map;
 }
 
-async function readFeedVideos(
+async function queryFeedVideoRows(
   admin: ReturnType<typeof createClient>,
   mode: FeedMode,
-  channelFitWeight: Map<string, number>,
-  creatorsMap: Map<string, CreatorRow>,
-  hideOverrides: ReadonlyMap<string, 'hide' | 'show'>,
 ): Promise<VideoRow[]> {
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   let query = admin
@@ -233,7 +231,17 @@ async function readFeedVideos(
 
   const { data, error } = await query;
   if (error) throw error;
-  let rows = applyHideOverrides((data ?? []) as VideoRow[], hideOverrides);
+  return (data ?? []) as VideoRow[];
+}
+
+function processFeedVideoRows(
+  rawRows: VideoRow[],
+  mode: FeedMode,
+  channelFitWeight: Map<string, number>,
+  creatorsMap: Map<string, CreatorRow>,
+  hideOverrides: ReadonlyMap<string, 'hide' | 'show'>,
+): VideoRow[] {
+  let rows = applyHideOverrides(rawRows, hideOverrides);
 
   if (mode === 'popular') {
     rows = rows.filter(
@@ -279,11 +287,17 @@ async function handlePublicAction(
   body: PublicAction,
   limitKey: string,
 ): Promise<Response> {
-  const creatorsMap = await loadCreatorsMap(admin);
-  const hideOverrides = await loadCreatorVideoOverrides(admin);
+  const creatorsMapPromise = loadCreatorsMap(admin);
+  const hideOverridesPromise = loadCreatorVideoOverrides(admin);
 
   if (body.action === 'creators') {
-    const channelsWithVideos = await loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides);
+    const channelsPromise = hideOverridesPromise.then((hideOverrides) =>
+      loadChannelIdsWithVisibleFeedVideos(admin, hideOverrides),
+    );
+    const [creatorsMap, channelsWithVideos] = await Promise.all([
+      creatorsMapPromise,
+      channelsPromise,
+    ]);
     const creators = [...creatorsMap.values()]
       .filter((row) => channelsWithVideos.has(row.youtube_channel_id))
       .sort(compareCreatorsByFitAndSubscribers)
@@ -292,6 +306,10 @@ async function handlePublicAction(
   }
 
   if (body.action === 'creator') {
+    const [creatorsMap, hideOverrides] = await Promise.all([
+      creatorsMapPromise,
+      hideOverridesPromise,
+    ]);
     const handle = typeof body.handle === 'string' ? body.handle.trim() : '';
     const channelId =
       typeof body.channelId === 'string' && body.channelId.trim()
@@ -325,8 +343,14 @@ async function handlePublicAction(
 
   if (body.action === 'feed') {
     const mode = parseFeedMode(body.mode);
+    const feedRowsPromise = queryFeedVideoRows(admin, mode);
+    const [creatorsMap, hideOverrides, rawRows] = await Promise.all([
+      creatorsMapPromise,
+      hideOverridesPromise,
+      feedRowsPromise,
+    ]);
     const fitWeights = buildChannelFitWeightMap(creatorsMap.values());
-    const rows = await readFeedVideos(admin, mode, fitWeights, creatorsMap, hideOverrides);
+    const rows = processFeedVideoRows(rawRows, mode, fitWeights, creatorsMap, hideOverrides);
     const videos = rows.map((row) => videoToDto(row, creatorsMap.get(row.channel_id)));
     return jsonResponse({ mode, videos });
   }
@@ -342,6 +366,10 @@ async function handlePublicAction(
         429,
       );
     }
+    const [creatorsMap, hideOverrides] = await Promise.all([
+      creatorsMapPromise,
+      hideOverridesPromise,
+    ]);
     const { data, error } = await admin.rpc('search_creator_videos', { p_query: q, p_limit: 40 });
     if (error) throw error;
     const rows = applyHideOverrides((data ?? []) as VideoRow[], hideOverrides);

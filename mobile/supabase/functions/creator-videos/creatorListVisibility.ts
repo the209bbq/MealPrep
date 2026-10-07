@@ -37,33 +37,47 @@ export function channelIdsWithVisibleFeedVideos(
   return channelIds;
 }
 
+async function fetchCreatorListVideoPage(
+  admin: SupabaseClient,
+  pageIndex: number,
+): Promise<CreatorListVideoRow[]> {
+  const from = pageIndex * POSTGREST_PAGE_SIZE;
+  const to = from + POSTGREST_PAGE_SIZE - 1;
+  const { data, error } = await admin
+    .from('creator_videos')
+    .select('video_id, channel_id, title, description_snippet, is_short')
+    .order('video_id', { ascending: true })
+    .range(from, to);
+  if (error) throw error;
+  return (data ?? []) as CreatorListVideoRow[];
+}
+
+/** Load visibility rows with parallel PostgREST pages (avoids serial full-table paging). */
+export async function loadCreatorListVideoRows(admin: SupabaseClient): Promise<CreatorListVideoRow[]> {
+  const firstPage = await fetchCreatorListVideoPage(admin, 0);
+  if (firstPage.length < POSTGREST_PAGE_SIZE) return firstPage;
+
+  const { count, error: countError } = await admin
+    .from('creator_videos')
+    .select('video_id', { count: 'exact', head: true });
+  if (countError) throw countError;
+
+  const total = count ?? firstPage.length;
+  const pageCount = Math.ceil(total / POSTGREST_PAGE_SIZE);
+  if (pageCount <= 1) return firstPage;
+
+  const restPages = await Promise.all(
+    Array.from({ length: pageCount - 1 }, (_, index) =>
+      fetchCreatorListVideoPage(admin, index + 1),
+    ),
+  );
+  return firstPage.concat(...restPages);
+}
+
 export async function loadChannelIdsWithVisibleFeedVideos(
   admin: SupabaseClient,
   hideOverrides: ReadonlyMap<string, CreatorVideoOverrideAction>,
 ): Promise<Set<string>> {
-  const channelIds = new Set<string>();
-  let offset = 0;
-
-  while (true) {
-    const from = offset;
-    const to = offset + POSTGREST_PAGE_SIZE - 1;
-    const { data, error } = await admin
-      .from('creator_videos')
-      .select('video_id, channel_id, title, description_snippet, is_short')
-      .order('video_id', { ascending: true })
-      .range(from, to);
-    if (error) throw error;
-
-    const page = (data ?? []) as CreatorListVideoRow[];
-    for (const row of page) {
-      if (isVisibleInCreatorFeed(row, hideOverrides)) {
-        channelIds.add(row.channel_id);
-      }
-    }
-
-    if (page.length < POSTGREST_PAGE_SIZE) break;
-    offset += POSTGREST_PAGE_SIZE;
-  }
-
-  return channelIds;
+  const rows = await loadCreatorListVideoRows(admin);
+  return channelIdsWithVisibleFeedVideos(rows, hideOverrides);
 }
