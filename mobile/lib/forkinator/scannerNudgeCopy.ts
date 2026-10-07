@@ -1,5 +1,5 @@
 export const FORKINATOR_GREETING_MESSAGE =
-  "Hey there! The name's Forks. I'm here to help.";
+  "Hey there! The name's Forky McForkface. I'm here to help.";
 
 export const FORKINATOR_GREETING_A11Y_LABEL = 'Dismiss greeting';
 

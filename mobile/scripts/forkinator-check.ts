@@ -80,7 +80,7 @@ assert.equal(FORKINATOR_GREETING_AUTO_HIDE_MS, 8000);
 assert.equal(FORKINATOR_GREETING_SHOWN_STORAGE_KEY, 'mealprep.forkinator.greetingShown');
 assert.equal(
   FORKINATOR_GREETING_MESSAGE,
-  "Hey there! The name's Forks. I'm here to help.",
+  "Hey there! The name's Forky McForkface. I'm here to help.",
 );
 assert.equal(FORKINATOR_GREETING_A11Y_LABEL, 'Dismiss greeting');
 
@@ -210,6 +210,9 @@ assert.equal(promptAtDefault320.placement, 'above', 'prompt should sit above mas
 assert.ok(promptAtDefault320.left >= bounds320.insetLeft);
 assert.ok(promptAtDefault320.left + promptAtDefault320.width <= 320);
 assert.ok(scannerPromptBodySize(320).bodyWidth <= 320 - 16);
+const greetingBody320 = scannerPromptBodySize(320, FORKINATOR_GREETING_MESSAGE);
+assert.ok(greetingBody320.bodyWidth <= 320 - 16);
+assert.ok(greetingBody320.bodyHeight <= 96, 'longer name should wrap in thought bubble on narrow phones');
 
 const clamped = clampForkinatorPosition({ x: -50, y: 9999 }, bounds390);
 assert.equal(clamped.x, bounds390.insetLeft);
@@ -217,7 +220,7 @@ assert.equal(clamped.y, bounds390.height - bounds390.insetBottom - bounds390.mas
 
 assert.equal(FORKINATOR_POSITION_STORAGE_KEY, 'mealprep.forkinator.position');
 assert.equal(FORKINATOR_HAS_SCANNED_STORAGE_KEY, 'mealprep.forkinator.hasScanned');
-assert.equal(FORKINATOR_ACCESSIBILITY_LABEL, 'Forkinator');
+assert.equal(FORKINATOR_ACCESSIBILITY_LABEL, 'Forky McForkface');
 assert.equal(FORKINATOR_ACCESSIBILITY_HINT, 'Tap to show thinking bubble');
 
 writeForkinatorHasScanned(false);
