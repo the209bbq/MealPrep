@@ -12,6 +12,7 @@ export const PANTRY_STAPLES_COPY = {
   skip: 'Skip',
   addedToast: (count: number) => `Added ${count} item${count === 1 ? '' : 's'} to your pantry`,
   pickDate: 'Pick date',
+  varietyHeading: 'Type',
 } as const;
 
 export function readPantryStaplesPromptDismissed(): boolean {

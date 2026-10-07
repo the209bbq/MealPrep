@@ -3,6 +3,7 @@ import { THEME } from '../../config/appConfig';
 import { PANTRY_STAPLES_COPY } from '../../config/pantryStaples';
 import { addDaysToIsoDate, todayIsoDate } from '../../lib/pantry/expiry';
 import {
+  resolveStapleVarietyIds,
   STAPLE_EXPIRY_QUICK_CHIPS,
   type StapleCatalogEntry,
   type StapleSelectionState,
@@ -34,31 +35,73 @@ export function StapleFollowUpChips({
   onToggleDateInput,
 }: StapleFollowUpChipsProps) {
   const hasSizes = (staple.sizeOptions?.length ?? 0) > 0;
+  const hasVarieties = (staple.varietyOptions?.length ?? 0) > 0;
   const showExpiry = Boolean(staple.perishable);
+  const activeVarietyIds = resolveStapleVarietyIds(staple, selection);
 
-  if (!hasSizes && !showExpiry) return null;
+  if (!hasSizes && !hasVarieties && !showExpiry) return null;
+
+  const toggleVariety = (varietyId: string) => {
+    const current = resolveStapleVarietyIds(staple, selection);
+    const selected = current.includes(varietyId);
+    if (selected) {
+      const next = current.filter((id) => id !== varietyId);
+      if (next.length === 0) return;
+      onChange({ ...selection, varietyOptionIds: next });
+      return;
+    }
+    onChange({ ...selection, varietyOptionIds: [...current, varietyId] });
+  };
 
   return (
     <View className="mt-2 rounded-xl border border-border bg-paper px-2 py-2">
+      {hasVarieties ? (
+        <View>
+          <Text className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+            {PANTRY_STAPLES_COPY.varietyHeading}
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            {staple.varietyOptions!.map((opt) => {
+              const selected = activeVarietyIds.includes(opt.id);
+              return (
+                <Pressable
+                  key={opt.id}
+                  onPress={() => toggleVariety(opt.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${opt.label}${selected ? ', selected' : ''}`}
+                  className={chipClass(selected)}
+                >
+                  <Text className={chipTextClass(selected)}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
       {hasSizes ? (
-        <View className="flex-row flex-wrap gap-2">
-          {staple.sizeOptions!.map((opt) => {
-            const selected = (selection.sizeOptionId ?? staple.defaultSizeId) === opt.id;
-            return (
-              <Pressable
-                key={opt.id}
-                onPress={() => onChange({ ...selection, sizeOptionId: opt.id })}
-                className={chipClass(selected)}
-              >
-                <Text className={chipTextClass(selected)}>{opt.label}</Text>
-              </Pressable>
-            );
-          })}
+        <View className={hasVarieties ? 'mt-2' : ''}>
+          <Text className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">Size</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {staple.sizeOptions!.map((opt) => {
+              const selected = (selection.sizeOptionId ?? staple.defaultSizeId) === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  onPress={() => onChange({ ...selection, sizeOptionId: opt.id })}
+                  className={chipClass(selected)}
+                >
+                  <Text className={chipTextClass(selected)}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       ) : null}
 
       {showExpiry ? (
-        <View className={`flex-row flex-wrap gap-2 ${hasSizes ? 'mt-2' : ''}`}>
+        <View className={`flex-row flex-wrap gap-2 ${hasSizes || hasVarieties ? 'mt-2' : ''}`}>
           {STAPLE_EXPIRY_QUICK_CHIPS.map((chip) => {
             const target = addDaysToIsoDate(todayIsoDate(), chip.days);
             const selected = selection.expiresOn === target && !selection.expirySkipped;
