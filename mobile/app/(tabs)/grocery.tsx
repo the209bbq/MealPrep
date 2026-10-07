@@ -26,6 +26,11 @@ import {
   readGroceryCombinePreference,
   writeGroceryCombinePreference,
 } from '../../lib/grocery/grouping';
+import {
+  consumeGroceryAisleCombineRequest,
+  subscribeGroceryAisleCombineRequest,
+} from '../../lib/grocery/groceryCombineRequest';
+import { markForkinatorAisleSortUsed } from '../../lib/forkinator/aisleSortPrompt';
 import { localDateString } from '../../lib/mealCalendar/dates';
 import { countUpcomingScheduledMeals } from '../../lib/mealCalendar/groupMeals';
 import { MEAL_CALENDAR } from '../../config/mealCalendar';
@@ -70,7 +75,22 @@ export default function GroceryScreen() {
 
   useEffect(() => {
     writeGroceryCombinePreference(combineList);
+    if (combineList) {
+      markForkinatorAisleSortUsed();
+    }
   }, [combineList]);
+
+  useEffect(() => {
+    return subscribeGroceryAisleCombineRequest(() => {
+      setCombineList(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (consumeGroceryAisleCombineRequest()) {
+      setCombineList(true);
+    }
+  }, []);
 
   const todayIso = localDateString();
   const upcomingPlannedMealCount = useMemo(

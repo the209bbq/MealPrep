@@ -28,6 +28,8 @@ interface RecipesUnifiedFeedCardProps {
   maskTitle?: boolean;
   /** Hide thumbnail until safety check passes (paired with maskTitle). */
   maskImage?: boolean;
+  /** Appended to the default accessibility label (e.g. diet conflict warning). */
+  accessibilityDietWarning?: string | null;
 }
 
 function RecipesUnifiedFeedCardInner({
@@ -41,6 +43,7 @@ function RecipesUnifiedFeedCardInner({
   interactionLoading = false,
   maskTitle = false,
   maskImage = false,
+  accessibilityDietWarning = null,
 }: RecipesUnifiedFeedCardProps) {
   const name = maskTitle ? '' : row.recipe.name;
   const imageUri = useMemo(() => {
@@ -59,13 +62,18 @@ function RecipesUnifiedFeedCardInner({
   const hasIngredients = row.kind === 'kitchen' && row.recipe.ingredients.length > 0;
   const readyToCook = !matchPending && hasIngredients && row.match.missingCount === 0;
   const ingredientLines = useMemo(() => dietCheckLinesFromRecipesTabRow(row), [row]);
+  const accessibilityLabel = useMemo(() => {
+    const base = maskTitle ? shopLine : `${row.recipe.name}. ${shopLine}`;
+    if (!accessibilityDietWarning) return base;
+    return `${base}. ${accessibilityDietWarning}`;
+  }, [accessibilityDietWarning, maskTitle, row.recipe.name, shopLine]);
 
   return (
     <Pressable
       onPress={onOpen}
       disabled={interactionLoading}
       accessibilityRole="button"
-      accessibilityLabel={maskTitle ? shopLine : `${row.recipe.name}. ${shopLine}`}
+      accessibilityLabel={accessibilityLabel}
       className="relative mb-2 overflow-hidden rounded-xl border border-border bg-card"
     >
       <View className="relative">

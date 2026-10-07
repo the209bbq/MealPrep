@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
 import {
   readHomeWeekCalendarExpanded,
@@ -22,6 +22,7 @@ import { buildGoogleCalendarTemplateUrl, cookEventTitle } from '../../lib/mealCa
 import { addLocalDays, localDateString } from '../../lib/mealCalendar/dates';
 import { shareOrDownloadIcs } from '../../lib/mealCalendar/shareIcs';
 import { openExternalUrl } from '../../lib/smartShop/openExternalUrl';
+import { resolveMealPlanItemDisplayTitle } from '../../lib/mealPlan/displayTitle';
 import { resolveMealPlanRecipeId } from '../../lib/mealPlan/resolve';
 import { savedKitchenRecipeIdsFromRecords } from '../../lib/savedRecipes/pickerRecipeIds';
 import type { MealPlanItem, MealSlot } from '../../types/mealprep';
@@ -124,6 +125,12 @@ export function MealWeekCalendarCard() {
     [savedRecipes.records],
   );
 
+  const mealPlanDisplayTitle = useCallback(
+    (item: MealPlanItem) =>
+      resolveMealPlanItemDisplayTitle(item, feedKitchenRecipes, savedRecipes.records),
+    [feedKitchenRecipes, savedRecipes.records],
+  );
+
   async function exportWeekIcs(): Promise<void> {
     const body = buildWeekIcsFromMeals(weekMeals, exportContexts);
     await shareOrDownloadIcs(body);
@@ -196,6 +203,7 @@ export function MealWeekCalendarCard() {
             ) : (
               meals.map((item) => {
                 const slotLabel = item.mealSlot ? MEAL_CALENDAR.slotLabels[item.mealSlot] : null;
+                const displayTitle = mealPlanDisplayTitle(item);
                 return (
                   <View key={item.id} className="mt-2 flex-row items-center">
                     <Pressable
@@ -207,7 +215,7 @@ export function MealWeekCalendarCard() {
                       className="min-h-[36px] flex-1 justify-center rounded-xl bg-paper px-3 py-2"
                     >
                       <Text className="font-semibold text-ink" numberOfLines={2}>
-                        {item.title}
+                        {displayTitle}
                       </Text>
                       {slotLabel ? <Text className="text-xs text-muted">{slotLabel}</Text> : null}
                     </Pressable>
@@ -215,7 +223,7 @@ export function MealWeekCalendarCard() {
                       onPress={() => setMenuItem(item)}
                       className="ml-2 p-1"
                       accessibilityRole="button"
-                      accessibilityLabel={`Meal options for ${item.title}`}
+                      accessibilityLabel={`Meal options for ${displayTitle}`}
                     >
                       <Ionicons name="ellipsis-horizontal" size={18} color={THEME.muted} />
                     </Pressable>

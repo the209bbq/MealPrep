@@ -9,6 +9,11 @@ import { applySavedToggle, isRefKeySaved } from '../lib/savedRecipes/optimistic'
 import { savedRecordFromKitchenRecipe, savedRecordFromMealDbRecipe, savedRecordFromViralItem } from '../lib/savedRecipes/payloads';
 import { refKeyForKitchenRecipe } from '../lib/savedRecipes/refKey';
 import { buildSavedRecipeFeedRows } from '../lib/savedRecipes/resolveRows';
+import { isUserImportedKitchenRecipe } from '../lib/recipeImport/mapToAppRecipe';
+import {
+  readHiddenImportedKitchenIds,
+  writeHiddenImportedKitchenIds,
+} from '../lib/savedRecipes/hiddenImportedKitchen';
 import { buildPantryMatchIndex } from '../lib/recipeMatch';
 import type { Recipe } from '../types/mealprep';
 
@@ -124,5 +129,29 @@ assert.equal(afterUnsave.length, 0);
 const replaced = applySavedToggle(afterSave, record.refKey, { ...record, title: 'Updated title' });
 assert.equal(replaced.length, 1);
 assert.equal(replaced[0]?.title, 'Updated title');
+
+const recordB = savedRecordFromKitchenRecipe({
+  ...kitchenOnly,
+  id: 'link-import-2',
+  name: 'Second save',
+});
+let twoSaved = applySavedToggle(afterSave, recordB.refKey, recordB);
+assert.equal(twoSaved.length, 2);
+const rollbackB = applySavedToggle(twoSaved, recordB.refKey, null);
+assert.equal(rollbackB.length, 1);
+assert.ok(isRefKeySaved(rollbackB, record.refKey), 'rollback one save must keep other saved rows');
+
+const importedKitchen: Recipe = {
+  ...kitchenOnly,
+  id: 'link-import-user-abc',
+  name: 'Pedernales Chili',
+  sourceType: 'web',
+  sourceUrl: 'https://example.com/chili',
+};
+assert.ok(isUserImportedKitchenRecipe(importedKitchen));
+
+const hiddenUser = '22222222-2222-4222-8222-222222222222';
+writeHiddenImportedKitchenIds(hiddenUser, new Set(['link-import-user-abc']));
+assert.ok(readHiddenImportedKitchenIds(hiddenUser).has('link-import-user-abc'));
 
 console.log('saved-recipes-check: ok');

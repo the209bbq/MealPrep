@@ -1,4 +1,5 @@
 import { Ionicons } from '../lib/icons/Ionicons';
+import { useEffect } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { THEME } from '../config/appConfig';
 import { PANTRY_SCAN_UI_COPY } from '../config/pantryScan';
@@ -22,12 +23,17 @@ export interface PantryStorageScanButtonsProps {
   onRequestNativeScan: (location: PantryStorageLocation, source: 'camera' | 'library') => void;
   onRequestSignIn?: () => void;
   scanLocation: PantryStorageLocation;
+  /** One-shot: open source menu or launch camera when pantry focuses. */
+  autoOpenScanMode?: 'menu' | 'camera' | null;
+  onAutoOpenScanHandled?: () => void;
 }
 
 export function PantryStorageScanButtons({
   disabled,
   onRequestNativeScan,
   scanLocation,
+  autoOpenScanMode,
+  onAutoOpenScanHandled,
 }: PantryStorageScanButtonsProps) {
   function openSourceMenu() {
     Alert.alert(PANTRY_SCAN_UI_COPY.choosePhotoSourceTitle, PANTRY_SCAN_UI_COPY.choosePhotoSourceMessage, [
@@ -42,6 +48,16 @@ export function PantryStorageScanButtons({
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
+
+  useEffect(() => {
+    if (!autoOpenScanMode || disabled) return;
+    onAutoOpenScanHandled?.();
+    if (autoOpenScanMode === 'camera') {
+      onRequestNativeScan(scanLocation, 'camera');
+      return;
+    }
+    openSourceMenu();
+  }, [autoOpenScanMode, disabled, onAutoOpenScanHandled, onRequestNativeScan, scanLocation]);
 
   return (
     <View className="mt-3">

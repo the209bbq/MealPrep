@@ -1,5 +1,5 @@
 import { Ionicons } from '../lib/icons/Ionicons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { THEME } from '../config/appConfig';
 import { GUEST_MODE_COPY } from '../config/guestMode';
@@ -23,6 +23,8 @@ export function PantryStorageScanButtons({
   contextSession,
   onRequestSignIn,
   scanLocation,
+  autoOpenScanMode,
+  onAutoOpenScanHandled,
 }: PantryStorageScanButtonsProps) {
   const [guestGateOpen, setGuestGateOpen] = useState(false);
   const [plusGateOpen, setPlusGateOpen] = useState(false);
@@ -107,6 +109,16 @@ export function PantryStorageScanButtons({
     if (!allowed) return;
     setSourceMenuOpen(true);
   }
+
+  useEffect(() => {
+    if (!autoOpenScanMode || disabled) return;
+    onAutoOpenScanHandled?.();
+    void (async () => {
+      const allowed = await runGateCheck();
+      if (!allowed) return;
+      setSourceMenuOpen(true);
+    })();
+  }, [autoOpenScanMode, disabled, onAutoOpenScanHandled]);
 
   return (
     <View className="mt-3">

@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '../../lib/icons/Ionicons';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
 import {
   ActivityIndicator,
@@ -58,6 +58,15 @@ import {
 } from '../../lib/scanCorrections/client';
 import { createScanSessionId } from '../../lib/scanCorrections/session';
 import { countPantryItemsForLocationFilters, countPantryItemsInLocation } from '../../lib/pantryGrouping';
+import {
+  consumeOpenPantryShelfScanRequest,
+  consumePantryWebShelfScanFile,
+  subscribeOpenPantryShelfScan,
+} from '../../lib/pantry/openShelfScanRequest';
+import {
+  consumePantryExpiringHighlightRequest,
+  subscribePantryExpiringHighlight,
+} from '../../lib/pantry/openExpiringHighlightRequest';
 import { readJson, writeJson } from '../../lib/storage';
 import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
 import { PantryImageQualityError } from '../../lib/pantryVision/prepareImageShared';
@@ -173,10 +182,74 @@ export default function PantryScreen() {
     readPantryStaplesPromptDismissed(),
   );
   const [scanRecipeCount, setScanRecipeCount] = useState<number | null>(null);
+  const [autoOpenScanMode, setAutoOpenScanMode] = useState<'menu' | 'camera' | null>(null);
+  const [highlightItemIds, setHighlightItemIds] = useState<Set<string>>(() => new Set());
   const [pendingScanPhotoPath, setPendingScanPhotoPath] = useState<string | null>(null);
   const pantryScanUploadRef = useRef<Promise<string | null> | null>(null);
   const scanSessionIdRef = useRef<string | null>(null);
   const aiBaselineRef = useRef<Map<string, { aiName: string }>>(new Map());
+
+  async function processWebShelfScanFile(file: File) {
+    const scanLocation = readLastPantryScanLocation();
+    try {
+      const { preparePantryImageFromFile } = await import('../../lib/pantryVision/prepareImage.web');
+      const prepared = await preparePantryImageFromFile(file);
+      setScanLocationHint(scanLocation);
+      await runVisionFromPrepared(prepared, scanLocation);
+    } catch (error) {
+      if (error instanceof PantryImageQualityError && error.reason === 'blank') {
+        handleWebPrepareError(error.message);
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Could not prepare photo';
+      handleWebPrepareError(message);
+    }
+  }
+
+  const tryConsumeExpiringHighlight = useCallback(() => {
+    const ids = consumePantryExpiringHighlightRequest();
+    if (!ids?.length) return;
+    setHighlightItemIds(new Set(ids));
+    selectLocationFilter('all');
+    setFilter('all');
+  }, []);
+
+  const tryConsumeShelfScanRequest = useCallback(() => {
+    const webFile = consumePantryWebShelfScanFile();
+    if (webFile) {
+      if (phase !== 'idle') return;
+      void processWebShelfScanFile(webFile);
+      return;
+    }
+    const mode = consumeOpenPantryShelfScanRequest();
+    if (!mode) return;
+    if (phase !== 'idle') return;
+    setAutoOpenScanMode(mode);
+  }, [phase]);
+
+  useFocusEffect(
+    useCallback(() => {
+      tryConsumeExpiringHighlight();
+      tryConsumeShelfScanRequest();
+    }, [tryConsumeExpiringHighlight, tryConsumeShelfScanRequest]),
+  );
+
+  useEffect(() => {
+    return subscribeOpenPantryShelfScan(() => {
+      tryConsumeShelfScanRequest();
+    });
+  }, [tryConsumeShelfScanRequest]);
+
+  useEffect(() => {
+    return subscribePantryExpiringHighlight(() => {
+      tryConsumeExpiringHighlight();
+    });
+  }, [tryConsumeExpiringHighlight]);
+
+  useEffect(() => {
+    tryConsumeExpiringHighlight();
+    tryConsumeShelfScanRequest();
+  }, [phase, tryConsumeExpiringHighlight, tryConsumeShelfScanRequest]);
 
   const visionReady = isPantryVisionConfigured();
   const accessToken = session?.access_token ?? null;
@@ -862,6 +935,8 @@ export default function PantryScreen() {
                 }}
                 onRequestNativeScan={(_location, source) => void handleNativeScan(source)}
                 onRequestSignIn={openAuthSheet}
+                autoOpenScanMode={autoOpenScanMode}
+                onAutoOpenScanHandled={() => setAutoOpenScanMode(null)}
               />
 
               {featureFlags.photoScan ? <PantryScanTip className="mt-2" /> : null}
@@ -980,7 +1055,7 @@ export default function PantryScreen() {
 
         {actionError ? <Text className="mb-2 text-xs font-semibold text-danger">{actionError}</Text> : null}
 
-        {!profileReady ? (
+        {!profileReady && pantry.length === 0 ? (
           <View className="mt-8 items-center justify-center py-8">
             <ActivityIndicator color={THEME.primary} />
           </View>
@@ -991,6 +1066,7 @@ export default function PantryScreen() {
             items={pantry}
             categoryFilter={filter}
             locationFilter={locationFilter}
+            highlightItemIds={highlightItemIds}
             onPressItem={openEditModal}
             onResetFilters={() => {
               selectLocationFilter('all');

@@ -153,6 +153,7 @@ import { syncPantryToSnapshot } from '../lib/pantry/syncPantrySnapshot';
 import { writeAccountPantryCache } from '../lib/pantry/writeAccountPantryCache';
 import { PANTRY_RESTOCK_COPY } from '../config/pantryRestock';
 import { PANTRY_SCAN_UI_COPY, writeLastPantryScanLocation } from '../config/pantryScan';
+import { markForkinatorPantryScanCompleted } from '../lib/forkinator/hasScanned';
 import { PANTRY_STAPLES_COPY } from '../config/pantryStaples';
 import { stapleSelectionsToPantryItems, type StapleSelectionState } from '../lib/pantry/stapleCatalog';
 import { reviewItemsToPantryItems } from '../lib/pantryVision/reviewItems';
@@ -747,7 +748,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     removeStorageKey(STORAGE_KEYS.grocery);
     removeStorageKey(STORAGE_KEYS.mealPlan);
     removeStorageKey(STORAGE_KEYS.recipes);
-    setPantry(nextPantry);
+    let mergedPantry = nextPantry;
+    setPantry((prev) => {
+      mergedPantry = mergePantryStock(nextPantry, prev).pantry;
+      return mergedPantry;
+    });
     setRecipes(nextRecipes);
     setGrocery(nextGrocery);
     setFeatureFlags(bundle.featureFlags);
@@ -761,7 +766,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         userId,
         savedAt: new Date().toISOString(),
         profile: bundle.profile,
-        pantry: nextPantry,
+        pantry: mergedPantry,
         grocery: nextGrocery,
         mealPlan: nextMealPlan,
         recipes: nextRecipes,
@@ -2682,7 +2687,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       setPantry((prev) => {
         const next = [item, ...prev];
-        writeAccountPantryCache(userId, next);
+        writeAccountPantryCache(userId, next, { profile });
         return next;
       });
 
@@ -2702,7 +2707,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (merged.shouldDeleteServerId) {
             return prev;
           }
-          writeAccountPantryCache(userId, merged.pantry);
+          writeAccountPantryCache(userId, merged.pantry, { profile });
           return merged.pantry;
         });
 
@@ -2714,13 +2719,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (isOffline()) return;
         setPantry((prev) => {
           const next = rollbackManualPantryItem(prev, item.id);
-          writeAccountPantryCache(userId, next);
+          writeAccountPantryCache(userId, next, { profile });
           return next;
         });
         throw error instanceof Error ? error : new Error('Failed to add pantry item');
       }
     },
-    [demoMode, isGuest, supabase, userId],
+    [demoMode, isGuest, profile, supabase, userId],
   );
 
   const updatePantryItemEntry = useCallback(
@@ -2753,11 +2758,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       setPantry((prev) => {
         const next = prev.filter((row) => row.id !== id);
-        writeAccountPantryCache(userId, next);
+        writeAccountPantryCache(userId, next, { profile });
         return next;
       });
     },
-    [demoMode, isGuest, supabase, userId],
+    [demoMode, isGuest, profile, supabase, userId],
   );
 
   const clearPantryLocation = useCallback(
@@ -2832,6 +2837,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const toSave = reviewItemsToPantryItems(items, scanPhotoPath);
       if (toSave.length === 0) return;
 
+      markForkinatorPantryScanCompleted();
+
       if (scanLocation) {
         writeLastPantryScanLocation(scanLocation);
       }
@@ -2881,9 +2888,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (toSave.length === 0) return;
 
       const pantrySnapshot = pantry.map((row) => ({ ...row }));
-      const { pantry: nextPantry, inserted, updated } = mergePantryStock(pantry, toSave);
+      let nextPantry: PantryItem[] = pantry;
+      let inserted: PantryItem[] = [];
+      let updated: PantryItem[] = [];
 
-      setPantry(nextPantry);
+      setPantry((prev) => {
+        const merged = mergePantryStock(prev, toSave);
+        nextPantry = merged.pantry;
+        inserted = merged.inserted;
+        updated = merged.updated;
+        if (!demoMode && !isGuest && userId) {
+          writeAccountPantryCache(userId, nextPantry, { profile });
+        }
+        return nextPantry;
+      });
 
       if (!demoMode && !isGuest) {
         if (!supabase || !userId) {
@@ -2897,7 +2915,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setPantry((prev) => {
             const insertIds = new Set(inserted.map((row) => row.id));
             const without = prev.filter((row) => !insertIds.has(row.id));
-            return [...savedInserts, ...without];
+            const withSaved = [...savedInserts, ...without];
+            writeAccountPantryCache(userId, withSaved, { profile });
+            return withSaved;
           });
         }
       }
@@ -2916,7 +2936,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
       });
     },
-    [demoMode, isGuest, pantry, supabase, userId],
+    [demoMode, isGuest, pantry, profile, supabase, userId],
   );
 
   const setFeatureFlag = useCallback(

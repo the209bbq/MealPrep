@@ -3,6 +3,8 @@
 
   var UPDATE_BANNER_ID = 'mealprep-pwa-update-banner';
   var PENDING_RELOAD_KEY = 'mealprep.pwaPendingReload';
+  var RELOAD_LOOP_GUARD_KEY = 'mealprep.pwaReloadGuardMs';
+  var RELOAD_LOOP_GUARD_MS = 8000;
   var hadControllerOnLoad = Boolean(navigator.serviceWorker.controller);
   var userInteracted = false;
   var reloadRequested = false;
@@ -56,8 +58,24 @@
       pending = reloadRequested;
     }
     if (!pending) return;
+    var now = Date.now();
+    var lastReload = 0;
+    try {
+      lastReload = Number(sessionStorage.getItem(RELOAD_LOOP_GUARD_KEY) || '0');
+    } catch (e) {
+      lastReload = 0;
+    }
+    if (lastReload && now - lastReload < RELOAD_LOOP_GUARD_MS) {
+      try {
+        sessionStorage.removeItem(PENDING_RELOAD_KEY);
+      } catch (e) {
+        /* ignore */
+      }
+      return;
+    }
     try {
       sessionStorage.removeItem(PENDING_RELOAD_KEY);
+      sessionStorage.setItem(RELOAD_LOOP_GUARD_KEY, String(now));
     } catch (e) {
       /* ignore */
     }

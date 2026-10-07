@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppOverlays } from '../components/AppOverlays';
 import { APP_BRAND } from '../config/appBrand';
 import { AppProvider } from '../context/AppContext';
+import { UndoToastHostProvider } from '../context/UndoToastHostContext';
 import { ScheduleRecipeSheetProvider } from '../context/ScheduleRecipeSheetContext';
 import { useHydrated } from '../hooks/useHydrated';
 
@@ -21,6 +22,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppProvider>
+          <UndoToastHostProvider>
           <ScheduleRecipeSheetProvider>
             {hydrated ? <StatusBar style="light" /> : null}
             <Stack screenOptions={{ headerShown: false }}>
@@ -33,6 +35,7 @@ export default function RootLayout() {
             </Stack>
             <RootOverlays />
           </ScheduleRecipeSheetProvider>
+          </UndoToastHostProvider>
         </AppProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

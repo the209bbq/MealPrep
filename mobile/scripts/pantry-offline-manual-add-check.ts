@@ -33,7 +33,8 @@ const mobileRoot = path.resolve(__dirname, '..');
 
 const appContextSource = fs.readFileSync(path.join(mobileRoot, 'context/AppContext.tsx'), 'utf8');
 assert.match(appContextSource, /buildManualPantryItem\(input\)/);
-assert.match(appContextSource, /writeAccountPantryCache\(userId, next\)/);
+assert.match(appContextSource, /writeAccountPantryCache\(userId, next, \{ profile \}\)/);
+assert.match(appContextSource, /mergePantryStock\(nextPantry, prev\)\.pantry/);
 assert.match(
   appContextSource,
   /if \(isOffline\(\)\) \{\s*return;\s*\}/,
@@ -41,6 +42,11 @@ assert.match(
 );
 
 const pantryScreenSource = fs.readFileSync(path.join(mobileRoot, 'app/(tabs)/pantry.tsx'), 'utf8');
+assert.match(
+  pantryScreenSource,
+  /!profileReady && pantry\.length === 0/,
+  'pantry list should render when items exist before profile finishes loading',
+);
 assert.match(
   pantryScreenSource,
   /accessibilityLabel=\{PANTRY_LIST_COPY\.overflowMenuA11y\}/,
