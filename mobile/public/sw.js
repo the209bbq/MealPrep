@@ -6,7 +6,7 @@
 const CACHE_VERSION = '__CACHE_VERSION__';
 const PRECACHE_URLS = __PRECACHE_URLS__;
 /** Bumped when navigation caching policy changes (forces fresh shell cache). */
-const NAV_POLICY_VERSION = '5';
+const NAV_POLICY_VERSION = '6';
 const SHELL_CACHE = `meal-prep-shell-${CACHE_VERSION}-${NAV_POLICY_VERSION}`;
 
 const SUPABASE_HOST_RE = /(^|\.)supabase\.co$/i;
@@ -27,12 +27,9 @@ function appShellUrl() {
   return new URL('index.html', self.registration.scope).pathname;
 }
 
-function serveAppShell() {
+function cachedAppShell() {
   const indexPath = appShellUrl();
-  return caches.match(indexPath).then((cached) => {
-    if (cached) return cached;
-    return fetch(indexPath);
-  });
+  return caches.match(indexPath);
 }
 
 function isImmutableHashedAsset(pathname) {
@@ -41,6 +38,10 @@ function isImmutableHashedAsset(pathname) {
 
 function isSwBootstrapAsset(pathname) {
   return pathname.endsWith('/sw.js') || pathname.endsWith('/pwa-register.js');
+}
+
+function isShellHtmlRequest(pathname) {
+  return pathname === appShellUrl() || pathname.endsWith('/index.html');
 }
 
 function cacheFirst(request) {
@@ -56,37 +57,41 @@ function cacheFirst(request) {
   });
 }
 
-function staleWhileRevalidate(request, offlineFallback) {
-  return caches.open(SHELL_CACHE).then((cache) =>
-    cache.match(request).then((cached) => {
-      const networkFetch = fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            cache.put(request, response.clone());
-          }
-          return response;
-        })
-        .catch(() => cached ?? offlineFallback?.() ?? undefined);
-      if (cached) {
-        void networkFetch;
-        return cached;
+function networkFirst(request, offlineFallback) {
+  return fetch(request)
+    .then((response) => {
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
       }
-      return networkFetch;
-    }),
-  );
+      return response;
+    })
+    .catch(() =>
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return offlineFallback?.();
+      }),
+    );
 }
 
 function precacheUrl(url) {
   return caches.open(SHELL_CACHE).then((cache) =>
-    cache.add(url).catch(() => {
-      /* tolerate missing URLs during deploy transitions */
-    }),
+    cache.add(url).then(
+      () => true,
+      () => false,
+    ),
   );
 }
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    Promise.all(PRECACHE_URLS.map((url) => precacheUrl(url))).then(() => self.skipWaiting()),
+    Promise.all(PRECACHE_URLS.map((url) => precacheUrl(url))).then((results) => {
+      const allOk = results.every(Boolean);
+      if (!allOk) {
+        return caches.delete(SHELL_CACHE);
+      }
+      return self.skipWaiting();
+    }),
   );
 });
 
@@ -111,12 +116,17 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (isAuthLikeRequest(url, request)) return;
 
-  if (request.mode === 'navigate') {
-    event.respondWith(staleWhileRevalidate(request, serveAppShell));
+  if (request.mode === 'navigate' || isShellHtmlRequest(url.pathname)) {
+    event.respondWith(networkFirst(request, cachedAppShell));
     return;
   }
 
-  if (isImmutableHashedAsset(url.pathname) || isSwBootstrapAsset(url.pathname)) {
+  if (isSwBootstrapAsset(url.pathname)) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (isImmutableHashedAsset(url.pathname)) {
     event.respondWith(cacheFirst(request));
     return;
   }

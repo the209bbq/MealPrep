@@ -10,12 +10,15 @@ const exportScript = fs.readFileSync(
   'utf8',
 );
 
-assert.match(swSource, /NAV_POLICY_VERSION = '5'/);
+assert.match(swSource, /NAV_POLICY_VERSION = '6'/);
 assert.match(swSource, /function cacheFirst\(/);
-assert.match(swSource, /function staleWhileRevalidate\(/);
+assert.match(swSource, /function networkFirst\(/);
+assert.doesNotMatch(swSource, /function staleWhileRevalidate\(/);
 assert.match(swSource, /isImmutableHashedAsset/);
-assert.doesNotMatch(swSource, /function networkFirst\(/);
-assert.match(swSource, /cacheFirst\(request\)/);
+assert.match(swSource, /isSwBootstrapAsset[\s\S]*networkFirst\(request\)/);
+assert.match(swSource, /request\.mode === 'navigate'[\s\S]*networkFirst\(request, cachedAppShell\)/);
+assert.match(swSource, /if \(!allOk\)[\s\S]*caches\.delete\(SHELL_CACHE\)/);
+assert.doesNotMatch(swSource, /cache\.add\(url\)\.catch\(\(\) => \{/);
 assert.doesNotMatch(swSource, /cache\.addAll\(/);
 assert.match(swSource, /PRECACHE_URLS\.map\(\(url\) => precacheUrl\(url\)\)/);
 
