@@ -147,30 +147,28 @@ function authorizeRefresh(req: Request): boolean {
   return Boolean(expected && provided && provided === expected);
 }
 
+/**
+ * Rate-limit bucket key. Uses the caller's network address only.
+ *
+ * This function runs with JWT verification off, so anything in the Authorization
+ * header is unverified: keying on its `sub` claim let a caller mint a fresh bucket
+ * per request by sending a made-up token. Prefer the edge-set client IP headers over
+ * `x-forwarded-for`, whose first entry can be supplied by the caller.
+ */
 function rateLimitKey(req: Request): string {
-  const authHeader = req.headers.get('Authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice('Bearer '.length);
-    const parts = token.split('.');
-    if (parts.length === 3) {
-      try {
-        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-        const payload = JSON.parse(atob(padded)) as { sub?: string };
-        if (payload.sub) return payload.sub;
-      } catch {
-        /* ignore */
-      }
-    }
-  }
+  const direct =
+    req.headers.get('cf-connecting-ip')?.trim() || req.headers.get('x-real-ip')?.trim();
+  if (direct) return direct;
   const forwarded = req.headers.get('x-forwarded-for');
-  return forwarded?.split(',')[0]?.trim() || req.headers.get('cf-connecting-ip') || 'anon';
+  return forwarded?.split(',')[0]?.trim() || 'anon';
 }
 
 const clientHits = new Map<string, { count: number; windowStart: number }>();
 const CLIENT_WINDOW_MS = 60_000;
 const CLIENT_MAX_PER_WINDOW = 60;
 const SEARCH_MAX_PER_WINDOW = 20;
+/** Longest search text sent to the database; longer input is cut, not rejected. */
+const SEARCH_QUERY_MAX_LENGTH = 80;
 
 function checkClientRateLimit(key: string, max: number): boolean {
   const now = Date.now();
@@ -356,7 +354,8 @@ async function handlePublicAction(
   }
 
   if (body.action === 'search') {
-    const q = typeof body.q === 'string' ? body.q.trim() : '';
+    const q =
+      typeof body.q === 'string' ? body.q.trim().slice(0, SEARCH_QUERY_MAX_LENGTH).trim() : '';
     if (q.length < 2) {
       return jsonResponse({ videos: [] });
     }

@@ -13,6 +13,20 @@ const indexSource = fs.readFileSync(
 assert.match(indexSource, /'Access-Control-Max-Age': '86400'/);
 assert.match(indexSource, /Promise\.all\(\[[\s\S]*creatorsMapPromise/);
 assert.match(indexSource, /queryFeedVideoRows/);
+
+// Rate limiting must not trust the unverified Authorization header (JWT verification is off).
+const rateLimitKeySource = indexSource.slice(
+  indexSource.indexOf('function rateLimitKey('),
+  indexSource.indexOf('const clientHits'),
+);
+assert.ok(rateLimitKeySource.length > 0, 'rateLimitKey should exist');
+assert.doesNotMatch(
+  rateLimitKeySource,
+  /Authorization|payload\.sub|atob\(/,
+  'rate limit key must come from the network address, not a caller-supplied token',
+);
+assert.match(indexSource, /SEARCH_QUERY_MAX_LENGTH = 80/);
+assert.match(indexSource, /\.slice\(0, SEARCH_QUERY_MAX_LENGTH\)/, 'search text should be length-capped');
 assert.doesNotMatch(
   indexSource,
   /while\s*\(true\)\s*\{[\s\S]*creator_videos/,
