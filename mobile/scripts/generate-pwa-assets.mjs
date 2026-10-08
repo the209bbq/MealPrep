@@ -35,7 +35,7 @@ function webPath(relative) {
   return `${basePath}${normalized}`;
 }
 
-async function generateIcons(sourceIcon) {
+async function generateIcons(sourceIcon, maskableIcon) {
   fs.mkdirSync(iconsDir, { recursive: true });
 
   const sizes = [
@@ -49,20 +49,7 @@ async function generateIcons(sourceIcon) {
   for (const { name, size, maskable } of sizes) {
     const out = path.join(iconsDir, name);
     if (maskable) {
-      const padding = Math.round(size * 0.14);
-      const inner = size - padding * 2;
-      const resized = await sharp(sourceIcon).resize(inner, inner, { fit: 'contain' }).png().toBuffer();
-      await sharp({
-        create: {
-          width: size,
-          height: size,
-          channels: 4,
-          background: THEME.brandCream,
-        },
-      })
-        .composite([{ input: resized, gravity: 'centre' }])
-        .png()
-        .toFile(out);
+      await sharp(maskableIcon).resize(size, size, { fit: 'cover' }).png().toFile(out);
     } else {
       await sharp(sourceIcon).resize(size, size, { fit: 'cover' }).png().toFile(out);
     }
@@ -123,7 +110,11 @@ async function main() {
   if (!fs.existsSync(sourceIcon)) {
     throw new Error(`Missing source icon: ${sourceIcon}`);
   }
-  await generateIcons(sourceIcon);
+  const maskableIcon = path.join(mobileRoot, brand.assets.iconMaskable);
+  if (!fs.existsSync(maskableIcon)) {
+    throw new Error(`Missing maskable icon: ${maskableIcon}`);
+  }
+  await generateIcons(sourceIcon, maskableIcon);
   writeManifest();
   console.log('PWA icons and manifest written to public/');
 }

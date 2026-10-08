@@ -20,13 +20,13 @@ export function BrandLogo({ variant, style }: BrandLogoProps) {
         accessibilityLabel={APP_BRAND.name}
       >
         <View
-          className="items-center justify-center rounded-full"
+          className="overflow-hidden rounded-full"
           style={{ backgroundColor: cream, width: headerMarkSize + 6, height: headerMarkSize + 6 }}
         >
           <Image
             source={APP_BRAND_IMAGES.logoMark}
-            style={[{ width: headerMarkSize, height: headerMarkSize }, style]}
-            resizeMode="contain"
+            style={[{ width: headerMarkSize + 6, height: headerMarkSize + 6 }, style]}
+            resizeMode="cover"
           />
         </View>
         <Text className="shrink text-sm font-bold text-on-primary" numberOfLines={1}>
