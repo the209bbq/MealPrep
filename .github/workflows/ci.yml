@@ -34,8 +34,18 @@ jobs:
       - name: Lint
         continue-on-error: true
         run: npm run lint
+      # test:grocery includes a Python check that imports the store-ingest dependencies.
+      - name: Install Python test dependencies
+        run: pip install --quiet -r scripts/stores-ingest/requirements.txt
       - name: Tests
-        run: npm test
+        run: |
+          set -o pipefail
+          if ! npm test 2>&1 | tee "$RUNNER_TEMP/test.log"; then
+            # Surface the end of the log on the PR so the failing check is visible without opening logs.
+            tail_text="$(tail -n 30 "$RUNNER_TEMP/test.log" | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            echo "::error title=Tests failed::${tail_text}"
+            exit 1
+          fi
 
   static-site:
     runs-on: ubuntu-latest
