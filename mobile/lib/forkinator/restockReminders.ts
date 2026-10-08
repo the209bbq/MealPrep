@@ -62,7 +62,13 @@ function inferRestockFromPantryRow(
   staple: StapleCatalogEntry,
   item: PantryItem,
 ): Pick<StapleRestockLine, 'quantity' | 'unit' | 'name'> {
-  const sizeMatch = staple.sizeOptions?.find((opt) => opt.unit === item.unit);
+  // FK3-9: prefer the staple's default pack (eggs → a dozen) when its unit matches the pantry
+  // row; only fall back to the first size option with that unit (eggs used to get 6).
+  const defaultSize = staple.sizeOptions?.find((opt) => opt.id === staple.defaultSizeId);
+  const sizeMatch =
+    defaultSize && defaultSize.unit === item.unit
+      ? defaultSize
+      : staple.sizeOptions?.find((opt) => opt.unit === item.unit);
   if (sizeMatch) {
     return { name: item.name, quantity: sizeMatch.quantity, unit: sizeMatch.unit };
   }
@@ -123,6 +129,26 @@ export function planStapleRestockLines(
   }
 
   return lines;
+}
+
+/**
+ * FK3-9: restock after cooking only looks at pantry rows the cooked recipe actually deducted,
+ * never the whole pantry. A row used up completely (removed from the pantry) counts as 0.
+ */
+export function planStapleRestockLinesForCook(
+  nextPantry: readonly PantryItem[],
+  deductedPantryRows: readonly PantryItem[],
+  grocery: readonly GroceryListItem[],
+): StapleRestockLine[] {
+  const nextById = new Map(nextPantry.map((row) => [row.id, row]));
+  const seen = new Set<string>();
+  const usedRows: PantryItem[] = [];
+  for (const previous of deductedPantryRows) {
+    if (seen.has(previous.id)) continue;
+    seen.add(previous.id);
+    usedRows.push(nextById.get(previous.id) ?? { ...previous, quantity: 0 });
+  }
+  return planStapleRestockLines(usedRows, grocery);
 }
 
 export function buildRestockReminderMessage(stapleNames: readonly string[]): string {

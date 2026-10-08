@@ -24,7 +24,12 @@ import {
   ingredientMatchScoreWithPantryTokens,
   type PantryMatchContext,
 } from './pantryMatchContext';
-import { findPantryItemsForIngredient, totalPantryQuantityInUnit } from './pantryStock';
+import {
+  findPantryItemsForIngredient,
+  isEggComponentIngredient,
+  isEggsPantryStapleRow,
+  totalPantryQuantityInUnit,
+} from './pantryStock';
 
 export interface MatchedIngredient {
   ingredient: RecipeIngredient;
@@ -106,6 +111,17 @@ function findPantryMatch(
 ): { item: PantryItem | null; reason: MatchedIngredient['matchReason']; score: number } {
   if (pantry.length === 0) {
     return { item: null, reason: 'fuzzy_name', score: 0 };
+  }
+
+  // FK3-4: egg yolk / egg white use whole eggs from the pantry (same rule as pantryStock).
+  if (isEggComponentIngredient(ingredient.name)) {
+    for (const row of context.items) {
+      const item = row.item;
+      if (usedPantryIds.has(item.id)) continue;
+      if (isEggsPantryStapleRow(item)) {
+        return { item, reason: 'ingredient_id', score: 1 };
+      }
+    }
   }
 
   for (const row of context.items) {

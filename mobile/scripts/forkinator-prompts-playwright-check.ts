@@ -37,7 +37,8 @@ const distDir = path.join(mobileRoot, 'dist');
 const WEB_BASE_PATH = '/MealPrep/app';
 const VIEWPORT = { width: 390, height: 844 };
 const PROMPT_WAIT_MS = 4500;
-const FORK_IDLE_MS = 11_000;
+/** Fork in the road is persistent on Home now (no 10 s idle wait). */
+const PERSISTENT_FORK_WAIT_MS = 3_000;
 
 type TriggerResult = { id: string; pass: boolean; note: string };
 
@@ -293,7 +294,7 @@ async function main() {
     });
 
     results.push({
-      id: '(e) fork in the road',
+      id: '(e) fork in the road (persistent on Home)',
       pass: await runTrigger(
         baseUrl,
         {
@@ -302,13 +303,16 @@ async function main() {
           [FORKINATOR_SCANNER_NUDGE_LAST_SHOWN_STORAGE_KEY]: String(Date.now()),
           [FORKINATOR_EXPIRATION_PROMPT_LAST_SHOWN_DAY_KEY]: JSON.stringify(todayIsoDate()),
           [FORKINATOR_EXPIRATION_PROMPT_LAST_FINGERPRINT_KEY]: JSON.stringify('none'),
-          [FORKINATOR_FORK_IN_ROAD_CONSECUTIVE_DISMISSALS_KEY]: '0',
+          // Already shown today and in cooldown: Home still shows it (no daily limit / cooldown).
+          [FORKINATOR_FORK_IN_ROAD_LAST_SHOWN_DAY_KEY]: JSON.stringify(todayIsoDate()),
+          [FORKINATOR_FORK_IN_ROAD_CONSECUTIVE_DISMISSALS_KEY]: '2',
+          [FORKINATOR_FORK_IN_ROAD_COOLDOWN_UNTIL_DAY_KEY]: JSON.stringify(addDaysToIsoDate(todayIsoDate(), 3)),
         },
         '/',
-        FORK_IDLE_MS,
+        PERSISTENT_FORK_WAIT_MS,
         FORKINATOR_FORK_IN_ROAD_MESSAGE,
       ),
-      note: '10s home idle',
+      note: 'shows right away on Home, ignoring the old idle wait, daily limit and cooldown',
     });
 
     results.push({
@@ -329,17 +333,41 @@ async function main() {
     await tapPage.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
     await waitForForky(tapPage);
     const fork = tapPage.getByRole('button', { name: FORKINATOR_ACCESSIBILITY_LABEL });
-    await fork.click();
-    await tapPage.waitForTimeout(80);
-    await fork.click();
-    await tapPage.waitForTimeout(80);
-    const html = await tapPage.content();
-    await browserTap.close();
-    const tapPass = !html.includes(FORKINATOR_GREETING_MESSAGE);
+    const forkText = tapPage.getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE);
+    let placementPass = false;
+    try {
+      await forkText.waitFor({ state: 'visible', timeout: PERSISTENT_FORK_WAIT_MS + 4000 });
+      const cloud = await forkText.boundingBox();
+      const body = await fork.boundingBox();
+      placementPass = Boolean(
+        cloud &&
+          body &&
+          (cloud.y + cloud.height <= body.y ||
+            cloud.x + cloud.width <= body.x ||
+            cloud.x >= body.x + body.width ||
+            cloud.y >= body.y + body.height),
+      );
+    } catch {
+      placementPass = false;
+    }
     results.push({
-      id: '(tap) web single activation',
+      id: '(placement) fork-in-road cloud clear of Forky',
+      pass: placementPass,
+      note: 'cloud text sits above or beside Forky, never over him',
+    });
+    await fork.click();
+    await tapPage.waitForTimeout(150);
+    const closedForVisit = !(await forkText.isVisible().catch(() => false));
+    await fork.click();
+    await tapPage.waitForTimeout(150);
+    const html = await tapPage.content();
+    const stillClosed = !(await forkText.isVisible().catch(() => false));
+    await browserTap.close();
+    const tapPass = closedForVisit && stillClosed && !html.includes(FORKINATOR_GREETING_MESSAGE);
+    results.push({
+      id: '(tap) close for visit, then tap does nothing',
       pass: tapPass,
-      note: `Two clicks should toggle thinking, not double-fire on first click (dedupe ${FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS}ms)`,
+      note: `First tap closes fork in the road for this visit; a tap with no prompt opens nothing (no thinking bubble; dedupe ${FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS}ms)`,
     });
 
     console.log('forkinator-prompts-playwright results:');

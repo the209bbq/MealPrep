@@ -1,12 +1,13 @@
 import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { formatQuantityWithUnit } from '../lib/formatQuantity';
-import type { MatchedIngredient } from '../lib/recipeMatch/match';
+import type { MealMadeReviewRow } from '../lib/mealPlan/pantryDeduction';
 import { THEME } from '../config/appConfig';
 
 export interface MealMadeReviewSheetProps {
   visible: boolean;
   mealTitle: string;
-  rows: MatchedIngredient[];
+  /** Rows carry the exact amount Confirm deducts (scaled, whole counts rounded). */
+  rows: MealMadeReviewRow[];
   selectedPantryIds: Set<string>;
   onTogglePantryItem: (pantryItemId: string, useFromPantry: boolean) => void;
   onConfirm: () => void;
@@ -56,7 +57,7 @@ export function MealMadeReviewSheet({
                       <Text className="font-semibold text-ink">{pantryItem.name}</Text>
                       <Text className="text-xs text-muted">
                         Recipe: {row.ingredient.name} · use{' '}
-                        {formatQuantityWithUnit(row.ingredient.quantity, row.ingredient.unit)}
+                        {formatQuantityWithUnit(row.deductQuantity, row.ingredient.unit)}
                       </Text>
                     </View>
                     <Switch

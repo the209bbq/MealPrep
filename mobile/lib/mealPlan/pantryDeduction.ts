@@ -28,6 +28,58 @@ export interface PantryDeductionResult {
   nextPantry: PantryItem[];
 }
 
+/**
+ * Units counted in whole items (eggs, onions, cloves, cans...). Scaled deductions for these
+ * round to whole numbers so the pantry never ends up with ½ an egg (FK3-2).
+ */
+const WHOLE_COUNT_UNITS = new Set([
+  '',
+  'each',
+  'ea',
+  'piece',
+  'pieces',
+  'item',
+  'items',
+  'whole',
+  'large',
+  'medium',
+  'small',
+  'egg',
+  'eggs',
+  'clove',
+  'cloves',
+  'head',
+  'heads',
+  'can',
+  'cans',
+  'jar',
+  'jars',
+  'bunch',
+  'bunches',
+  'slice',
+  'slices',
+  'stalk',
+  'stalks',
+]);
+
+export function isWholeCountIngredientUnit(unit: string | null | undefined): boolean {
+  return WHOLE_COUNT_UNITS.has((unit ?? '').trim().toLowerCase());
+}
+
+/**
+ * Amount the Made-it flow deducts for one ingredient: scaled by household servings, with
+ * whole-count units rounded to whole numbers (minimum 1 when the recipe uses any).
+ * The review sheet shows this exact value, so review and deduction always match.
+ */
+export function scaledPantryDeductionQuantity(ingredient: RecipeIngredient, scale: number): number {
+  const raw = ingredient.quantity * scale;
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  if (isWholeCountIngredientUnit(ingredient.unit)) {
+    return Math.max(1, Math.round(raw));
+  }
+  return roundQty(raw);
+}
+
 function recipeScale(
   recipe: Recipe,
   servingOverrides: Record<string, number>,
@@ -53,7 +105,7 @@ export function buildPantryDeductionLines(
     if (excludedPantryItemIds.has(pantryItem.id)) continue;
     if (isIngredientUnmeasurableForDeduction(row.ingredient)) continue;
 
-    const deductQuantity = roundQty(row.ingredient.quantity * scale);
+    const deductQuantity = scaledPantryDeductionQuantity(row.ingredient, scale);
     if (deductQuantity <= 0) continue;
 
     const convertible = ingredientUnitsConvertible(
@@ -135,6 +187,25 @@ export function restorePantryFromDeductions(pantry: PantryItem[], lines: PantryD
 
   const ids = new Set([...pantry.map((p) => p.id), ...lines.map((l) => l.previous.id)]);
   return [...ids].map((id) => byId.get(id)).filter((item): item is PantryItem => Boolean(item));
+}
+
+export type MealMadeReviewRow = MatchedIngredient & {
+  /** Exactly what Confirm will deduct, in the ingredient's unit. */
+  deductQuantity: number;
+};
+
+/** Review rows with the same scaled/rounded amounts `buildPantryDeductionLines` will deduct. */
+export function mealMadeReviewRowsWithDeductions(
+  match: RecipePantryMatch,
+  recipe: Recipe,
+  servingOverrides: Record<string, number>,
+  householdSize?: number,
+): MealMadeReviewRow[] {
+  const lines = buildPantryDeductionLines(match, recipe, servingOverrides, new Set(), householdSize);
+  const byPantryId = new Map(lines.map((line) => [line.pantryItemId, line.deductQuantity]));
+  return matchedRowsForReview(match)
+    .filter((row) => byPantryId.has(row.matchedPantryItem!.id))
+    .map((row) => ({ ...row, deductQuantity: byPantryId.get(row.matchedPantryItem!.id)! }));
 }
 
 export function matchedRowsForReview(match: RecipePantryMatch): MatchedIngredient[] {

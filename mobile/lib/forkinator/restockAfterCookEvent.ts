@@ -2,6 +2,11 @@ import type { PantryItem } from '../../types/mealprep';
 
 export type ForkinatorRestockAfterCookPayload = {
   nextPantry: PantryItem[];
+  /**
+   * Pantry rows (pre-cook values) the cooked recipe actually deducted. Restock only considers
+   * these, never the whole pantry (FK3-9).
+   */
+  deductedPantryRows: PantryItem[];
   /** True when confirm meal made applied at least one pantry deduction. */
   pantryDeductionApplied: boolean;
 };
