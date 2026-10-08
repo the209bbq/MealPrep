@@ -1,0 +1,64 @@
+name: Deploy Supabase function
+
+# Manual, one function at a time: Actions tab -> "Deploy Supabase function" -> Run workflow.
+# Deploys exactly what is on main, so the live function always matches the repo.
+#
+# One-time setup: add a repository secret named SUPABASE_ACCESS_TOKEN
+# (Supabase dashboard -> Account -> Access Tokens). Never paste the token anywhere else.
+on:
+  workflow_dispatch:
+    inputs:
+      function:
+        description: Function to deploy
+        required: true
+        type: choice
+        options:
+          - creator-videos
+          - delete-user-account
+          - kroger-deals
+          - library-generate
+          - pantry-vision
+          - recipe-import
+          - recipeapi-proxy
+          - usda-proxy
+          - viral-recipes
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-function-${{ inputs.function }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: okkwapgyadpaifpmkcex
+      FUNCTION_NAME: ${{ inputs.function }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the access token is configured
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error title=Missing secret::Add the SUPABASE_ACCESS_TOKEN repository secret, then run this again."
+            exit 1
+          fi
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Deploy
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          test -f "supabase/functions/$FUNCTION_NAME/index.ts"
+          # These two authenticate with their own shared secret / anon key, so gateway JWT
+          # verification stays off for them, matching how they are deployed today.
+          case "$FUNCTION_NAME" in
+            creator-videos|library-generate) jwt_flag="--no-verify-jwt" ;;
+            *) jwt_flag="" ;;
+          esac
+          supabase functions deploy "$FUNCTION_NAME" --project-ref "$SUPABASE_PROJECT_REF" $jwt_flag
