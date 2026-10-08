@@ -59,7 +59,7 @@ const distDir = path.join(mobileRoot, 'dist');
 const serveRoot = path.join(mobileRoot, '.toolbar-layout-serve-root');
 
 function prepareServeRoot(): string {
-  const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
+  const basePath = (process.env.APP_BASE ?? '').replace(/\/$/, '');
   const nested = path.join(serveRoot, basePath.replace(/^\//, ''));
   fs.rmSync(serveRoot, { recursive: true, force: true });
   fs.mkdirSync(nested, { recursive: true });
@@ -80,7 +80,7 @@ async function runPlaywrightLayoutCheck(): Promise<void> {
 
   const port = Number(process.env.PORT ?? 8767);
   const origin = `http://127.0.0.1:${port}`;
-  const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
+  const basePath = (process.env.APP_BASE ?? '').replace(/\/$/, '');
   const root = prepareServeRoot();
 
   const server = spawn('npx', ['serve', root, '-l', String(port), '--no-port-switching'], {

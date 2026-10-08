@@ -15,7 +15,7 @@ const distDir = path.join(mobileRoot, 'dist');
 const serveRoot = path.join(mobileRoot, '.pantry-scan-serve-root');
 const userPhoto = path.join(mobileRoot, 'test/fixtures/photos/pantry-rack.jpg');
 
-const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
+const basePath = (process.env.APP_BASE ?? '').replace(/\/$/, '');
 const port = Number(process.env.PORT ?? 8766);
 const origin = `http://127.0.0.1:${port}`;
 

@@ -20,7 +20,7 @@ const mobileRoot = path.resolve(__dirname, '..');
 const distDir = path.join(mobileRoot, 'dist');
 const serveRoot = path.join(mobileRoot, '.e2e-serve-root');
 
-const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
+const basePath = (process.env.APP_BASE ?? '').replace(/\/$/, '');
 const port = Number(process.env.PORT ?? 8766);
 const origin = `http://127.0.0.1:${port}`;
 

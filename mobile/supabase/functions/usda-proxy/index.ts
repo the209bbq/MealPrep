@@ -11,8 +11,10 @@ const USDA_FOOD = 'https://api.nal.usda.gov/fdc/v1/food';
 /** USDA rejects a single comma-joined value with parentheses; send repeated `dataType` params. */
 const DEFAULT_SEARCH_DATA_TYPES = ['Foundation', 'SR Legacy'];
 
-/** GitHub Pages PWA + common Expo web dev origins (Origin header has no path). */
+/** Production web app, the old GitHub Pages address, and common Expo web dev origins (Origin header has no path). */
 const ALLOWED_ORIGINS = new Set([
+  'https://mealplanatic.app',
+  'https://www.mealplanatic.app',
   'https://the209bbq.github.io',
   'http://localhost:8081',
   'http://localhost:19006',
@@ -40,7 +42,7 @@ function corsHeaders(req: Request): Record<string, string> {
   const allow =
     origin && (ALLOWED_ORIGINS.has(origin) || origin.startsWith('http://localhost:'))
       ? origin
-      : 'https://the209bbq.github.io';
+      : 'https://mealplanatic.app';
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

@@ -8,8 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "experiments": {
-      "typedRoutes": true,
-      "baseUrl": "/MealPrep/app"
+      "typedRoutes": true
     },
     "ios": {
       "supportsTablet": true
