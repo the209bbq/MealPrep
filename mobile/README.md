@@ -1,6 +1,6 @@
 # MealPlanatic mobile (Expo)
 
-Expo Router app with NativeWind styling and optional Supabase auth. The web build is exported to GitHub Pages at `/MealPrep/app/` next to the static site in `New/`.
+Expo Router app with NativeWind styling and optional Supabase auth. The web build is exported to GitHub Pages at the root of https://mealplanatic.app; the static site in `New/` is published under `/209/`.
 
 ## Run on your phone with Expo Go (no paid accounts)
 
@@ -18,7 +18,7 @@ Supabase env vars (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`) 
 
 ## Install the web app (PWA) on your home screen
 
-Production build: **https://the209bbq.github.io/MealPrep/app/**
+Production build: **https://mealplanatic.app/**
 
 - **Android (Chrome):** open the URL, use the install banner or browser menu → “Install app”.
 - **iOS (Safari):** open the URL → Share → **Add to Home Screen**.

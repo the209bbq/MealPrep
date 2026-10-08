@@ -345,7 +345,7 @@ function rootHasPrerenderedContent(html: string): boolean {
 }
 
 function runHydrationPlaywright(): { htmlSizes: Record<string, number> } {
-  const basePath = '/MealPrep/app';
+  const basePath = '';
   const routes = ['/', '/pantry', '/grocery'];
   const htmlSizes: Record<string, number> = {};
   for (const route of routes) {

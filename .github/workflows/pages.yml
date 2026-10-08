@@ -42,16 +42,42 @@ jobs:
       - name: Assemble site artifact
         run: |
           set -euo pipefail
-          mkdir -p _site
-          cp -a New/. _site/
-          cp -a mobile/dist/. _site/app/
+          # Site layout on https://mealplanatic.app:
+          #   /       MealPlanatic app (Expo web export)
+          #   /209/   209 Meal Prep static site (New/)
+          #   /app/   redirect stubs for links to the old /MealPrep/app/ address
+          mkdir -p _site/209
+          cp -a mobile/dist/. _site/
+          cp -a New/. _site/209/
           touch _site/.nojekyll
-          test -f _site/app/404.html || (echo "missing SPA 404 fallback in mobile/dist" && exit 1)
-          cd _site/app
-          for route in admin pantry grocery recipes smart-shop discover-recipes privacy terms delete-account; do
+          test -f _site/404.html || (echo "missing SPA 404 fallback in mobile/dist" && exit 1)
+          routes="admin pantry grocery recipes smart-shop discover-recipes privacy terms delete-account"
+          cd _site
+          for route in $routes; do
             if [ -f "$route.html" ]; then
               mkdir -p "$route"
               cp "$route.html" "$route/index.html"
+            fi
+          done
+          # Old app links: GitHub forwards the209bbq.github.io/MealPrep/app/* to /app/* here.
+          redirect_page() {
+            # $1 = output file, $2 = JS expression for the new path
+            mkdir -p "$(dirname "$1")"
+            printf '%s\n' '<!doctype html><meta charset="utf-8"><title>MealPlanatic</title>' \
+              '<meta name="robots" content="noindex">' \
+              "<script>location.replace($2 + location.search + location.hash);</script>" \
+              '<p><a href="/">Continue to MealPlanatic</a></p>' > "$1"
+          }
+          test ! -e app || (echo "app export now has an /app path; pick another redirect folder" && exit 1)
+          redirect_page app/index.html "location.pathname.replace(/^\\/app\\/?/, '/')"
+          for route in $routes; do
+            redirect_page "app/$route/index.html" "location.pathname.replace(/^\\/app\\/?/, '/')"
+          done
+          # Old 209 Meal Prep links: pages that used to sit at the site root now live under /209/.
+          for page in 209/*.html; do
+            name="$(basename "$page")"
+            if [ ! -e "$name" ]; then
+              redirect_page "$name" "'/209/$name'"
             fi
           done
       - name: Upload static site

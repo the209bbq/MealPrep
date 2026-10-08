@@ -56,7 +56,7 @@ import {
 
 const mobileRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const distDir = path.join(mobileRoot, 'dist');
-const WEB_BASE_PATH = '/MealPrep/app';
+const WEB_BASE_PATH = '';
 const VIEWPORT = { width: 390, height: 844 };
 const PROMPT_WAIT_MS = 4500;
 /** Fork in the road is persistent on Home now (no 10 s idle wait). */

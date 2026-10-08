@@ -1,16 +1,19 @@
 import appJson from '../app.json';
 
-/** GitHub Pages site origin (repo: the209bbq/MealPrep). */
-export const GITHUB_PAGES_ORIGIN = 'https://the209bbq.github.io';
+/**
+ * Public site origin. Hosted on GitHub Pages (repo: the209bbq/MealPrep) behind the
+ * custom domain, so the constant keeps its historical name.
+ */
+export const GITHUB_PAGES_ORIGIN = 'https://mealplanatic.app';
 
 function appBasePathFromConfig(): string {
   const baseUrl = appJson.expo?.experiments?.baseUrl ?? '';
   const trimmed = typeof baseUrl === 'string' ? baseUrl.trim() : '';
-  if (!trimmed) return '/app';
+  if (!trimmed) return '';
   return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
 }
 
-/** Published app root on GitHub Pages, e.g. `/MealPrep/app`. */
+/** Published app path under the origin. Empty when the app is served from the domain root. */
 export const GITHUB_PAGES_APP_PATH = appBasePathFromConfig();
 
 export type LegalPageSlug = 'privacy' | 'terms';
