@@ -673,7 +673,8 @@ export function ForkinatorOverlay() {
       insetLeft: insets.left,
       message: FORKINATOR_AISLE_SORT_MESSAGE,
       includeActionButton: true,
-      preferAboveBeforeSide: true,
+      preferAboveBeforeSide: height >= 700,
+      preferSideOverAbove: height < 700,
     });
   }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 

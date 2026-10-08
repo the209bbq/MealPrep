@@ -18,6 +18,7 @@ export type IntersectionHit = {
   label: string;
   role: string;
   rect: DomRect;
+  overlapPercent: number;
 };
 
 export type ForkinatorDomProbe = {
@@ -51,6 +52,32 @@ function rectsOverlap(a: DomRect, b: DomRect): boolean {
     a.top < b.top + b.height &&
     a.top + a.height > b.top
   );
+}
+
+export function overlapArea(a: DomRect, b: DomRect): number {
+  const w = Math.max(0, Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left));
+  const h = Math.max(0, Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top));
+  return w * h;
+}
+
+export function overlapPercentOfControl(overlay: DomRect, control: DomRect): number {
+  const controlArea = control.width * control.height;
+  if (controlArea <= 0) return 0;
+  return (overlapArea(overlay, control) / controlArea) * 100;
+}
+
+export function geometricOverlapHits(
+  overlay: DomRect,
+  elements: IntersectionHit[],
+): IntersectionHit[] {
+  const hits: IntersectionHit[] = [];
+  for (const el of elements) {
+    const pct = overlapPercentOfControl(overlay, el.rect);
+    if (pct > 0) {
+      hits.push({ ...el, overlapPercent: pct });
+    }
+  }
+  return hits;
 }
 
 export async function probeForkinatorDom(page: Page): Promise<ForkinatorDomProbe> {
@@ -134,6 +161,7 @@ export async function collectInteractiveElements(page: Page): Promise<Intersecti
         label,
         role: el.getAttribute('role') || el.tagName.toLowerCase(),
         rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+        overlapPercent: 0,
       });
     }
     return hits;
@@ -183,10 +211,10 @@ export async function runIntersectionScenario(
   const probe = await probeForkinatorDom(page);
 
   const pillHits = probe.pillBox
-    ? await hitsBlockingOverlay(page, probe.pillBox, interactive)
+    ? geometricOverlapHits(probe.pillBox, interactive)
     : [];
   const forkHitHits = probe.forkHitBox
-    ? await hitsBlockingOverlay(page, probe.forkHitBox, interactive)
+    ? geometricOverlapHits(probe.forkHitBox, interactive)
     : [];
 
   let cloudPassThroughOk = true;
@@ -213,46 +241,11 @@ export async function runIntersectionScenario(
   };
 }
 
-function pointInRect(x: number, y: number, rect: DomRect): boolean {
-  return (
-    x >= rect.left &&
-    x <= rect.left + rect.width &&
-    y >= rect.top &&
-    y <= rect.top + rect.height
-  );
-}
-
-export async function hitsBlockingOverlay(
-  page: Page,
-  overlay: DomRect,
-  elements: IntersectionHit[],
-): Promise<IntersectionHit[]> {
-  const labels = [...FORKY_LABELS];
-  const blocked: IntersectionHit[] = [];
-  for (const el of elements) {
-    if (!rectsOverlap(overlay, el.rect)) continue;
-    const cx = el.rect.left + el.rect.width / 2;
-    const cy = el.rect.top + el.rect.height / 2;
-    if (!pointInRect(cx, cy, overlay)) continue;
-    const sampleX = cx;
-    const sampleY = cy;
-    const expr = `((pt, labels) => {
-      const el = document.elementFromPoint(pt.x, pt.y);
-      if (!el) return false;
-      let node = el;
-      for (let i = 0; i < 6 && node; i++) {
-        const label = node.getAttribute && node.getAttribute('aria-label');
-        if (label && labels.indexOf(label) >= 0) return true;
-        const text = (node.textContent || '').trim();
-        if (text.indexOf("Can't decide?") >= 0 && text.indexOf('fork in the road') >= 0) return true;
-        node = node.parentElement;
-      }
-      return false;
-    })(${JSON.stringify({ x: sampleX, y: sampleY })}, ${JSON.stringify(labels)})`;
-    const forkyOnTop = await page.evaluate(expr);
-    if (forkyOnTop) blocked.push(el);
-  }
-  return blocked;
+export function formatHitList(hits: IntersectionHit[]): string {
+  if (hits.length === 0) return '—';
+  return hits
+    .map((h) => `${h.label.replace(/\|/g, '/')} (${h.overlapPercent.toFixed(1)}%)`)
+    .join('; ');
 }
 
 export function formatIntersectionTable(reports: IntersectionReport[]): string {
@@ -260,15 +253,9 @@ export function formatIntersectionTable(reports: IntersectionReport[]): string {
   lines.push('| Scenario | Viewport | Pill overlaps | Fork hit overlaps |');
   lines.push('|---|---|---|---|');
   for (const r of reports) {
-    const pill =
-      r.pillHits.length === 0
-        ? '—'
-        : r.pillHits.map((h) => h.label.replace(/\|/g, '/')).join('; ');
-    const fork =
-      r.forkHitHits.length === 0
-        ? '—'
-        : r.forkHitHits.map((h) => h.label.replace(/\|/g, '/')).join('; ');
-    lines.push(`| ${r.scenario} | ${r.viewport} | ${pill} | ${fork} |`);
+    lines.push(
+      `| ${r.scenario} | ${r.viewport} | ${formatHitList(r.pillHits)} | ${formatHitList(r.forkHitHits)} |`,
+    );
   }
   return lines.join('\n');
 }

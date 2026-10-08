@@ -48,7 +48,7 @@ import {
   allIntersectionsClear,
   collectInteractiveElements,
   formatIntersectionTable,
-  hitsBlockingOverlay,
+  geometricOverlapHits,
   probeForkinatorDom,
   runIntersectionScenario,
   type IntersectionReport,
@@ -349,14 +349,17 @@ async function runDomIntersectionMatrix(
             height: aisleMessage.height + 72,
           } as const);
         if (aisleBox) {
-          const aisleInteractive = await collectInteractiveElements(page);
-          const aisleBlocked = await hitsBlockingOverlay(page, aisleBox, aisleInteractive);
+          const aisleInteractive = (await collectInteractiveElements(page)).filter(
+            (el) =>
+              !/Forky|aisle sort|Dismiss aisle|Sort grocery list by aisle/i.test(el.label),
+          );
+          const aisleBlocked = geometricOverlapHits(aisleBox, aisleInteractive);
           if (aisleBlocked.length > 0) {
             report.pillHits.push(
               ...aisleBlocked.map((h) => ({
+                ...h,
                 label: `aisle-cloud∩${h.label}`,
                 role: 'aisle',
-                rect: h.rect,
               })),
             );
           }
