@@ -51,6 +51,8 @@ export type ScannerPromptLayoutInput = {
   includeActionButton?: boolean;
   /** When true, skip the above placement (grocery aisle cloud — FK5-3). */
   preferSideOverAbove?: boolean;
+  /** When true, try above before side (aisle cloud on right-docked Forky). */
+  preferAboveBeforeSide?: boolean;
 };
 
 function estimateMessageLineCount(message: string, contentWidth: number): number {
@@ -191,26 +193,34 @@ export function layoutScannerPrompt(input: ScannerPromptLayoutInput): ScannerPro
     return null;
   };
 
+  const aboveLayout = (): ScannerPromptLayout | null => {
+    if (aboveTop < minTop) return null;
+    return {
+      left: clamp(mascotCenterX - bodyWidth / 2, minLeft, maxRight - bodyWidth),
+      top: aboveTop,
+      placement: 'above',
+      width: bodyWidth,
+      height: aboveHeight,
+      bodyWidth,
+      bodyHeight,
+    };
+  };
+
+  if (input.preferAboveBeforeSide) {
+    const above = aboveLayout();
+    if (above) return above;
+  }
+
   if (!input.preferSideOverAbove) {
-    // 1) Above his head (preferred).
-    if (aboveTop >= minTop) {
-      return {
-        left: clamp(mascotCenterX - bodyWidth / 2, minLeft, maxRight - bodyWidth),
-        top: aboveTop,
-        placement: 'above',
-        width: bodyWidth,
-        height: aboveHeight,
-        bodyWidth,
-        bodyHeight,
-      };
-    }
+    const above = aboveLayout();
+    if (above) return above;
   }
 
   // 2) Off to the side, preferring the roomier side; squeeze the cloud if needed.
   const sideLayout = trySidePlacement();
   if (sideLayout) return sideLayout;
 
-  if (input.preferSideOverAbove && aboveTop >= minTop) {
+  if ((input.preferSideOverAbove || input.preferAboveBeforeSide) && aboveTop >= minTop) {
     return {
       left: clamp(mascotCenterX - bodyWidth / 2, minLeft, maxRight - bodyWidth),
       top: aboveTop,

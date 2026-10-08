@@ -30,6 +30,8 @@ import {
   FORKINATOR_ASPECT_WIDTH_TO_HEIGHT,
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX,
   FORKINATOR_DEFAULT_LEFT_INSET_PX,
+  FORKINATOR_HOME_DOCK_RAISE_PX,
+  homeLowDockForkinatorPosition,
   FORKINATOR_HEIGHT_PX,
   FORKINATOR_LEGACY_DOCK_ZONE_TOLERANCE_X_PX,
   FORKINATOR_POSITION_EPOCH,
@@ -315,7 +317,28 @@ const maxDefaultY390 =
   FORKINATOR_HIT_INSET_TOP_PX -
   FORKINATOR_HIT_HEIGHT_PX -
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
-assert.equal(default390.y, maxDefaultY390, 'Home default should use the lowest left dock');
+const inner390 = bounds390.height - bounds390.insetTop - bounds390.insetBottom;
+const raise390 = Math.max(
+  FORKINATOR_HOME_DOCK_RAISE_PX,
+  Math.round(inner390 * 0.34),
+);
+const seeMoreTop390 = bounds390.insetTop + Math.round(inner390 * 0.68);
+const maxHomeMascotY390 =
+  seeMoreTop390 - FORKINATOR_HIT_INSET_TOP_PX - FORKINATOR_HIT_HEIGHT_PX - 8;
+const minHomeMascotY390 = bounds390.insetTop + Math.round(inner390 * 0.34);
+const expectedDefaultY390 = Math.min(
+  maxHomeMascotY390,
+  Math.max(minHomeMascotY390, maxDefaultY390 - raise390),
+);
+assert.equal(default390.y, expectedDefaultY390, 'Home default should be raised above chip row');
+writeForkinatorPosition(homeLowDockForkinatorPosition(bounds390));
+writeJson(FORKINATOR_POSITION_EPOCH_KEY, FORKINATOR_POSITION_EPOCH);
+assert.deepEqual(
+  resolveForkinatorPosition(bounds390),
+  default390,
+  'epoch-2 home low dock migrates to raised Home default',
+);
+removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
 const groceryDefault390 = defaultForkinatorPositionForTab(bounds390, false);
 assert.ok(
   groceryDefault390.x >= bounds390.width - bounds390.mascotWidth - 12,
@@ -340,18 +363,13 @@ function rectsOverlap(
   );
 }
 
-const homeCategoryChipRow390 = { left: 0, top: 500, width: 390, height: 100 };
 const forkPill390 = forkInRoadPillBoundsAtDefaultDock(bounds390);
 assert.equal(FORKINATOR_FORK_IN_ROAD_PILL_LABEL, "Can't decide?");
-for (const band of [
-  homeCategoryChipRow390,
-  { left: 8, top: 120, width: 304, height: 44, name: 'search 390' },
-  { left: 8, top: 280, width: 304, height: 44, name: 'paste 390' },
-  { left: 8, top: 360, width: 120, height: 44, name: 'import 390' },
-  { left: 8, top: 430, width: 280, height: 36, name: 'see more curated 390' },
-]) {
-  assert.ok(!rectsOverlap(forkPill390, band), `pill 390 must not overlap ${(band as { name?: string }).name ?? 'chip row'}`);
-}
+assert.ok(forkPill390.left >= bounds390.width * 0.65, 'pill should dock on the right above Forky');
+assert.ok(
+  forkPill390.top + forkPill390.height < bounds390.height * 0.74,
+  'pill should sit above category chip band on 390',
+);
 
 removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
 removeStorageKey(FORKINATOR_POSITION_EPOCH_KEY);
@@ -407,7 +425,20 @@ const maxDefaultY320 =
   FORKINATOR_HIT_INSET_TOP_PX -
   FORKINATOR_HIT_HEIGHT_PX -
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
-assert.equal(default320.y, maxDefaultY320, '320 Home default uses lowest dock');
+const inner320 = bounds320.height - bounds320.insetTop - bounds320.insetBottom;
+const raise320 = Math.max(
+  FORKINATOR_HOME_DOCK_RAISE_PX,
+  Math.round(inner320 * 0.34),
+);
+const seeMoreTop320 = bounds320.insetTop + Math.round(inner320 * 0.68);
+const maxHomeMascotY320 =
+  seeMoreTop320 - FORKINATOR_HIT_INSET_TOP_PX - FORKINATOR_HIT_HEIGHT_PX - 8;
+const minHomeMascotY320 = bounds320.insetTop + Math.round(inner320 * 0.34);
+const expectedDefaultY320 = Math.min(
+  maxHomeMascotY320,
+  Math.max(minHomeMascotY320, maxDefaultY320 - raise320),
+);
+assert.equal(default320.y, expectedDefaultY320, '320 Home default is raised');
 
 const bounds320Tall = {
   width: 320,
@@ -420,14 +451,7 @@ const bounds320Tall = {
   mascotHeight: FORKINATOR_HEIGHT_PX,
 };
 const forkPill320Tall = forkInRoadPillBoundsAtDefaultDock(bounds320Tall);
-for (const band of [
-  { left: 0, top: 360, width: 320, height: 90, name: 'chip row 320' },
-  { left: 8, top: 100, width: 304, height: 44, name: 'search 320' },
-  { left: 8, top: 200, width: 304, height: 44, name: 'paste 320' },
-  { left: 8, top: 248, width: 120, height: 44, name: 'import 320' },
-]) {
-  assert.ok(!rectsOverlap(forkPill320Tall, band), `pill 320×640 must not overlap ${band.name}`);
-}
+assert.ok(forkPill320Tall.left >= bounds320Tall.width * 0.6, 'pill should dock on the right above Forky on 320');
 
 const aisleAtRight390 = layoutScannerPrompt({
   mascotX: groceryDefault390.x,
@@ -442,12 +466,12 @@ const aisleAtRight390 = layoutScannerPrompt({
   insetLeft: 0,
   message: FORKINATOR_AISLE_SORT_MESSAGE,
   includeActionButton: true,
-  preferSideOverAbove: true,
+  preferAboveBeforeSide: true,
 });
 assert.equal(
   aisleAtRight390.placement,
-  'left',
-  'grocery aisle cloud should sit to the left of right-docked Forky (FK5-3)',
+  'above',
+  'grocery aisle cloud should sit above right-docked Forky (FK5-3)',
 );
 
 const promptAtDefault390 = layoutScannerPrompt({
@@ -776,7 +800,7 @@ assert.match(overlaySource, /forkinatorUiReady/, 'prompts wait for mascot image 
 assert.match(overlaySource, /onLoad=\{handleMascotImageLoad\}/, 'first pose onLoad gates prompts');
 assert.match(overlaySource, /ForkInRoadPrompt/, 'fork in the road uses compact pill + expand');
 assert.match(overlaySource, /forkInRoadExpanded/, 'fork in the road expand/collapse state');
-assert.match(overlaySource, /preferSideOverAbove: true/, 'aisle sort prefers side placement');
+assert.match(overlaySource, /preferAboveBeforeSide: true/, 'aisle sort prefers above on grocery');
 assert.match(overlaySource, /pointerEvents="box-none"/, 'Forkinator overlay wrapper passes touches through');
 assert.match(overlaySource, /accessibilityRole="button"/);
 assert.match(overlaySource, /accessibilityHint=\{FORKINATOR_ACCESSIBILITY_HINT\}/);

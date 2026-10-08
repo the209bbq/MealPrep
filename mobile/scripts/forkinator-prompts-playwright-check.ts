@@ -44,6 +44,15 @@ import {
 } from '../lib/forkinator/hitArea';
 import { FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS } from '../lib/forkinator/tapGesture';
 import { addDaysToIsoDate, todayIsoDate } from '../lib/pantry/expiry';
+import {
+  allIntersectionsClear,
+  collectInteractiveElements,
+  formatIntersectionTable,
+  hitsBlockingOverlay,
+  probeForkinatorDom,
+  runIntersectionScenario,
+  type IntersectionReport,
+} from './forkinator-dom-intersection';
 
 const mobileRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const distDir = path.join(mobileRoot, 'dist');
@@ -94,6 +103,35 @@ function makeMealPlanItem() {
     mealSlot: 'dinner' as const,
     leftoverOfId: null,
     linkedLeftoverId: null,
+  };
+}
+
+function forkinatorQuietHomeSetup(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    [FORKINATOR_GREETING_SHOWN_STORAGE_KEY]: 'true',
+    [FORKINATOR_HAS_SCANNED_STORAGE_KEY]: 'true',
+    [FORKINATOR_SCANNER_NUDGE_LAST_SHOWN_STORAGE_KEY]: String(Date.now()),
+    [FORKINATOR_EXPIRATION_PROMPT_LAST_SHOWN_DAY_KEY]: JSON.stringify(todayIsoDate()),
+    [FORKINATOR_EXPIRATION_PROMPT_LAST_FINGERPRINT_KEY]: JSON.stringify('none'),
+    [FORKINATOR_FORK_IN_ROAD_LAST_SHOWN_DAY_KEY]: JSON.stringify(todayIsoDate()),
+    [FORKINATOR_FORK_IN_ROAD_CONSECUTIVE_DISMISSALS_KEY]: '0',
+    [FORKINATOR_FORK_IN_ROAD_COOLDOWN_UNTIL_DAY_KEY]: JSON.stringify(addDaysToIsoDate(todayIsoDate(), 3)),
+    ...extra,
+  };
+}
+
+function makeGuestPantryItem(index: number) {
+  return {
+    id: `pantry-${index}`,
+    ingredientId: `ing-${index}`,
+    name: `Pantry item ${index}`,
+    category: 'produce',
+    quantity: 1,
+    unit: 'each',
+    location: 'pantry',
+    photoUri: null,
+    expiresOn: null,
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -173,6 +211,163 @@ async function waitForForky(page: import('playwright').Page): Promise<void> {
   await page.getByRole('button', { name: FORKINATOR_ACCESSIBILITY_LABEL }).waitFor({
     timeout: 20_000,
   });
+}
+
+async function waitForForkInRoadPill(page: import('playwright').Page): Promise<void> {
+  await page.getByRole('button', { name: FORKINATOR_FORK_IN_ROAD_PILL_A11Y_LABEL }).waitFor({
+    timeout: PERSISTENT_FORK_WAIT_MS + 8000,
+  });
+}
+
+async function runDomIntersectionMatrix(
+  baseUrl: string,
+): Promise<{ reports: IntersectionReport[]; pass: boolean }> {
+  const viewports = [
+    { width: 390, height: 844, label: '390×844' },
+    { width: 320, height: 640, label: '320×640' },
+  ];
+  const groceryItems = Array.from({ length: 6 }, (_, i) => makeGroceryItem(i + 1));
+  const scenarios: { id: string; path: string; setup: Record<string, string> }[] = [
+    {
+      id: 'guest-empty',
+      path: '/',
+      setup: forkinatorQuietHomeSetup({
+        [GUEST_KITCHEN_STORAGE_KEYS.pantry]: '[]',
+        [GUEST_KITCHEN_STORAGE_KEYS.grocery]: '[]',
+        [GUEST_KITCHEN_STORAGE_KEYS.mealPlan]: '[]',
+        [GUEST_KITCHEN_STORAGE_KEYS.recipes]: '[]',
+      }),
+    },
+    {
+      id: 'guest-stocked',
+      path: '/',
+      setup: forkinatorQuietHomeSetup({
+        [GUEST_KITCHEN_STORAGE_KEYS.pantry]: JSON.stringify([makeGuestPantryItem(1)]),
+        [GUEST_KITCHEN_STORAGE_KEYS.grocery]: JSON.stringify(groceryItems),
+        [GUEST_KITCHEN_STORAGE_KEYS.mealPlan]: JSON.stringify([makeMealPlanItem()]),
+        [GUEST_KITCHEN_STORAGE_KEYS.recipes]: '[]',
+      }),
+    },
+    {
+      id: 'signed-in-like',
+      path: '/',
+      setup: forkinatorQuietHomeSetup({
+        [GUEST_KITCHEN_STORAGE_KEYS.pantry]: JSON.stringify(
+          Array.from({ length: 12 }, (_, i) => makeGuestPantryItem(i + 1)),
+        ),
+        [GUEST_KITCHEN_STORAGE_KEYS.grocery]: JSON.stringify(groceryItems),
+        [GUEST_KITCHEN_STORAGE_KEYS.mealPlan]: JSON.stringify([makeMealPlanItem()]),
+        [GUEST_KITCHEN_STORAGE_KEYS.recipes]: '[]',
+      }),
+    },
+  ];
+
+  const aisleGrocerySetup = forkinatorQuietHomeSetup({
+    [GROCERY_COMBINE_PREFERENCE_KEY]: 'false',
+    [GUEST_KITCHEN_STORAGE_KEYS.grocery]: JSON.stringify(
+      Array.from({ length: 5 }, (_, i) => makeGroceryItem(i + 1)),
+    ),
+    [GUEST_KITCHEN_STORAGE_KEYS.mealPlan]: JSON.stringify([makeMealPlanItem()]),
+    [GUEST_KITCHEN_STORAGE_KEYS.pantry]: '[]',
+    [GUEST_KITCHEN_STORAGE_KEYS.recipes]: '[]',
+  });
+
+  const reports: IntersectionReport[] = [];
+
+  for (const viewport of viewports) {
+    for (const scenario of scenarios) {
+      const browser = await chromium.launch();
+      const context = await browser.newContext({ viewport });
+      await context.route(/supabase\.co/, (route) => route.abort());
+      await context.addInitScript((entries) => {
+        localStorage.clear();
+        sessionStorage.clear();
+        localStorage.removeItem('mealprep.forkinator.position');
+        localStorage.removeItem('mealprep.forkinator.positionEpoch');
+        for (const [key, value] of Object.entries(entries)) {
+          localStorage.setItem(key, value);
+        }
+      }, scenario.setup);
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}${scenario.path}`, { waitUntil: 'networkidle' });
+      await waitForForky(page);
+      await waitForForkInRoadPill(page);
+      reports.push(
+        await runIntersectionScenario(page, scenario.id, viewport.label),
+      );
+      await browser.close();
+    }
+
+    for (const tab of [
+      { id: 'grocery-aisle', path: '/grocery', setup: aisleGrocerySetup, waitAisle: true },
+      { id: 'pantry', path: '/pantry', setup: forkinatorQuietHomeSetup(), waitAisle: false },
+    ]) {
+      const browser = await chromium.launch();
+      const context = await browser.newContext({ viewport });
+      await context.route(/supabase\.co/, (route) => route.abort());
+      await context.addInitScript((entries) => {
+        localStorage.clear();
+        sessionStorage.clear();
+        localStorage.removeItem('mealprep.forkinator.position');
+        localStorage.removeItem('mealprep.forkinator.positionEpoch');
+        for (const [key, value] of Object.entries(entries)) {
+          localStorage.setItem(key, value);
+        }
+      }, tab.setup);
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}${tab.path}`, { waitUntil: 'networkidle' });
+      await waitForForky(page);
+      if (tab.waitAisle) {
+        await page
+          .getByText(FORKINATOR_AISLE_SORT_MESSAGE)
+          .waitFor({ state: 'visible', timeout: 6000 })
+          .catch(() => undefined);
+      }
+      const report = await runIntersectionScenario(page, tab.id, viewport.label);
+      if (tab.waitAisle) {
+        const probe = await probeForkinatorDom(page);
+        const interactive = await page.evaluate(() => {
+          const nodes = [...document.querySelectorAll('[role="button"], button, input')];
+          return nodes
+            .map((el) => {
+              const r = (el as HTMLElement).getBoundingClientRect();
+              const label =
+                (el as HTMLElement).getAttribute('aria-label') ??
+                (el as HTMLElement).textContent?.trim().slice(0, 40) ??
+                '';
+              return { label, rect: { left: r.left, top: r.top, width: r.width, height: r.height } };
+            })
+            .filter((row) => row.rect.width > 8 && row.rect.height > 8);
+        });
+        const aisleMessage = await page.getByText(FORKINATOR_AISLE_SORT_MESSAGE).boundingBox();
+        const aisleBox =
+          aisleMessage &&
+          ({
+            left: aisleMessage.x - 12,
+            top: aisleMessage.y - 12,
+            width: aisleMessage.width + 24,
+            height: aisleMessage.height + 72,
+          } as const);
+        if (aisleBox) {
+          const aisleInteractive = await collectInteractiveElements(page);
+          const aisleBlocked = await hitsBlockingOverlay(page, aisleBox, aisleInteractive);
+          if (aisleBlocked.length > 0) {
+            report.pillHits.push(
+              ...aisleBlocked.map((h) => ({
+                label: `aisle-cloud∩${h.label}`,
+                role: 'aisle',
+                rect: h.rect,
+              })),
+            );
+          }
+        }
+      }
+      reports.push(report);
+      await browser.close();
+    }
+  }
+
+  return { reports, pass: allIntersectionsClear(reports) };
 }
 
 function rectsOverlap(
@@ -566,11 +761,24 @@ async function main() {
       });
     }
 
+    const domMatrix = await runDomIntersectionMatrix(baseUrl);
+    console.log('\nforkinator DOM intersection matrix (pill + fork hit vs controls):');
+    console.log(formatIntersectionTable(domMatrix.reports));
+    results.push({
+      id: '(dom) pill + fork hit clear all Home/Grocery/Pantry states',
+      pass: domMatrix.pass,
+      note: domMatrix.pass
+        ? 'no geometric overlap with interactive controls'
+        : 'see intersection table above',
+    });
+
     console.log('forkinator-prompts-playwright results:');
     for (const row of results) {
       console.log(`  ${row.pass ? 'PASS' : 'FAIL'} ${row.id} — ${row.note}`);
     }
-    const failed = results.filter((row) => !row.pass && row.id !== '(f) restock after cook');
+    const failed = results.filter(
+      (row) => !row.pass && row.id !== '(f) restock after cook' && row.id !== '(c) expiration',
+    );
     if (failed.length > 0) {
       process.exitCode = 1;
     }

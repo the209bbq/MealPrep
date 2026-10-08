@@ -33,8 +33,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Places the pill above Forky's head when there is room, else to his right (Home left dock),
- * never overlapping his body.
+ * Places the pill above Forky's head when there is room (clears category chips), else beside him.
  */
 export function layoutForkInRoadPill(input: ForkInRoadPillLayoutInput): ForkInRoadPillLayout {
   const edge = FORK_IN_ROAD_PILL_SCREEN_EDGE_INSET_PX;
@@ -47,38 +46,18 @@ export function layoutForkInRoadPill(input: ForkInRoadPillLayoutInput): ForkInRo
   const maxBottom =
     input.screenHeight - input.insetBottom - FORKINATOR_TAB_BAR_HEIGHT_PX - edge;
   const mascotCenterX = input.mascotX + input.mascotWidth / 2;
-  /** Home feed controls occupy the middle band on typical phone heights (FK5-1). */
-  const homeControlsBandTop = input.screenHeight * 0.35;
-  const homeControlsBandBottom = input.screenHeight * 0.72;
-  const homeControlsGapBottom = input.screenHeight * 0.56;
-
-  // Beside Forky (right) first — keeps the pill in the lower corner on Home left dock.
-  const rightLeft = input.mascotX + input.mascotWidth + gap;
-  if (rightLeft + pillWidth <= maxRight) {
-    let besideTop = input.mascotY + 4;
-    if (
-      besideTop + pillHeight > homeControlsBandTop &&
-      besideTop < homeControlsBandBottom
-    ) {
-      const gapTop = input.screenHeight * 0.38;
-      if (homeControlsGapBottom - gapTop >= pillHeight + 8) {
-        besideTop = homeControlsGapBottom - pillHeight - 8;
-      } else {
-        besideTop = homeControlsBandTop - pillHeight - 8;
-      }
-    }
-    const top = clamp(besideTop, minTop, maxBottom - pillHeight);
-    return { left: rightLeft, top, width: pillWidth, height: pillHeight };
-  }
 
   const aboveTop = input.mascotY - gap - pillHeight;
   if (aboveTop >= minTop) {
-    return {
-      left: clamp(mascotCenterX - pillWidth / 2, minLeft, maxRight - pillWidth),
-      top: aboveTop,
-      width: pillWidth,
-      height: pillHeight,
-    };
+    const rightDockedPillLeft = maxRight - pillWidth;
+    const left = clamp(rightDockedPillLeft, minLeft, maxRight - pillWidth);
+    return { left, top: aboveTop, width: pillWidth, height: pillHeight };
+  }
+
+  const rightLeft = input.mascotX + input.mascotWidth + gap;
+  if (rightLeft + pillWidth <= maxRight) {
+    const top = clamp(input.mascotY + 4, minTop, maxBottom - pillHeight);
+    return { left: rightLeft, top, width: pillWidth, height: pillHeight };
   }
 
   const leftLeft = input.mascotX - gap - pillWidth;

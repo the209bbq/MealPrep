@@ -19,6 +19,13 @@ export const FORKINATOR_DEFAULT_LEFT_INSET_PX = 8;
 /** Default dock on other tabs: hugging the right edge. */
 export const FORKINATOR_DEFAULT_RIGHT_INSET_PX = 8;
 export const FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX = 16;
+/**
+ * Lifts the Home left dock so Forky's hit box and pill sit above the category chip row
+ * on 320×640 and 390×844 (DOM-verified).
+ */
+export const FORKINATOR_HOME_DOCK_RAISE_PX = 194;
+/** Lift right-docked Forky so list row actions stay tappable (Grocery/Pantry). */
+export const FORKINATOR_NON_HOME_DOCK_RAISE_PX = 136;
 
 /** Legacy bottom-right dock zone tolerance for epoch migration (FK5-4). */
 export const FORKINATOR_LEGACY_DOCK_ZONE_TOLERANCE_X_PX = 12;
@@ -65,14 +72,37 @@ export function legacyDefaultForkinatorPosition(bounds: ForkinatorBounds): Forki
     bounds.insetRight -
     bounds.mascotWidth -
     FORKINATOR_DEFAULT_RIGHT_INSET_PX;
+  const maxY = maxForkinatorPositionY(bounds);
+  const y = Math.max(
+    bounds.insetTop,
+    maxY - FORKINATOR_NON_HOME_DOCK_RAISE_PX,
+  );
+  return clampForkinatorPosition({ x, y }, bounds);
+}
+
+/** Home default dock before FK5-R5 raise (bottom-left at max Y). */
+export function homeLowDockForkinatorPosition(bounds: ForkinatorBounds): ForkinatorPosition {
+  const x = bounds.insetLeft + FORKINATOR_DEFAULT_LEFT_INSET_PX;
   const y = maxForkinatorPositionY(bounds);
   return clampForkinatorPosition({ x, y }, bounds);
 }
 
-/** Home default: bottom-left dock (compact pill keeps controls clear). */
+/** Home default: bottom-left dock, raised above Home feed controls. */
 export function defaultForkinatorPosition(bounds: ForkinatorBounds): ForkinatorPosition {
   const x = bounds.insetLeft + FORKINATOR_DEFAULT_LEFT_INSET_PX;
-  const y = maxForkinatorPositionY(bounds);
+  const maxY = maxForkinatorPositionY(bounds);
+  const innerHeight = bounds.height - bounds.insetTop - bounds.insetBottom;
+  const seeMoreTop = bounds.insetTop + Math.round(innerHeight * 0.68);
+  const maxHomeMascotY =
+    seeMoreTop - FORKINATOR_HIT_INSET_TOP_PX - FORKINATOR_HIT_HEIGHT_PX - 8;
+  const minHomeMascotY = bounds.insetTop + Math.round(innerHeight * 0.34);
+  const raisePx = Math.max(
+    FORKINATOR_HOME_DOCK_RAISE_PX,
+    Math.round(innerHeight * 0.34),
+  );
+  const raisedY = maxY - raisePx;
+  let y = Math.min(maxHomeMascotY, Math.max(minHomeMascotY, raisedY));
+  y = Math.min(maxY, Math.max(bounds.insetTop, y));
   return clampForkinatorPosition({ x, y }, bounds);
 }
 
@@ -150,6 +180,16 @@ export function resolveForkinatorPosition(bounds: ForkinatorBounds): ForkinatorP
 
   const epoch = readForkinatorPositionEpoch();
   if (epoch >= FORKINATOR_POSITION_EPOCH) {
+    const homeLow = homeLowDockForkinatorPosition(bounds);
+    if (
+      !isStoredPositionInLegacyDockZone(stored, bounds) &&
+      Math.abs(stored.x - homeLow.x) <= FORKINATOR_LEGACY_DOCK_ZONE_TOLERANCE_X_PX &&
+      Math.abs(stored.y - homeLow.y) <= FORKINATOR_LEGACY_DOCK_ZONE_TOLERANCE_Y_PX
+    ) {
+      const raised = defaultForkinatorPosition(bounds);
+      writeForkinatorPosition(raised);
+      return raised;
+    }
     return stored;
   }
 
