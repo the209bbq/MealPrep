@@ -37,6 +37,9 @@ jobs:
       # test:grocery includes a Python check that imports the store-ingest dependencies.
       - name: Install Python test dependencies
         run: pip install --quiet -r scripts/stores-ingest/requirements.txt
+      # Some checks drive a real browser (e.g. prepare-image-web-check).
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
       - name: Tests
         run: |
           set -o pipefail
