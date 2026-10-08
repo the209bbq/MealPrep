@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mobileRoot = path.resolve(__dirname, '..');
 const publicDir = path.join(mobileRoot, 'public');
 
-const baseUrl = appJson.expo?.experiments?.baseUrl ?? '';
+const baseUrl = (appJson.expo?.experiments as { baseUrl?: string } | undefined)?.baseUrl ?? '';
 const normalized = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 assert.equal(GITHUB_PAGES_APP_PATH, normalized);
 
