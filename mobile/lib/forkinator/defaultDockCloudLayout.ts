@@ -1,16 +1,18 @@
-import { FORKINATOR_FORK_IN_ROAD_MESSAGE } from './forkInRoadPromptCopy';
+import {
+  FORK_IN_ROAD_PILL_MIN_WIDTH_PX,
+  layoutForkInRoadPill,
+} from './forkInRoadPillLayout';
 import {
   defaultForkinatorPosition,
   type ForkinatorBounds,
 } from './position';
-import { layoutScannerPrompt } from './scannerPromptLayout';
 
 export type ForkinatorRect = { left: number; top: number; width: number; height: number };
 
-/** Fork-in-the-road cloud bounds at the default dock (for layout regression checks). */
-export function forkInRoadCloudBoundsAtDefaultDock(bounds: ForkinatorBounds): ForkinatorRect {
+/** Collapsed fork-in-the-road pill at the Home default dock (layout regression checks). */
+export function forkInRoadPillBoundsAtDefaultDock(bounds: ForkinatorBounds): ForkinatorRect {
   const position = defaultForkinatorPosition(bounds);
-  const layout = layoutScannerPrompt({
+  const layout = layoutForkInRoadPill({
     mascotX: position.x,
     mascotY: position.y,
     mascotWidth: bounds.mascotWidth,
@@ -21,8 +23,7 @@ export function forkInRoadCloudBoundsAtDefaultDock(bounds: ForkinatorBounds): Fo
     insetRight: bounds.insetRight,
     insetBottom: bounds.insetBottom,
     insetLeft: bounds.insetLeft,
-    message: FORKINATOR_FORK_IN_ROAD_MESSAGE,
-    includeActionButton: true,
+    pillWidth: FORK_IN_ROAD_PILL_MIN_WIDTH_PX,
   });
   return {
     left: layout.left,
@@ -30,4 +31,9 @@ export function forkInRoadCloudBoundsAtDefaultDock(bounds: ForkinatorBounds): Fo
     width: layout.width,
     height: layout.height,
   };
+}
+
+/** @deprecated Use forkInRoadPillBoundsAtDefaultDock — full cloud is expand-only now. */
+export function forkInRoadCloudBoundsAtDefaultDock(bounds: ForkinatorBounds): ForkinatorRect {
+  return forkInRoadPillBoundsAtDefaultDock(bounds);
 }

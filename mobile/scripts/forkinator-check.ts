@@ -26,21 +26,26 @@ import { FORKINATOR_TAB_BAR_HEIGHT_PX } from '../lib/forkinator/forkinatorTabBar
 import {
   clampForkinatorPosition,
   defaultForkinatorPosition,
+  defaultForkinatorPositionForTab,
   FORKINATOR_ASPECT_WIDTH_TO_HEIGHT,
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX,
-  FORKINATOR_DEFAULT_DOCK_RAISE_PX,
   FORKINATOR_DEFAULT_LEFT_INSET_PX,
+  FORKINATOR_HOME_DOCK_RAISE_PX,
+  homeLowDockForkinatorPosition,
   FORKINATOR_HEIGHT_PX,
+  FORKINATOR_LEGACY_DOCK_ZONE_TOLERANCE_X_PX,
   FORKINATOR_POSITION_EPOCH,
   FORKINATOR_POSITION_EPOCH_KEY,
   FORKINATOR_POSITION_STORAGE_KEY,
   FORKINATOR_WIDTH_PX,
+  isStoredPositionInLegacyDockZone,
   legacyDefaultForkinatorPosition,
   readForkinatorPosition,
   resolveForkinatorPosition,
   writeForkinatorPosition,
 } from '../lib/forkinator/position';
-import { forkInRoadCloudBoundsAtDefaultDock } from '../lib/forkinator/defaultDockCloudLayout';
+import { forkInRoadPillBoundsAtDefaultDock } from '../lib/forkinator/defaultDockCloudLayout';
+import { FORKINATOR_FORK_IN_ROAD_PILL_LABEL } from '../lib/forkinator/forkInRoadPromptCopy';
 import {
   FORKINATOR_TIPS_PRESERVED_STORAGE_KEYS,
   FORKINATOR_TIPS_RESET_STORAGE_KEYS,
@@ -164,6 +169,7 @@ const tapNone = {
   expirationPromptVisible: false,
   restockPromptVisible: false,
   forkInRoadPromptVisible: false,
+  forkInRoadExpanded: false,
   aisleSortPromptVisible: false,
   scannerPromptVisible: false,
 };
@@ -193,8 +199,18 @@ assert.equal(
   resolveForkinatorMascotTapAction({
     ...tapNone,
     forkInRoadPromptVisible: true,
+    forkInRoadExpanded: false,
   }),
-  'dismissForkInRoadPrompt',
+  'none',
+  'collapsed pill: tapping Forky does nothing',
+);
+assert.equal(
+  resolveForkinatorMascotTapAction({
+    ...tapNone,
+    forkInRoadPromptVisible: true,
+    forkInRoadExpanded: true,
+  }),
+  'collapseForkInRoadPrompt',
 );
 assert.equal(
   resolveForkinatorMascotTapAction({
@@ -302,35 +318,57 @@ const maxDefaultY390 =
   FORKINATOR_HIT_HEIGHT_PX -
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
 const inner390 = bounds390.height - bounds390.insetTop - bounds390.insetBottom;
-const expectedDefaultY390 = Math.max(
-  bounds390.insetTop + inner390 * 0.3,
-  Math.min(maxDefaultY390, maxDefaultY390 - FORKINATOR_DEFAULT_DOCK_RAISE_PX),
+const raise390 = Math.max(
+  FORKINATOR_HOME_DOCK_RAISE_PX,
+  Math.round(inner390 * 0.34),
 );
-assert.equal(default390.y, expectedDefaultY390, 'default should sit above the lowest dock');
+const seeMoreTop390 = bounds390.insetTop + Math.round(inner390 * 0.68);
+const maxHomeMascotY390 =
+  seeMoreTop390 - FORKINATOR_HIT_INSET_TOP_PX - FORKINATOR_HIT_HEIGHT_PX - 8;
+const minHomeMascotY390 = bounds390.insetTop + Math.round(inner390 * 0.34);
+const expectedDefaultY390 = Math.min(
+  maxHomeMascotY390,
+  Math.max(minHomeMascotY390, maxDefaultY390 - raise390),
+);
+assert.equal(default390.y, expectedDefaultY390, 'Home default should be raised above chip row');
+writeForkinatorPosition(homeLowDockForkinatorPosition(bounds390));
+writeJson(FORKINATOR_POSITION_EPOCH_KEY, FORKINATOR_POSITION_EPOCH);
+assert.deepEqual(
+  resolveForkinatorPosition(bounds390),
+  default390,
+  'epoch-2 home low dock migrates to raised Home default',
+);
+removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
+const groceryDefault390 = defaultForkinatorPositionForTab(bounds390, false);
+assert.ok(
+  groceryDefault390.x >= bounds390.width - bounds390.mascotWidth - 12,
+  'non-Home default should dock on the right',
+);
 const hitBottom390 =
   default390.y + FORKINATOR_HIT_INSET_TOP_PX + FORKINATOR_HIT_HEIGHT_PX;
 assert.ok(
   hitBottom390 <= bounds390.height - bounds390.insetBottom - FORKINATOR_TAB_BAR_HEIGHT_PX,
   'mascot hit area must not overlap tab bar at 390',
 );
-assert.ok(
-  default390.y > 400,
-  'default should still sit in the lower half of the screen',
-);
+/** QA FK5-1: collapsed pill must stay off main Home controls (approx bands from R5 harness). */
+function rectsOverlap(
+  a: { left: number; top: number; width: number; height: number },
+  b: { left: number; top: number; width: number; height: number },
+): boolean {
+  return (
+    a.left < b.left + b.width &&
+    a.left + a.width > b.left &&
+    a.top < b.top + b.height &&
+    a.top + a.height > b.top
+  );
+}
 
-/** QA FK4-1: category chip row overlapped the cloud at ~y 544–660 on 390×844. */
-const homeCategoryChipRow390 = { left: 0, top: 500, width: 390, height: 100 };
-const forkCloud390 = forkInRoadCloudBoundsAtDefaultDock(bounds390);
+const forkPill390 = forkInRoadPillBoundsAtDefaultDock(bounds390);
+assert.equal(FORKINATOR_FORK_IN_ROAD_PILL_LABEL, "Can't decide?");
+assert.ok(forkPill390.left >= bounds390.width * 0.65, 'pill should dock on the right above Forky');
 assert.ok(
-  forkCloud390.top + forkCloud390.height <= homeCategoryChipRow390.top ||
-    forkCloud390.top >= homeCategoryChipRow390.top + homeCategoryChipRow390.height ||
-    forkCloud390.left + forkCloud390.width <= homeCategoryChipRow390.left ||
-    forkCloud390.left >= homeCategoryChipRow390.left + homeCategoryChipRow390.width,
-  'fork-in-the-road cloud at default 390 should not overlap the category chip row band',
-);
-assert.ok(
-  forkCloud390.top + forkCloud390.height < homeCategoryChipRow390.top + 8,
-  'default fork cloud should sit above the chip row on 390',
+  forkPill390.top + forkPill390.height < bounds390.height * 0.74,
+  'pill should sit above category chip band on 390',
 );
 
 removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
@@ -338,9 +376,34 @@ removeStorageKey(FORKINATOR_POSITION_EPOCH_KEY);
 writeForkinatorPosition(legacy390);
 assert.deepEqual(resolveForkinatorPosition(bounds390), default390, 'unmoved legacy default migrates');
 assert.equal(readJson(FORKINATOR_POSITION_EPOCH_KEY, null), FORKINATOR_POSITION_EPOCH);
+writeForkinatorPosition({
+  x: legacy390.x - 3,
+  y: legacy390.y - 3,
+});
+removeStorageKey(FORKINATOR_POSITION_EPOCH_KEY);
+assert.deepEqual(
+  resolveForkinatorPosition(bounds390),
+  default390,
+  'legacy default with tap jitter migrates (FK5-4)',
+);
+const bounds390Short = { ...bounds390, height: 800, insetBottom: 0 };
+const legacyAt800 = legacyDefaultForkinatorPosition(bounds390Short);
+writeForkinatorPosition({ x: legacyAt800.x, y: legacyAt800.y });
+removeStorageKey(FORKINATOR_POSITION_EPOCH_KEY);
+assert.deepEqual(
+  resolveForkinatorPosition(bounds390),
+  default390,
+  'legacy default saved at 390×800 migrates when loaded at 390×844',
+);
 writeForkinatorPosition({ x: 120, y: 200 });
 writeJson(FORKINATOR_POSITION_EPOCH_KEY, 1);
 assert.deepEqual(resolveForkinatorPosition(bounds390), { x: 120, y: 200 }, 'custom position is kept');
+assert.equal(
+  isStoredPositionInLegacyDockZone({ x: legacy390.x - 3, y: legacy390.y - 3 }, bounds390),
+  true,
+);
+assert.equal(isStoredPositionInLegacyDockZone({ x: 120, y: 200 }, bounds390), false);
+assert.equal(FORKINATOR_LEGACY_DOCK_ZONE_TOLERANCE_X_PX, 12);
 removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
 removeStorageKey(FORKINATOR_POSITION_EPOCH_KEY);
 
@@ -362,8 +425,20 @@ const maxDefaultY320 =
   FORKINATOR_HIT_INSET_TOP_PX -
   FORKINATOR_HIT_HEIGHT_PX -
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
-assert.ok(default320.y >= maxDefaultY320 - FORKINATOR_DEFAULT_DOCK_RAISE_PX - 1);
-assert.ok(default320.y <= maxDefaultY320, '320 default stays within tab-bar clearance');
+const inner320 = bounds320.height - bounds320.insetTop - bounds320.insetBottom;
+const raise320 = Math.max(
+  FORKINATOR_HOME_DOCK_RAISE_PX,
+  Math.round(inner320 * 0.34),
+);
+const seeMoreTop320 = bounds320.insetTop + Math.round(inner320 * 0.68);
+const maxHomeMascotY320 =
+  seeMoreTop320 - FORKINATOR_HIT_INSET_TOP_PX - FORKINATOR_HIT_HEIGHT_PX - 8;
+const minHomeMascotY320 = bounds320.insetTop + Math.round(inner320 * 0.34);
+const expectedDefaultY320 = Math.min(
+  maxHomeMascotY320,
+  Math.max(minHomeMascotY320, maxDefaultY320 - raise320),
+);
+assert.equal(default320.y, expectedDefaultY320, '320 Home default is raised');
 
 const bounds320Tall = {
   width: 320,
@@ -375,11 +450,28 @@ const bounds320Tall = {
   mascotWidth: FORKINATOR_WIDTH_PX,
   mascotHeight: FORKINATOR_HEIGHT_PX,
 };
-const forkCloud320Tall = forkInRoadCloudBoundsAtDefaultDock(bounds320Tall);
-const homeCategoryChipRow320 = { left: 0, top: 360, width: 320, height: 90 };
-assert.ok(
-  forkCloud320Tall.top + forkCloud320Tall.height < homeCategoryChipRow320.top + 8,
-  'default fork cloud should sit above the chip row on 320×640',
+const forkPill320Tall = forkInRoadPillBoundsAtDefaultDock(bounds320Tall);
+assert.ok(forkPill320Tall.left >= bounds320Tall.width * 0.6, 'pill should dock on the right above Forky on 320');
+
+const aisleAtRight390 = layoutScannerPrompt({
+  mascotX: groceryDefault390.x,
+  mascotY: groceryDefault390.y,
+  mascotWidth: FORKINATOR_WIDTH_PX,
+  mascotHeight: FORKINATOR_HEIGHT_PX,
+  screenWidth: 390,
+  screenHeight: 844,
+  insetTop: 47,
+  insetRight: 0,
+  insetBottom: 34,
+  insetLeft: 0,
+  message: FORKINATOR_AISLE_SORT_MESSAGE,
+  includeActionButton: true,
+  preferAboveBeforeSide: true,
+});
+assert.equal(
+  aisleAtRight390.placement,
+  'above',
+  'grocery aisle cloud should sit above right-docked Forky (FK5-3)',
 );
 
 const promptAtDefault390 = layoutScannerPrompt({
@@ -698,7 +790,17 @@ assert.match(
   /opacity: pose === mascotPose \? 1 : 0/,
   'overlay should keep all mascot poses mounted to avoid stale frames',
 );
-assert.match(overlaySource, /writeForkinatorPosition/, 'overlay should persist position on release');
+assert.match(
+  overlaySource,
+  /!isForkinatorTapRelease[\s\S]*writeForkinatorPosition/,
+  'overlay should persist position only after a drag, not a tap',
+);
+assert.match(overlaySource, /defaultForkinatorPositionForTab/, 'per-tab default dock');
+assert.match(overlaySource, /forkinatorUiReady/, 'prompts wait for mascot image load');
+assert.match(overlaySource, /onLoad=\{handleMascotImageLoad\}/, 'first pose onLoad gates prompts');
+assert.match(overlaySource, /ForkInRoadPrompt/, 'fork in the road uses compact pill + expand');
+assert.match(overlaySource, /forkInRoadExpanded/, 'fork in the road expand/collapse state');
+assert.match(overlaySource, /preferAboveBeforeSide: true/, 'aisle sort prefers above on grocery');
 assert.match(overlaySource, /pointerEvents="box-none"/, 'Forkinator overlay wrapper passes touches through');
 assert.match(overlaySource, /accessibilityRole="button"/);
 assert.match(overlaySource, /accessibilityHint=\{FORKINATOR_ACCESSIBILITY_HINT\}/);
