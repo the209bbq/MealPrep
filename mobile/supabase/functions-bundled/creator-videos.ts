@@ -675,27 +675,16 @@ function authorizeRefresh(req) {
   return Boolean(expected && provided && provided === expected);
 }
 function rateLimitKey(req) {
-  const authHeader = req.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice("Bearer ".length);
-    const parts = token.split(".");
-    if (parts.length === 3) {
-      try {
-        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-        const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
-        const payload = JSON.parse(atob(padded));
-        if (payload.sub) return payload.sub;
-      } catch {
-      }
-    }
-  }
+  const direct = req.headers.get("cf-connecting-ip")?.trim() || req.headers.get("x-real-ip")?.trim();
+  if (direct) return direct;
   const forwarded = req.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "anon";
+  return forwarded?.split(",")[0]?.trim() || "anon";
 }
 var clientHits = /* @__PURE__ */ new Map();
 var CLIENT_WINDOW_MS = 6e4;
 var CLIENT_MAX_PER_WINDOW = 60;
 var SEARCH_MAX_PER_WINDOW = 20;
+var SEARCH_QUERY_MAX_LENGTH = 80;
 function checkClientRateLimit(key, max) {
   const now = Date.now();
   const bucket = clientHits.get(key);
@@ -833,7 +822,7 @@ async function handlePublicAction(admin, body, limitKey) {
     return jsonResponse({ mode, videos });
   }
   if (body.action === "search") {
-    const q = typeof body.q === "string" ? body.q.trim() : "";
+    const q = typeof body.q === "string" ? body.q.trim().slice(0, SEARCH_QUERY_MAX_LENGTH).trim() : "";
     if (q.length < 2) {
       return jsonResponse({ videos: [] });
     }
