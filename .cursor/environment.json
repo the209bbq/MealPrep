@@ -1,0 +1,4 @@
+{
+  "name": "MealPlanatic",
+  "install": "bash .cursor/setup-agent-env.sh"
+}
