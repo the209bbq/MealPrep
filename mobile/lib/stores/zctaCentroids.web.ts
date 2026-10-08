@@ -8,7 +8,7 @@ let loaded: ZctaCentroidMap | null = null;
 let loadPromise: Promise<ZctaCentroidMap> | null = null;
 
 function zctaPublicUrl(): string {
-  const baseUrl = appJson.expo?.experiments?.baseUrl;
+  const baseUrl = (appJson.expo?.experiments as { baseUrl?: string } | undefined)?.baseUrl;
   const base =
     typeof baseUrl === 'string' && baseUrl.length > 0
       ? (baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl)

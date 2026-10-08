@@ -279,4 +279,12 @@ async function main(): Promise<void> {
   console.log('prepare-image-web-check: OK');
 }
 
-void main();
+// Exit explicitly: the `npx serve` helper can leave a child process holding the event loop open,
+// which made this check hang in CI after printing OK.
+main().then(
+  () => process.exit(0),
+  (error) => {
+    console.error(error);
+    process.exit(1);
+  },
+);

@@ -7,7 +7,7 @@ import appJson from '../app.json';
 export const GITHUB_PAGES_ORIGIN = 'https://mealplanatic.app';
 
 function appBasePathFromConfig(): string {
-  const baseUrl = appJson.expo?.experiments?.baseUrl ?? '';
+  const baseUrl = (appJson.expo?.experiments as { baseUrl?: string } | undefined)?.baseUrl ?? '';
   const trimmed = typeof baseUrl === 'string' ? baseUrl.trim() : '';
   if (!trimmed) return '';
   return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
