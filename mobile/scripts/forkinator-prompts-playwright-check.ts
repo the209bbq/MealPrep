@@ -21,6 +21,8 @@ import {
 import { FORKINATOR_AISLE_SORT_PROMPT_LAST_SHOWN_DAY_KEY } from '../lib/forkinator/aisleSortPrompt';
 import { FORKINATOR_AISLE_SORT_MESSAGE } from '../lib/forkinator/aisleSortPromptCopy';
 import { FORKINATOR_FORK_IN_ROAD_MESSAGE } from '../lib/forkinator/forkInRoadPromptCopy';
+import { defaultForkinatorPosition } from '../lib/forkinator/position';
+import { forkInRoadCloudBoundsAtDefaultDock } from '../lib/forkinator/defaultDockCloudLayout';
 import {
   FORKINATOR_FORK_IN_ROAD_COOLDOWN_UNTIL_DAY_KEY,
   FORKINATOR_FORK_IN_ROAD_CONSECUTIVE_DISMISSALS_KEY,
@@ -160,6 +162,100 @@ async function waitForForky(page: import('playwright').Page): Promise<void> {
   await page.getByRole('button', { name: FORKINATOR_ACCESSIBILITY_LABEL }).waitFor({
     timeout: 20_000,
   });
+}
+
+function rectsOverlap(
+  a: { left: number; top: number; width: number; height: number },
+  b: { left: number; top: number; width: number; height: number },
+): boolean {
+  return (
+    a.left < b.left + b.width &&
+    a.left + a.width > b.left &&
+    a.top < b.top + b.height &&
+    a.top + a.height > b.top
+  );
+}
+
+async function assertDefaultForkCloudClearsCategoryChips(
+  baseUrl: string,
+  viewport: { width: number; height: number },
+): Promise<{ pass: boolean; note: string }> {
+  const bounds = {
+    width: viewport.width,
+    height: viewport.height,
+    insetTop: viewport.width === 390 ? 47 : 44,
+    insetRight: 0,
+    insetBottom: viewport.width === 390 ? 34 : 28,
+    insetLeft: 0,
+    mascotWidth: 44,
+    mascotHeight: 120,
+  };
+  const expectedCloud = forkInRoadCloudBoundsAtDefaultDock(bounds);
+  const expectedMascot = defaultForkinatorPosition(bounds);
+
+  const browser = await chromium.launch();
+  const context = await browser.newContext({ viewport });
+  await context.route(/supabase\.co/, (route) => route.abort());
+  await context.addInitScript(() => {
+    localStorage.setItem('mealprep.forkinator.greetingShown', 'true');
+    localStorage.setItem('mealprep.forkinator.hasScanned', 'true');
+    localStorage.setItem('mealprep.forkinator.scannerNudgeLastShownAt', String(Date.now()));
+    localStorage.removeItem('mealprep.forkinator.position');
+    localStorage.removeItem('mealprep.forkinator.positionEpoch');
+  });
+  const page = await context.newPage();
+  await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+  await waitForForky(page);
+  await page.getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE).waitFor({
+    state: 'visible',
+    timeout: PERSISTENT_FORK_WAIT_MS + 4000,
+  });
+
+  const fork = page.getByRole('button', { name: FORKINATOR_ACCESSIBILITY_LABEL });
+  const forkBox = await fork.boundingBox();
+  const cloudText = page.getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE);
+  const cloudBox = await cloudText.boundingBox();
+  const chips = page.getByRole('button', { name: /classic recipes$/i });
+  const chipCount = await chips.count();
+  let chipUnion: { left: number; top: number; width: number; height: number } | null = null;
+  for (let i = 0; i < chipCount; i += 1) {
+    const box = await chips.nth(i).boundingBox();
+    if (!box) continue;
+    if (!chipUnion) {
+      chipUnion = { left: box.x, top: box.y, width: box.width, height: box.height };
+    } else {
+      const right = Math.max(chipUnion.left + chipUnion.width, box.x + box.width);
+      const bottom = Math.max(chipUnion.top + chipUnion.height, box.y + box.height);
+      chipUnion.left = Math.min(chipUnion.left, box.x);
+      chipUnion.top = Math.min(chipUnion.top, box.y);
+      chipUnion.width = right - chipUnion.left;
+      chipUnion.height = bottom - chipUnion.top;
+    }
+  }
+
+  await browser.close();
+
+  const mascotOk =
+    forkBox &&
+    Math.abs(forkBox.x - expectedMascot.x) < 4 &&
+    Math.abs(forkBox.y - expectedMascot.y) < 4;
+  const cloudOk =
+    cloudBox &&
+    Math.abs(cloudBox.x - expectedCloud.left) < 6 &&
+    Math.abs(cloudBox.y - expectedCloud.top) < 6;
+  const noChipOverlap =
+    cloudBox && chipUnion
+      ? !rectsOverlap(
+          { left: cloudBox.x, top: cloudBox.y, width: cloudBox.width, height: cloudBox.height },
+          chipUnion,
+        )
+      : false;
+
+  const pass = Boolean(mascotOk && cloudOk && noChipOverlap);
+  return {
+    pass,
+    note: `mascot@${expectedMascot.x},${expectedMascot.y}; cloud clears ${chipCount} category chips`,
+  };
 }
 
 async function runTrigger(
@@ -320,6 +416,29 @@ async function main() {
       pass: false,
       note: 'Not automated (requires cook confirm + staple deduction flow)',
     });
+
+    {
+      const chip390 = await assertDefaultForkCloudClearsCategoryChips(baseUrl, {
+        width: 390,
+        height: 844,
+      });
+      results.push({
+        id: '(g) default dock cloud vs category chips 390×844',
+        pass: chip390.pass,
+        note: chip390.note,
+      });
+    }
+    {
+      const chip320 = await assertDefaultForkCloudClearsCategoryChips(baseUrl, {
+        width: 320,
+        height: 640,
+      });
+      results.push({
+        id: '(h) default dock cloud vs category chips 320×640',
+        pass: chip320.pass,
+        note: chip320.note,
+      });
+    }
 
     const browserTap = await chromium.launch();
     const tapContext = await browserTap.newContext({ viewport: VIEWPORT });

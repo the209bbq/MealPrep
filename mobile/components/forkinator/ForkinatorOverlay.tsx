@@ -83,7 +83,7 @@ import {
   defaultForkinatorPosition,
   FORKINATOR_HEIGHT_PX,
   FORKINATOR_WIDTH_PX,
-  readForkinatorPosition,
+  resolveForkinatorPosition,
   writeForkinatorPosition,
   type ForkinatorBounds,
   type ForkinatorPosition,
@@ -309,7 +309,7 @@ export function ForkinatorOverlay() {
     if (width <= 0 || height <= 0) return;
     setPosition((current) => {
       if (current) return clampForkinatorPosition(current, bounds);
-      const stored = readForkinatorPosition();
+      const stored = resolveForkinatorPosition(bounds);
       return stored
         ? clampForkinatorPosition(stored, bounds)
         : defaultForkinatorPosition(bounds);
@@ -974,8 +974,6 @@ export function ForkinatorOverlay() {
     scannerPromptVisible,
     greetingPromptVisible,
   });
-  const mascotSource = FORKINATOR_MASCOT_POSE_SOURCES[mascotPose];
-
   const dragInteractionProps: ViewProps = IS_WEB
     ? ({
         onPointerDown,
@@ -1129,17 +1127,28 @@ export function ForkinatorOverlay() {
           height: FORKINATOR_HEIGHT_PX,
         }}
       >
-        <Image
-          source={mascotSource}
-          style={[
-            { width: FORKINATOR_WIDTH_PX, height: FORKINATOR_HEIGHT_PX },
-            imageWebStyle,
-          ]}
-          contentFit="contain"
-          accessibilityIgnoresInvertColors
-          pointerEvents="none"
-          {...(IS_WEB ? ({ draggable: false } as object) : null)}
-        />
+        {(Object.keys(FORKINATOR_MASCOT_POSE_SOURCES) as ForkinatorMascotPose[]).map((pose) => (
+          <Image
+            key={pose}
+            source={FORKINATOR_MASCOT_POSE_SOURCES[pose]}
+            style={[
+              {
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: FORKINATOR_WIDTH_PX,
+                height: FORKINATOR_HEIGHT_PX,
+                opacity: pose === mascotPose ? 1 : 0,
+              },
+              imageWebStyle,
+            ]}
+            contentFit="contain"
+            transition={0}
+            accessibilityIgnoresInvertColors
+            pointerEvents="none"
+            {...(IS_WEB ? ({ draggable: false } as object) : null)}
+          />
+        ))}
         <View
           ref={dragSurfaceRef}
           {...dragInteractionProps}

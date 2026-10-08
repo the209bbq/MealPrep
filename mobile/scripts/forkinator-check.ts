@@ -28,12 +28,19 @@ import {
   defaultForkinatorPosition,
   FORKINATOR_ASPECT_WIDTH_TO_HEIGHT,
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX,
+  FORKINATOR_DEFAULT_DOCK_RAISE_PX,
+  FORKINATOR_DEFAULT_LEFT_INSET_PX,
   FORKINATOR_HEIGHT_PX,
+  FORKINATOR_POSITION_EPOCH,
+  FORKINATOR_POSITION_EPOCH_KEY,
   FORKINATOR_POSITION_STORAGE_KEY,
   FORKINATOR_WIDTH_PX,
+  legacyDefaultForkinatorPosition,
   readForkinatorPosition,
+  resolveForkinatorPosition,
   writeForkinatorPosition,
 } from '../lib/forkinator/position';
+import { forkInRoadCloudBoundsAtDefaultDock } from '../lib/forkinator/defaultDockCloudLayout';
 import {
   FORKINATOR_TIPS_PRESERVED_STORAGE_KEYS,
   FORKINATOR_TIPS_RESET_STORAGE_KEYS,
@@ -278,19 +285,28 @@ const bounds390 = {
 };
 
 const default390 = defaultForkinatorPosition(bounds390);
-assert.ok(default390.x > bounds390.insetLeft, 'default should dock on the right');
+const legacy390 = legacyDefaultForkinatorPosition(bounds390);
 assert.ok(
-  default390.x >= bounds390.width - bounds390.insetRight - bounds390.mascotWidth - 12,
-  'default x should be near the right edge',
+  default390.x <= bounds390.insetLeft + FORKINATOR_DEFAULT_LEFT_INSET_PX + 2,
+  'default should dock on the left',
 );
-const expectedDefaultY390 =
+assert.ok(
+  legacy390.x >= bounds390.width - bounds390.insetRight - bounds390.mascotWidth - 12,
+  'legacy default x should be near the right edge',
+);
+const maxDefaultY390 =
   bounds390.height -
   bounds390.insetBottom -
   FORKINATOR_TAB_BAR_HEIGHT_PX -
   FORKINATOR_HIT_INSET_TOP_PX -
   FORKINATOR_HIT_HEIGHT_PX -
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
-assert.equal(default390.y, expectedDefaultY390, 'default should clear tab bar hit area');
+const inner390 = bounds390.height - bounds390.insetTop - bounds390.insetBottom;
+const expectedDefaultY390 = Math.max(
+  bounds390.insetTop + inner390 * 0.3,
+  Math.min(maxDefaultY390, maxDefaultY390 - FORKINATOR_DEFAULT_DOCK_RAISE_PX),
+);
+assert.equal(default390.y, expectedDefaultY390, 'default should sit above the lowest dock');
 const hitBottom390 =
   default390.y + FORKINATOR_HIT_INSET_TOP_PX + FORKINATOR_HIT_HEIGHT_PX;
 assert.ok(
@@ -298,9 +314,35 @@ assert.ok(
   'mascot hit area must not overlap tab bar at 390',
 );
 assert.ok(
-  default390.y > 500,
-  'default should be in the lower screen (avoids mid-screen controls)',
+  default390.y > 400,
+  'default should still sit in the lower half of the screen',
 );
+
+/** QA FK4-1: category chip row overlapped the cloud at ~y 544–660 on 390×844. */
+const homeCategoryChipRow390 = { left: 0, top: 500, width: 390, height: 100 };
+const forkCloud390 = forkInRoadCloudBoundsAtDefaultDock(bounds390);
+assert.ok(
+  forkCloud390.top + forkCloud390.height <= homeCategoryChipRow390.top ||
+    forkCloud390.top >= homeCategoryChipRow390.top + homeCategoryChipRow390.height ||
+    forkCloud390.left + forkCloud390.width <= homeCategoryChipRow390.left ||
+    forkCloud390.left >= homeCategoryChipRow390.left + homeCategoryChipRow390.width,
+  'fork-in-the-road cloud at default 390 should not overlap the category chip row band',
+);
+assert.ok(
+  forkCloud390.top + forkCloud390.height < homeCategoryChipRow390.top + 8,
+  'default fork cloud should sit above the chip row on 390',
+);
+
+removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
+removeStorageKey(FORKINATOR_POSITION_EPOCH_KEY);
+writeForkinatorPosition(legacy390);
+assert.deepEqual(resolveForkinatorPosition(bounds390), default390, 'unmoved legacy default migrates');
+assert.equal(readJson(FORKINATOR_POSITION_EPOCH_KEY, null), FORKINATOR_POSITION_EPOCH);
+writeForkinatorPosition({ x: 120, y: 200 });
+writeJson(FORKINATOR_POSITION_EPOCH_KEY, 1);
+assert.deepEqual(resolveForkinatorPosition(bounds390), { x: 120, y: 200 }, 'custom position is kept');
+removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
+removeStorageKey(FORKINATOR_POSITION_EPOCH_KEY);
 
 const bounds320 = {
   width: 320,
@@ -313,11 +355,31 @@ const bounds320 = {
   mascotHeight: FORKINATOR_HEIGHT_PX,
 };
 const default320 = defaultForkinatorPosition(bounds320);
+const maxDefaultY320 =
+  bounds320.height -
+  bounds320.insetBottom -
+  FORKINATOR_TAB_BAR_HEIGHT_PX -
+  FORKINATOR_HIT_INSET_TOP_PX -
+  FORKINATOR_HIT_HEIGHT_PX -
+  FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
+assert.ok(default320.y >= maxDefaultY320 - FORKINATOR_DEFAULT_DOCK_RAISE_PX - 1);
+assert.ok(default320.y <= maxDefaultY320, '320 default stays within tab-bar clearance');
+
+const bounds320Tall = {
+  width: 320,
+  height: 640,
+  insetTop: 44,
+  insetRight: 0,
+  insetBottom: 28,
+  insetLeft: 0,
+  mascotWidth: FORKINATOR_WIDTH_PX,
+  mascotHeight: FORKINATOR_HEIGHT_PX,
+};
+const forkCloud320Tall = forkInRoadCloudBoundsAtDefaultDock(bounds320Tall);
+const homeCategoryChipRow320 = { left: 0, top: 360, width: 320, height: 90 };
 assert.ok(
-  default320.y >
-    bounds320.insetTop +
-      (bounds320.height - bounds320.insetTop - bounds320.insetBottom) * 0.55,
-  '320px default should sit low on the screen',
+  forkCloud320Tall.top + forkCloud320Tall.height < homeCategoryChipRow320.top + 8,
+  'default fork cloud should sit above the chip row on 320×640',
 );
 
 const promptAtDefault390 = layoutScannerPrompt({
@@ -463,7 +525,7 @@ assert.equal(
 
 const clamped = clampForkinatorPosition({ x: -50, y: 9999 }, bounds390);
 assert.equal(clamped.x, bounds390.insetLeft);
-assert.equal(clamped.y, expectedDefaultY390, 'clamp should respect tab bar and hit area');
+assert.equal(clamped.y, maxDefaultY390, 'clamp should respect tab bar and hit area');
 
 assert.equal(FORKINATOR_POSITION_STORAGE_KEY, 'mealprep.forkinator.position');
 assert.equal(FORKINATOR_HAS_SCANNED_STORAGE_KEY, 'mealprep.forkinator.hasScanned');
@@ -630,7 +692,12 @@ assert.doesNotMatch(
 assert.match(overlaySource, /forkinatorPose/, 'overlay should resolve mascot pose');
 assert.match(overlaySource, /resolveForkinatorMascotPose/, 'overlay should map prompt state to pose');
 assert.match(overlaySource, /FORKINATOR_MASCOT_POSE_SOURCES/, 'all pose assets required up front');
-assert.match(overlaySource, /readForkinatorPosition/, 'overlay should restore saved position');
+assert.match(overlaySource, /resolveForkinatorPosition/, 'overlay should restore and migrate saved position');
+assert.match(
+  overlaySource,
+  /opacity: pose === mascotPose \? 1 : 0/,
+  'overlay should keep all mascot poses mounted to avoid stale frames',
+);
 assert.match(overlaySource, /writeForkinatorPosition/, 'overlay should persist position on release');
 assert.match(overlaySource, /pointerEvents="box-none"/, 'Forkinator overlay wrapper passes touches through');
 assert.match(overlaySource, /accessibilityRole="button"/);
