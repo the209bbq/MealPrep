@@ -49,6 +49,8 @@ export type ScannerPromptLayoutInput = {
   message?: string;
   includeCameraButton?: boolean;
   includeActionButton?: boolean;
+  /** When true, skip the above placement (grocery aisle cloud — FK5-3). */
+  preferSideOverAbove?: boolean;
 };
 
 function estimateMessageLineCount(message: string, contentWidth: number): number {
@@ -154,10 +156,61 @@ export function layoutScannerPrompt(input: ScannerPromptLayoutInput): ScannerPro
   };
   const mascotCenterX = input.mascotX + input.mascotWidth / 2;
 
-  // 1) Above his head (preferred).
   const aboveHeight = bodyHeight + tailBlock;
   const aboveTop = input.mascotY - gap - aboveHeight;
-  if (aboveTop >= minTop) {
+
+  const trySidePlacement = (): ScannerPromptLayout | null => {
+  const roomRight = maxRight - (input.mascotX + input.mascotWidth + gap) - tailBlock;
+  const roomLeft = input.mascotX - gap - tailBlock - minLeft;
+  const sides: { placement: 'left' | 'right'; room: number }[] = [
+    { placement: 'right' as const, room: roomRight },
+    { placement: 'left' as const, room: roomLeft },
+  ].sort((a, b) => b.room - a.room);
+    for (const side of sides) {
+      const sideBodyWidth = Math.min(bodyWidth, Math.floor(side.room));
+      if (sideBodyWidth < PROMPT_BUBBLE_MIN_SIDE_BODY_WIDTH) continue;
+      const sized = scannerPromptBodySizeForWidth(sideBodyWidth, message, includeActionButton);
+      const width = sized.bodyWidth + tailBlock;
+      const height = sized.bodyHeight;
+      if (height > maxBottom - minTop) continue;
+      const left =
+        side.placement === 'right'
+          ? input.mascotX + input.mascotWidth + gap
+          : input.mascotX - gap - width;
+      const top = clamp(input.mascotY, minTop, maxBottom - height);
+      return {
+        left,
+        top,
+        placement: side.placement,
+        width,
+        height,
+        bodyWidth: sized.bodyWidth,
+        bodyHeight: sized.bodyHeight,
+      };
+    }
+    return null;
+  };
+
+  if (!input.preferSideOverAbove) {
+    // 1) Above his head (preferred).
+    if (aboveTop >= minTop) {
+      return {
+        left: clamp(mascotCenterX - bodyWidth / 2, minLeft, maxRight - bodyWidth),
+        top: aboveTop,
+        placement: 'above',
+        width: bodyWidth,
+        height: aboveHeight,
+        bodyWidth,
+        bodyHeight,
+      };
+    }
+  }
+
+  // 2) Off to the side, preferring the roomier side; squeeze the cloud if needed.
+  const sideLayout = trySidePlacement();
+  if (sideLayout) return sideLayout;
+
+  if (input.preferSideOverAbove && aboveTop >= minTop) {
     return {
       left: clamp(mascotCenterX - bodyWidth / 2, minLeft, maxRight - bodyWidth),
       top: aboveTop,
@@ -166,37 +219,6 @@ export function layoutScannerPrompt(input: ScannerPromptLayoutInput): ScannerPro
       height: aboveHeight,
       bodyWidth,
       bodyHeight,
-    };
-  }
-
-  // 2) Off to the side, preferring the roomier side; squeeze the cloud if needed.
-  const roomRight = maxRight - (input.mascotX + input.mascotWidth + gap) - tailBlock;
-  const roomLeft = input.mascotX - gap - tailBlock - minLeft;
-  const sides: { placement: 'left' | 'right'; room: number }[] = [
-    { placement: 'right' as const, room: roomRight },
-    { placement: 'left' as const, room: roomLeft },
-  ].sort((a, b) => b.room - a.room);
-  for (const side of sides) {
-    const sideBodyWidth = Math.min(bodyWidth, Math.floor(side.room));
-    if (sideBodyWidth < PROMPT_BUBBLE_MIN_SIDE_BODY_WIDTH) continue;
-    const sized = scannerPromptBodySizeForWidth(sideBodyWidth, message, includeActionButton);
-    const width = sized.bodyWidth + tailBlock;
-    const height = sized.bodyHeight;
-    if (height > maxBottom - minTop) continue;
-    const left =
-      side.placement === 'right'
-        ? input.mascotX + input.mascotWidth + gap
-        : input.mascotX - gap - width;
-    // Line the cloud up with his head, kept on-screen and above the tab bar.
-    const top = clamp(input.mascotY, minTop, maxBottom - height);
-    return {
-      left,
-      top,
-      placement: side.placement,
-      width,
-      height,
-      bodyWidth: sized.bodyWidth,
-      bodyHeight: sized.bodyHeight,
     };
   }
 

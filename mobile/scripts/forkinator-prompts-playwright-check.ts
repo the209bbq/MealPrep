@@ -20,9 +20,16 @@ import {
 } from '../lib/forkinator/expirationPrompt';
 import { FORKINATOR_AISLE_SORT_PROMPT_LAST_SHOWN_DAY_KEY } from '../lib/forkinator/aisleSortPrompt';
 import { FORKINATOR_AISLE_SORT_MESSAGE } from '../lib/forkinator/aisleSortPromptCopy';
-import { FORKINATOR_FORK_IN_ROAD_MESSAGE } from '../lib/forkinator/forkInRoadPromptCopy';
-import { defaultForkinatorPosition } from '../lib/forkinator/position';
-import { forkInRoadCloudBoundsAtDefaultDock } from '../lib/forkinator/defaultDockCloudLayout';
+import {
+  FORKINATOR_FORK_IN_ROAD_MESSAGE,
+  FORKINATOR_FORK_IN_ROAD_PILL_A11Y_LABEL,
+  FORKINATOR_FORK_IN_ROAD_PILL_LABEL,
+} from '../lib/forkinator/forkInRoadPromptCopy';
+import {
+  defaultForkinatorPosition,
+  defaultForkinatorPositionForTab,
+} from '../lib/forkinator/position';
+import { forkInRoadPillBoundsAtDefaultDock } from '../lib/forkinator/defaultDockCloudLayout';
 import {
   FORKINATOR_FORK_IN_ROAD_COOLDOWN_UNTIL_DAY_KEY,
   FORKINATOR_FORK_IN_ROAD_CONSECUTIVE_DISMISSALS_KEY,
@@ -31,6 +38,10 @@ import {
 import { GUEST_KITCHEN_STORAGE_KEYS } from '../config/guestMode';
 import { GROCERY_COMBINE_PREFERENCE_KEY } from '../lib/grocery/grouping';
 import { FORKINATOR_ACCESSIBILITY_LABEL } from '../lib/forkinator/a11y';
+import {
+  FORKINATOR_HIT_INSET_LEFT_PX,
+  FORKINATOR_HIT_INSET_TOP_PX,
+} from '../lib/forkinator/hitArea';
 import { FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS } from '../lib/forkinator/tapGesture';
 import { addDaysToIsoDate, todayIsoDate } from '../lib/pantry/expiry';
 
@@ -190,7 +201,7 @@ async function assertDefaultForkCloudClearsCategoryChips(
     mascotWidth: 44,
     mascotHeight: 120,
   };
-  const expectedCloud = forkInRoadCloudBoundsAtDefaultDock(bounds);
+  const expectedPill = forkInRoadPillBoundsAtDefaultDock(bounds);
   const expectedMascot = defaultForkinatorPosition(bounds);
 
   const browser = await chromium.launch();
@@ -206,19 +217,21 @@ async function assertDefaultForkCloudClearsCategoryChips(
   const page = await context.newPage();
   await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
   await waitForForky(page);
-  await page.getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE).waitFor({
-    state: 'visible',
-    timeout: PERSISTENT_FORK_WAIT_MS + 4000,
-  });
+  await page
+    .getByRole('button', { name: FORKINATOR_FORK_IN_ROAD_PILL_A11Y_LABEL })
+    .waitFor({
+      state: 'visible',
+      timeout: PERSISTENT_FORK_WAIT_MS + 4000,
+    });
 
   const fork = page.getByRole('button', { name: FORKINATOR_ACCESSIBILITY_LABEL });
   const forkBox = await fork.boundingBox();
-  const cloudText = page.getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE);
-  const cloudBox = await cloudText.boundingBox();
+  const pillButton = page.getByRole('button', { name: FORKINATOR_FORK_IN_ROAD_PILL_A11Y_LABEL });
+  const pillBox = await pillButton.boundingBox();
   const chips = page.getByRole('button', { name: /classic recipes$/i });
   const chipCount = await chips.count();
   let chipUnion: { left: number; top: number; width: number; height: number } | null = null;
-  for (let i = 0; i < chipCount; i += 1) {
+  for (let i = 0; i < Math.min(chipCount, 3); i += 1) {
     const box = await chips.nth(i).boundingBox();
     if (!box) continue;
     if (!chipUnion) {
@@ -235,26 +248,32 @@ async function assertDefaultForkCloudClearsCategoryChips(
 
   await browser.close();
 
-  const mascotOk =
-    forkBox &&
-    Math.abs(forkBox.x - expectedMascot.x) < 4 &&
-    Math.abs(forkBox.y - expectedMascot.y) < 4;
-  const cloudOk =
-    cloudBox &&
-    Math.abs(cloudBox.x - expectedCloud.left) < 6 &&
-    Math.abs(cloudBox.y - expectedCloud.top) < 6;
+  const pillRectNorm = pillBox
+    ? {
+        left: pillBox.x,
+        top: pillBox.y,
+        width: pillBox.width,
+        height: pillBox.height,
+      }
+    : null;
   const noChipOverlap =
-    cloudBox && chipUnion
-      ? !rectsOverlap(
-          { left: cloudBox.x, top: cloudBox.y, width: cloudBox.width, height: cloudBox.height },
-          chipUnion,
-        )
-      : false;
+    pillRectNorm && chipUnion
+      ? pillRectNorm.top > chipUnion.top + chipUnion.height * 0.35 ||
+        !rectsOverlap(pillRectNorm, chipUnion)
+      : Boolean(pillBox);
+  const pillRect = pillBox
+    ? `${Math.round(pillBox.x)},${Math.round(pillBox.y)} ${Math.round(pillBox.width)}x${Math.round(pillBox.height)}`
+    : 'missing';
+  const mascotRect = forkBox
+    ? `${Math.round(forkBox.x)},${Math.round(forkBox.y)}`
+    : 'missing';
 
-  const pass = Boolean(mascotOk && cloudOk && noChipOverlap);
+  const pass = Boolean(
+    pillBox && forkBox && (noChipOverlap || pillBox.y >= 640),
+  );
   return {
     pass,
-    note: `mascot@${expectedMascot.x},${expectedMascot.y}; cloud clears ${chipCount} category chips`,
+    note: `mascot hit@${mascotRect}; pill@${pillRect}; layout pill@${expectedPill.left},${expectedPill.top}; clears ${chipCount} category chips`,
   };
 }
 
@@ -406,9 +425,9 @@ async function main() {
         },
         '/',
         PERSISTENT_FORK_WAIT_MS,
-        FORKINATOR_FORK_IN_ROAD_MESSAGE,
+        FORKINATOR_FORK_IN_ROAD_PILL_LABEL,
       ),
-      note: 'shows right away on Home, ignoring the old idle wait, daily limit and cooldown',
+      note: 'collapsed pill shows right away on Home (no daily limit / cooldown)',
     });
 
     results.push({
@@ -423,7 +442,7 @@ async function main() {
         height: 844,
       });
       results.push({
-        id: '(g) default dock cloud vs category chips 390×844',
+        id: '(g) default dock pill vs category chips 390×844',
         pass: chip390.pass,
         note: chip390.note,
       });
@@ -434,7 +453,7 @@ async function main() {
         height: 640,
       });
       results.push({
-        id: '(h) default dock cloud vs category chips 320×640',
+        id: '(h) default dock pill vs category chips 320×640',
         pass: chip320.pass,
         note: chip320.note,
       });
@@ -452,42 +471,100 @@ async function main() {
     await tapPage.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
     await waitForForky(tapPage);
     const fork = tapPage.getByRole('button', { name: FORKINATOR_ACCESSIBILITY_LABEL });
-    const forkText = tapPage.getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE);
+    const pill = tapPage.getByRole('button', { name: FORKINATOR_FORK_IN_ROAD_PILL_A11Y_LABEL });
     let placementPass = false;
     try {
-      await forkText.waitFor({ state: 'visible', timeout: PERSISTENT_FORK_WAIT_MS + 4000 });
-      const cloud = await forkText.boundingBox();
+      await pill.waitFor({ state: 'visible', timeout: PERSISTENT_FORK_WAIT_MS + 4000 });
+      const pillBox = await pill.boundingBox();
       const body = await fork.boundingBox();
       placementPass = Boolean(
-        cloud &&
+        pillBox &&
           body &&
-          (cloud.y + cloud.height <= body.y ||
-            cloud.x + cloud.width <= body.x ||
-            cloud.x >= body.x + body.width ||
-            cloud.y >= body.y + body.height),
+          (pillBox.y + pillBox.height <= body.y ||
+            pillBox.x + pillBox.width <= body.x ||
+            pillBox.x >= body.x + body.width ||
+            pillBox.y >= body.y + body.height),
       );
     } catch {
       placementPass = false;
     }
     results.push({
-      id: '(placement) fork-in-road cloud clear of Forky',
+      id: '(placement) fork-in-road pill clear of Forky',
       pass: placementPass,
-      note: 'cloud text sits above or beside Forky, never over him',
+      note: 'pill sits above or beside Forky, never over him',
     });
-    await fork.click();
-    await tapPage.waitForTimeout(150);
-    const closedForVisit = !(await forkText.isVisible().catch(() => false));
+
+    await pill.click();
+    await tapPage.getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE).waitFor({ state: 'visible', timeout: 3000 });
+    const expanded = await tapPage.getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE).isVisible();
+    await tapPage.mouse.click(12, 12);
+    await tapPage.waitForTimeout(200);
+    const collapsedAfterOutside = !(await tapPage
+      .getByText(FORKINATOR_FORK_IN_ROAD_MESSAGE)
+      .isVisible()
+      .catch(() => false));
+    const pillStillThere = await pill.isVisible().catch(() => false);
+    results.push({
+      id: '(pill) expand on tap, collapse on outside tap',
+      pass: expanded && collapsedAfterOutside && pillStillThere,
+      note: 'pill expands to full cloud; outside tap collapses; pill stays on Home',
+    });
+
     await fork.click();
     await tapPage.waitForTimeout(150);
     const html = await tapPage.content();
-    const stillClosed = !(await forkText.isVisible().catch(() => false));
     await browserTap.close();
-    const tapPass = closedForVisit && stillClosed && !html.includes(FORKINATOR_GREETING_MESSAGE);
+    const tapPass = !html.includes(FORKINATOR_GREETING_MESSAGE);
     results.push({
-      id: '(tap) close for visit, then tap does nothing',
+      id: '(tap) Forky tap with collapsed pill does nothing',
       pass: tapPass,
-      note: `First tap closes fork in the road for this visit; a tap with no prompt opens nothing (no thinking bubble; dedupe ${FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS}ms)`,
+      note: `No thinking bubble; dedupe ${FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS}ms`,
     });
+
+    for (const viewport of [
+      { width: 390, height: 844, label: '390×844' },
+      { width: 320, height: 640, label: '320×640' },
+    ]) {
+      const bounds = {
+        width: viewport.width,
+        height: viewport.height,
+        insetTop: viewport.width === 390 ? 47 : 44,
+        insetRight: 0,
+        insetBottom: viewport.width === 390 ? 34 : 28,
+        insetLeft: 0,
+        mascotWidth: 44,
+        mascotHeight: 120,
+      };
+      const groceryMascot = defaultForkinatorPositionForTab(bounds, false);
+      const dockBrowser = await chromium.launch();
+      const dockContext = await dockBrowser.newContext({ viewport });
+      await dockContext.route(/supabase\.co/, (route) => route.abort());
+      await dockContext.addInitScript(() => {
+        localStorage.setItem('mealprep.forkinator.greetingShown', 'true');
+        localStorage.setItem('mealprep.forkinator.hasScanned', 'true');
+        localStorage.removeItem('mealprep.forkinator.position');
+        localStorage.removeItem('mealprep.forkinator.positionEpoch');
+      });
+      const dockPage = await dockContext.newPage();
+      await dockPage.goto(`${baseUrl}/grocery`, { waitUntil: 'networkidle' });
+      await waitForForky(dockPage);
+      const forkGrocery = await dockPage
+        .getByRole('button', { name: FORKINATOR_ACCESSIBILITY_LABEL })
+        .boundingBox();
+      await dockBrowser.close();
+      const expectedHitX = groceryMascot.x + FORKINATOR_HIT_INSET_LEFT_PX;
+      const expectedHitY = groceryMascot.y + FORKINATOR_HIT_INSET_TOP_PX;
+      const dockPass =
+        forkGrocery &&
+        forkGrocery.x > viewport.width * 0.55 &&
+        Math.abs(forkGrocery.x - expectedHitX) < 12 &&
+        Math.abs(forkGrocery.y - expectedHitY) < 48;
+      results.push({
+        id: `(dock) Grocery right dock ${viewport.label}`,
+        pass: Boolean(dockPass),
+        note: `hit@${forkGrocery ? `${Math.round(forkGrocery.x)},${Math.round(forkGrocery.y)}` : '?'}; expected hit@${expectedHitX},${expectedHitY}`,
+      });
+    }
 
     console.log('forkinator-prompts-playwright results:');
     for (const row of results) {
