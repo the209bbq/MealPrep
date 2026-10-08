@@ -16,6 +16,7 @@ concurrency:
 jobs:
   mobile:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: mobile
@@ -43,7 +44,8 @@ jobs:
       - name: Tests
         run: |
           set -o pipefail
-          if ! npm test 2>&1 | tee "$RUNNER_TEMP/test.log"; then
+          # Hard stop so a hung browser check fails fast and still reports where it stopped.
+          if ! timeout --signal=TERM --kill-after=30s 12m npm test 2>&1 | tee "$RUNNER_TEMP/test.log"; then
             # Surface the end of the log on the PR so the failing check is visible without opening logs.
             tail_text="$(tail -n 30 "$RUNNER_TEMP/test.log" | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
             echo "::error title=Tests failed::${tail_text}"
