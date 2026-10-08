@@ -2,7 +2,7 @@
  * Playwright hydration check for static web export (GitHub Pages subpath).
  * Run from mobile/ after export:web:
  *   npx serve dist -l 8765 --no-port-switching
- *   APP_BASE=/MealPrep/app npx tsx scripts/web-hydration-check.ts
+ *   APP_BASE= npx tsx scripts/web-hydration-check.ts
  */
 import { chromium, type Page } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -15,7 +15,7 @@ const mobileRoot = path.resolve(__dirname, '..');
 const distDir = path.join(mobileRoot, 'dist');
 const serveRoot = path.join(mobileRoot, '.hydration-serve-root');
 
-const basePath = (process.env.APP_BASE ?? '/MealPrep/app').replace(/\/$/, '');
+const basePath = (process.env.APP_BASE ?? '').replace(/\/$/, '');
 const port = Number(process.env.PORT ?? 8765);
 const origin = `http://127.0.0.1:${port}`;
 

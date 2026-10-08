@@ -32,6 +32,6 @@ for (const file of ['privacy.html', 'terms.html']) {
 const privacyHtml = fs.readFileSync(path.join(publicDir, 'privacy.html'), 'utf8');
 assert.ok(privacyHtml.includes(deletionUrl), 'privacy.html should link to web account deletion page');
 
-assert.equal(githubPagesLegalUrl('privacy'), `https://the209bbq.github.io${normalized}/privacy`);
+assert.equal(githubPagesLegalUrl('privacy'), `https://mealplanatic.app${normalized}/privacy`);
 
 console.log('legal-pages-check: ok');
