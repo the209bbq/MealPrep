@@ -25,4 +25,4 @@ Free product data by barcode. No API key and no Supabase function: the app calls
 
 - **Camera scanning.** Lookup works with a typed barcode. Scanning needs `expo-camera`, which must be added with `npx expo install expo-camera` (so the version matches the Expo SDK) plus a camera permission string in `app.json`.
 - **Category and storage location.** Adding an item still infers category and location from the name, as before. Open Food Facts categories are not used yet.
-- **Not verified against the live API.** The response parsing follows their v2 docs and tolerates missing fields, but it has only been tested against fake responses. Try one real barcode on a device and on the web build (browser CORS has not been tested).
+- **Live API on web.** `world.openfoodfacts.org` returns `Access-Control-Allow-Origin: *`, so the GitHub Pages app can call the API from the browser. Still spot-check a real barcode after deploy; native uses the identifying User-Agent.
