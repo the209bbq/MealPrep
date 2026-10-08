@@ -30,8 +30,10 @@ import {
   FORKINATOR_ASPECT_WIDTH_TO_HEIGHT,
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX,
   FORKINATOR_DEFAULT_LEFT_INSET_PX,
-  FORKINATOR_HOME_DOCK_RAISE_PX,
+  FORKINATOR_HOME_DOCK_TOP_OFFSET_FRACTION_SHORT,
+  FORKINATOR_HOME_DOCK_TOP_OFFSET_FRACTION_TALL,
   homeLowDockForkinatorPosition,
+  homeRaisedBottomLeftForkinatorPosition,
   FORKINATOR_HEIGHT_PX,
   FORKINATOR_LEGACY_DOCK_ZONE_TOLERANCE_X_PX,
   FORKINATOR_POSITION_EPOCH,
@@ -46,6 +48,7 @@ import {
 } from '../lib/forkinator/position';
 import { forkInRoadPillBoundsAtDefaultDock } from '../lib/forkinator/defaultDockCloudLayout';
 import { FORKINATOR_FORK_IN_ROAD_PILL_LABEL } from '../lib/forkinator/forkInRoadPromptCopy';
+import { isForkInRoadPillAnchoredToMascot } from '../lib/forkinator/forkInRoadPillLayout';
 import {
   FORKINATOR_TIPS_PRESERVED_STORAGE_KEYS,
   FORKINATOR_TIPS_RESET_STORAGE_KEYS,
@@ -318,25 +321,25 @@ const maxDefaultY390 =
   FORKINATOR_HIT_HEIGHT_PX -
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
 const inner390 = bounds390.height - bounds390.insetTop - bounds390.insetBottom;
-const raise390 = Math.max(
-  FORKINATOR_HOME_DOCK_RAISE_PX,
-  Math.round(inner390 * 0.34),
-);
-const seeMoreTop390 = bounds390.insetTop + Math.round(inner390 * 0.68);
-const maxHomeMascotY390 =
-  seeMoreTop390 - FORKINATOR_HIT_INSET_TOP_PX - FORKINATOR_HIT_HEIGHT_PX - 8;
-const minHomeMascotY390 = bounds390.insetTop + Math.round(inner390 * 0.34);
-const expectedDefaultY390 = Math.min(
-  maxHomeMascotY390,
-  Math.max(minHomeMascotY390, maxDefaultY390 - raise390),
-);
-assert.equal(default390.y, expectedDefaultY390, 'Home default should be raised above chip row');
-writeForkinatorPosition(homeLowDockForkinatorPosition(bounds390));
-writeJson(FORKINATOR_POSITION_EPOCH_KEY, FORKINATOR_POSITION_EPOCH);
+let expectedDefaultY390 =
+  bounds390.insetTop + Math.round(inner390 * FORKINATOR_HOME_DOCK_TOP_OFFSET_FRACTION_TALL);
+if (bounds390.insetTop < 12) {
+  expectedDefaultY390 = Math.round(bounds390.height * 0.256);
+}
+assert.equal(default390.y, expectedDefaultY390, 'Home default uses upper-left dock at 390');
+writeForkinatorPosition(homeRaisedBottomLeftForkinatorPosition(bounds390));
+writeJson(FORKINATOR_POSITION_EPOCH_KEY, 2);
 assert.deepEqual(
   resolveForkinatorPosition(bounds390),
   default390,
-  'epoch-2 home low dock migrates to raised Home default',
+  'epoch-2 raised home left dock migrates to epoch-3 top dock',
+);
+writeForkinatorPosition(homeLowDockForkinatorPosition(bounds390));
+writeJson(FORKINATOR_POSITION_EPOCH_KEY, 2);
+assert.deepEqual(
+  resolveForkinatorPosition(bounds390),
+  default390,
+  'epoch-2 home low dock migrates to epoch-3 top dock',
 );
 removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
 const groceryDefault390 = defaultForkinatorPositionForTab(bounds390, false);
@@ -365,11 +368,23 @@ function rectsOverlap(
 
 const forkPill390 = forkInRoadPillBoundsAtDefaultDock(bounds390);
 assert.equal(FORKINATOR_FORK_IN_ROAD_PILL_LABEL, "Can't decide?");
-assert.ok(forkPill390.left >= bounds390.width * 0.65, 'pill should dock on the right above Forky');
 assert.ok(
-  forkPill390.top + forkPill390.height < bounds390.height * 0.74,
-  'pill should sit above category chip band on 390',
+  isForkInRoadPillAnchoredToMascot(forkPill390, {
+    mascotX: default390.x,
+    mascotY: default390.y,
+    mascotWidth: FORKINATOR_WIDTH_PX,
+    mascotHeight: FORKINATOR_HEIGHT_PX,
+    screenWidth: bounds390.width,
+    screenHeight: bounds390.height,
+    insetTop: bounds390.insetTop,
+    insetRight: bounds390.insetRight,
+    insetBottom: bounds390.insetBottom,
+    insetLeft: bounds390.insetLeft,
+    pillWidth: forkPill390.width,
+  }),
+  'pill should be anchored beside or above Forky at 390',
 );
+assert.ok(forkPill390.left < bounds390.width * 0.35, 'pill should sit beside Forky, not screen-right');
 
 removeStorageKey(FORKINATOR_POSITION_STORAGE_KEY);
 removeStorageKey(FORKINATOR_POSITION_EPOCH_KEY);
@@ -426,19 +441,12 @@ const maxDefaultY320 =
   FORKINATOR_HIT_HEIGHT_PX -
   FORKINATOR_DEFAULT_BOTTOM_MARGIN_PX;
 const inner320 = bounds320.height - bounds320.insetTop - bounds320.insetBottom;
-const raise320 = Math.max(
-  FORKINATOR_HOME_DOCK_RAISE_PX,
-  Math.round(inner320 * 0.34),
-);
-const seeMoreTop320 = bounds320.insetTop + Math.round(inner320 * 0.68);
-const maxHomeMascotY320 =
-  seeMoreTop320 - FORKINATOR_HIT_INSET_TOP_PX - FORKINATOR_HIT_HEIGHT_PX - 8;
-const minHomeMascotY320 = bounds320.insetTop + Math.round(inner320 * 0.34);
-const expectedDefaultY320 = Math.min(
-  maxHomeMascotY320,
-  Math.max(minHomeMascotY320, maxDefaultY320 - raise320),
-);
-assert.equal(default320.y, expectedDefaultY320, '320 Home default is raised');
+let expectedDefaultY320 =
+  bounds320.insetTop + Math.round(inner320 * FORKINATOR_HOME_DOCK_TOP_OFFSET_FRACTION_SHORT);
+if (bounds320.insetTop < 12) {
+  expectedDefaultY320 = Math.round(bounds320.height * 0.369);
+}
+assert.equal(default320.y, expectedDefaultY320, '320 Home default uses upper-left dock');
 
 const bounds320Tall = {
   width: 320,
@@ -451,7 +459,22 @@ const bounds320Tall = {
   mascotHeight: FORKINATOR_HEIGHT_PX,
 };
 const forkPill320Tall = forkInRoadPillBoundsAtDefaultDock(bounds320Tall);
-assert.ok(forkPill320Tall.left >= bounds320Tall.width * 0.6, 'pill should dock on the right above Forky on 320');
+assert.ok(
+  isForkInRoadPillAnchoredToMascot(forkPill320Tall, {
+    mascotX: defaultForkinatorPosition(bounds320Tall).x,
+    mascotY: defaultForkinatorPosition(bounds320Tall).y,
+    mascotWidth: FORKINATOR_WIDTH_PX,
+    mascotHeight: FORKINATOR_HEIGHT_PX,
+    screenWidth: bounds320Tall.width,
+    screenHeight: bounds320Tall.height,
+    insetTop: bounds320Tall.insetTop,
+    insetRight: bounds320Tall.insetRight,
+    insetBottom: bounds320Tall.insetBottom,
+    insetLeft: bounds320Tall.insetLeft,
+    pillWidth: forkPill320Tall.width,
+  }),
+  'pill should be anchored beside or above Forky on 320×640',
+);
 
 const aisleAtRight390 = layoutScannerPrompt({
   mascotX: groceryDefault390.x,
@@ -800,7 +823,11 @@ assert.match(overlaySource, /forkinatorUiReady/, 'prompts wait for mascot image 
 assert.match(overlaySource, /onLoad=\{handleMascotImageLoad\}/, 'first pose onLoad gates prompts');
 assert.match(overlaySource, /ForkInRoadPrompt/, 'fork in the road uses compact pill + expand');
 assert.match(overlaySource, /forkInRoadExpanded/, 'fork in the road expand/collapse state');
-assert.match(overlaySource, /preferAboveBeforeSide: true/, 'aisle sort prefers above on grocery');
+assert.match(
+  overlaySource,
+  /preferAboveBeforeSide: height >= 700/,
+  'aisle sort prefers above on tall grocery, side on short',
+);
 assert.match(overlaySource, /pointerEvents="box-none"/, 'Forkinator overlay wrapper passes touches through');
 assert.match(overlaySource, /accessibilityRole="button"/);
 assert.match(overlaySource, /accessibilityHint=\{FORKINATOR_ACCESSIBILITY_HINT\}/);
