@@ -42,6 +42,7 @@ import {
   reverseGroceryCheckRestock,
 } from '../lib/grocery/restockLedger';
 import { bumpGroceryPersistGeneration, enqueueGroceryPersist } from '../lib/grocery/persistQueue';
+import { isPersistedGroceryUuid } from '../lib/grocery/persistIds';
 import {
   cancelManualGroceryInsert,
   completeManualGroceryInsertTracking,
@@ -51,6 +52,7 @@ import {
   isManualGroceryLocalId,
   mergeSavedManualGroceryItem,
   mergeServerGroceryWithPendingManual,
+  resolveGroceryListForServerSync,
   rollbackManualGroceryItem,
   trackManualGroceryInsert,
 } from '../lib/grocery/manualGroceryInsertLifecycle';
@@ -109,6 +111,9 @@ import {
   applyPantryDeductions,
   buildPantryDeductionLines,
   matchedRowsForReview,
+  mealMadeReviewRowsWithDeductions,
+  restorePantryFromDeductions,
+  type MealMadeReviewRow,
   type PantryDeductionLine,
 } from '../lib/mealPlan/pantryDeduction';
 import { scoreRecipeAgainstPantry, scoreRecipeForPantryDeduction } from '../lib/recipeMatch/match';
@@ -389,7 +394,7 @@ interface AppContextValue {
   undoLastMealMade: (mealPlanItemId?: string) => Promise<void>;
   mealMadeReview: MealMadeReviewState | null;
   mealMadeReviewTitle: string | null;
-  mealMadeReviewRows: ReturnType<typeof matchedRowsForReview>;
+  mealMadeReviewRows: MealMadeReviewRow[];
   mealMadeBusy: boolean;
   cookConfirmPrompt: CookConfirmPromptState | null;
   beginCookViewSession: (target: ScheduleRecipeTarget) => void;
@@ -443,7 +448,7 @@ interface AppContextValue {
     quantity: number;
     unit: string;
     category: PantryCategory;
-  }) => Promise<void>;
+  }) => Promise<string | null>;
   clearCheckedGroceryItems: () => void;
   removeGroceryItem: (id: string) => void;
   seedPantry: () => void;
@@ -532,6 +537,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const groceryRestockLedgerRef = useRef(new Map<string, { pantryItemId: string; quantityAdded: number; unit: string }>());
   const pendingManualPantryInsertsRef = useRef(createManualInsertCoordinator());
   const pendingManualGroceryInsertsRef = useRef(createManualGroceryInsertCoordinator());
+  /** Manual grocery adds that finished saving, keyed by their optimistic local id (FK3-6). */
+  const savedManualGroceryByLocalIdRef = useRef(new Map<string, GroceryListItem>());
   const [session, setSession] = useState<Session | null>(null);
   const [liveProfile, setLiveProfile] = useState<UserProfile | null>(null);
 
@@ -567,7 +574,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [demoMode, hydrated]);
   const [undoToast, setUndoToast] = useState<UndoToastState | null>(null);
   const [mealMadeReview, setMealMadeReview] = useState<MealMadeReviewState | null>(null);
-  const [mealMadeUndo, setMealMadeUndo] = useState<MealMadeUndoState | null>(null);
+  /** Latest planned-meal undo; a ref so the toast's Undo never reads a stale closure (FK3-1). */
+  const mealMadeUndoRef = useRef<MealMadeUndoState | null>(null);
+  const latestPantryRef = useRef<PantryItem[]>(pantry);
   const [mealMadeBusy, setMealMadeBusy] = useState(false);
   const [cookConfirmPrompt, setCookConfirmPrompt] = useState<CookConfirmPromptState | null>(null);
   const [cookConfirmBusy, setCookConfirmBusy] = useState(false);
@@ -1034,9 +1043,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return next;
         }
-        const toSync = groceryListForServerSync(next);
         void enqueueGroceryPersist(() =>
-          replaceGroceryList(supabase, userId, toSync).then((persisted) => {
+          replaceGroceryList(
+            supabase,
+            userId,
+            resolveGroceryListForServerSync(next, savedManualGroceryByLocalIdRef.current),
+          ).then((persisted) => {
             setGrocery((current) => mergeServerGroceryWithPendingManual(current, persisted));
             return persisted;
           }),
@@ -1316,7 +1328,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setServingOverrides({});
     setUndoToast(null);
     setMealMadeReview(null);
-    setMealMadeUndo(null);
+    mealMadeUndoRef.current = null;
     setLiveDataLoaded(false);
     setPantry(readGuestPantry());
     setGrocery(readGuestGrocery());
@@ -1352,9 +1364,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return;
         }
-        const toSync = groceryListForServerSync(next);
         void enqueueGroceryPersist(() =>
-          replaceGroceryList(supabase, userId, toSync).then((persisted) => {
+          replaceGroceryList(
+            supabase,
+            userId,
+            resolveGroceryListForServerSync(next, savedManualGroceryByLocalIdRef.current),
+          ).then((persisted) => {
             setGrocery((current) => mergeServerGroceryWithPendingManual(current, persisted));
             return persisted;
           }),
@@ -1491,7 +1506,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         else if (isGuest) writeGuestGrocery(next);
         else if (supabase && userId) {
           void enqueueGroceryPersist(() =>
-            replaceGroceryList(supabase, userId, groceryListForServerSync(next)),
+            replaceGroceryList(
+              supabase,
+              userId,
+              resolveGroceryListForServerSync(next, savedManualGroceryByLocalIdRef.current),
+            ),
           ).catch((error: unknown) => {
             setKitchenError(error instanceof Error ? error.message : 'Failed to update grocery list');
           });
@@ -1564,45 +1583,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const undoLastMealMade = useCallback(
-    async (mealPlanItemId?: string) => {
-      if (!mealMadeUndo) return;
-      const targetId = mealPlanItemId ?? mealMadeUndo.mealPlanItemId;
-      if (
-        targetId != null &&
-        mealMadeUndo.mealPlanItemId != null &&
-        mealMadeUndo.mealPlanItemId !== targetId
-      ) {
-        return;
-      }
+  useEffect(() => {
+    latestPantryRef.current = pantry;
+  }, [pantry]);
 
-      const { previousMeal, pantrySnapshot, deductionLines } = mealMadeUndo;
+  /**
+   * Undo one specific planned-meal cook. Only the latest undo state may run, and it is
+   * cleared before any work so it can never be replayed against a newer pantry (FK3-1).
+   * Restores just the deducted pantry rows to their pre-cook values.
+   */
+  const runMealMadeUndo = useCallback(
+    async (undoState: MealMadeUndoState) => {
+      if (mealMadeUndoRef.current !== undoState) return;
+      if (!undoState.mealPlanItemId) return;
+      mealMadeUndoRef.current = null;
+      setUndoToast(null);
 
-      setPantry(pantrySnapshot);
-      if (targetId && previousMeal) {
+      const { mealPlanItemId: targetId, previousMeal, deductionLines } = undoState;
+      const pantryBeforeUndo = latestPantryRef.current;
+      const currentIds = new Set(pantryBeforeUndo.map((row) => row.id));
+      const restoredPantry = restorePantryFromDeductions(pantryBeforeUndo, deductionLines);
+      setPantry(restoredPantry);
+      latestPantryRef.current = restoredPantry;
+      if (previousMeal) {
         setMealPlan((prev) => prev.map((row) => (row.id === targetId ? previousMeal : row)));
       }
-      setMealMadeUndo(null);
-      setUndoToast(null);
 
       if (!demoMode && supabase && userId) {
         try {
-          const currentIds = new Set(pantry.map((row) => row.id));
-          const snapshotIds = new Set(pantrySnapshot.map((row) => row.id));
-          const removedIds = [...currentIds].filter((id) => !snapshotIds.has(id));
-          if (removedIds.length > 0) {
-            await deletePantryItemsByIds(supabase, userId, removedIds);
-          }
-          for (const row of pantrySnapshot) {
-            if (deductionLines.some((line) => line.pantryItemId === row.id) || !currentIds.has(row.id)) {
-              if (currentIds.has(row.id)) {
-                await updatePantryItem(supabase, userId, row);
-              } else {
-                await insertPantryItem(supabase, userId, row);
+          for (const line of deductionLines) {
+            const row = line.previous;
+            if (currentIds.has(row.id)) {
+              await updatePantryItem(supabase, userId, row);
+            } else {
+              const inserted = await insertPantryItem(supabase, userId, row);
+              if (inserted.id !== row.id) {
+                setPantry((prev) => prev.map((item) => (item.id === row.id ? inserted : item)));
               }
             }
           }
-          if (targetId && previousMeal) {
+          if (previousMeal) {
             await updateMealPlanItem(supabase, userId, targetId, {
               made: previousMeal.made,
               madeAt: previousMeal.madeAt,
@@ -1613,7 +1633,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [demoMode, mealMadeUndo, pantry, supabase, userId],
+    [demoMode, supabase, userId],
+  );
+
+  const undoLastMealMade = useCallback(
+    async (mealPlanItemId?: string) => {
+      const undoState = mealMadeUndoRef.current;
+      if (!undoState?.mealPlanItemId) return;
+      if (mealPlanItemId != null && undoState.mealPlanItemId !== mealPlanItemId) return;
+      await runMealMadeUndo(undoState);
+    },
+    [runMealMadeUndo],
   );
 
   const confirmMealMade = useCallback(async () => {
@@ -1660,12 +1690,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ),
         );
       }
-      setMealMadeUndo({
-        mealPlanItemId: item?.id ?? null,
-        previousMeal,
-        pantrySnapshot,
-        deductionLines: lines,
-      });
+      // A new cook always replaces any older undo; off-plan cooks have no Undo (known gap).
+      const undoState: MealMadeUndoState | null = item
+        ? {
+            mealPlanItemId: item.id,
+            previousMeal,
+            pantrySnapshot,
+            deductionLines: lines,
+          }
+        : null;
+      mealMadeUndoRef.current = undoState;
 
       if (!demoMode && supabase && userId) {
         for (const line of lines) {
@@ -1692,19 +1726,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUndoToast({
         message: item ? `Marked “${toastTitle}” as made` : SEAMLESS_FLOW_COPY.pantryUpdatedToast,
         onUndo: () => {
-          void undoLastMealMade(item?.id ?? undefined);
+          if (undoState) void runMealMadeUndo(undoState);
         },
-        showUndo: Boolean(item),
+        showUndo: Boolean(undoState),
       });
 
       if (lines.some((line) => line.quantityApplied)) {
         emitForkinatorRestockAfterCook({
           nextPantry,
+          deductedPantryRows: lines
+            .filter((line) => line.quantityApplied)
+            .map((line) => line.previous),
           pantryDeductionApplied: true,
         });
       }
     } catch (error: unknown) {
       setAuthError(error instanceof Error ? error.message : 'Failed to mark meal as made');
+      mealMadeUndoRef.current = null;
       setPantry(pantrySnapshot);
       if (item && previousMeal) {
         setMealPlan((prev) => prev.map((row) => (row.id === item.id ? previousMeal : row)));
@@ -1720,9 +1758,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pantry,
     feedKitchenRecipes,
     profile.householdSize,
+    runMealMadeUndo,
     servingOverrides,
     supabase,
-    undoLastMealMade,
     userId,
   ]);
 
@@ -2210,7 +2248,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addManualGroceryItem = useCallback(
     async (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => {
       const trimmed = input.name.trim();
-      if (!trimmed) return;
+      if (!trimmed) return null;
       const unit = input.unit.trim() || 'each';
       removeGroceryDismissals(ownerId, [groceryManualLineDismissalKey(trimmed, unit)]);
       const item = createManualGroceryItem({ ...input, name: trimmed, unit });
@@ -2222,7 +2260,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           else writeGuestGrocery(next);
           return next;
         });
-        return;
+        return item.id;
       }
       if (!supabase || !userId) {
         throw new Error('Sign in to add grocery items.');
@@ -2240,11 +2278,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             savedAt: new Date().toISOString(),
           });
         }
-        return;
+        return item.id;
       }
 
       try {
-        const saved = await insertGroceryItem(supabase, userId, item);
+        // FK3-6: serialize with full-list grocery syncs (e.g. the refresh after a meal is
+        // marked made) so a replace that started earlier cannot drop this row from memory.
+        const saved = await enqueueGroceryPersist(() => insertGroceryItem(supabase, userId, item));
+        if (!saved) {
+          completeManualGroceryInsertTracking(pendingManualGroceryInsertsRef.current, item.id);
+          return item.id;
+        }
         const cancelled = isManualGroceryInsertCancelled(pendingManualGroceryInsertsRef.current, item.id);
         completeManualGroceryInsertTracking(pendingManualGroceryInsertsRef.current, item.id);
 
@@ -2265,10 +2309,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         if (deleteServerId) {
           await deleteGroceryItems(supabase, userId, [deleteServerId]);
+          return null;
         }
+        savedManualGroceryByLocalIdRef.current.set(item.id, saved);
+        return saved.id;
       } catch (error: unknown) {
         completeManualGroceryInsertTracking(pendingManualGroceryInsertsRef.current, item.id);
-        if (isOffline()) return;
+        if (isOffline()) return item.id;
         setGrocery((prev) => {
           const next = rollbackManualGroceryItem(prev, item.id);
           const cached = readAccountKitchenCache(userId);
@@ -2372,7 +2419,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cancelManualGroceryInsert(pendingManualGroceryInsertsRef.current, id);
       setGrocery((prev) => {
         const removed = prev.find((item) => item.id === id);
-        if (!removed) return prev;
+        if (!removed) {
+          // FK3-6: Forky's restock Undo passes the saved server id; if a list refresh already
+          // dropped the row from memory, still delete it on the server.
+          if (!demoMode && !isGuest && supabase && userId && isPersistedGroceryUuid(id)) {
+            void enqueueGroceryPersist(() => deleteGroceryItems(supabase, userId, [id])).catch(
+              (error: unknown) => {
+                setKitchenError(error instanceof Error ? error.message : 'Failed to remove grocery item');
+              },
+            );
+          }
+          return prev;
+        }
 
         const dismissalKeys = groceryDismissalKeysForItem(removed, groceryDismissalContext);
         addGroceryDismissals(ownerId, dismissalKeys);
@@ -2394,7 +2452,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [groceryDismissalContext, ownerId, persistGroceryList],
+    [demoMode, groceryDismissalContext, isGuest, ownerId, persistGroceryList, supabase, userId],
   );
 
   const seedPantry = useCallback(() => {
@@ -3074,8 +3132,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!mealMadeReview) return [];
     const recipe = feedKitchenRecipes.find((row) => row.id === mealMadeReview.recipeId);
     if (!recipe) return [];
-    return matchedRowsForReview(scoreRecipeForPantryDeduction(recipe, pantry));
-  }, [feedKitchenRecipes, mealMadeReview, pantry]);
+    return mealMadeReviewRowsWithDeductions(
+      scoreRecipeForPantryDeduction(recipe, pantry),
+      recipe,
+      servingOverrides,
+      profile.householdSize,
+    );
+  }, [feedKitchenRecipes, mealMadeReview, pantry, profile.householdSize, servingOverrides]);
 
   const value = useMemo(
     () => ({

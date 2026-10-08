@@ -46,6 +46,8 @@ import { useUnifiedRecipeSearch } from '../../hooks/useUnifiedRecipeSearch';
 import { useViralRecipeOpen } from '../../hooks/useViralRecipeOpen';
 import { useApp } from '../../context/AppContext';
 import { buildRecipesTabCatalogRows } from '../../lib/recipes/recipesTabCatalog';
+import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
+import { scoreRecipeAgainstPantry } from '../../lib/recipeMatch/match';
 import { buildUnifiedRecipesFeed } from '../../lib/recipes/unifiedFeed';
 import {
   filterCreatorFeedModelsForDietPrefs,
@@ -132,6 +134,7 @@ export default function HomeScreen() {
   }>();
   const {
     pantry,
+    recipes: accountRecipes,
     session,
     demoMode,
     openAuthSheet,
@@ -158,7 +161,6 @@ export default function HomeScreen() {
     savedRecipes,
     registerSavedRecipeToggleOutcome,
     finishCookViewSession,
-    beginCookViewSession,
     cookConfirmPrompt,
     confirmCookConfirmPrompt,
     declineCookConfirmPrompt,
@@ -601,18 +603,13 @@ export default function HomeScreen() {
         const resolved = await resolveRowBeforeUserAction(row);
         if (!resolved) return;
         logOpen(refKeyFromRecipesTabRow(resolved));
-        if (resolved.kind === 'kitchen') {
-          beginCookViewSession(
-            scheduleTargetFromRecipesTabRow(resolved, {
-              onOpenCookView: () => {},
-            }),
-          );
-        }
+        // FK3-3: just viewing a recipe must not start a cook session; only Cook this → Cook now
+        // (ScheduleRecipeSheet.openCookView) calls beginCookViewSession.
         setDetailInitialSection('ingredients');
         setPickedDetailRow(resolved);
       })();
     },
-    [beginCookViewSession, logOpen, resolveRowBeforeUserAction],
+    [logOpen, resolveRowBeforeUserAction],
   );
 
   const openSwapRecipe = useCallback(
@@ -670,11 +667,32 @@ export default function HomeScreen() {
     );
     if (fromFeed) return fromFeed;
     const kitchen = feedKitchenRecipes.find((recipe) => recipe.id === routeRecipeId);
-    if (!kitchen) return null;
-    const match = pantryRecipeMatches.byRecipeId.get(kitchen.id);
-    if (!match) return null;
-    return { kind: 'kitchen' as const, recipe: kitchen, match };
-  }, [feedKitchenRecipes, filterBaseRows, pantryRecipeMatches.byRecipeId, pickedDetailRow, routeRecipeId, viralOpenState]);
+    if (kitchen) {
+      const match = pantryRecipeMatches.byRecipeId.get(kitchen.id);
+      if (!match) return null;
+      return { kind: 'kitchen' as const, recipe: kitchen, match };
+    }
+    // FK3-5: Forky's quiz picks (guests) come from the built-in catalog, which is not in
+    // feedKitchenRecipes, so resolve the deep link from the same catalog the quiz uses.
+    const catalogRecipe =
+      catalogKitchenRecipes.find((recipe) => recipe.id === routeRecipeId) ??
+      kitchenRecipesForPantryMatch(accountRecipes).find((recipe) => recipe.id === routeRecipeId);
+    if (!catalogRecipe) return null;
+    const catalogMatch =
+      pantryRecipeMatches.byRecipeId.get(catalogRecipe.id) ??
+      scoreRecipeAgainstPantry(catalogRecipe, pantry);
+    return { kind: 'kitchen' as const, recipe: catalogRecipe, match: catalogMatch };
+  }, [
+    accountRecipes,
+    catalogKitchenRecipes,
+    feedKitchenRecipes,
+    filterBaseRows,
+    pantry,
+    pantryRecipeMatches.byRecipeId,
+    pickedDetailRow,
+    routeRecipeId,
+    viralOpenState,
+  ]);
 
   const { onHomeScroll } = useForkInRoadHomeIdle({ recipeDetailOpen: detailRow != null });
 

@@ -5,7 +5,8 @@ export type ForkinatorMascotTapAction =
   | 'dismissForkInRoadPrompt'
   | 'dismissAisleSortPrompt'
   | 'dismissScannerPrompt'
-  | 'toggleThinkingBubble';
+  /** No prompt visible: tapping Forky does nothing (thinking bubble removed). */
+  | 'none';
 
 export function resolveForkinatorMascotTapAction(input: {
   greetingPromptVisible: boolean;
@@ -21,5 +22,5 @@ export function resolveForkinatorMascotTapAction(input: {
   if (input.forkInRoadPromptVisible) return 'dismissForkInRoadPrompt';
   if (input.aisleSortPromptVisible) return 'dismissAisleSortPrompt';
   if (input.scannerPromptVisible) return 'dismissScannerPrompt';
-  return 'toggleThinkingBubble';
+  return 'none';
 }

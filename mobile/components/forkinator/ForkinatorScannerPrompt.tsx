@@ -9,10 +9,10 @@ import {
   SCANNER_PROMPT_FONT_SIZE,
   SCANNER_PROMPT_HORIZONTAL_PADDING,
   SCANNER_PROMPT_LINE_HEIGHT,
+  PROMPT_BUBBLE_TAIL_GAP,
   type ScannerPromptLayout,
   type ScannerPromptPlacement,
 } from '../../lib/forkinator/scannerPromptLayout';
-import { THINKING_BUBBLE_TAIL_GAP } from '../../lib/forkinator/thinkingBubbleLayout';
 
 const OUTLINE = '#D1D5DB';
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -36,14 +36,46 @@ type ForkinatorScannerPromptProps = {
 
 function TailCircles({ placement }: { placement: ScannerPromptPlacement }) {
   const sizes = [10, 7, 5];
+  if (placement === 'left' || placement === 'right') {
+    // Side cloud: tail runs horizontally toward Forky's head, biggest circle by the cloud.
+    const ordered = placement === 'left' ? sizes : [...sizes].reverse();
+    return (
+      <View
+        pointerEvents="none"
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          alignSelf: 'flex-start',
+          marginTop: 14,
+          marginLeft: placement === 'left' ? PROMPT_BUBBLE_TAIL_GAP : 0,
+          marginRight: placement === 'right' ? PROMPT_BUBBLE_TAIL_GAP : 0,
+        }}
+      >
+        {ordered.map((size, index) => (
+          <View
+            key={size}
+            style={{
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              backgroundColor: '#FFFFFF',
+              borderWidth: 1,
+              borderColor: OUTLINE,
+              marginLeft: index === 0 ? 0 : 3,
+            }}
+          />
+        ))}
+      </View>
+    );
+  }
   const isAbove = placement === 'above';
   return (
     <View
       pointerEvents="none"
       style={{
         alignItems: 'center',
-        marginTop: isAbove ? THINKING_BUBBLE_TAIL_GAP : 0,
-        marginBottom: isAbove ? 0 : THINKING_BUBBLE_TAIL_GAP,
+        marginTop: isAbove ? PROMPT_BUBBLE_TAIL_GAP : 0,
+        marginBottom: isAbove ? 0 : PROMPT_BUBBLE_TAIL_GAP,
         transform: isAbove ? undefined : [{ scaleY: -1 }],
       }}
     >
@@ -96,7 +128,9 @@ export function ForkinatorScannerPrompt({
 
   if (!visible) return null;
 
-  const cloudFirst = layout.placement === 'below';
+  const isSide = layout.placement === 'left' || layout.placement === 'right';
+  // Tail sits between the cloud and Forky: before the body when the cloud is below him or to his right.
+  const tailFirst = layout.placement === 'below' || layout.placement === 'right';
 
   const bodyStyle = {
     width: layout.bodyWidth,
@@ -177,10 +211,11 @@ export function ForkinatorScannerPrompt({
         top: layout.top,
         width: layout.width,
         opacity,
-        alignItems: 'center',
+        alignItems: isSide ? 'flex-start' : 'center',
+        flexDirection: isSide ? 'row' : 'column',
       }}
     >
-      {cloudFirst ? (
+      {tailFirst ? (
         <>
           <TailCircles placement={layout.placement} />
           {body}

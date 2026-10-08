@@ -64,6 +64,7 @@ import {
 } from '../lib/forkinator/scannerNudgeCooldown';
 import {
   layoutScannerPrompt,
+  PROMPT_BUBBLE_TAIL_HEIGHT,
   scannerPromptBodySize,
 } from '../lib/forkinator/scannerPromptLayout';
 import {
@@ -117,10 +118,6 @@ import {
 import type { PantryItem, Recipe } from '../types/mealprep';
 import type { RecipePantryMatch } from '../lib/recipeMatch';
 import {
-  layoutThinkingBubble,
-  THINKING_BUBBLE_TAIL_HEIGHT,
-} from '../lib/forkinator/thinkingBubbleLayout';
-import {
   FORKINATOR_TAP_MOVE_THRESHOLD_PX,
   isForkinatorTapRelease,
 } from '../lib/forkinator/tapGesture';
@@ -132,7 +129,7 @@ const mobileRoot = path.resolve(__dirname, '..');
 assert.ok(Math.abs(FORKINATOR_ASPECT_WIDTH_TO_HEIGHT - 44 / 120) < 0.001);
 assert.equal(FORKINATOR_WIDTH_PX, 44);
 assert.equal(FORKINATOR_HEIGHT_PX, 120);
-assert.equal(THINKING_BUBBLE_TAIL_HEIGHT, 28);
+assert.equal(PROMPT_BUBBLE_TAIL_HEIGHT, 28);
 assert.equal(FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS, 2000);
 assert.equal(FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS, 2000);
 assert.equal(FORKINATOR_GREETING_AUTO_HIDE_MS, 8000);
@@ -206,10 +203,9 @@ assert.equal(
   }),
   'dismissScannerPrompt',
 );
-assert.equal(resolveForkinatorMascotTapAction(tapNone), 'toggleThinkingBubble');
+assert.equal(resolveForkinatorMascotTapAction(tapNone), 'none', 'tap with no prompt does nothing (bubble removed)');
 
 const poseBase = {
-  thinkingVisible: false,
   expirationPromptVisible: false,
   restockPromptVisible: false,
   forkInRoadPromptVisible: false,
@@ -229,20 +225,10 @@ assert.equal(
   resolveForkinatorMascotPose({
     ...poseBase,
     expirationPromptVisible: true,
-    thinkingVisible: true,
     aisleSortPromptVisible: true,
     scannerPromptVisible: true,
   }),
   'sad',
-);
-assert.equal(
-  resolveForkinatorMascotPose({
-    ...poseBase,
-    thinkingVisible: true,
-    scannerPromptVisible: true,
-  }),
-  'idea',
-  'auto prompt pose beats manual thinking bubble',
 );
 assert.equal(
   resolveForkinatorMascotPose({
@@ -518,9 +504,67 @@ assert.equal(isForkinatorTapRelease(6, 0, 200), false);
 assert.equal(isForkinatorTapRelease(0, 0, 500), false);
 assert.equal(isForkinatorTapRelease(10, 0, 200), false, '10px move is a drag, not a tap');
 
-const aboveLayout = layoutThinkingBubble({
-  mascotX: 200,
-  mascotY: 200,
+// Text clouds sit fully above Forky's head or off to the side — never over his body — and stay
+// on-screen and clear of the tab bar wherever he is dragged.
+const promptMessages: { message: string; includeActionButton: boolean }[] = [
+  { message: FORKINATOR_GREETING_MESSAGE, includeActionButton: false },
+  { message: FORKINATOR_SCANNER_NUDGE_MESSAGE, includeActionButton: true },
+  { message: FORKINATOR_AISLE_SORT_MESSAGE, includeActionButton: true },
+  {
+    message: "You're running low on milk, eggs, and 1 more, so I added them to your grocery list.",
+    includeActionButton: true,
+  },
+  { message: 'That QA Milk and 1 more item are living on borrowed time!', includeActionButton: true },
+];
+for (const screen of [
+  { width: 390, height: 844, insetTop: 47, insetBottom: 34 },
+  { width: 320, height: 568, insetTop: 20, insetBottom: 0 },
+]) {
+  const maxX = screen.width - FORKINATOR_WIDTH_PX;
+  const maxY = screen.height - screen.insetBottom - FORKINATOR_TAB_BAR_HEIGHT_PX - FORKINATOR_HEIGHT_PX;
+  for (const fx of [0, 0.25, 0.5, 0.75, 1]) {
+    for (const fy of [0, 0.2, 0.5, 0.8, 1]) {
+      const mascotX = Math.round(maxX * fx);
+      const mascotY = Math.round(screen.insetTop + (maxY - screen.insetTop) * fy);
+      for (const variant of promptMessages) {
+        const layout = layoutScannerPrompt({
+          mascotX,
+          mascotY,
+          mascotWidth: FORKINATOR_WIDTH_PX,
+          mascotHeight: FORKINATOR_HEIGHT_PX,
+          screenWidth: screen.width,
+          screenHeight: screen.height,
+          insetTop: screen.insetTop,
+          insetRight: 0,
+          insetBottom: screen.insetBottom,
+          insetLeft: 0,
+          message: variant.message,
+          includeActionButton: variant.includeActionButton,
+        });
+        const where = `${screen.width}x${screen.height} mascot(${mascotX},${mascotY}) ${layout.placement}`;
+        const overlaps =
+          layout.left < mascotX + FORKINATOR_WIDTH_PX &&
+          layout.left + layout.width > mascotX &&
+          layout.top < mascotY + FORKINATOR_HEIGHT_PX &&
+          layout.top + layout.height > mascotY;
+        assert.ok(!overlaps, `cloud must not cover Forky: ${where}`);
+        assert.ok(layout.left >= 0 && layout.left + layout.width <= screen.width, `cloud on-screen x: ${where}`);
+        assert.ok(layout.top >= screen.insetTop, `cloud below status bar: ${where}`);
+        assert.ok(
+          layout.top + layout.height <=
+            screen.height - screen.insetBottom - FORKINATOR_TAB_BAR_HEIGHT_PX,
+          `cloud clears the tab bar: ${where}`,
+        );
+        if (layout.placement === 'above') {
+          assert.ok(layout.top + layout.height <= mascotY, `above cloud ends over his head: ${where}`);
+        }
+      }
+    }
+  }
+}
+const topLeftLayout = layoutScannerPrompt({
+  mascotX: 0,
+  mascotY: 47,
   mascotWidth: FORKINATOR_WIDTH_PX,
   mascotHeight: FORKINATOR_HEIGHT_PX,
   screenWidth: 390,
@@ -530,13 +574,34 @@ const aboveLayout = layoutThinkingBubble({
   insetBottom: 34,
   insetLeft: 0,
 });
-assert.equal(aboveLayout.placement, 'above');
-assert.ok(aboveLayout.top < 200, 'bubble should sit above mascot when room allows');
-assert.equal(
-  aboveLayout.top,
-  200 - aboveLayout.height - 6,
-  'bubble should respect mascot gap with corrected tail height',
-);
+assert.equal(topLeftLayout.placement, 'right', 'no room above at top-left → cloud flips to his right');
+const topRightLayout = layoutScannerPrompt({
+  mascotX: 390 - FORKINATOR_WIDTH_PX,
+  mascotY: 47,
+  mascotWidth: FORKINATOR_WIDTH_PX,
+  mascotHeight: FORKINATOR_HEIGHT_PX,
+  screenWidth: 390,
+  screenHeight: 844,
+  insetTop: 47,
+  insetRight: 0,
+  insetBottom: 34,
+  insetLeft: 0,
+});
+assert.equal(topRightLayout.placement, 'left', 'no room above at top-right → cloud flips to his left');
+const midLayout = layoutScannerPrompt({
+  mascotX: 200,
+  mascotY: 400,
+  mascotWidth: FORKINATOR_WIDTH_PX,
+  mascotHeight: FORKINATOR_HEIGHT_PX,
+  screenWidth: 390,
+  screenHeight: 844,
+  insetTop: 47,
+  insetRight: 0,
+  insetBottom: 34,
+  insetLeft: 0,
+});
+assert.equal(midLayout.placement, 'above');
+assert.equal(midLayout.top, 400 - midLayout.height - 6, 'above cloud keeps the mascot gap');
 
 const overlaysSource = fs.readFileSync(path.join(mobileRoot, 'components/AppOverlays.tsx'), 'utf8');
 assert.match(overlaysSource, /ForkinatorOverlay/, 'Forkinator should mount from AppOverlays');
@@ -606,23 +671,14 @@ assert.match(overlaySource, /FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS/, 'pro
 assert.match(overlaySource, /layoutScannerPrompt/, 'prompt follows mascot position');
 assert.match(overlaySource, /tabIndex: 0/, 'web mascot should be focusable');
 assert.match(overlaySource, /isForkinatorTapRelease/, 'tap should use movement threshold helper');
-assert.match(overlaySource, /setThinkingVisible/, 'tap should toggle thinking bubble when prompt hidden');
+assert.ok(!overlaySource.includes('setThinkingVisible'), 'tap-toggled thinking bubble was removed');
+assert.ok(!overlaySource.includes('ForkinatorThinkingBubble'), 'thinking bubble component is gone');
 assert.ok(!overlaySource.includes('Animated'), 'mascot overlay should stay unanimated');
 
-const bubbleSource = fs.readFileSync(
-  path.join(forkinatorDir, 'ForkinatorThinkingBubble.tsx'),
-  'utf8',
-);
-assert.match(bubbleSource, /Animated/, 'thinking bubble may animate');
-assert.match(bubbleSource, /pointerEvents="none"/, 'bubble should pass touches through');
-assert.match(bubbleSource, /ThinkingDots/, 'thinking bubble shows pulsing dots only');
-assert.match(bubbleSource, /reduceMotion/, 'bubble should respect reduce motion');
-assert.match(bubbleSource, /USE_NATIVE_DRIVER/, 'bubble should gate native driver on web');
 assert.ok(
-  !bubbleSource.includes('FORKINATOR_SCANNER_NUDGE_MESSAGE'),
-  'thinking bubble must not include scanner message text',
+  !fs.existsSync(path.join(forkinatorDir, 'ForkinatorThinkingBubble.tsx')),
+  'thinking bubble component deleted',
 );
-assert.ok(!bubbleSource.includes('tip'), 'bubble should not include tip copy');
 
 const promptSource = fs.readFileSync(path.join(forkinatorDir, 'ForkinatorScannerPrompt.tsx'), 'utf8');
 assert.match(promptSource, /message/);

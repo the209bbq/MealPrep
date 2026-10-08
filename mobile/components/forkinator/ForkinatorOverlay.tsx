@@ -99,7 +99,6 @@ import {
   FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS,
   isForkinatorTapRelease,
 } from '../../lib/forkinator/tapGesture';
-import { layoutThinkingBubble } from '../../lib/forkinator/thinkingBubbleLayout';
 import {
   forkinatorDragSurfaceWebStyle,
   forkinatorMascotImageWebStyle,
@@ -109,11 +108,10 @@ import {
   type ForkinatorMascotPose,
 } from '../../lib/forkinator/forkinatorPose';
 import { ForkinatorScannerPrompt } from './ForkinatorScannerPrompt';
-import { ForkinatorThinkingBubble } from './ForkinatorThinkingBubble';
 import { ForkInRoadQuizSheet } from './ForkInRoadQuizSheet';
 import {
   buildRestockReminderMessage,
-  planStapleRestockLines,
+  planStapleRestockLinesForCook,
   stapleDisplayNameForMessage,
 } from '../../lib/forkinator/restockReminders';
 import {
@@ -127,10 +125,7 @@ import {
   FORKINATOR_RESTOCK_UNDO_BUTTON_LABEL,
 } from '../../lib/forkinator/restockPromptCopy';
 import {
-  markForkInRoadPromptDismissed,
   markForkInRoadPromptEngaged,
-  markForkInRoadPromptShown,
-  shouldAutoShowForkInRoadPrompt,
 } from '../../lib/forkinator/forkInRoadPrompt';
 import {
   FORKINATOR_FORK_IN_ROAD_A11Y_LABEL,
@@ -138,13 +133,16 @@ import {
   FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL,
   FORKINATOR_FORK_IN_ROAD_MESSAGE,
 } from '../../lib/forkinator/forkInRoadPromptCopy';
-import { subscribeForkInRoadHomeIdleReady } from '../../lib/forkinator/forkInRoadIdle';
 import { buildForkInRoadCandidateRows } from '../../lib/forkinator/forkInRoadQuiz';
 import { filterRecipesTabRowsForDietPrefs } from '../../lib/diet/filterRows';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { readGuestPantry } from '../../lib/guest/localKitchenStore';
 import { readJson } from '../../lib/storage';
-import type { ForkinatorAutoPromptKind } from '../../lib/forkinator/forkinatorActivePrompt';
+import {
+  FORKINATOR_AUTO_PROMPT_PRIORITY,
+  shouldReplaceForkinatorAutoPrompt,
+  type ForkinatorAutoPromptKind,
+} from '../../lib/forkinator/forkinatorActivePrompt';
 import type { RecipesTabRow } from '../../config/recipesTabFilters';
 
 const FORKINATOR_MASCOT_POSE_SOURCES: Record<ForkinatorMascotPose, number> = {
@@ -187,6 +185,7 @@ export function ForkinatorOverlay() {
     pantryRecipeMatches,
     userDietPrefs,
     kitchenPantryReady,
+    mealMadeReview,
   } = useApp();
   const pantryForForkinator = useMemo(() => {
     if (!isGuest || pantry.length > 0) return pantry;
@@ -206,15 +205,17 @@ export function ForkinatorOverlay() {
     [authReady, demoMode, profile.plan, profile.role, profileReady, session],
   );
   const [position, setPosition] = useState<ForkinatorPosition | null>(null);
-  const [thinkingVisible, setThinkingVisible] = useState(false);
   const [greetingPromptVisible, setGreetingPromptVisible] = useState(false);
   const [scannerPromptVisible, setScannerPromptVisible] = useState(false);
   const [expirationPromptVisible, setExpirationPromptVisible] = useState(false);
   const [aisleSortPromptVisible, setAisleSortPromptVisible] = useState(false);
   const [restockPromptVisible, setRestockPromptVisible] = useState(false);
   const [restockPromptMessage, setRestockPromptMessage] = useState('');
-  const [restockUndoLines, setRestockUndoLines] = useState<{ name: string; unit: string }[]>([]);
-  const [forkInRoadPromptVisible, setForkInRoadPromptVisible] = useState(false);
+  const [restockUndoLines, setRestockUndoLines] = useState<
+    { id: string | null; name: string; unit: string }[]
+  >([]);
+  /** Fork in the road is persistent on Home; this only closes it for the current visit. */
+  const [forkInRoadDismissedThisVisit, setForkInRoadDismissedThisVisit] = useState(false);
   const [forkInRoadQuizVisible, setForkInRoadQuizVisible] = useState(false);
   const [expirationPromptItems, setExpirationPromptItems] = useState<PantryItem[]>([]);
   const [tipsAutoShowEpoch, setTipsAutoShowEpoch] = useState(0);
@@ -236,18 +237,43 @@ export function ForkinatorOverlay() {
   const restockPromptVisibleRef = useRef(false);
   const forkInRoadPromptVisibleRef = useRef(false);
   const sessionAutoPromptShownRef = useRef(false);
+  /** Auto-prompt whose timer is scheduled but not fired yet (FK3-7). */
+  const pendingAutoPromptKindRef = useRef<ForkinatorAutoPromptKind | null>(null);
   const restockHandledForCookRef = useRef(false);
   const aisleCheckedOnPathRef = useRef(false);
 
-  const showAutoPrompt = useCallback((kind: ForkinatorAutoPromptKind) => {
-    setThinkingVisible(false);
+  const visibleAutoPromptKind = useCallback((): ForkinatorAutoPromptKind | null => {
+    if (greetingPromptVisibleRef.current) return 'greeting';
+    if (expirationPromptVisibleRef.current) return 'expiration';
+    if (restockPromptVisibleRef.current) return 'restock';
+    if (aisleSortPromptVisibleRef.current) return 'aisleSort';
+    if (scannerPromptVisibleRef.current) return 'scanner';
+    if (forkInRoadPromptVisibleRef.current) return 'forkInRoad';
+    return null;
+  }, []);
+
+  /**
+   * Show one auto prompt. A lower-priority prompt never replaces a visible higher one
+   * (FK3-7); `force` is for prompts caused by the user's own action (restock after cooking).
+   */
+  const showAutoPrompt = useCallback((kind: ForkinatorAutoPromptKind, options?: { force?: boolean }) => {
+    const current = visibleAutoPromptKind();
+    if (
+      !options?.force &&
+      current &&
+      current !== kind &&
+      !shouldReplaceForkinatorAutoPrompt(current, kind)
+    ) {
+      return false;
+    }
     const setters: Record<ForkinatorAutoPromptKind, (v: boolean) => void> = {
       greeting: setGreetingPromptVisible,
       expiration: setExpirationPromptVisible,
       restock: setRestockPromptVisible,
       aisleSort: setAisleSortPromptVisible,
       scanner: setScannerPromptVisible,
-      forkInRoad: setForkInRoadPromptVisible,
+      // Fork in the road is derived (always on while on Home); it is never auto-scheduled.
+      forkInRoad: () => {},
     };
     const setter = setters[kind];
     setGreetingPromptVisible(false);
@@ -255,10 +281,15 @@ export function ForkinatorOverlay() {
     setRestockPromptVisible(false);
     setAisleSortPromptVisible(false);
     setScannerPromptVisible(false);
-    setForkInRoadPromptVisible(false);
     setter(true);
+    greetingPromptVisibleRef.current = kind === 'greeting';
+    expirationPromptVisibleRef.current = kind === 'expiration';
+    restockPromptVisibleRef.current = kind === 'restock';
+    aisleSortPromptVisibleRef.current = kind === 'aisleSort';
+    scannerPromptVisibleRef.current = kind === 'scanner';
     sessionAutoPromptShownRef.current = true;
-  }, []);
+    return true;
+  }, [visibleAutoPromptKind]);
 
   const bounds: ForkinatorBounds = useMemo(
     () => ({
@@ -309,10 +340,6 @@ export function ForkinatorOverlay() {
     restockPromptVisibleRef.current = restockPromptVisible;
   }, [restockPromptVisible]);
 
-  useEffect(() => {
-    forkInRoadPromptVisibleRef.current = forkInRoadPromptVisible;
-  }, [forkInRoadPromptVisible]);
-
   const openGroceryCount = useMemo(() => grocery.filter((item) => !item.checked).length, [grocery]);
   const groceryCombineByAisle = readGroceryCombinePreference();
   const showMealGrouping = hasMealPlanGroceryGrouping(mealPlan);
@@ -348,14 +375,14 @@ export function ForkinatorOverlay() {
       scannerAutoShowStartedRef.current = false;
       blockScannerThisSessionRef.current = false;
       sessionAutoPromptShownRef.current = false;
+      pendingAutoPromptKindRef.current = null;
       aisleCheckedOnPathRef.current = false;
-      setThinkingVisible(false);
       setGreetingPromptVisible(false);
       setScannerPromptVisible(false);
       setExpirationPromptVisible(false);
       setAisleSortPromptVisible(false);
       setRestockPromptVisible(false);
-      setForkInRoadPromptVisible(false);
+      setForkInRoadDismissedThisVisit(false);
       setForkInRoadQuizVisible(false);
       setExpirationPromptItems([]);
       setRestockPromptMessage('');
@@ -375,10 +402,12 @@ export function ForkinatorOverlay() {
       if (greetingAutoShowStartedRef.current) return;
       greetingAutoShowStartedRef.current = true;
       blockScannerThisSessionRef.current = true;
+      pendingAutoPromptKindRef.current = 'greeting';
       autoShowPromptTimerRef.current = setTimeout(() => {
         autoShowPromptTimerRef.current = null;
-        markForkinatorGreetingShown();
-        showAutoPrompt('greeting');
+        pendingAutoPromptKindRef.current = null;
+        if (sessionAutoPromptShownRef.current) return;
+        if (showAutoPrompt('greeting')) markForkinatorGreetingShown();
       }, FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS);
       return;
     }
@@ -387,11 +416,15 @@ export function ForkinatorOverlay() {
     if (expirationPlan.show) {
       if (expirationAutoShowStartedRef.current) return;
       expirationAutoShowStartedRef.current = true;
+      pendingAutoPromptKindRef.current = 'expiration';
       autoShowPromptTimerRef.current = setTimeout(() => {
         autoShowPromptTimerRef.current = null;
+        pendingAutoPromptKindRef.current = null;
+        if (sessionAutoPromptShownRef.current) return;
         setExpirationPromptItems(expirationPlan.items);
-        markForkinatorExpirationPromptShown(expirationPlan.items.map((item) => item.id));
-        showAutoPrompt('expiration');
+        if (showAutoPrompt('expiration')) {
+          markForkinatorExpirationPromptShown(expirationPlan.items.map((item) => item.id));
+        }
       }, delay);
       return;
     }
@@ -401,12 +434,14 @@ export function ForkinatorOverlay() {
     if (!shouldAutoShowForkinatorScannerPrompt(readForkinatorHasScanned())) return;
 
     scannerAutoShowStartedRef.current = true;
+    pendingAutoPromptKindRef.current = 'scanner';
     autoShowPromptTimerRef.current = setTimeout(() => {
       autoShowPromptTimerRef.current = null;
+      pendingAutoPromptKindRef.current = null;
       if (blockScannerThisSessionRef.current) return;
+      if (sessionAutoPromptShownRef.current) return;
       if (!shouldAutoShowForkinatorScannerPrompt(readForkinatorHasScanned())) return;
-      markForkinatorScannerNudgeShown();
-      showAutoPrompt('scanner');
+      if (showAutoPrompt('scanner')) markForkinatorScannerNudgeShown();
     }, delay);
   }, [kitchenPantryReady, mascotReady, pantryForForkinator, showAutoPrompt, tipsAutoShowEpoch]);
 
@@ -418,6 +453,14 @@ export function ForkinatorOverlay() {
     if (!mascotReady || !kitchenPantryReady) return;
     if (sessionAutoPromptShownRef.current) return;
     if (aisleCheckedOnPathRef.current) return;
+    const pendingKind = pendingAutoPromptKindRef.current;
+    if (
+      pendingKind &&
+      FORKINATOR_AUTO_PROMPT_PRIORITY[pendingKind] > FORKINATOR_AUTO_PROMPT_PRIORITY.aisleSort
+    ) {
+      // Greeting/expiration is about to show; don't burn aisle's once-a-day slot (FK3-7).
+      return;
+    }
     const aisleEligible = shouldAutoShowForkinatorAisleSortPrompt({
       openGroceryItemCount: openGroceryCount,
       showMealGrouping,
@@ -434,8 +477,7 @@ export function ForkinatorOverlay() {
       return;
     }
     aisleCheckedOnPathRef.current = true;
-    markForkinatorAisleSortPromptShown();
-    showAutoPrompt('aisleSort');
+    if (showAutoPrompt('aisleSort')) markForkinatorAisleSortPromptShown();
   }, [
     groceryCombineByAisle,
     isGroceryScreen,
@@ -446,11 +488,21 @@ export function ForkinatorOverlay() {
     showAutoPrompt,
   ]);
 
+  // FK3-8: aisle and fork-in-the-road prompts belong to their own screens, and the Made-it
+  // review sheet counts as busy (adjusted during render, not in an effect).
+  const mealMadeReviewOpen = mealMadeReview != null;
+  if (aisleSortPromptVisible && !isGroceryScreen) {
+    setAisleSortPromptVisible(false);
+  }
+  // Leaving Home ends the visit, so a "close for now" doesn't carry over to the next visit.
+  if (!isHomeScreen && forkInRoadDismissedThisVisit) {
+    setForkInRoadDismissedThisVisit(false);
+  }
+
   useEffect(() => {
     if (!greetingPromptVisible) return;
     setAisleSortPromptVisible(false);
     setScannerPromptVisible(false);
-    setThinkingVisible(false);
   }, [greetingPromptVisible]);
 
   useEffect(() => {
@@ -468,22 +520,28 @@ export function ForkinatorOverlay() {
     if (restockHandledForCookRef.current) return;
     restockHandledForCookRef.current = true;
 
-    const lines = planStapleRestockLines(payload.nextPantry, grocery);
+    const lines = planStapleRestockLinesForCook(
+      payload.nextPantry,
+      payload.deductedPantryRows ?? [],
+      grocery,
+    );
     if (lines.length === 0) return;
 
+    const undoLines: { id: string | null; name: string; unit: string }[] = [];
     for (const line of lines) {
-      await addManualGroceryItem({
+      const id = await addManualGroceryItem({
         name: line.name,
         quantity: line.quantity,
         unit: line.unit,
         category: line.category,
       });
+      undoLines.push({ id, name: line.name, unit: line.unit });
     }
 
     const messageNames = lines.map((line) => stapleDisplayNameForMessage(line.stapleId, line.name));
-    setRestockUndoLines(lines.map((line) => ({ name: line.name, unit: line.unit })));
+    setRestockUndoLines(undoLines);
     setRestockPromptMessage(buildRestockReminderMessage(messageNames));
-    showAutoPrompt('restock');
+    showAutoPrompt('restock', { force: true });
   }, [addManualGroceryItem, grocery, showAutoPrompt]);
 
   useEffect(() => {
@@ -510,41 +568,32 @@ export function ForkinatorOverlay() {
     return filterRecipesTabRowsForDietPrefs(rows, userDietPrefs);
   }, [feedKitchenRecipes, pantryRecipeMatches, recipes, userDietPrefs]);
 
-  const tryShowForkInRoadPrompt = useCallback(() => {
-    if (!mascotReady || !isHomeScreen) return;
-    if (greetingPromptVisibleRef.current) return;
-    if (expirationPromptVisibleRef.current) return;
-    if (restockPromptVisibleRef.current) return;
-    if (aisleSortPromptVisibleRef.current) return;
-    if (scannerPromptVisibleRef.current) return;
-    if (forkInRoadPromptVisibleRef.current) return;
-    if (!shouldAutoShowForkInRoadPrompt()) return;
-    if (forkInRoadCandidateRows.length === 0) return;
-    markForkInRoadPromptShown();
-    showAutoPrompt('forkInRoad');
-  }, [forkInRoadCandidateRows.length, isHomeScreen, mascotReady, showAutoPrompt]);
+  /**
+   * Fork in the road (meal suggestions) stays up the whole time the user is on Home/recipes:
+   * no idle wait, daily limit, or dismissal cooldown. It yields to any other prompt, hides
+   * while the Made-it review or the quiz is open, and leaving Home hides it.
+   */
+  const forkInRoadPromptVisible =
+    mascotReady &&
+    isHomeScreen &&
+    !mealMadeReviewOpen &&
+    !forkInRoadQuizVisible &&
+    !forkInRoadDismissedThisVisit &&
+    !greetingPromptVisible &&
+    !expirationPromptVisible &&
+    !restockPromptVisible &&
+    !aisleSortPromptVisible &&
+    !scannerPromptVisible &&
+    forkInRoadCandidateRows.length > 0;
 
   useEffect(() => {
-    return subscribeForkInRoadHomeIdleReady(() => {
-      tryShowForkInRoadPrompt();
-    });
-  }, [tryShowForkInRoadPrompt]);
+    forkInRoadPromptVisibleRef.current = forkInRoadPromptVisible;
+  }, [forkInRoadPromptVisible]);
 
-  const thinkingLayout = useMemo(() => {
-    if (!position) return null;
-    return layoutThinkingBubble({
-      mascotX: position.x,
-      mascotY: position.y,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
-      screenWidth: width,
-      screenHeight: height,
-      insetTop: insets.top,
-      insetRight: insets.right,
-      insetBottom: insets.bottom,
-      insetLeft: insets.left,
-    });
-  }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
+  const dismissForkInRoadForVisit = useCallback(() => {
+    forkInRoadPromptVisibleRef.current = false;
+    setForkInRoadDismissedThisVisit(true);
+  }, []);
 
   const greetingPromptLayout = useMemo(() => {
     if (!position) return null;
@@ -708,6 +757,12 @@ export function ForkinatorOverlay() {
 
   const handleRestockUndoPress = useCallback(() => {
     for (const target of restockUndoLines) {
+      // FK3-6: remove exactly the row Forky added, by id (server id once saved). If a list
+      // refresh dropped it from memory, removeGroceryItem still deletes it on the server.
+      if (target.id) {
+        removeGroceryItem(target.id);
+        continue;
+      }
       const normalized = target.name.trim().toLowerCase();
       const row = grocery.find(
         (item) =>
@@ -722,7 +777,6 @@ export function ForkinatorOverlay() {
   }, [grocery, removeGroceryItem, restockUndoLines]);
 
   const handleForkInRoadHelpPress = useCallback(() => {
-    setForkInRoadPromptVisible(false);
     markForkInRoadPromptEngaged();
     setForkInRoadQuizVisible(true);
   }, []);
@@ -754,8 +808,7 @@ export function ForkinatorOverlay() {
       return;
     }
     if (action === 'dismissForkInRoadPrompt') {
-      markForkInRoadPromptDismissed();
-      setForkInRoadPromptVisible(false);
+      dismissForkInRoadForVisit();
       return;
     }
     if (action === 'dismissAisleSortPrompt') {
@@ -766,8 +819,9 @@ export function ForkinatorOverlay() {
       setScannerPromptVisible(false);
       return;
     }
-    setThinkingVisible((show) => !show);
-  }, []);
+    // No active prompt: tapping Forky does nothing for now (the tap-for-a-tip bubble was
+    // removed; it may come back later as a real tip).
+  }, [dismissForkInRoadForVisit]);
 
   const applyDragDelta = useCallback(
     (dx: number, dy: number) => {
@@ -913,7 +967,6 @@ export function ForkinatorOverlay() {
   const webDragStyle = forkinatorDragSurfaceWebStyle();
   const imageWebStyle = forkinatorMascotImageWebStyle();
   const mascotPose = resolveForkinatorMascotPose({
-    thinkingVisible,
     expirationPromptVisible,
     restockPromptVisible,
     forkInRoadPromptVisible,
@@ -1026,10 +1079,7 @@ export function ForkinatorOverlay() {
           reduceMotion={reduceMotion}
           message={FORKINATOR_FORK_IN_ROAD_MESSAGE}
           accessibilityLabel={FORKINATOR_FORK_IN_ROAD_A11Y_LABEL}
-          onPress={() => {
-            markForkInRoadPromptDismissed();
-            setForkInRoadPromptVisible(false);
-          }}
+          onPress={dismissForkInRoadForVisit}
           actionButton={{
             label: FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL,
             accessibilityLabel: FORKINATOR_FORK_IN_ROAD_BUTTON_A11Y_LABEL,
@@ -1061,13 +1111,6 @@ export function ForkinatorOverlay() {
             onPress: handleScannerCameraPress,
             icon: 'camera',
           }}
-        />
-      ) : null}
-      {thinkingLayout ? (
-        <ForkinatorThinkingBubble
-          layout={thinkingLayout}
-          visible={thinkingVisible && !forkInRoadPromptVisible}
-          reduceMotion={reduceMotion}
         />
       ) : null}
       <ForkInRoadQuizSheet

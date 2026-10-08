@@ -61,6 +61,30 @@ export function groceryListForServerSync(items: GroceryListItem[]): GroceryListI
   return items.filter((item) => !isManualGroceryLocalId(item.id) || isPersistedGroceryUuid(item.id));
 }
 
+/**
+ * Like `groceryListForServerSync`, but resolved when the queued sync actually runs: a manual
+ * row that was still local when the list was built is swapped for its saved server row, so a
+ * full-list replace never deletes a manual add (e.g. Forky's restock) that finished saving in
+ * the meantime (FK3-6).
+ */
+export function resolveGroceryListForServerSync(
+  items: GroceryListItem[],
+  savedManualByLocalId: ReadonlyMap<string, GroceryListItem>,
+): GroceryListItem[] {
+  const out: GroceryListItem[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    let row: GroceryListItem | undefined = item;
+    if (isManualGroceryLocalId(item.id) && !isPersistedGroceryUuid(item.id)) {
+      row = savedManualByLocalId.get(item.id);
+    }
+    if (!row || seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
+
 /** Keep in-flight manual rows when a full-list sync returns without them. */
 export function mergeServerGroceryWithPendingManual(
   current: GroceryListItem[],

@@ -29,7 +29,7 @@ function keysOverlap(ingKeys: string[], pantryKeys: string[]): boolean {
   return false;
 }
 
-function isEggComponentIngredient(name: string): boolean {
+export function isEggComponentIngredient(name: string): boolean {
   const normalized = normalizeIngredientName(name);
   if (!normalized) return false;
   if (normalized === 'egg' || normalized === 'eggs') return true;
@@ -42,7 +42,7 @@ function isEggComponentIngredient(name: string): boolean {
   );
 }
 
-function isEggsPantryStapleRow(item: PantryItem): boolean {
+export function isEggsPantryStapleRow(item: PantryItem): boolean {
   if (item.ingredientId.startsWith('staple-eggs')) return true;
   const name = normalizeIngredientName(item.name);
   return name === 'eggs' || name === 'egg';
