@@ -9,7 +9,7 @@ import type { DeliveryServiceId } from './smartShopChains';
  */
 export const DELIVERY_URL_TEMPLATES = {
   instacart: {
-    label: 'Order on Instacart',
+    label: 'Open Instacart',
     /** Keyword search when no slug: https://www.instacart.com/store/s?k=... */
     searchTemplate: 'https://www.instacart.com/store/s?k={query}',
     /** Known chain: https://www.instacart.com/store/{slug} */
@@ -18,7 +18,7 @@ export const DELIVERY_URL_TEMPLATES = {
     listOrderTemplate: 'https://www.instacart.com/store/s?k=grocery',
   },
   doordash: {
-    label: 'Order on DoorDash',
+    label: 'Open DoorDash',
     /** https://www.doordash.com/search/store/{name}/ */
     searchTemplate: 'https://www.doordash.com/search/store/{query}/',
     listOrderTemplate: 'https://www.doordash.com/search/store/grocery/',

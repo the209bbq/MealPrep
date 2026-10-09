@@ -51,8 +51,8 @@ export function OrderListDeliveryButtons({
 }) {
   return (
     <View className="mt-3 flex-row flex-wrap gap-2">
-      <DeliveryChip label="Order this list on Instacart" onPress={() => onOrder('instacart')} />
-      <DeliveryChip label="Order this list on DoorDash" onPress={() => onOrder('doordash')} />
+      <DeliveryChip label="Open Instacart for this list" onPress={() => onOrder('instacart')} />
+      <DeliveryChip label="Open DoorDash for this list" onPress={() => onOrder('doordash')} />
     </View>
   );
 }
