@@ -9,6 +9,7 @@ import {
   fetchCreatorList,
 } from '../creatorVideos/client';
 import { compareCreatorsByFitAndSubscribers } from '../creatorVideos/fitOrder';
+import { selectCreatorPrefetchChannelIds } from '../creatorVideos/prefetchSelection';
 import { fetchMealDbCategoryFeedRows } from './categories';
 
 export interface HomeRecipePrefetchInput {
@@ -60,10 +61,10 @@ export async function runHomeRecipePrefetch(input: HomeRecipePrefetchInput): Pro
       const sorted = [...creators].sort(compareCreatorsByFitAndSubscribers);
       await fetchCreatorFeed('popular', input.accessToken);
 
-      const channelIds =
-        input.creatorChannelIds?.length
-          ? input.creatorChannelIds
-          : sorted.slice(0, 3).map((row) => row.youtubeChannelId);
+      const channelIds = selectCreatorPrefetchChannelIds(
+        input.creatorChannelIds,
+        sorted.map((row) => row.youtubeChannelId),
+      );
 
       await mapWithConcurrency(channelIds, 2, async (channelId) => {
         if (generation !== prefetchGeneration || !channelId) return;
