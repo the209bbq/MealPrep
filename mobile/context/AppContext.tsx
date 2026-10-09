@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { isUserPlan, type UserPlan } from '../config/plans';
 import { useHydrated } from '../hooks/useHydrated';
 import { useHydrationGatedPersist } from '../hooks/useHydrationGatedPersist';
 import {
@@ -510,6 +511,10 @@ interface AppContextValue {
   };
   openAuthSheet: () => void;
   openAccountSheet: () => void;
+  /** Re-reads only the signed-in user's plan (after checkout or billing changes). */
+  refreshProfilePlan: () => Promise<UserPlan | null>;
+  /** Shows a short message in the toast area with no Undo. */
+  showNotice: (message: string) => void;
   saveProfileSetup: (patch: {
     name?: string;
     homeZip?: string;
@@ -1339,6 +1344,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     closeAccountSheet();
   }, [closeAccountSheet, profile.id, supabase, userId]);
+
+  const refreshProfilePlan = useCallback(async (): Promise<UserPlan | null> => {
+    if (!supabase || !userId) return null;
+    const { data, error } = await supabase.from('profiles').select('plan').eq('id', userId).maybeSingle();
+    const next = (data as { plan?: unknown } | null)?.plan;
+    if (error || typeof next !== 'string' || !isUserPlan(next)) return null;
+    setLiveProfile((prev) => (prev && prev.plan !== next ? { ...prev, plan: next } : prev));
+    return next;
+  }, [supabase, userId]);
+
+  const showNotice = useCallback((message: string) => {
+    setUndoToast({ message, showUndo: false, onUndo: () => setUndoToast(null) });
+  }, []);
 
   const deleteAccount = useCallback(async () => {
     await deleteUserAccount();
@@ -3254,6 +3272,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       uploadProfilePhoto,
       removeProfilePhoto,
       deleteAccount,
+      refreshProfilePlan,
+      showNotice,
       completePostSignupSetup,
     }),
     [
@@ -3369,6 +3389,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       uploadProfilePhoto,
       removeProfilePhoto,
       deleteAccount,
+      refreshProfilePlan,
+      showNotice,
       completePostSignupSetup,
     ],
   );
