@@ -258,4 +258,11 @@ export interface ThemeTokens {
   successAccent: string;
   onSuccess: string;
   danger: string;
+  tomato: string;
+  tomatoDark: string;
+  tomatoLight: string;
+  onTomato: string;
+  warning: string;
+  warningLight: string;
+  onWarning: string;
 }

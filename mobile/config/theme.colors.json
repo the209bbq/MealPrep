@@ -18,5 +18,12 @@
   "successLight": "#D1FAE5",
   "successAccent": "#059669",
   "onSuccess": "#FFFFFF",
-  "danger": "#B91C1C"
+  "danger": "#B91C1C",
+  "tomato": "#C9431F",
+  "tomatoDark": "#A83616",
+  "tomatoLight": "#FBE6DD",
+  "onTomato": "#FFFFFF",
+  "warning": "#E9B23B",
+  "warningLight": "#FBEBC2",
+  "onWarning": "#5C3D00"
 }
