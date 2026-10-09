@@ -90,12 +90,9 @@ function writeManifest() {
         text: 'text',
         url: 'url',
       },
-      files: [
-        {
-          name: 'media',
-          accept: ['video/mp4', 'video/quicktime', 'video/webm', 'image/jpeg', 'image/png', 'image/webp'],
-        },
-      ],
+      // No `files` entry: browsers only deliver shared files over POST multipart, which this GET
+      // target cannot receive. Links and text still share in. Add file sharing back together
+      // with a POST handler in the service worker.
     },
     icons: [
       { src: webPath('/icons/icon-192.png'), sizes: '192x192', type: 'image/png', purpose: 'any' },
