@@ -93,6 +93,8 @@ import {
   writePantryStaplesPromptDismissed,
 } from '../../config/pantryStaples';
 import { PantryAddStaplesLink } from '../../components/pantry/PantryAddStaplesLink';
+import { PantryBarcodeLookup } from '../../components/pantry/PantryBarcodeLookup';
+import { suggestedPantryName } from '../../lib/openFoodFacts/client';
 import { PantryStaplesInviteCard } from '../../components/pantry/PantryStaplesInviteCard';
 import { addDaysToIsoDate, todayIsoDate } from '../../lib/pantry/expiry';
 import { STAPLE_EXPIRY_QUICK_CHIPS } from '../../lib/pantry/stapleCatalog';
@@ -1107,6 +1109,14 @@ export default function PantryScreen() {
         <View className="flex-1 justify-end bg-black/40">
           <View className="rounded-t-3xl border border-border bg-paper px-4 pb-8 pt-4">
             <Text className="text-lg font-bold text-ink">{editItem ? 'Edit item' : 'Add item'}</Text>
+            {!editItem ? (
+              <PantryBarcodeLookup
+                onProductFound={(product) => {
+                  setManualName(suggestedPantryName(product));
+                  setFormError(null);
+                }}
+              />
+            ) : null}
             <TextInput
               value={manualName}
               onChangeText={setManualName}
