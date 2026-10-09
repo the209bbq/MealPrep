@@ -16,6 +16,8 @@ import { InstallAppBanner } from '../../components/InstallAppBanner';
 import { CookConfirmBanner } from '../../components/home/CookConfirmBanner';
 import { HomeRecipesRefreshButton } from '../../components/home/HomeRecipesRefreshButton';
 import { HomePantryCta } from '../../components/home/HomePantryCta';
+import { HomeForkyCard } from '../../components/home/HomeForkyCard';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import { HomeHubSheet } from '../../components/home/HomeHubSheet';
 import { Card } from '../../components/Card';
 import { RecipeDetailSheet } from '../../components/recipes/RecipeDetailSheet';
@@ -428,6 +430,10 @@ export default function HomeScreen() {
     () => Boolean(sharedImportText.trim()) && params.import === '1',
     [params.import, sharedImportText],
   );
+
+  /** Recipe import sits behind a button on Home; a shared link or text opens it straight away. */
+  const [importOpen, setImportOpen] = useState(false);
+  const importExpanded = importOpen || Boolean(sharedImportText.trim());
 
   const pantryEmpty = profileReady && pantry.length === 0;
   const showHomePantryCta = showCreatorCatalogSections && !searching && profileReady && pantryEmpty;
@@ -1031,18 +1037,13 @@ export default function HomeScreen() {
           Demo mode — local data only until you sign in with a connected account.
         </Text>
       ) : null}
-      <Card
-        className="mt-4"
-        title={creatorFeedEnabled ? undefined : RECIPES_COPY.cookNowCard.title}
-        subtitle={
-          creatorFeedEnabled
-            ? RECIPES_COPY.homeToolbarCard.subtitle
-            : RECIPES_COPY.cookNowCard.subtitle
-        }
-        subtitleClassName={
-          creatorFeedEnabled ? 'mt-1 text-base text-muted' : undefined
-        }
+      <Text
+        accessibilityRole="header"
+        className="mt-5 text-[28px] font-extrabold leading-8 text-ink"
       >
+        {RECIPES_COPY.homeHeading}
+      </Text>
+      <View className="mt-3">
         {selectedCreator ? (
           <Pressable
             onPress={() => setSelectedCreator(null)}
@@ -1059,31 +1060,71 @@ export default function HomeScreen() {
         {activeCreator && selectedCreator && activeCreatorWebsite ? (
           <CreatorRecipeWebsiteLink website={activeCreatorWebsite} />
         ) : null}
-        <View className="mt-2 min-w-0 flex-row items-center gap-1.5">
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder={
-              creatorFeedEnabled
-                ? CREATOR_RECIPES_COPY.searchPlaceholder
-                : RECIPES_COPY.discoveryPanel.searchPlaceholder
-            }
-            placeholderTextColor={THEME.muted}
-            className="min-w-0 flex-1 rounded-xl border border-border bg-card px-3 py-2.5 text-base text-ink"
+        <View className="min-w-0 flex-row items-center gap-1.5">
+          <View
+            className="min-h-[48px] min-w-0 flex-1 flex-row items-center gap-2 rounded-full border border-border bg-card px-4"
             style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            accessibilityLabel="Search recipes"
-          />
+          >
+            <Ionicons name="search" size={18} color={THEME.muted} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder={
+                creatorFeedEnabled
+                  ? CREATOR_RECIPES_COPY.searchPlaceholder
+                  : RECIPES_COPY.discoveryPanel.searchPlaceholder
+              }
+              placeholderTextColor={THEME.muted}
+              className="min-w-0 flex-1 py-2.5 text-base text-ink"
+              style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="Search recipes"
+            />
+          </View>
           {creatorFeedEnabled && !searching ? (
             <CreatorRecipesFeedModeDropdown value={feedMode} onChange={handleFeedModeChange} />
           ) : null}
         </View>
-        <RecipeImportFromShareParams
-          url={typeof params.url === 'string' ? params.url : undefined}
-          text={typeof params.text === 'string' ? params.text : undefined}
-          autoRun={autoStartSharedImport}
-        />
+        {!searching && !selectedCreator ? <HomeForkyCard /> : null}
+        <Pressable
+          onPress={() => setImportOpen((open) => !open)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: importExpanded }}
+          accessibilityLabel={
+            importExpanded ? RECIPES_COPY.homeImport.close : RECIPES_COPY.homeImport.open
+          }
+          className="mt-3 min-h-[44px] flex-row items-center justify-center gap-2 self-start rounded-full border border-primary bg-card px-4"
+        >
+          <Ionicons
+            name={importExpanded ? 'chevron-up' : 'add'}
+            size={18}
+            color={THEME.primary}
+          />
+          <Text className="text-sm font-bold text-primary">
+            {importExpanded ? RECIPES_COPY.homeImport.close : RECIPES_COPY.homeImport.open}
+          </Text>
+        </Pressable>
+        {importExpanded ? (
+          <Card
+            className="mt-2"
+            title={creatorFeedEnabled ? undefined : RECIPES_COPY.cookNowCard.title}
+            subtitle={
+              creatorFeedEnabled
+                ? RECIPES_COPY.homeToolbarCard.subtitle
+                : RECIPES_COPY.cookNowCard.subtitle
+            }
+            subtitleClassName={
+              creatorFeedEnabled ? 'mt-1 text-base text-muted' : undefined
+            }
+          >
+            <RecipeImportFromShareParams
+              url={typeof params.url === 'string' ? params.url : undefined}
+              text={typeof params.text === 'string' ? params.text : undefined}
+              autoRun={autoStartSharedImport}
+            />
+          </Card>
+        ) : null}
         {showLegacyKitchenFeed ? (
           <RecipesTabFilterBar
             baseRows={filterBaseRows}
@@ -1110,7 +1151,7 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
         ) : null}
-      </Card>
+      </View>
 
       {listLoading ? (
         <View className="mt-4 flex-row items-center gap-2">

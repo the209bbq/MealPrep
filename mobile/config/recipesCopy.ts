@@ -7,7 +7,19 @@ export type RecipesPantryFilterCopyId = 'best_match' | 'have_all' | 'missing_1_2
 export const RECIPES_COPY = {
   mealsOnHomeLink: (count: number) => `Meals to make on Home (${count})`,
 
-  /** Top line on the Home recipe toolbar when the creator feed is enabled. */
+  /** Heading at the top of Home. */
+  homeHeading: 'What’s for dinner?',
+  /** Forky's card on Home; the button opens the "Can't decide?" quiz. */
+  homeForkyCard: {
+    body: 'Can’t decide? Answer three quick questions and I’ll pick dinner.',
+    button: 'Help me pick',
+  },
+  /** Button that shows or hides the recipe import box on Home. */
+  homeImport: {
+    open: 'Import a recipe',
+    close: 'Hide recipe import',
+  },
+  /** Top line of the Home recipe import box when the creator feed is enabled. */
   homeToolbarCard: {
     subtitle:
       'Paste a video link or recipe text — or tap 📷 to snap a cookbook, magazine, or recipe card.',
