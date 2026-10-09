@@ -135,6 +135,7 @@ import {
 } from '../../lib/forkinator/forkInRoadPrompt';
 import { FORKINATOR_FORK_IN_ROAD_MESSAGE } from '../../lib/forkinator/forkInRoadPromptCopy';
 import { buildForkInRoadCandidateRows } from '../../lib/forkinator/forkInRoadQuiz';
+import { subscribeForkInRoadQuizRequest } from '../../lib/forkinator/forkInRoadQuizRequest';
 import { filterRecipesTabRowsForDietPrefs } from '../../lib/diet/filterRows';
 import { kitchenRecipesForPantryMatch } from '../../lib/recipeMatch/kitchenCatalogMerge';
 import { readGuestPantry } from '../../lib/guest/localKitchenStore';
@@ -818,6 +819,12 @@ export function ForkinatorOverlay() {
     setForkInRoadExpanded(false);
     setForkInRoadQuizVisible(true);
   }, []);
+
+  // Home "Help me pick" card opens this same quiz.
+  useEffect(
+    () => subscribeForkInRoadQuizRequest(handleForkInRoadHelpPress),
+    [handleForkInRoadHelpPress],
+  );
 
   const handleForkInRoadOpenRecipe = useCallback((row: RecipesTabRow) => {
     if (row.kind !== 'kitchen') return;

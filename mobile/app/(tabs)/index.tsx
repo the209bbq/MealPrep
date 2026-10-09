@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   Text,
@@ -30,6 +31,8 @@ import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedF
 import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { THEME, isCreatorRecipesConfigured } from '../../config/appConfig';
+import { APP_ROUTES } from '../../config/appRoutes';
+import { Ionicons } from '../../lib/icons/Ionicons';
 import {
   applyRecipesTabFilters,
   recipesTabNarrowingFiltersActive,
@@ -83,6 +86,11 @@ import { useHomeRecipesRefresh } from '../../hooks/useHomeRecipesRefresh';
 import { useForkInRoadHomeIdle } from '../../hooks/useForkInRoadHomeIdle';
 import { resetForkInRoadHomeIdleTimer } from '../../lib/forkinator/forkInRoadIdle';
 import {
+  FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL,
+  FORKINATOR_FORK_IN_ROAD_HOME_CARD_MESSAGE,
+} from '../../lib/forkinator/forkInRoadPromptCopy';
+import { requestForkInRoadQuiz } from '../../lib/forkinator/forkInRoadQuizRequest';
+import {
   HomeWebPullRefreshIndicator,
   useHomeScrollRefresh,
 } from '../../hooks/useHomeScrollRefresh';
@@ -111,6 +119,11 @@ import {
 } from '../../lib/mealCalendar/scheduleTarget';
 import type { CreatorFeedCardModel } from '../../lib/recipes/creatorFeedRows';
 import { sourceTagForRecipesTabRow } from '../../lib/recipes/searchResultSourceTag';
+
+/** Forky on the green "Help me pick" card (source art is 131 x 360). */
+const FORKY_CARD_IMAGE: number = require('../../assets/forkinator/forkinator-full.png');
+const FORKY_CARD_IMAGE_WIDTH = 56;
+const FORKY_CARD_IMAGE_HEIGHT = 154;
 
 function RecipesFeedSectionLabel({ title, className }: { title: string; className?: string }) {
   return (
@@ -973,6 +986,11 @@ export default function HomeScreen() {
     [pantry],
   );
 
+  /** Opens Forky's existing fork-in-the-road quiz (state lives in ForkinatorOverlay). */
+  const handleHelpMePick = useCallback(() => {
+    requestForkInRoadQuiz();
+  }, []);
+
   function openSavedRecipeRow(row: RecipesTabRow) {
     if (row.kind === 'kitchen' && row.recipe.id.startsWith('viral-preview-')) {
       const record = savedRecipes.records.find((entry) => {
@@ -992,6 +1010,15 @@ export default function HomeScreen() {
     return <ScrollView className="flex-1 bg-paper" />;
   }
 
+  // "From your pantry" only once there is a pantry to match against; otherwise the
+  // section keeps its existing title.
+  const classicSectionHeading = pantryEmpty
+    ? RECIPES_TAB_SURFACE_COPY.classicSectionTitle
+    : RECIPES_TAB_SURFACE_COPY.pantrySectionHeading;
+  const classicSectionToggleTitle = pantryEmpty
+    ? RECIPES_TAB_SURFACE_COPY.classicSectionTitle
+    : `${RECIPES_TAB_SURFACE_COPY.pantrySectionHeading}. ${RECIPES_TAB_SURFACE_COPY.classicSectionTitle}`;
+
   const homeScrollProps = homeScrollRefresh.scrollViewProps;
   const homeScrollOnScroll = homeScrollProps.onScroll as
     | ((event: NativeSyntheticEvent<NativeScrollEvent>) => void)
@@ -1003,7 +1030,7 @@ export default function HomeScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-paper px-4 pb-8"
+      className="flex-1 bg-paper px-5 pb-8"
       {...homeScrollProps}
       onScroll={mergedHomeOnScroll}
       scrollEventThrottle={16}
@@ -1015,7 +1042,7 @@ export default function HomeScreen() {
         pullDistance={homeScrollRefresh.pullDistance ?? 0}
       />
       {showHomePantryCta ? <HomePantryCta /> : null}
-      <InstallAppBanner />
+      <InstallAppBanner className="mt-4" />
       <GuestSaveNudge />
       {cookConfirmPrompt ? (
         <CookConfirmBanner
@@ -1031,35 +1058,21 @@ export default function HomeScreen() {
           Demo mode — local data only until you sign in with a connected account.
         </Text>
       ) : null}
-      <Card
-        className="mt-4"
-        title={creatorFeedEnabled ? undefined : RECIPES_COPY.cookNowCard.title}
-        subtitle={
-          creatorFeedEnabled
-            ? RECIPES_COPY.homeToolbarCard.subtitle
-            : RECIPES_COPY.cookNowCard.subtitle
-        }
-        subtitleClassName={
-          creatorFeedEnabled ? 'mt-1 text-base text-muted' : undefined
-        }
+
+      <Text
+        accessibilityRole="header"
+        className="mt-5 text-[28px] font-extrabold leading-[31px] text-ink"
+        style={{ letterSpacing: -0.6 }}
       >
-        {selectedCreator ? (
-          <Pressable
-            onPress={() => setSelectedCreator(null)}
-            className="mb-2 min-h-[36px] justify-center"
-            accessibilityRole="button"
-            accessibilityLabel="Back to all creators"
-          >
-            <Text className="text-sm font-semibold text-primary">← All creators</Text>
-          </Pressable>
-        ) : null}
-        {activeCreator && selectedCreator ? (
-          <Text className="mb-2 text-sm font-semibold text-ink">{activeCreator.displayName}</Text>
-        ) : null}
-        {activeCreator && selectedCreator && activeCreatorWebsite ? (
-          <CreatorRecipeWebsiteLink website={activeCreatorWebsite} />
-        ) : null}
-        <View className="mt-2 min-w-0 flex-row items-center gap-1.5">
+        {RECIPES_TAB_SURFACE_COPY.homeHeading}
+      </Text>
+
+      <View className="mt-4 min-w-0 flex-row items-center gap-2">
+        <View
+          className="min-h-[48px] min-w-0 flex-1 flex-row items-center rounded-full border border-border bg-card pl-4 pr-3"
+          style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
+        >
+          <Ionicons name="search" size={20} color={THEME.muted} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -1069,16 +1082,81 @@ export default function HomeScreen() {
                 : RECIPES_COPY.discoveryPanel.searchPlaceholder
             }
             placeholderTextColor={THEME.muted}
-            className="min-w-0 flex-1 rounded-xl border border-border bg-card px-3 py-2.5 text-base text-ink"
+            className="ml-2.5 min-h-[46px] min-w-0 flex-1 text-base text-ink"
             style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
             autoCapitalize="none"
             autoCorrect={false}
             accessibilityLabel="Search recipes"
           />
-          {creatorFeedEnabled && !searching ? (
-            <CreatorRecipesFeedModeDropdown value={feedMode} onChange={handleFeedModeChange} />
-          ) : null}
         </View>
+        {creatorFeedEnabled && !searching ? (
+          <CreatorRecipesFeedModeDropdown value={feedMode} onChange={handleFeedModeChange} />
+        ) : null}
+      </View>
+
+      {!searching ? (
+        <View
+          className="relative mt-4 overflow-hidden rounded-[20px] bg-primary p-4"
+          style={{ paddingLeft: 84 }}
+        >
+          <Image
+            source={FORKY_CARD_IMAGE}
+            accessibilityLabel="Forky"
+            resizeMode="contain"
+            style={{
+              position: 'absolute',
+              left: 14,
+              top: 10,
+              width: FORKY_CARD_IMAGE_WIDTH,
+              height: FORKY_CARD_IMAGE_HEIGHT,
+              transform: [{ rotate: '-6deg' }],
+            }}
+          />
+          <Text className="text-base font-bold leading-5 text-cream">
+            {FORKINATOR_FORK_IN_ROAD_HOME_CARD_MESSAGE}
+          </Text>
+          <Pressable
+            onPress={handleHelpMePick}
+            accessibilityRole="button"
+            accessibilityLabel={FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL}
+            className="mt-2.5 min-h-[44px] items-center justify-center self-start rounded-full bg-cream px-[18px]"
+            style={({ pressed }) => ({ opacity: pressed ? 0.88 : 1 })}
+          >
+            <Text className="text-[15px] font-bold text-primary">
+              {FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <Card
+        className="mt-4"
+        title={creatorFeedEnabled ? undefined : RECIPES_COPY.cookNowCard.title}
+        subtitle={
+          creatorFeedEnabled
+            ? RECIPES_COPY.homeToolbarCard.subtitle
+            : RECIPES_COPY.cookNowCard.subtitle
+        }
+        subtitleClassName={
+          creatorFeedEnabled ? 'text-base text-muted' : undefined
+        }
+      >
+        {selectedCreator ? (
+          <Pressable
+            onPress={() => setSelectedCreator(null)}
+            className="mt-1 min-h-[44px] justify-center self-start"
+            accessibilityRole="button"
+            accessibilityLabel="Back to all creators"
+          >
+            <Text className="text-sm font-bold text-primary">← All creators</Text>
+          </Pressable>
+        ) : null}
+        {activeCreator && selectedCreator ? (
+          <Text className="mb-2 text-[15px] font-bold text-ink">{activeCreator.displayName}</Text>
+        ) : null}
+        {activeCreator && selectedCreator && activeCreatorWebsite ? (
+          <CreatorRecipeWebsiteLink website={activeCreatorWebsite} />
+        ) : null}
         <RecipeImportFromShareParams
           url={typeof params.url === 'string' ? params.url : undefined}
           text={typeof params.text === 'string' ? params.text : undefined}
@@ -1099,11 +1177,11 @@ export default function HomeScreen() {
           <Pressable
             onPress={showDifferentIdeas}
             disabled={mealDbLoading}
-            className="mt-2 min-h-[40px] items-center justify-center rounded-lg px-3 py-2"
+            className="mt-2 min-h-[44px] items-center justify-center rounded-full px-4"
             accessibilityRole="button"
             accessibilityLabel={RECIPES_COPY.cookNowCard.showDifferentIdeas}
           >
-            <Text className="text-sm font-semibold text-primary">
+            <Text className="text-sm font-bold text-primary">
               {mealDbLoading
                 ? RECIPES_COPY.discoveryPanel.searching
                 : RECIPES_COPY.cookNowCard.showDifferentIdeas}
@@ -1144,11 +1222,13 @@ export default function HomeScreen() {
           {CREATOR_RECIPES_COPY.emptySearchForQuery(searchTrimmed)}
         </Text>
       ) : null}
-      {searching
-        ? searchResultsFiltered.map((result) =>
+      {searching ? (
+        <View className="mt-4 flex-row flex-wrap justify-between">
+          {searchResultsFiltered.map((result) =>
             result.kind === 'classic' ? (
               <RecipesUnifiedFeedCard
                 key={`classic-${result.row.recipe.id}`}
+                grid
                 row={result.row}
                 sourceTag={sourceTagForRecipesTabRow(result.row)}
                 saved={
@@ -1175,6 +1255,7 @@ export default function HomeScreen() {
             ) : (
               <CreatorRecipesFeedCard
                 key={result.model.videoId}
+                grid
                 model={result.model}
                 saved={savedRecipes.isCreatorSaved(
                   result.model.videoId,
@@ -1193,8 +1274,9 @@ export default function HomeScreen() {
                 onCook={() => openCookSheetForCreator(result.model)}
               />
             ),
-          )
-        : null}
+          )}
+        </View>
+      ) : null}
 
       {showCreatorCatalogSections && !searching ? (
         <>
@@ -1205,7 +1287,21 @@ export default function HomeScreen() {
             onPress={homeRecipesRefresh.onRefresh}
           />
           <RecipesTabCollapsibleSection
-            title={RECIPES_TAB_SURFACE_COPY.classicSectionTitle}
+            title={classicSectionToggleTitle}
+            heading={classicSectionHeading}
+            headerAction={
+              <Pressable
+                onPress={() => router.push(APP_ROUTES.pantry)}
+                accessibilityRole="link"
+                accessibilityLabel={RECIPES_TAB_SURFACE_COPY.seePantryLink}
+                className="min-h-[44px] shrink-0 justify-center pl-3"
+              >
+                <Text className="text-sm font-bold text-primary">
+                  {RECIPES_TAB_SURFACE_COPY.seePantryLink}
+                </Text>
+              </Pressable>
+            }
+            bubbleRowAbove
             expanded={tabSurface.sections.classic}
             onToggle={() => tabSurface.setClassicExpanded(!tabSurface.sections.classic)}
             loading={tabSurface.sections.classic && (mealDbBlockingLoad || mealDbCategoriesLoading)}
@@ -1217,17 +1313,19 @@ export default function HomeScreen() {
                 onImpression={(chip) =>
                   tabSurface.logCategoryImpression(chip.category, chip.position)
                 }
+                selectedCategory={selectedClassicCategory}
+                onSelectAll={() => setSelectedClassicCategory(null)}
               />
             }
           >
             {selectedClassicCategory ? (
               <Pressable
                 onPress={() => setSelectedClassicCategory(null)}
-                className="mb-2 min-h-[36px] justify-center"
+                className="mb-2 min-h-[44px] justify-center self-start"
                 accessibilityRole="button"
                 accessibilityLabel="Show all classic categories"
               >
-                <Text className="text-sm font-semibold text-primary">← All categories</Text>
+                <Text className="text-sm font-bold text-primary">← All categories</Text>
               </Pressable>
             ) : null}
             {classicCategoryFeed.offlineCategoryEmpty && classicRecipeRows.length === 0 ? (
@@ -1238,43 +1336,46 @@ export default function HomeScreen() {
                 <Text className="text-sm text-muted">{MEALDB_COPY.categoryLoadFailed}</Text>
                 <Pressable
                   onPress={classicCategoryFeed.retryLoad}
-                  className="mt-2 min-h-[40px] justify-center rounded-lg px-3 py-2"
+                  className="mt-2 min-h-[44px] justify-center self-start rounded-full border border-border bg-card px-4"
                   accessibilityRole="button"
                   accessibilityLabel={MEALDB_COPY.categoryRetry}
                 >
-                  <Text className="text-sm font-semibold text-primary">{MEALDB_COPY.categoryRetry}</Text>
+                  <Text className="text-sm font-bold text-primary">{MEALDB_COPY.categoryRetry}</Text>
                 </Pressable>
               </View>
             ) : null}
             {(mealDbBlockingLoad || classicCategoryLoading) && classicRecipeRows.length === 0 ? (
               <RecipesFeedCardSkeleton count={4} />
             ) : null}
-            {classicRecipeRows.map((row) => (
-              <RecipesUnifiedFeedCard
-                key={row.recipe.id}
-                row={row}
-                maskTitle={
-                  maskClassicStubTitles &&
-                  row.kind === 'kitchen' &&
-                  (Boolean(row.pantryMatchPending) || Boolean(row.pantryMatchFailed))
-                }
-                maskImage={
-                  maskClassicStubTitles &&
-                  row.kind === 'kitchen' &&
-                  (Boolean(row.pantryMatchPending) || Boolean(row.pantryMatchFailed))
-                }
-                saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
-                onToggleSave={
-                  row.kind === 'kitchen' ? () => toggleKitchenSaveWithResolve(row) : undefined
-                }
-                saveDisabled={
-                  row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false
-                }
-                interactionLoading={row.kind === 'kitchen' && row.recipe.id === rowDetailLoadingId}
-                onOpen={() => openDetail(row)}
-                onCook={() => openCookSheetForRow(row)}
-              />
-            ))}
+            <View className="flex-row flex-wrap justify-between">
+              {classicRecipeRows.map((row) => (
+                <RecipesUnifiedFeedCard
+                  key={row.recipe.id}
+                  grid
+                  row={row}
+                  maskTitle={
+                    maskClassicStubTitles &&
+                    row.kind === 'kitchen' &&
+                    (Boolean(row.pantryMatchPending) || Boolean(row.pantryMatchFailed))
+                  }
+                  maskImage={
+                    maskClassicStubTitles &&
+                    row.kind === 'kitchen' &&
+                    (Boolean(row.pantryMatchPending) || Boolean(row.pantryMatchFailed))
+                  }
+                  saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
+                  onToggleSave={
+                    row.kind === 'kitchen' ? () => toggleKitchenSaveWithResolve(row) : undefined
+                  }
+                  saveDisabled={
+                    row.kind === 'kitchen' ? savedRecipes.isKitchenSavePending(row.recipe) : false
+                  }
+                  interactionLoading={row.kind === 'kitchen' && row.recipe.id === rowDetailLoadingId}
+                  onOpen={() => openDetail(row)}
+                  onCook={() => openCookSheetForRow(row)}
+                />
+              ))}
+            </View>
             {mealDbLoadingMore && classicRecipeRows.length > 0 ? (
               <View className="mt-1 flex-row items-center gap-2">
                 <ActivityIndicator color={THEME.primary} size="small" />
@@ -1284,7 +1385,8 @@ export default function HomeScreen() {
           </RecipesTabCollapsibleSection>
 
           <RecipesTabCollapsibleSection
-            title={CREATOR_RECIPES_COPY.creatorsSectionTitle}
+            title={`${RECIPES_TAB_SURFACE_COPY.creatorsSectionHeading}. ${CREATOR_RECIPES_COPY.creatorsSectionTitle}`}
+            heading={RECIPES_TAB_SURFACE_COPY.creatorsSectionHeading}
             expanded={tabSurface.sections.creators}
             onToggle={() => tabSurface.setCreatorsExpanded(!tabSurface.sections.creators)}
             loading={tabSurface.sections.creators && creatorsLoading && creators.length === 0}
@@ -1320,19 +1422,22 @@ export default function HomeScreen() {
                 ) : null}
               </>
             ) : null}
-            {browseVideoModels.map((model) => (
-              <CreatorRecipesFeedCard
-                key={model.videoId}
-                model={model}
-                saved={savedRecipes.isCreatorSaved(model.videoId, model.importedRecipe)}
-                onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
-                saveDisabled={savedRecipes.isCreatorSavePending(model.videoId, model.importedRecipe)}
-                onOpen={() => {
-                  openCreatorVideo(model.item);
-                }}
-                onCook={() => openCookSheetForCreator(model)}
-              />
-            ))}
+            <View className="flex-row flex-wrap justify-between">
+              {browseVideoModels.map((model) => (
+                <CreatorRecipesFeedCard
+                  key={model.videoId}
+                  grid
+                  model={model}
+                  saved={savedRecipes.isCreatorSaved(model.videoId, model.importedRecipe)}
+                  onToggleSave={() => savedRecipes.toggleCreatorVideo(model.video, model.importedRecipe)}
+                  saveDisabled={savedRecipes.isCreatorSavePending(model.videoId, model.importedRecipe)}
+                  onOpen={() => {
+                    openCreatorVideo(model.item);
+                  }}
+                  onCook={() => openCookSheetForCreator(model)}
+                />
+              ))}
+            </View>
             {!selectedCreator && browseVideoModels.length === 0 && feedLoading ? (
               <View className="flex-row items-center gap-2">
                 <ActivityIndicator color={THEME.primary} size="small" />
@@ -1348,10 +1453,12 @@ export default function HomeScreen() {
         </>
       ) : null}
 
-      {showLegacyKitchenFeed
-        ? filteredRows.map((row) => (
+      {showLegacyKitchenFeed ? (
+        <View className="mt-4 flex-row flex-wrap justify-between">
+          {filteredRows.map((row) => (
             <RecipesUnifiedFeedCard
               key={row.kind === 'kitchen' ? row.recipe.id : `api-${row.recipe.id}`}
+              grid
               row={row}
               saved={row.kind === 'kitchen' ? savedRecipes.isKitchenSaved(row.recipe) : false}
               onToggleSave={
@@ -1366,8 +1473,9 @@ export default function HomeScreen() {
               onOpen={() => openDetail(row)}
               onCook={() => openCookSheetForRow(row)}
             />
-          ))
-        : null}
+          ))}
+        </View>
+      ) : null}
 
       <HomeHubSheet
         rows={savedRecipes.feedRows}

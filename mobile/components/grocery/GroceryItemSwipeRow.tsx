@@ -19,6 +19,7 @@ interface GroceryItemSwipeRowProps {
   showMealHint?: boolean;
   hideSecondaryLine?: boolean;
   onRowBodyPress?: () => void;
+  showDivider?: boolean;
 }
 
 function SwipeDeleteAction({ onPress }: { onPress: () => void }) {
@@ -27,7 +28,7 @@ function SwipeDeleteAction({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={GROCERY_COPY.removeItem}
-      className="mb-2 ml-2 min-w-[72px] items-center justify-center rounded-2xl bg-danger px-3"
+      className="min-w-[72px] items-center justify-center bg-danger px-3"
     >
       <Ionicons name="trash-outline" size={22} color={THEME.onPrimary} />
       <Text className="mt-0.5 text-xs font-bold text-on-primary">{GROCERY_COPY.removeItem}</Text>

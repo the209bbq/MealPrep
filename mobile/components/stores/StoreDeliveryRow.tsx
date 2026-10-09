@@ -30,9 +30,9 @@ export function StoreDeliveryRow({ store }: Props) {
           <Pressable
             key={service.id}
             onPress={() => void openExternalUrl(storeDeliveryUrl(service.id, store))}
-            className="min-h-[40px] flex-row items-center justify-center rounded-xl border border-border bg-paper px-3 py-2"
+            className="min-h-[44px] flex-row items-center justify-center rounded-full border border-primary bg-card px-4 active:opacity-80"
           >
-            <Text className="text-xs font-semibold text-primary">{service.label}</Text>
+            <Text className="text-sm font-bold text-primary">{service.label}</Text>
           </Pressable>
         ))}
       </View>

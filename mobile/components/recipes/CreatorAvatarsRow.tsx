@@ -21,7 +21,7 @@ export function CreatorAvatarsRow({
       showsHorizontalScrollIndicator={false}
       accessibilityRole="list"
       accessibilityLabel={CREATOR_RECIPES_COPY.creatorRowAccessibility}
-      contentContainerStyle={{ gap: 12, paddingRight: 4 }}
+      contentContainerStyle={{ gap: 14, paddingRight: 4 }}
     >
       {slots.map((slot) => (
         <HalfVisibleOnce key={slot.creator.id} onVisible={() => onImpression(slot)}>
@@ -29,8 +29,8 @@ export function CreatorAvatarsRow({
             onPress={() => onSelect(slot)}
             accessibilityRole="button"
             accessibilityLabel={`${slot.creator.displayName} recipes`}
-            className="items-center"
-            style={{ width: 72 }}
+            className="min-h-[44px] items-center"
+            style={{ width: 64 }}
           >
             {slot.creator.avatarUrl ? (
               <Image
@@ -39,13 +39,13 @@ export function CreatorAvatarsRow({
                 accessibilityIgnoresInvertColors
               />
             ) : (
-              <View className="h-14 w-14 items-center justify-center rounded-full border border-border bg-card">
-                <Text className="text-lg font-bold text-primary">
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-primary">
+                <Text className="text-xl font-extrabold text-on-primary">
                   {slot.creator.displayName.slice(0, 1).toUpperCase()}
                 </Text>
               </View>
             )}
-            <Text className="mt-1 text-center text-[11px] font-medium text-ink" numberOfLines={2}>
+            <Text className="mt-1.5 text-center text-xs font-semibold text-muted" numberOfLines={2}>
               {slot.creator.displayName}
             </Text>
           </Pressable>

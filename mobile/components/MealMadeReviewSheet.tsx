@@ -82,7 +82,7 @@ export function MealMadeReviewSheet({
             <Pressable
               disabled={busy}
               onPress={onConfirm}
-              className={`flex-1 rounded-xl bg-primary py-3 ${busy ? 'opacity-60' : ''}`}
+              className={`flex-1 rounded-full bg-primary py-3 ${busy ? 'opacity-60' : ''}`}
             >
               <Text className="text-center text-sm font-bold text-on-primary">
                 {busy ? 'Saving…' : 'Confirm'}

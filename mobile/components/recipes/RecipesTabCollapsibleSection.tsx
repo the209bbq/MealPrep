@@ -4,41 +4,57 @@ import { THEME } from '../../config/appConfig';
 
 export function RecipesTabCollapsibleSection({
   title,
+  heading,
+  headerAction,
+  bubbleRowAbove = false,
   expanded,
   onToggle,
   bubbleRow,
   children,
   loading,
 }: {
+  /** Names the expand/collapse toggle for screen readers. */
   title: string;
+  /** Short heading shown on screen; falls back to `title`. */
+  heading?: string;
+  /** Optional link shown at the right end of the heading row. */
+  headerAction?: React.ReactNode;
+  /** Show the chips/avatars above the heading instead of under it. */
+  bubbleRowAbove?: boolean;
   expanded: boolean;
   onToggle: () => void;
-  /** Horizontally scrollable chips/avatars; always visible above expandable body. */
+  /** Horizontally scrollable chips/avatars; always visible, never gated on `expanded`. */
   bubbleRow?: React.ReactNode;
   children?: React.ReactNode;
   loading?: boolean;
 }) {
   return (
-    <View className="mt-2">
-      <Pressable
-        onPress={onToggle}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        accessibilityLabel={`${title}, ${expanded ? 'collapse' : 'expand'}`}
-        className="min-h-[44px] flex-row items-center justify-between rounded-xl border border-border bg-card px-3 py-2"
-      >
-        <Text accessibilityRole="header" className="text-sm font-bold text-ink">
-          {title}
-        </Text>
-        <View className="flex-row items-center gap-2">
+    <View className="mt-4">
+      {bubbleRowAbove ? <>{bubbleRow ? <View className="mb-3">{bubbleRow}</View> : null}</> : null}
+      <View className="flex-row items-center justify-between">
+        <Pressable
+          onPress={onToggle}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={`${title}, ${expanded ? 'collapse' : 'expand'}`}
+          className="min-h-[44px] min-w-0 flex-1 flex-row items-center gap-2"
+        >
+          <Text
+            accessibilityRole="header"
+            className="shrink text-[19px] font-extrabold text-ink"
+            style={{ letterSpacing: -0.2 }}
+          >
+            {heading ?? title}
+          </Text>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={THEME.muted} />
           {loading ? (
             <Text className="text-xs text-muted">Loading…</Text>
           ) : null}
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={THEME.muted} />
-        </View>
-      </Pressable>
-      {bubbleRow ? <View className="mt-2">{bubbleRow}</View> : null}
-      {expanded && children ? <View className="mt-2">{children}</View> : null}
+        </Pressable>
+        {headerAction ?? null}
+      </View>
+      {bubbleRowAbove ? null : <>{bubbleRow ? <View className="mt-1">{bubbleRow}</View> : null}</>}
+      {expanded && children ? <View className="mt-3">{children}</View> : null}
     </View>
   );
 }

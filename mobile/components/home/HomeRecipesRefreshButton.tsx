@@ -19,7 +19,7 @@ export function HomeRecipesRefreshButton({
   return (
     <View className="mt-3 flex-row items-center justify-end gap-2">
       {statusMessage ? (
-        <Text className="text-xs font-medium text-success-accent" accessibilityLiveRegion="polite">
+        <Text className="text-xs font-semibold text-primary" accessibilityLiveRegion="polite">
           {statusMessage}
         </Text>
       ) : null}
@@ -29,7 +29,7 @@ export function HomeRecipesRefreshButton({
         accessibilityRole="button"
         accessibilityLabel={RECIPES_COPY.homeToolbarCard.refreshRecipes}
         accessibilityState={{ busy: refreshing }}
-        className="min-h-[40px] min-w-[40px] items-center justify-center rounded-full border border-border bg-card"
+        className="min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-border bg-card"
       >
         {refreshing ? (
           <ActivityIndicator size="small" color={THEME.primary} />

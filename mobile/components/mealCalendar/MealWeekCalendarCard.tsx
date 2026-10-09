@@ -236,7 +236,7 @@ export function MealWeekCalendarCard() {
 
         <Pressable
           onPress={shopForWeekScheduledMeals}
-          className="mt-3 items-center rounded-xl bg-primary py-3"
+          className="mt-3 items-center rounded-full bg-primary py-3"
         >
           <Text className="text-sm font-bold text-on-primary">{MEAL_CALENDAR.shopForWeekLabel}</Text>
         </Pressable>

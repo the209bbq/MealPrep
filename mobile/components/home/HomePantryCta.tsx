@@ -21,7 +21,7 @@ export function HomePantryCta() {
 
   if (stackButton) {
     return (
-      <Card className="mt-4 p-3">
+      <Card className="mt-4">
         <Text className="text-sm text-muted">{description}</Text>
         <Pressable
           onPress={() => router.push(APP_ROUTES.pantry)}
@@ -29,17 +29,17 @@ export function HomePantryCta() {
           onPressOut={() => setPressed(false)}
           accessibilityRole="button"
           accessibilityLabel={buttonLabel}
-          className="mt-3 items-center justify-center rounded-xl px-3 py-2.5"
+          className="mt-3 min-h-[44px] items-center justify-center rounded-full px-4"
           style={buttonStyle}
         >
-          <Text className="text-xs font-bold text-on-primary">{buttonLabel}</Text>
+          <Text className="text-sm font-bold text-on-primary">{buttonLabel}</Text>
         </Pressable>
       </Card>
     );
   }
 
   return (
-    <Card className="mt-4 p-3">
+    <Card className="mt-4">
       <View className="flex-row items-center gap-3">
         <Text className="min-w-0 flex-1 text-sm text-muted">{description}</Text>
         <Pressable
@@ -48,10 +48,10 @@ export function HomePantryCta() {
           onPressOut={() => setPressed(false)}
           accessibilityRole="button"
           accessibilityLabel={buttonLabel}
-          className="shrink-0 items-center justify-center rounded-xl px-3 py-2"
+          className="min-h-[44px] shrink-0 items-center justify-center rounded-full px-4"
           style={buttonStyle}
         >
-          <Text className="text-xs font-bold text-on-primary">{buttonLabel}</Text>
+          <Text className="text-sm font-bold text-on-primary">{buttonLabel}</Text>
         </Pressable>
       </View>
     </Card>

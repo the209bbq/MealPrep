@@ -15,16 +15,18 @@ export function CategoryChips({ selected, onSelect }: CategoryChipsProps) {
   ];
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
       {items.map((item) => {
         const active = selected === item.key;
         return (
           <Pressable
             key={item.key}
             onPress={() => onSelect(item.key)}
-            className={`mr-2 rounded-full px-3 py-1.5 ${active ? 'bg-primary' : 'border border-border bg-paper'}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            className={`mr-2 min-h-[44px] items-center justify-center rounded-full px-4 ${active ? 'bg-primary' : 'border border-border bg-card'}`}
           >
-            <Text className={`text-xs font-semibold ${active ? 'text-on-primary' : 'text-muted'}`}>
+            <Text className={`text-sm ${active ? 'font-bold text-cream' : 'font-semibold text-ink'}`}>
               {item.label}
             </Text>
           </Pressable>

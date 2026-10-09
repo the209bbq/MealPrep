@@ -26,9 +26,9 @@ export function CreatorRecipesFeedModeDropdown({
         accessibilityRole="button"
         accessibilityLabel={`${CREATOR_RECIPES_COPY.feedAccessibility}: ${CREATOR_RECIPES_FEED_MODE_LABELS[value]}`}
         accessibilityState={{ expanded: open }}
-        className="max-w-[108px] flex-row items-center gap-0.5 rounded-lg border border-border bg-card px-2 py-1.5"
+        className="min-h-[48px] max-w-[116px] flex-row items-center gap-1 rounded-full border border-border bg-card px-3"
       >
-        <Text className="shrink text-xs font-semibold text-ink" numberOfLines={1}>
+        <Text className="shrink text-sm font-semibold text-ink" numberOfLines={1}>
           {CREATOR_RECIPES_FEED_MODE_SHORT_LABELS[value]}
         </Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={THEME.muted} />
@@ -43,11 +43,11 @@ export function CreatorRecipesFeedModeDropdown({
                 onChange(choice);
                 closeMenu();
               }}
-              className={`px-3 py-2 ${selected ? 'bg-primary-light' : 'bg-paper'}`}
+              className={`min-h-[44px] justify-center px-4 ${selected ? 'bg-primary-light' : 'bg-card'}`}
               accessibilityRole="button"
               accessibilityState={{ selected }}
             >
-              <Text className={`text-xs font-semibold ${selected ? 'text-primary-dark' : 'text-ink'}`}>
+              <Text className={`text-sm font-semibold ${selected ? 'text-primary' : 'text-ink'}`}>
                 {CREATOR_RECIPES_FEED_MODE_LABELS[choice]}
               </Text>
             </Pressable>

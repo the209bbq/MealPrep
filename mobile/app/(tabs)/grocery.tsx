@@ -38,6 +38,10 @@ import { useGroceryCommunityDealBadges } from '../../lib/communityDeals/useCommu
 import { buildGroceryRecipeNameById, groceryRecipeSourceLabels } from '../../lib/grocery/recipeLabels';
 import { PANTRY_CATEGORIES, type PantryCategory } from '../../types/mealprep';
 
+/** Approved design: small caps aisle heading above a white card of hairline-separated rows. */
+const SECTION_HEADING_CLASS = 'text-[13px] font-extrabold uppercase tracking-wider text-muted';
+const SECTION_CARD_CLASS = 'mt-2 overflow-hidden rounded-[18px] border border-border bg-card';
+
 export default function GroceryScreen() {
   const {
     grocery,
@@ -112,6 +116,19 @@ export default function GroceryScreen() {
   );
   const openMerged = useMemo(() => mergeGroceryItemsForCombinedView(open), [open]);
   const doneMerged = useMemo(() => mergeGroceryItemsForCombinedView(done), [done]);
+  /** Combined lines are already ordered by aisle; split them so each aisle gets its own card. */
+  const openMergedSections = useMemo(() => {
+    const sections: { category: PantryCategory; lines: typeof openMerged }[] = [];
+    for (const line of openMerged) {
+      const last = sections[sections.length - 1];
+      if (last && last.category === line.category) {
+        last.lines.push(line);
+      } else {
+        sections.push({ category: line.category, lines: [line] });
+      }
+    }
+    return sections;
+  }, [openMerged]);
   const openItemIds = useMemo(() => open.map((g) => g.id), [open]);
   const { badges: communityBadges } = useGroceryCommunityDealBadges(openItemIds, grocery);
 
@@ -187,200 +204,241 @@ export default function GroceryScreen() {
 
   const progressPct = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
   const showShopCta = featureFlags.smartShop && open.length > 0;
+  const shopCtaBottomPad = Math.max(insets.bottom, 16);
 
   return (
     <>
       <View className="flex-1 bg-paper">
-        <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: showShopCta ? 100 + insets.bottom : 32 }}>
+        <ScrollView
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingBottom: showShopCta ? 54 + 12 + shopCtaBottomPad + 24 : 32 }}
+        >
           {kitchenError ? (
             <Pressable
               onPress={clearKitchenError}
-              className="mt-3 flex-row items-center justify-between rounded-xl border border-danger/30 bg-danger/10 px-3 py-2"
+              className="mt-4 min-h-[44px] flex-row items-center justify-between rounded-[18px] border border-danger/30 bg-danger/10 px-4 py-2"
             >
               <Text className="flex-1 pr-2 text-xs font-medium text-danger">{kitchenError}</Text>
               <Text className="text-xs font-bold text-danger">Dismiss</Text>
             </Pressable>
           ) : null}
-          <View className="mt-4 overflow-hidden rounded-3xl bg-slate px-5 py-5">
-            <Text className="text-xs font-bold uppercase tracking-widest text-on-primary-muted">{GROCERY_COPY.listTitle}</Text>
-            <Text className="mt-1 text-2xl font-bold text-on-primary">
-              {GROCERY_COPY.toBuyInCartLine(open.length, checkedCount)}
-            </Text>
-            <View className="mt-3 h-2 overflow-hidden rounded-full bg-on-primary-muted/30">
-              <View className="h-full rounded-full bg-primary-accent" style={{ width: `${progressPct}%` }} />
-            </View>
-            <Text className="mt-2 text-sm text-on-primary-muted">
-              {GROCERY_COPY.plannedMealsLine(upcomingPlannedMealCount)}
+
+          <View className="mt-5 min-h-[44px] flex-row items-center justify-between gap-3">
+            <Text
+              accessibilityRole="header"
+              className="min-w-0 flex-1 text-[28px] font-extrabold leading-[31px] tracking-tight text-ink"
+            >
+              {GROCERY_COPY.listTitle}
             </Text>
             {showMealGrouping ? (
               <Pressable
                 onPress={() => setCombineList((v) => !v)}
                 accessibilityRole="switch"
+                accessibilityLabel={GROCERY_COPY.sortByAisle}
                 accessibilityState={{ checked: combineList }}
-                className="mt-3 flex-row items-center justify-between rounded-2xl border border-on-primary-muted/30 bg-primary/20 px-3 py-2 active:opacity-90"
+                className={`h-11 flex-row items-center justify-center gap-1.5 rounded-full border px-3.5 active:opacity-90 ${
+                  combineList ? 'border-primary bg-primary' : 'border-border bg-card'
+                }`}
               >
-                <Text className="text-sm font-semibold text-on-primary">{GROCERY_COPY.combineList}</Text>
-                <View
-                  className={`h-7 w-12 rounded-full p-0.5 ${combineList ? 'bg-primary-accent' : 'bg-on-primary-muted/40'}`}
-                >
-                  <View
-                    className={`h-6 w-6 rounded-full bg-card shadow-sm ${combineList ? 'ml-auto' : ''}`}
-                  />
-                </View>
+                {combineList ? <Ionicons name="checkmark" size={16} color={THEME.onPrimary} /> : null}
+                <Text className={`text-sm font-bold ${combineList ? 'text-on-primary' : 'text-primary'}`}>
+                  {GROCERY_COPY.sortByAisle}
+                </Text>
               </Pressable>
             ) : null}
-            <View className="mt-4 flex-row flex-wrap gap-2">
-              <Pressable
-                onPress={() => {
-                  setAisleTouched(false);
-                  setManualCategory(inferGroceryCategoryFromName(manualName));
-                  setAddOpen(true);
-                }}
-                className="min-h-[48px] flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3"
-              >
-                <Ionicons name="add-circle-outline" size={20} color={THEME.primary} />
-                <Text className="text-sm font-bold text-ink">{GROCERY_COPY.addItem}</Text>
-              </Pressable>
+          </View>
+
+          <Pressable
+            onPress={() => {
+              setAisleTouched(false);
+              setManualCategory(inferGroceryCategoryFromName(manualName));
+              setAddOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={GROCERY_COPY.addItemField}
+            className="mt-[14px] h-12 flex-row items-center gap-2.5 rounded-full border border-border bg-card px-4 active:opacity-90"
+          >
+            <Ionicons name="add" size={22} color={THEME.muted} />
+            <Text className="min-w-0 flex-1 text-base text-muted" numberOfLines={1}>
+              {GROCERY_COPY.addItemField}
+            </Text>
+          </Pressable>
+
+          <View className="mt-[14px] rounded-[18px] border border-border bg-card px-4 py-3.5">
+            <View className="flex-row items-center gap-3">
+              <View className="min-w-0 flex-1">
+                <Text className="text-base font-extrabold text-ink">
+                  {GROCERY_COPY.toBuyInCartLine(open.length, checkedCount)}
+                </Text>
+                <Text className="mt-0.5 text-xs text-muted">
+                  {GROCERY_COPY.plannedMealsLine(upcomingPlannedMealCount)}
+                </Text>
+              </View>
               <Pressable
                 onPress={refreshGrocery}
-                className="min-h-[48px] rounded-2xl border border-on-primary-muted/40 bg-primary/30 px-4 py-3"
+                accessibilityRole="button"
+                className="h-11 flex-row items-center justify-center gap-1.5 rounded-full border border-border bg-card px-3.5 active:opacity-90"
               >
-                <Text className="text-center text-sm font-bold text-on-primary">{GROCERY_COPY.refresh}</Text>
+                <Ionicons name="refresh" size={16} color={THEME.primary} />
+                <Text className="text-sm font-bold text-primary">{GROCERY_COPY.refresh}</Text>
               </Pressable>
+            </View>
+            <View className="mt-3 h-2 overflow-hidden rounded-full bg-primary-light">
+              <View className="h-full rounded-full bg-primary" style={{ width: `${progressPct}%` }} />
             </View>
           </View>
 
           {totalCount === 0 ? (
-            <View className="mt-6">
+            <View className="mt-[14px]">
               <GroceryEmptyState />
             </View>
           ) : (
             <>
-              <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-muted">
+              <Text className="mb-1 mt-5 text-lg font-extrabold text-ink">
                 {GROCERY_COPY.toBuySection} ({open.length})
               </Text>
               {open.length === 0 ? (
-                <View className="rounded-2xl border border-border bg-card px-4 py-5">
+                <View className="mt-2 rounded-[18px] border border-border bg-card px-4 py-5">
                   <Text className="text-center text-sm text-muted">{GROCERY_COPY.allSetHint}</Text>
                 </View>
               ) : useCombinedView ? (
-                openMerged.map((line) => (
-                  <GroceryItemSwipeRow
-                    key={line.mergeKey}
-                    item={line.representative}
-                    quantityLabel={line.quantityLabel}
-                    recipeLabels=""
-                    hideSecondaryLine
-                    mealHint={line.mealHint}
-                    showMealHint={expandedMealHintKey === line.mergeKey}
-                    onRowBodyPress={() =>
-                      setExpandedMealHintKey((key) => (key === line.mergeKey ? null : line.mergeKey))
-                    }
-                    onToggle={() => toggleGroceryItemsChecked(line.underlyingIds)}
-                    onRemove={() => {
-                      for (const id of line.underlyingIds) {
-                        removeGroceryItem(id);
-                      }
-                    }}
-                    communityDeal={communityBadges.get(line.representative.id)}
-                  />
+                openMergedSections.map((section) => (
+                  <View key={section.category} className="mt-[14px]">
+                    <Text className={SECTION_HEADING_CLASS}>
+                      {CATEGORY_LABELS[section.category]} ({section.lines.length})
+                    </Text>
+                    <View className={SECTION_CARD_CLASS}>
+                      {section.lines.map((line, index) => (
+                        <GroceryItemSwipeRow
+                          key={line.mergeKey}
+                          item={line.representative}
+                          quantityLabel={line.quantityLabel}
+                          recipeLabels=""
+                          hideSecondaryLine
+                          mealHint={line.mealHint}
+                          showMealHint={expandedMealHintKey === line.mergeKey}
+                          onRowBodyPress={() =>
+                            setExpandedMealHintKey((key) => (key === line.mergeKey ? null : line.mergeKey))
+                          }
+                          onToggle={() => toggleGroceryItemsChecked(line.underlyingIds)}
+                          onRemove={() => {
+                            for (const id of line.underlyingIds) {
+                              removeGroceryItem(id);
+                            }
+                          }}
+                          communityDeal={communityBadges.get(line.representative.id)}
+                          showDivider={index < section.lines.length - 1}
+                        />
+                      ))}
+                    </View>
+                  </View>
                 ))
               ) : showMealGrouping ? (
                 openDayGroups.map((dayGroup) => (
-                  <View key={dayGroup.key} className="mb-5">
-                    <View className="mb-2 flex-row items-center gap-2">
-                      <View className="h-8 w-1 rounded-full bg-primary" />
-                      <Text className="text-base font-bold text-ink">{dayGroup.dayLabel}</Text>
-                    </View>
+                  <View key={dayGroup.key} className="mt-[14px]">
+                    <Text className="text-[15px] font-extrabold text-ink">{dayGroup.dayLabel}</Text>
                     {dayGroup.meals.map((mealGroup) => (
-                      <View key={mealGroup.mealPlanItemId ?? mealGroup.header} className="mb-3">
-                        <Text className="mb-2 text-sm font-semibold text-slate">{mealGroup.header}</Text>
-                        {mealGroup.items.map((item) => (
-                          <GroceryItemSwipeRow
-                            key={item.id}
-                            item={item}
-                            recipeLabels=""
-                            hideSecondaryLine
-                            onToggle={() => toggleGroceryItem(item.id)}
-                            onRemove={() => removeGroceryItem(item.id)}
-                            communityDeal={communityBadges.get(item.id)}
-                          />
-                        ))}
+                      <View key={mealGroup.mealPlanItemId ?? mealGroup.header} className="mt-2.5">
+                        <Text className={SECTION_HEADING_CLASS}>{mealGroup.header}</Text>
+                        <View className={SECTION_CARD_CLASS}>
+                          {mealGroup.items.map((item, index) => (
+                            <GroceryItemSwipeRow
+                              key={item.id}
+                              item={item}
+                              recipeLabels=""
+                              hideSecondaryLine
+                              onToggle={() => toggleGroceryItem(item.id)}
+                              onRemove={() => removeGroceryItem(item.id)}
+                              communityDeal={communityBadges.get(item.id)}
+                              showDivider={index < mealGroup.items.length - 1}
+                            />
+                          ))}
+                        </View>
                       </View>
                     ))}
                   </View>
                 ))
               ) : (
                 openSections.map((section) => (
-                  <View key={section.category} className="mb-4">
-                    <View className="mb-2 flex-row items-center gap-2">
-                      <View className="h-8 w-1 rounded-full bg-primary" />
-                      <Text className="text-base font-bold text-ink">{section.label}</Text>
-                      <Text className="text-sm text-muted">({section.items.length})</Text>
+                  <View key={section.category} className="mt-[14px]">
+                    <Text className={SECTION_HEADING_CLASS}>
+                      {section.label} ({section.items.length})
+                    </Text>
+                    <View className={SECTION_CARD_CLASS}>
+                      {section.items.map((item, index) => (
+                        <GroceryItemSwipeRow
+                          key={item.id}
+                          item={item}
+                          recipeLabels={recipeLabelFor(item)}
+                          onToggle={() => toggleGroceryItem(item.id)}
+                          onRemove={() => removeGroceryItem(item.id)}
+                          communityDeal={communityBadges.get(item.id)}
+                          showDivider={index < section.items.length - 1}
+                        />
+                      ))}
                     </View>
-                    {section.items.map((item) => (
-                      <GroceryItemSwipeRow
-                        key={item.id}
-                        item={item}
-                        recipeLabels={recipeLabelFor(item)}
-                        onToggle={() => toggleGroceryItem(item.id)}
-                        onRemove={() => removeGroceryItem(item.id)}
-                        communityDeal={communityBadges.get(item.id)}
-                      />
-                    ))}
                   </View>
                 ))
               )}
 
               {done.length > 0 ? (
-                <View className="mt-2">
+                <View className="mt-6">
                   <Pressable
                     onPress={() => setCartExpanded((v) => !v)}
-                    className="mb-2 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3"
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: cartExpanded }}
+                    className="min-h-[48px] flex-row items-center justify-between rounded-full border border-border bg-card px-4 active:opacity-90"
                   >
                     <View className="flex-row items-center gap-2">
-                      <Ionicons name="bag-check-outline" size={22} color={THEME.primary} />
-                      <Text className="text-base font-bold text-ink">{GROCERY_COPY.inCartSection} ({done.length})</Text>
+                      <Ionicons name="bag-check-outline" size={20} color={THEME.primary} />
+                      <Text className="text-base font-extrabold text-ink">
+                        {GROCERY_COPY.inCartSection} ({done.length})
+                      </Text>
                     </View>
                     <Ionicons name={cartExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={THEME.muted} />
                   </Pressable>
-                  {cartExpanded
-                    ? useCombinedView
-                      ? doneMerged.map((line) => (
-                          <GroceryItemSwipeRow
-                            key={line.mergeKey}
-                            item={{ ...line.representative, checked: true }}
-                            quantityLabel={line.quantityLabel}
-                            recipeLabels=""
-                            hideSecondaryLine
-                            mealHint={line.mealHint}
-                            showMealHint={expandedMealHintKey === line.mergeKey}
-                            onRowBodyPress={() =>
-                              setExpandedMealHintKey((key) => (key === line.mergeKey ? null : line.mergeKey))
-                            }
-                            onToggle={() => toggleGroceryItemsChecked(line.underlyingIds)}
-                            onRemove={() => {
-                              for (const id of line.underlyingIds) {
-                                removeGroceryItem(id);
+                  {cartExpanded ? (
+                    <View className={SECTION_CARD_CLASS}>
+                      {useCombinedView
+                        ? doneMerged.map((line, index) => (
+                            <GroceryItemSwipeRow
+                              key={line.mergeKey}
+                              item={{ ...line.representative, checked: true }}
+                              quantityLabel={line.quantityLabel}
+                              recipeLabels=""
+                              hideSecondaryLine
+                              mealHint={line.mealHint}
+                              showMealHint={expandedMealHintKey === line.mergeKey}
+                              onRowBodyPress={() =>
+                                setExpandedMealHintKey((key) => (key === line.mergeKey ? null : line.mergeKey))
                               }
-                            }}
-                            dimmed
-                          />
-                        ))
-                      : done.map((item) => (
-                          <GroceryItemSwipeRow
-                            key={item.id}
-                            item={item}
-                            recipeLabels={recipeLabelFor(item)}
-                            onToggle={() => toggleGroceryItem(item.id)}
-                            onRemove={() => removeGroceryItem(item.id)}
-                            dimmed
-                          />
-                        ))
-                    : null}
+                              onToggle={() => toggleGroceryItemsChecked(line.underlyingIds)}
+                              onRemove={() => {
+                                for (const id of line.underlyingIds) {
+                                  removeGroceryItem(id);
+                                }
+                              }}
+                              dimmed
+                              showDivider={index < doneMerged.length - 1}
+                            />
+                          ))
+                        : done.map((item, index) => (
+                            <GroceryItemSwipeRow
+                              key={item.id}
+                              item={item}
+                              recipeLabels={recipeLabelFor(item)}
+                              onToggle={() => toggleGroceryItem(item.id)}
+                              onRemove={() => removeGroceryItem(item.id)}
+                              dimmed
+                              showDivider={index < done.length - 1}
+                            />
+                          ))}
+                    </View>
+                  ) : null}
                   <Pressable
                     onPress={handleClearChecked}
-                    className="mt-2 min-h-[48px] items-center justify-center rounded-2xl border border-danger/30 bg-card py-3"
+                    accessibilityRole="button"
+                    className="mt-3 min-h-[48px] items-center justify-center rounded-full border border-danger/30 bg-card px-4 active:opacity-90"
                   >
                     <Text className="text-sm font-bold text-danger">{GROCERY_COPY.clearCheckedItems}</Text>
                   </Pressable>
@@ -392,15 +450,17 @@ export default function GroceryScreen() {
 
         {showShopCta ? (
           <View
-            className="absolute bottom-0 left-0 right-0 border-t border-border bg-card px-4 pt-3"
-            style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+            className="absolute bottom-0 left-0 right-0 bg-paper px-5 pt-3"
+            style={{ paddingBottom: shopCtaBottomPad }}
           >
             <Pressable
               onPress={() => router.push(APP_ROUTES.smartShop)}
-              className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3"
+              accessibilityRole="button"
+              accessibilityLabel={GROCERY_COPY.comparePricesNearYou}
+              className="h-[54px] flex-row items-center justify-center gap-2 rounded-full bg-tomato px-5 active:opacity-90"
             >
-              <Ionicons name="pricetags" size={22} color={THEME.onPrimary} />
-              <Text className="text-base font-bold text-on-primary">{GROCERY_COPY.findStoresForList(open.length)}</Text>
+              <Ionicons name="location-outline" size={20} color={THEME.onTomato} />
+              <Text className="text-[17px] font-extrabold text-on-tomato">{GROCERY_COPY.comparePricesNearYou}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -429,8 +489,8 @@ export default function GroceryScreen() {
 
       <Modal visible={addOpen} animationType="slide" transparent onRequestClose={() => setAddOpen(false)}>
         <View className="flex-1 justify-end bg-black/40">
-          <View className="rounded-t-3xl border border-border bg-paper px-4 pb-8 pt-4">
-            <Text className="text-lg font-bold text-ink">{GROCERY_COPY.addItemModalTitle}</Text>
+          <View className="rounded-t-3xl border border-border bg-paper px-5 pb-8 pt-5">
+            <Text className="text-xl font-extrabold text-ink">{GROCERY_COPY.addItemModalTitle}</Text>
             <TextInput
               value={manualName}
               onChangeText={(text) => {
@@ -441,7 +501,7 @@ export default function GroceryScreen() {
               }}
               placeholder={GROCERY_COPY.itemNamePlaceholder}
               placeholderTextColor={THEME.muted}
-              className="mt-4 rounded-xl border border-border bg-card px-4 py-3 text-base text-ink"
+              className="mt-4 min-h-[48px] rounded-full border border-border bg-card px-4 py-3 text-base text-ink"
             />
             <View className="mt-3 flex-row gap-2">
               <TextInput
@@ -450,17 +510,19 @@ export default function GroceryScreen() {
                 keyboardType="decimal-pad"
                 placeholder={GROCERY_COPY.qtyPlaceholder}
                 placeholderTextColor={THEME.muted}
-                className="w-24 rounded-xl border border-border bg-card px-4 py-3 text-base text-ink"
+                className="min-h-[48px] w-24 rounded-full border border-border bg-card px-4 py-3 text-base text-ink"
               />
               <TextInput
                 value={manualUnit}
                 onChangeText={setManualUnit}
                 placeholder={GROCERY_COPY.unitPlaceholder}
                 placeholderTextColor={THEME.muted}
-                className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base text-ink"
+                className="min-h-[48px] flex-1 rounded-full border border-border bg-card px-4 py-3 text-base text-ink"
               />
             </View>
-            <Text className="mt-4 text-xs font-bold uppercase tracking-wide text-muted">{GROCERY_COPY.aisleLabel}</Text>
+            <Text className="mt-4 text-[13px] font-extrabold uppercase tracking-wide text-muted">
+              {GROCERY_COPY.aisleLabel}
+            </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
               {PANTRY_CATEGORIES.map((cat) => {
                 const selected = manualCategory === cat;
@@ -471,9 +533,11 @@ export default function GroceryScreen() {
                       setAisleTouched(true);
                       setManualCategory(cat);
                     }}
-                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
+                    className={`mr-2 min-h-[44px] items-center justify-center rounded-full border px-4 ${
+                      selected ? 'border-primary bg-primary' : 'border-border bg-card'
+                    }`}
                   >
-                    <Text className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-slate'}`}>
+                    <Text className={`text-sm font-semibold ${selected ? 'text-on-primary' : 'text-ink'}`}>
                       {CATEGORY_LABELS[cat]}
                     </Text>
                   </Pressable>
@@ -481,15 +545,20 @@ export default function GroceryScreen() {
               })}
             </ScrollView>
             <View className="mt-6 flex-row gap-2">
-              <Pressable onPress={() => setAddOpen(false)} className="flex-1 rounded-2xl border border-border py-3">
-                <Text className="text-center font-bold text-slate">{GROCERY_COPY.cancel}</Text>
+              <Pressable
+                onPress={() => setAddOpen(false)}
+                className="min-h-[48px] flex-1 items-center justify-center rounded-full border border-border bg-card px-4"
+              >
+                <Text className="text-center text-base font-bold text-primary">{GROCERY_COPY.cancel}</Text>
               </Pressable>
               <Pressable
                 disabled={addSaving}
                 onPress={() => void submitManualItem()}
-                className={`flex-1 rounded-2xl bg-primary py-3 ${addSaving ? 'opacity-50' : ''}`}
+                className={`min-h-[48px] flex-1 items-center justify-center rounded-full bg-primary px-4 ${
+                  addSaving ? 'opacity-50' : ''
+                }`}
               >
-                <Text className="text-center font-bold text-on-primary">{GROCERY_COPY.addToList}</Text>
+                <Text className="text-center text-base font-bold text-on-primary">{GROCERY_COPY.addToList}</Text>
               </Pressable>
             </View>
           </View>

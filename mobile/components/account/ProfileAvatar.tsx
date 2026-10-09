@@ -8,9 +8,11 @@ type ProfileAvatarProps = {
   photoUrl: string | null;
   size?: number;
   guest?: boolean;
+  /** On the green header: no fill of its own, cream icon and initials. */
+  onHeader?: boolean;
 };
 
-export function ProfileAvatar({ name, photoUrl, size = 32, guest = false }: ProfileAvatarProps) {
+export function ProfileAvatar({ name, photoUrl, size = 32, guest = false, onHeader = false }: ProfileAvatarProps) {
   const dimension = { width: size, height: size, borderRadius: size / 2 };
 
   if (photoUrl?.trim()) {
@@ -28,17 +30,21 @@ export function ProfileAvatar({ name, photoUrl, size = 32, guest = false }: Prof
     return (
       <View
         style={dimension}
-        className="items-center justify-center border border-on-primary-muted/40 bg-slate"
+        className={`items-center justify-center ${onHeader ? '' : 'border border-on-primary-muted/40 bg-slate'}`}
         accessibilityLabel="Guest account"
       >
-        <HydrationSafeIonicon name="person-outline" size={size * 0.5} color={THEME.onPrimaryMuted} />
+        <HydrationSafeIonicon
+          name="person-outline"
+          size={onHeader ? 22 : size * 0.5}
+          color={onHeader ? THEME.brandCream : THEME.onPrimaryMuted}
+        />
       </View>
     );
   }
 
   return (
-    <View style={dimension} className="items-center justify-center bg-primary">
-      <Text className="font-bold text-on-primary" style={{ fontSize: size * 0.34 }}>
+    <View style={dimension} className={`items-center justify-center ${onHeader ? '' : 'bg-primary'}`}>
+      <Text className={`font-extrabold ${onHeader ? 'text-cream' : 'text-on-primary'}`} style={{ fontSize: size * 0.38 }}>
         {initials(name)}
       </Text>
     </View>

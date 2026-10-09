@@ -113,7 +113,7 @@ async function addPantryItems(page: Page): Promise<void> {
   await page.waitForURL(/\/pantry/, { timeout: 15_000 });
 
   for (const name of PANTRY_ITEMS) {
-    await page.getByText('Add item manually', { exact: true }).click();
+    await page.getByRole('button', { name: 'Add item', exact: true }).click();
     await page.getByPlaceholder('Item name').fill(name);
     await page.getByText('Add to pantry', { exact: true }).click();
     await page.getByText(name, { exact: true }).waitFor({ timeout: 15_000 });
@@ -293,7 +293,7 @@ async function smartShopWithMockStores(page: Page): Promise<void> {
     );
   });
 
-  const shopCta = page.getByText(/Find stores for this list/, { exact: false }).first();
+  const shopCta = page.getByText(GROCERY_COPY.comparePricesNearYou, { exact: false }).first();
   await shopCta.waitFor({ timeout: 15_000 });
   await shopCta.click();
   await page.waitForURL(/\/smart-shop/, { timeout: 15_000 });

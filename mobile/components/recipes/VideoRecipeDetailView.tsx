@@ -313,7 +313,7 @@ export function VideoRecipeDetailView({
               {onStartImport ? (
                 <Pressable
                   onPress={onStartImport}
-                  className="mt-3 min-h-[48px] items-center justify-center rounded-xl bg-primary px-4"
+                  className="mt-3 min-h-[48px] items-center justify-center rounded-full bg-primary px-4"
                   accessibilityRole="button"
                   accessibilityLabel={VIRAL_RECIPES_COPY.getRecipeCta}
                 >
@@ -343,7 +343,7 @@ export function VideoRecipeDetailView({
                   </Pressable>
                 ) : null}
                 {onSignInForImport ? (
-                  <Pressable onPress={onSignInForImport} className="min-h-[44px] justify-center rounded-xl bg-primary px-4 py-2">
+                  <Pressable onPress={onSignInForImport} className="min-h-[44px] justify-center rounded-full bg-primary px-4 py-2">
                     <Text className="text-sm font-bold text-on-primary">{RECIPE_IMPORT_COPY.guestSignInCta}</Text>
                   </Pressable>
                 ) : null}

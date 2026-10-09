@@ -15,7 +15,7 @@ export function Card({
   ...props
 }: CardProps & { className?: string }) {
   return (
-    <View className={`rounded-2xl border border-border bg-card p-4 shadow-sm ${className ?? ''}`} {...props}>
+    <View className={`rounded-[18px] border border-border bg-card p-4 ${className ?? ''}`} {...props}>
       {title ? <Text className="text-lg font-bold text-ink">{title}</Text> : null}
       {subtitle ? (
         <Text className={subtitleClassName ?? 'mt-1 text-sm text-muted'}>{subtitle}</Text>

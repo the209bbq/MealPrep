@@ -4,6 +4,8 @@ export const GROCERY_COPY = {
   toBuySection: 'To buy',
   inCartSection: 'In cart',
   addItem: 'Add item',
+  /** Approved design: the pill field under the heading that opens the add-item sheet. */
+  addItemField: 'Add an item',
   refresh: 'Refresh',
   clearCheckedItems: 'Clear checked items',
   clearCheckedTitle: 'Clear checked items',
@@ -29,6 +31,8 @@ export const GROCERY_COPY = {
   shopThisList: (count: number) => `Shop this list (${count})`,
   /** Primary CTA from grocery tab → Smart Shop (prefilled open items + saved location). */
   findStoresForList: (count: number) => `Find stores for this list (${count})`,
+  /** Approved design: grocery tab button that opens Smart Shop. No savings claims or figures here. */
+  comparePricesNearYou: 'Compare prices near you',
   addedMissingSingle: (name: string) => `Added ${name} to your grocery list`,
   addedMissingPlural: (count: number) => `Added ${count} missing items to your grocery list`,
   alreadyOnGroceryList: 'Those missing items are already on your grocery list',
@@ -41,5 +45,7 @@ export const GROCERY_COPY = {
       : `${count} planned meals · only buy what recipes still need`,
   toBuyInCartLine: (open: number, checked: number) => `${open} to buy · ${checked} in cart`,
   combineList: 'Combine',
+  /** Approved design: label for the combine toggle (the combined list is ordered by aisle). */
+  sortByAisle: 'Sort by aisle',
   combinedForMeals: (hint: string) => hint,
 } as const;

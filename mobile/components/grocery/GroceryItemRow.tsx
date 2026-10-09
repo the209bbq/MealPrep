@@ -19,6 +19,8 @@ interface GroceryItemRowProps {
   showMealHint?: boolean;
   hideSecondaryLine?: boolean;
   onRowBodyPress?: () => void;
+  /** Hairline under the row; off for the last row in a card. */
+  showDivider?: boolean;
 }
 
 export function GroceryItemRow({
@@ -33,6 +35,7 @@ export function GroceryItemRow({
   showMealHint,
   hideSecondaryLine,
   onRowBodyPress,
+  showDivider,
 }: GroceryItemRowProps) {
   const qtyLabel = quantityLabel ?? formatQuantityWithUnit(item.quantity, item.unit);
   const bodyOpensMealHint = onRowBodyPress != null;
@@ -42,27 +45,32 @@ export function GroceryItemRow({
 
   return (
     <View
-      className={`mb-2 flex-row items-center rounded-2xl border border-border bg-card px-3 py-3 ${dimmed ? 'opacity-80' : ''}`}
+      className={`min-h-[52px] flex-row items-center bg-card pl-[5px] pr-1 ${
+        showDivider ? 'border-b border-border/60' : ''
+      } ${dimmed ? 'opacity-80' : ''}`}
     >
       <Pressable
         onPress={onToggle}
         accessibilityRole="checkbox"
         accessibilityLabel={`Mark ${item.name} as ${item.checked ? 'not purchased' : 'purchased'}`}
         accessibilityState={{ checked: item.checked }}
-        className={`mr-3 h-11 w-11 items-center justify-center rounded-xl border-2 active:opacity-90 ${
-          item.checked ? 'border-primary bg-primary' : 'border-primary bg-primary-light'
-        }`}
+        className="h-11 w-11 items-center justify-center active:opacity-90"
       >
-        {item.checked ? <Ionicons name="checkmark" size={24} color={THEME.onPrimary} /> : null}
+        <View
+          className={`h-[22px] w-[22px] items-center justify-center rounded-md border-2 border-primary ${
+            item.checked ? 'bg-primary' : 'bg-card'
+          }`}
+        >
+          {item.checked ? <Ionicons name="checkmark" size={16} color={THEME.onPrimary} /> : null}
+        </View>
       </Pressable>
       <Pressable
         onPress={onRowBodyPress ?? onToggle}
         accessibilityRole="button"
         accessibilityLabel={bodyAccessibilityLabel}
-        className="min-w-0 flex-1 active:opacity-90"
+        className="ml-px min-h-[44px] min-w-0 flex-1 justify-center py-1.5 active:opacity-90"
       >
-        <Text className={`text-base font-bold ${item.checked ? 'text-muted line-through' : 'text-ink'}`}>{item.name}</Text>
-        <Text className="mt-0.5 text-sm font-semibold text-primary-dark">{qtyLabel}</Text>
+        <Text className={`text-base font-semibold ${item.checked ? 'text-muted line-through' : 'text-ink'}`}>{item.name}</Text>
         {communityDeal ? (
           <View className="mt-1 self-start rounded-lg bg-amber-100 px-2 py-0.5">
             <Text className="text-xs font-bold text-amber-950">
@@ -73,26 +81,27 @@ export function GroceryItemRow({
           </View>
         ) : null}
         {showMealHint && mealHint ? (
-          <Text className="mt-1 text-xs font-medium text-slate" numberOfLines={2}>
+          <Text className="mt-0.5 text-xs font-medium text-muted" numberOfLines={2}>
             {mealHint}
           </Text>
         ) : null}
         {!hideSecondaryLine && !showMealHint ? (
           recipeLabels ? (
-            <Text className="mt-1 text-xs text-muted" numberOfLines={2}>
-              {recipeLabels}
+            <Text className="mt-0.5 text-xs text-muted" numberOfLines={2}>
+              For {recipeLabels}
             </Text>
           ) : (
-            <Text className="mt-1 text-xs text-muted">Added manually</Text>
+            <Text className="mt-0.5 text-xs text-muted">Added manually</Text>
           )
         ) : null}
       </Pressable>
+      <Text className="ml-3 max-w-[40%] text-right text-sm text-muted">{qtyLabel}</Text>
       <Pressable
         onPress={onRemove}
         accessibilityRole="button"
         accessibilityLabel={GROCERY_COPY.removeItem}
-        hitSlop={12}
-        className="ml-2 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-border bg-paper active:bg-danger/10"
+        hitSlop={4}
+        className="ml-1 min-h-[44px] min-w-[44px] items-center justify-center rounded-full active:bg-danger/10"
       >
         <Ionicons name="trash-outline" size={20} color={THEME.danger} />
       </Pressable>

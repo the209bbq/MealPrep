@@ -26,6 +26,8 @@ export interface PantryStorageScanButtonsProps {
   /** One-shot: open source menu or launch camera when pantry focuses. */
   autoOpenScanMode?: 'menu' | 'camera' | null;
   onAutoOpenScanHandled?: () => void;
+  /** Show the "Plus" badge on the scan card (user is not on the paid plan yet). */
+  showPlusBadge?: boolean;
 }
 
 export function PantryStorageScanButtons({
@@ -34,6 +36,7 @@ export function PantryStorageScanButtons({
   scanLocation,
   autoOpenScanMode,
   onAutoOpenScanHandled,
+  showPlusBadge,
 }: PantryStorageScanButtonsProps) {
   function openSourceMenu() {
     Alert.alert(PANTRY_SCAN_UI_COPY.choosePhotoSourceTitle, PANTRY_SCAN_UI_COPY.choosePhotoSourceMessage, [
@@ -60,17 +63,28 @@ export function PantryStorageScanButtons({
   }, [autoOpenScanMode, disabled, onAutoOpenScanHandled, onRequestNativeScan, scanLocation]);
 
   return (
-    <View className="mt-3">
+    <View>
       <Pressable
         disabled={disabled}
         onPress={openSourceMenu}
-        className={`flex-row items-center justify-center gap-2 rounded-xl px-4 py-3 ${
-          disabled ? 'bg-slate/40' : 'bg-primary'
+        className={`min-h-[44px] flex-row items-center gap-3 rounded-[20px] border-[1.5px] border-tomato bg-card p-3.5 ${
+          disabled ? 'opacity-50' : ''
         }`}
+        accessibilityRole="button"
         accessibilityLabel={PANTRY_SCAN_UI_COPY.scanShelfA11y}
       >
-        <Ionicons name="camera-outline" size={22} color={THEME.onPrimary} />
-        <Text className="text-sm font-bold text-on-primary">{PANTRY_SCAN_UI_COPY.scanShelf}</Text>
+        <View className="h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tomato-light">
+          <Ionicons name="camera-outline" size={24} color={THEME.tomatoDark} />
+        </View>
+        <View className="min-w-0 flex-1">
+          <Text className="text-base font-extrabold text-ink">{PANTRY_SCAN_UI_COPY.scanCardTitle}</Text>
+          <Text className="mt-0.5 text-sm leading-5 text-muted">{PANTRY_SCAN_UI_COPY.scanCardSubtitle}</Text>
+        </View>
+        {showPlusBadge ? (
+          <View className="shrink-0 rounded-[10px] bg-tomato px-[9px] py-1">
+            <Text className="text-xs font-extrabold text-on-tomato">{PANTRY_SCAN_UI_COPY.scanCardPlusBadge}</Text>
+          </View>
+        ) : null}
       </Pressable>
     </View>
   );

@@ -261,7 +261,7 @@ export function StoreCommunityDealsSection({
                 <Pressable
                   onPress={() => void handleSubmitDeal()}
                   disabled={submitting}
-                  className="flex-1 rounded-xl bg-success px-3 py-2"
+                  className="flex-1 rounded-full bg-success px-3 py-2"
                 >
                   <Text className="text-center text-xs font-bold text-on-success">
                     {submitting ? 'Saving…' : 'Post deal'}

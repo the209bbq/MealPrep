@@ -182,7 +182,7 @@ export function SmartShopStorePickerModal({
                 setManualName('');
                 setManualAddress('');
               }}
-              className="mt-3 rounded-xl bg-slate px-4 py-2"
+              className="mt-3 rounded-full bg-slate px-4 py-2"
             >
               <Text className="text-center font-bold text-on-primary">Add store</Text>
             </Pressable>

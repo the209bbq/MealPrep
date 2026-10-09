@@ -43,7 +43,7 @@ export function ConfirmDialog({
             <Pressable
               disabled={loading}
               onPress={onConfirm}
-              className={`flex-1 rounded-xl py-3 ${destructive ? 'bg-danger' : 'bg-primary'} ${loading ? 'opacity-60' : ''}`}
+              className={`flex-1 rounded-full py-3 ${destructive ? 'bg-danger' : 'bg-primary'} ${loading ? 'opacity-60' : ''}`}
             >
               <Text className={`text-center text-sm font-bold ${destructive ? 'text-paper' : 'text-on-primary'}`}>
                 {loading ? 'Working…' : confirmLabel}

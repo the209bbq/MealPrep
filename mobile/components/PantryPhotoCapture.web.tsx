@@ -44,7 +44,7 @@ export function PantryPhotoCapture({ onImagePrepared, onError, disabled }: Pantr
       <Pressable
         disabled={disabled}
         onPress={() => cameraRef.current?.click()}
-        className={`flex-1 rounded-xl px-3 py-3 ${disabled ? 'bg-slate/40' : 'bg-primary'}`}
+        className={`flex-1 rounded-full px-3 py-3 ${disabled ? 'bg-slate/40' : 'bg-primary'}`}
       >
         <Text className="text-center text-sm font-bold text-on-primary">Scan shelf</Text>
       </Pressable>

@@ -623,7 +623,8 @@ async function main() {
         },
         '/',
         PERSISTENT_FORK_WAIT_MS,
-        FORKINATOR_FORK_IN_ROAD_PILL_LABEL,
+        // Exact match: the Home "Help me pick" card also starts with "Can't decide?".
+        new RegExp(`^${FORKINATOR_FORK_IN_ROAD_PILL_LABEL.replace(/[?]/g, '\\?')}$`),
       ),
       note: 'collapsed pill shows right away on Home (no daily limit / cooldown)',
     });

@@ -48,7 +48,7 @@ function HubSegment({
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
       {...(Platform.OS === 'web' ? { 'aria-selected': active } : {})}
-      className={`flex-1 items-center rounded-xl px-2 py-2.5 ${active ? 'bg-primary' : 'bg-paper'}`}
+      className={`flex-1 items-center rounded-full px-2 py-2.5 ${active ? 'bg-primary' : 'bg-paper'}`}
       style={({ pressed }) => (pressed ? { opacity: 0.85 } : undefined)}
     >
       <Text className={`text-sm font-bold ${active ? 'text-on-primary' : 'text-ink'}`}>{label}</Text>
