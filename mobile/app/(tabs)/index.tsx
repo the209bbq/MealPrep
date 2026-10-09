@@ -90,6 +90,8 @@ import {
   FORKINATOR_FORK_IN_ROAD_HOME_CARD_MESSAGE,
 } from '../../lib/forkinator/forkInRoadPromptCopy';
 import { requestForkInRoadQuiz } from '../../lib/forkinator/forkInRoadQuizRequest';
+import { AskForkySheet } from '../../components/forkinator/AskForkySheet';
+import { ASK_FORKY_COPY } from '../../config/askForky';
 import {
   HomeWebPullRefreshIndicator,
   useHomeScrollRefresh,
@@ -161,6 +163,8 @@ export default function HomeScreen() {
     toggleMealPlanKitchenRecipe,
     feedKitchenRecipes,
     isGuest,
+    isAdmin,
+    featureFlags,
     userDietPrefs,
     notifySavedToMyRecipes,
     notifyRemovedFromMyRecipes,
@@ -991,6 +995,16 @@ export default function HomeScreen() {
     requestForkInRoadQuiz();
   }, []);
 
+  // Ask Forky (AI chat): off for customers until the switch is on; admins can try it first.
+  const askForkyAvailable = (featureFlags.askForky || isAdmin) && !demoMode;
+  const [askForkyOpen, setAskForkyOpen] = useState(false);
+  const openAskForkyRecipe = useCallback(
+    (recipeId: string) => {
+      router.push({ pathname: '/', params: { recipeId } });
+    },
+    [],
+  );
+
   function openSavedRecipeRow(row: RecipesTabRow) {
     if (row.kind === 'kitchen' && row.recipe.id.startsWith('viral-preview-')) {
       const record = savedRecipes.records.find((entry) => {
@@ -1126,7 +1140,26 @@ export default function HomeScreen() {
               {FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL}
             </Text>
           </Pressable>
+          {askForkyAvailable ? (
+            <Pressable
+              onPress={() => setAskForkyOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={ASK_FORKY_COPY.openButton}
+              className="mt-2 min-h-[44px] items-center justify-center self-start rounded-full border border-cream px-[18px]"
+              style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
+            >
+              <Text className="text-[15px] font-bold text-cream">{ASK_FORKY_COPY.openButton}</Text>
+            </Pressable>
+          ) : null}
         </View>
+      ) : null}
+      {askForkyAvailable ? (
+        <AskForkySheet
+          visible={askForkyOpen}
+          onClose={() => setAskForkyOpen(false)}
+          onOpenRecipe={openAskForkyRecipe}
+          onHelpMePick={handleHelpMePick}
+        />
       ) : null}
 
       <Card
