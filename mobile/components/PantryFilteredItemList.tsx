@@ -1,10 +1,20 @@
 import { useMemo } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { CATEGORY_LABELS } from '../config/appConfig';
-import { PANTRY_LIST_COPY, type PantryStorageLocation } from '../config/pantryStorage';
+import {
+  labelForPantryStorageLocation,
+  PANTRY_LIST_COPY,
+  type PantryStorageLocation,
+} from '../config/pantryStorage';
 import { groupPantryIntoLocationSections } from '../lib/pantryGrouping';
 import { formatQuantityWithUnit } from '../lib/formatQuantity';
-import { formatPantryExpiryShort, isExpiringSoon, isPantryItemExpired } from '../lib/pantry/expiry';
+import {
+  daysUntilPantryExpiry,
+  formatPantryDaysLeft,
+  formatPantryExpiryShort,
+  isExpiringSoon,
+  isPantryItemExpired,
+} from '../lib/pantry/expiry';
 import type { PantryCategory, PantryItem } from '../types/mealprep';
 
 interface PantryFilteredItemListProps {
@@ -16,42 +26,72 @@ interface PantryFilteredItemListProps {
   onResetFilters?: () => void;
 }
 
+const SECTION_HEADING_CLASS = 'mb-2.5 text-[19px] font-extrabold text-ink';
+const SECTION_CARD_CLASS = 'overflow-hidden rounded-[18px] border border-border bg-card';
+
+function rowClassName(isLast: boolean, highlighted: boolean): string {
+  return `min-h-[56px] flex-row items-center justify-between gap-3 px-4 py-2 ${
+    isLast ? '' : 'border-b border-border/60'
+  } ${highlighted ? 'bg-primary-light' : ''}`;
+}
+
 function PantryItemRow({
   item,
   highlighted,
+  isLast,
   onPress,
 }: {
   item: PantryItem;
   highlighted: boolean;
+  isLast: boolean;
   onPress: () => void;
 }) {
   const expiryLabel = formatPantryExpiryShort(item.expiresOn);
   const expired = isPantryItemExpired(item);
   const soon = !expired && isExpiringSoon(item);
   return (
-    <Pressable
-      onPress={onPress}
-      className={`mb-2 rounded-xl border bg-paper px-3 py-3 ${
-        highlighted ? 'border-primary border-2' : 'border-border'
-      }`}
-    >
-      <View className="flex-row items-start justify-between">
-        <View className="flex-1 pr-2">
-          <Text className="text-base font-bold text-ink">{item.name}</Text>
-          <Text className="text-sm text-muted">
-            {CATEGORY_LABELS[item.category]} · {formatQuantityWithUnit(item.quantity, item.unit)}
-            {expiryLabel ? ` · ${expiryLabel}` : ''}
-          </Text>
-          {expired && expiryLabel ? (
-            <Text className="mt-0.5 text-xs font-semibold text-danger">Expired</Text>
-          ) : soon && expiryLabel ? (
-            <Text className="mt-0.5 text-xs font-semibold text-danger">Expiring soon</Text>
-          ) : null}
-        </View>
-        {item.photoUri ? (
-          <Image source={{ uri: item.photoUri }} className="h-12 w-12 rounded-lg" />
+    <Pressable onPress={onPress} accessibilityRole="button" className={rowClassName(isLast, highlighted)}>
+      <View className="min-w-0 flex-1">
+        <Text className="text-base font-bold text-ink">{item.name}</Text>
+        <Text className="text-[13px] text-muted">
+          {CATEGORY_LABELS[item.category]}
+          {expiryLabel ? ` · ${expiryLabel}` : ''}
+        </Text>
+        {expired && expiryLabel ? (
+          <Text className="text-[13px] font-semibold text-danger">Expired</Text>
+        ) : soon && expiryLabel ? (
+          <Text className="text-[13px] font-semibold text-danger">Expiring soon</Text>
         ) : null}
       </View>
+      <Text className="shrink-0 text-[15px] text-muted">{formatQuantityWithUnit(item.quantity, item.unit)}</Text>
+      {item.photoUri ? <Image source={{ uri: item.photoUri }} className="h-10 w-10 rounded-lg" /> : null}
+    </Pressable>
+  );
+}
+
+function UseSoonRow({
+  item,
+  highlighted,
+  isLast,
+  onPress,
+}: {
+  item: PantryItem;
+  highlighted: boolean;
+  isLast: boolean;
+  onPress: () => void;
+}) {
+  const daysLeftLabel = formatPantryDaysLeft(item);
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" className={rowClassName(isLast, highlighted)}>
+      <View className="min-w-0 flex-1">
+        <Text className="text-base font-bold text-ink">{item.name}</Text>
+        <Text className="text-[13px] text-muted">{labelForPantryStorageLocation(item.location)}</Text>
+      </View>
+      {daysLeftLabel ? (
+        <View className="shrink-0 rounded-[10px] bg-warning-light px-2.5 py-[5px]">
+          <Text className="text-[13px] font-bold text-on-warning">{daysLeftLabel}</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -69,14 +109,31 @@ export function PantryFilteredItemList({
     [categoryFilter, items, locationFilter],
   );
 
+  /** Dated items inside the app's existing "expiring soon" window, soonest first (same filters as the list). */
+  const useSoonItems = useMemo(
+    () =>
+      sections
+        .flatMap((section) => section.items)
+        .filter((item) => isExpiringSoon(item))
+        .sort((a, b) => {
+          const byDays = (daysUntilPantryExpiry(a) ?? 0) - (daysUntilPantryExpiry(b) ?? 0);
+          return byDays !== 0 ? byDays : a.name.localeCompare(b.name);
+        }),
+    [sections],
+  );
+
   const hasItems = sections.some((section) => section.items.length > 0);
 
   if (!hasItems) {
     return (
-      <View className="mb-4 rounded-2xl border border-border bg-card px-4 py-6">
+      <View className="rounded-[18px] border border-border bg-card px-4 py-6">
         <Text className="text-center text-sm text-muted">{PANTRY_LIST_COPY.emptyFiltered}</Text>
         {items.length > 0 && onResetFilters ? (
-          <Pressable onPress={onResetFilters} className="mt-3 items-center rounded-xl border border-border py-2.5">
+          <Pressable
+            onPress={onResetFilters}
+            accessibilityRole="button"
+            className="mt-3 min-h-[44px] items-center justify-center rounded-full border border-border px-4"
+          >
             <Text className="text-sm font-bold text-primary-dark">{PANTRY_LIST_COPY.showAllFilters}</Text>
           </Pressable>
         ) : null}
@@ -87,35 +144,52 @@ export function PantryFilteredItemList({
   const showLocationHeaders = locationFilter === 'all';
 
   return (
-    <View className="mb-4">
+    <View className="gap-4">
+      {useSoonItems.length > 0 ? (
+        <View>
+          <Text className={SECTION_HEADING_CLASS} accessibilityRole="header">
+            {PANTRY_LIST_COPY.useSoonHeading}
+          </Text>
+          <View className={SECTION_CARD_CLASS}>
+            {useSoonItems.map((item, index) => (
+              <UseSoonRow
+                key={item.id}
+                item={item}
+                highlighted={highlightItemIds?.has(item.id) ?? false}
+                isLast={index === useSoonItems.length - 1}
+                onPress={() => onPressItem(item)}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       {sections.map((section) => {
         if (section.items.length === 0) {
           return null;
         }
 
+        const rows = section.categoryGroups.flatMap((group) => group.items);
+
         return (
-          <View key={section.location} className={showLocationHeaders ? 'mb-4' : ''}>
+          <View key={section.location}>
             {showLocationHeaders ? (
-              <Text className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+              <Text className={SECTION_HEADING_CLASS} accessibilityRole="header">
                 {section.label}
               </Text>
             ) : null}
 
-            {section.categoryGroups.map((group) => (
-              <View key={`${section.location}-${group.category}`} className="mb-1">
-                <Text className="mb-1 px-1 text-xs font-bold uppercase tracking-wide text-muted">
-                  {group.label}
-                </Text>
-                {group.items.map((item) => (
-                  <PantryItemRow
-                    key={item.id}
-                    item={item}
-                    highlighted={highlightItemIds?.has(item.id) ?? false}
-                    onPress={() => onPressItem(item)}
-                  />
-                ))}
-              </View>
-            ))}
+            <View className={SECTION_CARD_CLASS}>
+              {rows.map((item, index) => (
+                <PantryItemRow
+                  key={item.id}
+                  item={item}
+                  highlighted={highlightItemIds?.has(item.id) ?? false}
+                  isLast={index === rows.length - 1}
+                  onPress={() => onPressItem(item)}
+                />
+              ))}
+            </View>
           </View>
         );
       })}

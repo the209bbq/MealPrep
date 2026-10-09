@@ -71,3 +71,21 @@ export function isExpiringSoon(item: Pick<PantryItem, 'expiresOn'>, days = 7, no
   horizon.setUTCDate(horizon.getUTCDate() + days);
   return exp.getTime() <= horizon.getTime();
 }
+
+/** Whole calendar days from today until `expiresOn` (0 = today, negative = expired). Null when no valid date. */
+export function daysUntilPantryExpiry(item: Pick<PantryItem, 'expiresOn'>, now = new Date()): number | null {
+  if (!item.expiresOn) return null;
+  const exp = parseIsoDateOnly(item.expiresOn.slice(0, 10));
+  if (!exp) return null;
+  const today = parseIsoDateOnly(todayIsoDate(now));
+  if (!today) return null;
+  return Math.round((exp.getTime() - today.getTime()) / 86_400_000);
+}
+
+/** Use-soon badge label, e.g. "1 day left". Null when the item has no date or is already expired. */
+export function formatPantryDaysLeft(item: Pick<PantryItem, 'expiresOn'>, now = new Date()): string | null {
+  const days = daysUntilPantryExpiry(item, now);
+  if (days === null || days < 0) return null;
+  if (days === 0) return 'Use today';
+  return `${days} day${days === 1 ? '' : 's'} left`;
+}

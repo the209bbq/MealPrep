@@ -25,6 +25,7 @@ export function PantryStorageScanButtons({
   scanLocation,
   autoOpenScanMode,
   onAutoOpenScanHandled,
+  showPlusBadge,
 }: PantryStorageScanButtonsProps) {
   const [guestGateOpen, setGuestGateOpen] = useState(false);
   const [plusGateOpen, setPlusGateOpen] = useState(false);
@@ -121,7 +122,7 @@ export function PantryStorageScanButtons({
   }, [autoOpenScanMode, disabled, onAutoOpenScanHandled]);
 
   return (
-    <View className="mt-3">
+    <View>
       {authPhotoScanPending ? (
         <Text className="mb-2 text-xs text-muted">{GUEST_MODE_COPY.pantryScanAuthLoading}</Text>
       ) : null}
@@ -129,17 +130,28 @@ export function PantryStorageScanButtons({
       <Pressable
         disabled={pickersDisabled}
         onPress={() => void onPressScanShelf()}
-        className={`flex-row items-center justify-center gap-2 rounded-xl px-4 py-3 ${
-          pickersDisabled ? 'bg-slate/40' : 'bg-primary'
+        className={`min-h-[44px] flex-row items-center gap-3 rounded-[20px] border-[1.5px] border-tomato bg-card p-3.5 ${
+          pickersDisabled ? 'opacity-50' : ''
         }`}
+        accessibilityRole="button"
         accessibilityLabel={PANTRY_SCAN_UI_COPY.scanShelfA11y}
       >
-        <Ionicons name="camera-outline" size={22} color={THEME.onPrimary} />
-        <Text className="text-sm font-bold text-on-primary">{PANTRY_SCAN_UI_COPY.scanShelf}</Text>
+        <View className="h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tomato-light">
+          <Ionicons name="camera-outline" size={24} color={THEME.tomatoDark} />
+        </View>
+        <View className="min-w-0 flex-1">
+          <Text className="text-base font-extrabold text-ink">{PANTRY_SCAN_UI_COPY.scanCardTitle}</Text>
+          <Text className="mt-0.5 text-sm leading-5 text-muted">{PANTRY_SCAN_UI_COPY.scanCardSubtitle}</Text>
+        </View>
+        {showPlusBadge ? (
+          <View className="shrink-0 rounded-[10px] bg-tomato px-[9px] py-1">
+            <Text className="text-xs font-extrabold text-on-tomato">{PANTRY_SCAN_UI_COPY.scanCardPlusBadge}</Text>
+          </View>
+        ) : null}
       </Pressable>
 
       {sourceMenuOpen ? (
-        <View className="mt-2 rounded-xl border border-border bg-card p-2">
+        <View className="mt-2 rounded-[18px] border border-border bg-card p-3">
           <Text className="mb-2 text-center text-xs font-semibold text-muted">
             {PANTRY_SCAN_UI_COPY.choosePhotoSourceMessage}
           </Text>
@@ -147,44 +159,48 @@ export function PantryStorageScanButtons({
             <Pressable
               disabled={pickersDisabled}
               onPress={() => void onPressPicker('camera')}
-              className={`flex-1 rounded-lg py-2.5 ${pickersDisabled ? 'opacity-40' : 'bg-primary-light'}`}
+              className={`min-h-[44px] flex-1 items-center justify-center rounded-full px-3 ${pickersDisabled ? 'opacity-40' : 'bg-primary'}`}
               accessibilityLabel={PANTRY_SCAN_UI_COPY.takePhoto}
             >
-              <Text className="text-center text-xs font-bold text-primary-dark">
+              <Text className="text-center text-sm font-bold text-cream">
                 {PANTRY_SCAN_UI_COPY.takePhoto}
               </Text>
             </Pressable>
             <Pressable
               disabled={pickersDisabled}
               onPress={() => void onPressPicker('library')}
-              className={`flex-1 rounded-lg border border-border py-2.5 ${pickersDisabled ? 'opacity-40' : 'bg-paper'}`}
+              className={`min-h-[44px] flex-1 items-center justify-center rounded-full border border-border px-3 ${pickersDisabled ? 'opacity-40' : 'bg-card'}`}
               accessibilityLabel={PANTRY_SCAN_UI_COPY.chooseFromLibrary}
             >
-              <Text className="text-center text-xs font-bold text-slate">
+              <Text className="text-center text-sm font-bold text-ink">
                 {PANTRY_SCAN_UI_COPY.chooseFromLibrary}
               </Text>
             </Pressable>
           </View>
-          <Pressable onPress={() => setSourceMenuOpen(false)} className="mt-2 py-1">
-            <Text className="text-center text-xs font-semibold text-muted">Cancel</Text>
+          <Pressable
+            onPress={() => setSourceMenuOpen(false)}
+            className="mt-1 min-h-[44px] items-center justify-center"
+            accessibilityRole="button"
+          >
+            <Text className="text-center text-sm font-semibold text-muted">Cancel</Text>
           </Pressable>
         </View>
       ) : null}
 
       {guestGateOpen ? (
-        <View className="mb-2 mt-2 rounded-2xl border border-primary bg-primary-light px-4 py-4">
+        <View className="mt-2 rounded-[18px] border border-primary bg-primary-light px-4 py-4">
           <Text className="text-sm font-bold text-ink">{GUEST_MODE_COPY.pantryScanSignInTitle}</Text>
           <Text className="mt-1 text-sm leading-5 text-muted">{GUEST_MODE_COPY.pantryScanSignIn}</Text>
           <View className="mt-3 flex-row gap-2">
             <Pressable
               onPress={() => onRequestSignIn?.()}
-              className="flex-1 items-center rounded-full bg-primary py-3"
+              className="min-h-[44px] flex-1 items-center justify-center rounded-full bg-primary px-4"
             >
               <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>
             </Pressable>
             <Pressable
               onPress={() => setGuestGateOpen(false)}
-              className="items-center justify-center rounded-xl border border-border bg-paper px-4 py-3"
+              className="min-h-[44px] items-center justify-center rounded-full border border-border bg-card px-4"
             >
               <Text className="text-sm font-semibold text-muted">Not now</Text>
             </Pressable>

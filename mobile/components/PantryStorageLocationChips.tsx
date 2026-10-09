@@ -36,11 +36,19 @@ export function PantryStorageLocationChips({
             <Pressable
               key={option.id}
               onPress={() => onSelect(option.id)}
-              className={`mr-2 rounded-full ${compact ? 'px-2 py-1' : 'px-3 py-1.5'} ${
-                active ? 'bg-primary' : 'border border-border bg-paper'
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              className={`mr-2 items-center justify-center rounded-full ${compact ? 'px-2 py-1' : 'min-h-[44px] px-4'} ${
+                active ? 'bg-primary' : `border border-border ${compact ? 'bg-paper' : 'bg-card'}`
               }`}
             >
-              <Text className={`font-semibold ${compact ? 'text-[10px]' : 'text-xs'} ${active ? 'text-on-primary' : 'text-muted'}`}>
+              <Text
+                className={`${compact ? 'text-[10px] font-semibold' : 'text-sm'} ${
+                  active
+                    ? `${compact ? 'text-on-primary' : 'font-bold text-cream'}`
+                    : `${compact ? 'text-muted' : 'font-semibold text-ink'}`
+                }`}
+              >
                 {option.label}
               </Text>
             </Pressable>
@@ -72,20 +80,21 @@ export function PantryStorageLocationFilterChips({
   ];
 
   return (
-    <View>
-      <Text className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">
-        {PANTRY_LIST_COPY.storageFilterLabel}
-      </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
+    <View accessibilityLabel={PANTRY_LIST_COPY.storageFilterLabel}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         {items.map((item) => {
           const active = selected === item.key;
           return (
             <Pressable
               key={item.key}
               onPress={() => onSelect(item.key)}
-              className={`mr-2 rounded-full px-3 py-1.5 ${active ? 'bg-slate' : 'border border-border bg-paper'}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              className={`mr-2 min-h-[44px] items-center justify-center rounded-full px-4 ${
+                active ? 'bg-primary' : 'border border-border bg-card'
+              }`}
             >
-              <Text className={`text-xs font-semibold ${active ? 'text-on-primary' : 'text-muted'}`}>
+              <Text className={`text-sm ${active ? 'font-bold text-cream' : 'font-semibold text-ink'}`}>
                 {item.label} ({item.count})
               </Text>
             </Pressable>

@@ -22,16 +22,16 @@ export function PantryScanTip({ className = '' }: PantryScanTipProps) {
   if (!visible) return null;
 
   return (
-    <View className={`rounded-xl border border-primary/30 bg-primary-light/40 px-3 py-2 ${className}`}>
+    <View className={`rounded-[18px] border border-primary/30 bg-primary-light/40 px-4 py-2 ${className}`}>
       <View className="flex-row items-start justify-between gap-2">
-        <Text className="flex-1 text-xs leading-5 text-primary-dark">{PANTRY_SCAN_TIP.message}</Text>
+        <Text className="flex-1 py-2 text-sm leading-5 text-primary-dark">{PANTRY_SCAN_TIP.message}</Text>
         <Pressable
           onPress={dismiss}
           accessibilityRole="button"
           accessibilityLabel="Dismiss scan tip"
-          hitSlop={8}
+          className="min-h-[44px] items-center justify-center px-1"
         >
-          <Text className="text-xs font-bold text-primary-dark">Dismiss</Text>
+          <Text className="text-sm font-bold text-primary-dark">Dismiss</Text>
         </Pressable>
       </View>
     </View>

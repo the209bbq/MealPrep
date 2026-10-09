@@ -78,6 +78,7 @@ import {
 import { resolvePhotoScanAccess } from '../../lib/guest/resolvePhotoScanAccess';
 import { photoScanPlanBlockedMessage } from '../../lib/plans/photoScanPlanBlockedMessage';
 import {
+  photoScanAccessState,
   photoScanAccessUserMessage,
   shouldDeferPhotoScanForProfile,
 } from '../../lib/plans/photoScanAccess';
@@ -865,58 +866,72 @@ export default function PantryScreen() {
   const showSetupHint = !visionReady && !demoMode;
   const scanControlsVisible = phase !== 'review';
   const showStaplesInvite = pantry.length === 0 && !staplesInviteDismissed && phase !== 'review';
+  /** "Plus" badge on the scan card: only for people the existing gate would not let scan (guest or free plan). */
+  const scanAccessState = photoScanAccessState(photoScanAccess);
+  const showScanPlusBadge = scanAccessState === 'guest_blocked' || scanAccessState === 'plan_blocked';
 
   return (
     <>
       <View className="flex-1 bg-paper">
-        <ScrollView className="flex-1 px-4 pb-8" contentContainerStyle={{ paddingBottom: phase === 'review' ? 96 : 32 }}>
-        <View className="mt-4 flex-row items-start justify-between gap-2">
-          <View className="flex-1">
-            <Text className="text-lg font-bold text-ink">Pantry</Text>
-            <Text className="text-sm text-muted">Track what you own — fewer duplicate buys</Text>
+        <ScrollView
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingTop: 20, paddingBottom: phase === 'review' ? 96 : 32 }}
+        >
+        <View className="gap-4">
+          <View>
+            <View className="flex-row items-center justify-between gap-2">
+              <Text className="flex-1 text-[28px] font-extrabold leading-9 text-ink" accessibilityRole="header">
+                Pantry
+              </Text>
+              {pantry.length > 0 ? (
+                <Pressable
+                  onPress={() => setOverflowOpen(true)}
+                  className="h-11 w-11 items-center justify-center rounded-full border border-border bg-card"
+                  accessibilityRole="button"
+                  accessibilityLabel={PANTRY_LIST_COPY.overflowMenuA11y}
+                >
+                  <Ionicons name="ellipsis-horizontal" size={22} color={THEME.ink} />
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={openAddModal}
+                className="h-11 flex-row items-center gap-1.5 rounded-full bg-primary pl-3 pr-4"
+                accessibilityRole="button"
+                accessibilityLabel="Add item"
+              >
+                <Ionicons name="add" size={20} color={THEME.brandCream} />
+                <Text className="text-[15px] font-bold text-cream">Add item</Text>
+              </Pressable>
+            </View>
+            <Text className="mt-1 text-sm text-muted">Track what you own — fewer duplicate buys</Text>
             <PantryAddStaplesLink onPress={openPantryStaples} />
           </View>
-          {pantry.length > 0 ? (
-            <Pressable
-              onPress={() => setOverflowOpen(true)}
-              className="rounded-full border border-border bg-card p-2"
-              accessibilityRole="button"
-              accessibilityLabel={PANTRY_LIST_COPY.overflowMenuA11y}
-            >
-              <Ionicons name="ellipsis-horizontal" size={22} color={THEME.ink} />
-            </Pressable>
+
+          {showStaplesInvite ? (
+            <PantryStaplesInviteCard onPick={openPantryStaples} onDismiss={dismissStaplesInvite} />
           ) : null}
-        </View>
 
-        {showStaplesInvite ? (
-          <PantryStaplesInviteCard onPick={openPantryStaples} onDismiss={dismissStaplesInvite} />
-        ) : null}
+          {scanRecipeCount != null && scanRecipeCount > 0 ? (
+            <View className="rounded-[18px] border border-primary bg-primary-light px-4 py-4">
+              <Text className="text-base font-extrabold text-primary-dark">Pantry updated</Text>
+              <Text className="mt-1 text-sm text-primary-dark">
+                See {scanRecipeCount} recipe{scanRecipeCount === 1 ? '' : 's'} you can make with default matches.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setScanRecipeCount(null);
+                  router.push(APP_ROUTES.home);
+                }}
+                className="mt-3 min-h-[44px] items-center justify-center rounded-full bg-primary px-4"
+                accessibilityRole="button"
+              >
+                <Text className="text-sm font-bold text-cream">See {scanRecipeCount} recipes</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
-        {scanRecipeCount != null && scanRecipeCount > 0 ? (
-          <View className="mt-4 rounded-2xl border border-primary bg-primary-light px-4 py-4">
-            <Text className="font-bold text-primary-dark">Pantry updated</Text>
-            <Text className="mt-1 text-sm text-primary-dark">
-              See {scanRecipeCount} recipe{scanRecipeCount === 1 ? '' : 's'} you can make with default matches.
-            </Text>
-            <Pressable
-              onPress={() => {
-                setScanRecipeCount(null);
-                router.push(APP_ROUTES.home);
-              }}
-              className="mt-3 items-center rounded-full bg-primary py-3"
-            >
-              <Text className="text-sm font-bold text-on-primary">See {scanRecipeCount} recipes</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        <Card
-          className="mt-4"
-          title="Pantry inventory"
-          subtitle={PANTRY_SCAN_UI_COPY.inventoryCardSubtitle}
-        >
           {scanControlsVisible ? (
-            <>
+            <View className="gap-2">
               <PantryStorageScanButtons
                 disabled={phase === 'loading' || !featureFlags.photoScan}
                 guestPhotoScanBlocked={shouldBlockGuestPantryPhotoScan(photoScanGate)}
@@ -937,14 +952,15 @@ export default function PantryScreen() {
                 onRequestSignIn={openAuthSheet}
                 autoOpenScanMode={autoOpenScanMode}
                 onAutoOpenScanHandled={() => setAutoOpenScanMode(null)}
+                showPlusBadge={showScanPlusBadge}
               />
 
-              {featureFlags.photoScan ? <PantryScanTip className="mt-2" /> : null}
-            </>
+              {featureFlags.photoScan ? <PantryScanTip /> : null}
+            </View>
           ) : null}
 
           {phase === 'loading' ? (
-            <View className="mt-4 items-center py-6">
+            <View className="items-center rounded-[18px] border border-border bg-card px-4 py-6">
               <ActivityIndicator size="large" color={THEME.primary} />
               <Text className="mt-2 text-sm text-muted">Analyzing photo…</Text>
               <Text className="mt-2 max-w-sm text-center text-xs text-muted">
@@ -954,36 +970,37 @@ export default function PantryScreen() {
           ) : null}
 
           {previewUri ? (
-            <Image source={{ uri: previewUri }} className="mt-3 h-32 w-full rounded-xl" resizeMode="cover" />
+            <Image source={{ uri: previewUri }} className="h-32 w-full rounded-[18px]" resizeMode="cover" />
           ) : null}
 
           {showSetupHint ? (
-            <View className="mt-3 rounded-xl border border-border bg-paper p-3">
-              <Text className="text-sm font-semibold text-ink">Photo scan not set up yet</Text>
+            <View className="rounded-[18px] border border-border bg-card px-4 py-3">
+              <Text className="text-sm font-bold text-ink">Photo scan not set up yet</Text>
               <Text className="mt-1 text-xs text-muted">{PHOTO_SCAN.notConfiguredMessage}</Text>
             </View>
           ) : null}
 
           {demoMode ? (
-            <Text className="mt-2 text-xs text-muted">
+            <Text className="text-xs text-muted">
               Demo mode: scan returns labeled sample detections only (no cloud scan).
             </Text>
           ) : null}
 
           {scanQualityWarning ? (
-            <View className="mt-3 rounded-xl border border-border bg-paper p-3">
+            <View className="rounded-[18px] border border-border bg-card px-4 py-3">
               <Text className="text-xs text-muted">{scanQualityWarning}</Text>
             </View>
           ) : null}
 
           {scanNotice ? (
-            <View className="mt-3 rounded-xl border border-border bg-paper p-3">
+            <View className="rounded-[18px] border border-border bg-card px-4 py-3">
               <Text className="text-sm font-bold text-ink">{scanNotice.title}</Text>
               <Text className="mt-1 text-xs text-muted">{scanNotice.message}</Text>
               {lastScanAttempt ? (
                 <Pressable
                   onPress={retryLastScan}
-                  className="mt-3 items-center rounded-xl border border-border bg-card py-2.5"
+                  className="mt-3 min-h-[44px] items-center justify-center rounded-full border border-border bg-card px-4"
+                  accessibilityRole="button"
                 >
                   <Text className="text-sm font-bold text-primary-dark">{PHOTO_SCAN.tryAgainLabel}</Text>
                 </Pressable>
@@ -992,21 +1009,23 @@ export default function PantryScreen() {
           ) : null}
 
           {scanError ? (
-            <View className="mt-3 rounded-xl border border-danger/25 bg-paper p-3">
+            <View className="rounded-[18px] border border-danger/25 bg-card px-4 py-3">
               <Text className="text-sm font-bold text-ink">{scanErrorTitle ?? PHOTO_SCAN.scanFailedTitle}</Text>
               <Text className="mt-1 text-xs text-muted">{scanError}</Text>
               {scanGuestSignInCta ? (
                 <Pressable
                   onPress={openAuthSheet}
-                  className="mt-3 items-center rounded-full bg-primary py-2.5"
+                  className="mt-3 min-h-[44px] items-center justify-center rounded-full bg-primary px-4"
+                  accessibilityRole="button"
                 >
-                  <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>
+                  <Text className="text-sm font-bold text-cream">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>
                 </Pressable>
               ) : null}
               {lastScanAttempt ? (
                 <Pressable
                   onPress={retryLastScan}
-                  className="mt-3 items-center rounded-xl border border-border bg-card py-2.5"
+                  className="mt-3 min-h-[44px] items-center justify-center rounded-full border border-border bg-card px-4"
+                  accessibilityRole="button"
                 >
                   <Text className="text-sm font-bold text-primary-dark">{PHOTO_SCAN.tryAgainLabel}</Text>
                 </Pressable>
@@ -1015,65 +1034,62 @@ export default function PantryScreen() {
           ) : null}
 
           {phase === 'review' ? (
-            <PantryScanReview
-              key={`${scanLocationHint}-${reviewItems.map((i) => i.key).join(',')}`}
-              items={reviewItems}
-              onChange={setReviewItems}
-              onSave={() => void handleSaveReview()}
-              onCancel={handleCancelReview}
-              onAddAnotherPhoto={() => void handleAddAnotherPhotoFromReview()}
-              addPhotoBusy={addPhotoBusy}
-              saving={saving}
-              modelLabel={isAdmin ? modelLabel : undefined}
-              saveError={saveError}
-              defaultBatchLocation={scanLocationHint}
-              onBatchLocationChange={setScanLocationHint}
-              stickyFooter
-              pantry={pantry}
-              recipes={recipes}
-              scanLocationHint={scanLocationHint}
-              shareTrainingPhoto={userPreferences.shareScanPhotoForTraining}
-              onShareTrainingPhotoChange={(value) => setUserPreference('shareScanPhotoForTraining', value)}
-            />
+            <Card>
+              <PantryScanReview
+                key={`${scanLocationHint}-${reviewItems.map((i) => i.key).join(',')}`}
+                items={reviewItems}
+                onChange={setReviewItems}
+                onSave={() => void handleSaveReview()}
+                onCancel={handleCancelReview}
+                onAddAnotherPhoto={() => void handleAddAnotherPhotoFromReview()}
+                addPhotoBusy={addPhotoBusy}
+                saving={saving}
+                modelLabel={isAdmin ? modelLabel : undefined}
+                saveError={saveError}
+                defaultBatchLocation={scanLocationHint}
+                onBatchLocationChange={setScanLocationHint}
+                stickyFooter
+                pantry={pantry}
+                recipes={recipes}
+                scanLocationHint={scanLocationHint}
+                shareTrainingPhoto={userPreferences.shareScanPhotoForTraining}
+                onShareTrainingPhotoChange={(value) => setUserPreference('shareScanPhotoForTraining', value)}
+              />
+            </Card>
           ) : null}
 
-          <Pressable
-            onPress={openAddModal}
-            className="mt-4 rounded-xl border border-border bg-card px-3 py-3"
-          >
-            <Text className="text-center text-sm font-bold text-primary-dark">Add item manually</Text>
-          </Pressable>
-        </Card>
+          <View className="gap-2">
+            <PantryStorageLocationFilterChips
+              selected={locationFilter}
+              onSelect={selectLocationFilter}
+              counts={locationFilterCounts}
+            />
 
-        <PantryStorageLocationFilterChips
-          selected={locationFilter}
-          onSelect={selectLocationFilter}
-          counts={locationFilterCounts}
-        />
-
-        <CategoryChips selected={filter} onSelect={setFilter} />
-
-        {actionError ? <Text className="mb-2 text-xs font-semibold text-danger">{actionError}</Text> : null}
-
-        {!profileReady && pantry.length === 0 ? (
-          <View className="mt-8 items-center justify-center py-8">
-            <ActivityIndicator color={THEME.primary} />
+            <CategoryChips selected={filter} onSelect={setFilter} />
           </View>
-        ) : pantry.length === 0 ? (
-          <TabEmptyState tab="pantry" />
-        ) : (
-          <PantryFilteredItemList
-            items={pantry}
-            categoryFilter={filter}
-            locationFilter={locationFilter}
-            highlightItemIds={highlightItemIds}
-            onPressItem={openEditModal}
-            onResetFilters={() => {
-              selectLocationFilter('all');
-              setFilter('all');
-            }}
-          />
-        )}
+
+          {actionError ? <Text className="text-xs font-semibold text-danger">{actionError}</Text> : null}
+
+          {!profileReady && pantry.length === 0 ? (
+            <View className="items-center justify-center py-8">
+              <ActivityIndicator color={THEME.primary} />
+            </View>
+          ) : pantry.length === 0 ? (
+            <TabEmptyState tab="pantry" className="mt-0" />
+          ) : (
+            <PantryFilteredItemList
+              items={pantry}
+              categoryFilter={filter}
+              locationFilter={locationFilter}
+              highlightItemIds={highlightItemIds}
+              onPressItem={openEditModal}
+              onResetFilters={() => {
+                selectLocationFilter('all');
+                setFilter('all');
+              }}
+            />
+          )}
+        </View>
         </ScrollView>
 
         {phase === 'review' ? (
@@ -1106,7 +1122,7 @@ export default function PantryScreen() {
       <Modal visible={addOpen} animationType="slide" transparent onRequestClose={closeManualModal}>
         <View className="flex-1 justify-end bg-black/40">
           <View className="rounded-t-3xl border border-border bg-paper px-4 pb-8 pt-4">
-            <Text className="text-lg font-bold text-ink">{editItem ? 'Edit item' : 'Add item'}</Text>
+            <Text className="text-[19px] font-extrabold text-ink">{editItem ? 'Edit item' : 'Add item'}</Text>
             <TextInput
               value={manualName}
               onChangeText={setManualName}
@@ -1144,9 +1160,9 @@ export default function PantryScreen() {
                         setManualLocation(suggestStorageLocationForCategory(cat));
                       }
                     }}
-                    className={`mr-2 rounded-full px-3 py-2 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
+                    className={`mr-2 min-h-[44px] items-center justify-center rounded-full px-4 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
                   >
-                    <Text className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-slate'}`}>
+                    <Text className={`text-sm font-semibold ${selected ? 'text-cream' : 'text-ink'}`}>
                       {CATEGORY_LABELS[cat]}
                     </Text>
                   </Pressable>
@@ -1171,9 +1187,9 @@ export default function PantryScreen() {
                       setManualExpiresOn(target);
                       setManualExpiryInputOpen(false);
                     }}
-                    className={`rounded-full px-3 py-2 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
+                    className={`min-h-[44px] items-center justify-center rounded-full px-4 ${selected ? 'bg-primary' : 'border border-border bg-card'}`}
                   >
-                    <Text className={`text-xs font-semibold ${selected ? 'text-on-primary' : 'text-slate'}`}>
+                    <Text className={`text-sm font-semibold ${selected ? 'text-cream' : 'text-ink'}`}>
                       {chip.label}
                     </Text>
                   </Pressable>
@@ -1181,10 +1197,10 @@ export default function PantryScreen() {
               })}
               <Pressable
                 onPress={() => setManualExpiryInputOpen((open) => !open)}
-                className={`rounded-full px-3 py-2 ${manualExpiryInputOpen ? 'bg-primary' : 'border border-border bg-card'}`}
+                className={`min-h-[44px] items-center justify-center rounded-full px-4 ${manualExpiryInputOpen ? 'bg-primary' : 'border border-border bg-card'}`}
               >
                 <Text
-                  className={`text-xs font-semibold ${manualExpiryInputOpen ? 'text-on-primary' : 'text-slate'}`}
+                  className={`text-sm font-semibold ${manualExpiryInputOpen ? 'text-cream' : 'text-ink'}`}
                 >
                   {PANTRY_STAPLES_COPY.pickDate}
                 </Text>
@@ -1194,10 +1210,10 @@ export default function PantryScreen() {
                   setManualExpiresOn(null);
                   setManualExpiryInputOpen(false);
                 }}
-                className={`rounded-full px-3 py-2 ${manualExpiresOn === null ? 'bg-primary' : 'border border-border bg-card'}`}
+                className={`min-h-[44px] items-center justify-center rounded-full px-4 ${manualExpiresOn === null ? 'bg-primary' : 'border border-border bg-card'}`}
               >
                 <Text
-                  className={`text-xs font-semibold ${manualExpiresOn === null ? 'text-on-primary' : 'text-slate'}`}
+                  className={`text-sm font-semibold ${manualExpiresOn === null ? 'text-cream' : 'text-ink'}`}
                 >
                   No date
                 </Text>
@@ -1221,7 +1237,7 @@ export default function PantryScreen() {
               <>
                 <Pressable
                   onPress={() => cookWithPantryItem(editItem)}
-                  className="mt-4 rounded-2xl border border-primary/30 bg-primary-light py-3"
+                  className="mt-4 min-h-[44px] items-center justify-center rounded-full border border-primary/30 bg-primary-light px-4"
                   accessibilityRole="button"
                   accessibilityLabel={MAIN_INGREDIENT_COPY.cookWithThisAction}
                 >
@@ -1231,18 +1247,24 @@ export default function PantryScreen() {
                 </Pressable>
                 <Pressable
                   onPress={requestDeleteItem}
-                  className="mt-3 rounded-2xl border border-danger/30 py-3"
+                  className="mt-3 min-h-[44px] items-center justify-center rounded-full border border-danger/30 px-4"
                 >
                   <Text className="text-center font-bold text-danger">Delete item</Text>
                 </Pressable>
               </>
             ) : null}
             <View className="mt-6 flex-row gap-2">
-              <Pressable onPress={closeManualModal} className="flex-1 rounded-2xl border border-border py-3">
-                <Text className="text-center font-bold text-slate">Cancel</Text>
+              <Pressable
+                onPress={closeManualModal}
+                className="min-h-[44px] flex-1 items-center justify-center rounded-full border border-border bg-card px-4"
+              >
+                <Text className="text-center font-bold text-ink">Cancel</Text>
               </Pressable>
-              <Pressable onPress={() => void submitManualForm()} className="flex-1 rounded-2xl bg-primary py-3">
-                <Text className="text-center font-bold text-on-primary">{editItem ? 'Save changes' : 'Add to pantry'}</Text>
+              <Pressable
+                onPress={() => void submitManualForm()}
+                className="min-h-[44px] flex-1 items-center justify-center rounded-full bg-primary px-4"
+              >
+                <Text className="text-center font-bold text-cream">{editItem ? 'Save changes' : 'Add to pantry'}</Text>
               </Pressable>
             </View>
           </View>

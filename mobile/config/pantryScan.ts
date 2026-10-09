@@ -12,6 +12,9 @@ export const PANTRY_SCAN_UI_COPY = {
   inventoryCardSubtitle: '🤳 Scan shelves with your camera to add items',
   scanShelf: 'Scan shelf',
   scanShelfA11y: 'Scan shelf with camera or photo library',
+  scanCardTitle: 'Scan your fridge',
+  scanCardSubtitle: 'Take a photo and Forky adds what he sees.',
+  scanCardPlusBadge: 'Plus',
   addItems: (count: number) => `Add ${count} item${count === 1 ? '' : 's'}`,
   addedToPantry: (count: number) =>
     `Added ${count} item${count === 1 ? '' : 's'} to pantry`,

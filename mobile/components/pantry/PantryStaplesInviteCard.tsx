@@ -10,22 +10,22 @@ interface PantryStaplesInviteCardProps {
 
 export function PantryStaplesInviteCard({ onPick, onDismiss }: PantryStaplesInviteCardProps) {
   return (
-    <View className="mt-4 rounded-2xl border border-primary/25 bg-primary-light px-4 py-4">
+    <View className="rounded-[18px] border border-primary/25 bg-primary-light px-4 py-4">
       <View className="flex-row items-start gap-3">
         <Text className="text-2xl" accessibilityElementsHidden importantForAccessibility="no">
           🧺
         </Text>
         <View className="flex-1">
-          <Text className="text-base font-bold text-primary-dark">{PANTRY_STAPLES_COPY.inviteTitle}</Text>
+          <Text className="text-base font-extrabold text-primary-dark">{PANTRY_STAPLES_COPY.inviteTitle}</Text>
           <Text className="mt-1 text-sm text-primary-dark/90">{PANTRY_STAPLES_COPY.inviteSubtitle}</Text>
-          <Pressable onPress={onPick} className="mt-3 items-center rounded-full bg-primary py-3">
+          <Pressable onPress={onPick} className="mt-3 min-h-[44px] items-center justify-center rounded-full bg-primary px-4">
             <Text className="text-sm font-bold text-on-primary">{PANTRY_STAPLES_COPY.inviteCta}</Text>
           </Pressable>
-          <Pressable onPress={onDismiss} className="mt-2 items-center py-2">
-            <Text className="text-xs font-semibold text-muted">{PANTRY_STAPLES_COPY.skip}</Text>
+          <Pressable onPress={onDismiss} className="mt-1 min-h-[44px] items-center justify-center">
+            <Text className="text-sm font-semibold text-muted">{PANTRY_STAPLES_COPY.skip}</Text>
           </Pressable>
         </View>
-        <Pressable onPress={onDismiss} accessibilityLabel="Dismiss" className="rounded-full p-1">
+        <Pressable onPress={onDismiss} accessibilityLabel="Dismiss" hitSlop={12} className="rounded-full p-1">
           <Ionicons name="close" size={20} color={THEME.muted} />
         </Pressable>
       </View>
