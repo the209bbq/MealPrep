@@ -167,8 +167,12 @@ assert.ok(tapHeights.length >= 6 && tapHeights.every((h) => h >= 44));
 for (const value of Object.values(ASK_FORKY_COPY)) {
   if (typeof value === 'string') assert.doesNotMatch(value, /save \$|\d+ ?% off|free forever|unlimited/i, value);
 }
-const home = read('app/(tabs)/index.tsx');
-assert.match(home, /\(featureFlags\.askForky \|\| isAdmin\) && !demoMode/, 'hidden unless switched on (admins can try it)');
+// Opened by tapping the floating Forky (owner's choice, Oct 9), not from a Home button.
+const overlay = read('components/forkinator/ForkinatorOverlay.tsx');
+assert.match(overlay, /\(featureFlags\.askForky \|\| profile\.role === 'admin'\) && !demoMode/, 'hidden unless switched on (admins can try it)');
+assert.match(overlay, /if \(askForkyAvailable\) setAskForkyOpen\(true\);/);
+assert.match(overlay, /\{askForkyAvailable \? \(\s*<AskForkySheet/);
+assert.doesNotMatch(read('app/(tabs)/index.tsx'), /AskForky|askForky/, 'no Ask Forky entry on Home');
 assert.match(read('config/appConfig.ts'), /askForky: false/);
 // Privacy page names the AI provider before the switch can be turned on (compliance rule 2).
 const privacy = read('public/privacy.html');
