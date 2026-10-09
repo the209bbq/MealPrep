@@ -4,17 +4,19 @@ import brandJson from './appBrand.json';
 export type AppBrandColors = {
   brandCream: string;
   themePrimaryDark: string;
+  iconBackground: string;
 };
 
-export type AppBrandCropRect = {
+/** Mascot placement on the square app icon, as fractions of the icon size. */
+export type AppBrandMascotPlacement = {
   left: number;
   top: number;
   width: number;
-  height: number;
 };
 
 export type AppBrandAssetPaths = {
   icon: string;
+  iconMaskable: string;
   splashIcon: string;
   favicon: string;
   androidIconForeground: string;
@@ -40,11 +42,9 @@ export type AppBrandConfig = {
   shortName: string;
   pwaDescription: string;
   colors: AppBrandColors;
+  sourceMascot: string;
   sourceLogo: string;
-  crops: {
-    icon: AppBrandCropRect;
-    full: AppBrandCropRect;
-  };
+  iconMascot: AppBrandMascotPlacement;
   assets: AppBrandAssetPaths;
   ui: AppBrandUi;
   copy: AppBrandCopy;

@@ -4,15 +4,15 @@
   "pwaDescription": "Plan meals, use your pantry, and shop smarter.",
   "colors": {
     "brandCream": "#FCF8EC",
-    "themePrimaryDark": "#13253F"
+    "themePrimaryDark": "#13253F",
+    "iconBackground": "#1F4D33"
   },
-  "sourceLogo": "assets/mealplanatic-logo-source.png",
-  "crops": {
-    "icon": { "left": 502, "top": 288, "width": 950, "height": 978 },
-    "full": { "left": 139, "top": 288, "width": 1730, "height": 1255 }
-  },
+  "sourceMascot": "assets/brand/forkinator-mascot.png",
+  "sourceLogo": "assets/brand/mealplanatic-logo-lockup.png",
+  "iconMascot": { "left": 0.196, "top": 0.05, "width": 0.608 },
   "assets": {
     "icon": "assets/icon.png",
+    "iconMaskable": "assets/icon-maskable.png",
     "splashIcon": "assets/splash-icon.png",
     "favicon": "assets/favicon.png",
     "androidIconForeground": "assets/android-icon-foreground.png",
