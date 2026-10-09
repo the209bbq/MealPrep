@@ -1041,7 +1041,9 @@ export async function adminSetUserPlan(
   if (!applied || !isUserPlan(applied)) {
     throw new Error('Plan update did not apply. Check admin access and try again.');
   }
-  if (applied !== plan) {
+  // Setting Free only removes the manual grant. A user with a live subscription stays on Plus,
+  // so 'paid' coming back from a 'free' request is a valid outcome, not a failure.
+  if (applied !== plan && !(plan === 'free' && applied === 'paid')) {
     throw new Error(`Plan update returned ${applied} instead of ${plan}.`);
   }
   return applied;
