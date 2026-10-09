@@ -119,7 +119,7 @@ function RecipeImportReviewForm({
               onAddMissingToGrocery(savedRecipeId);
               onClose();
             }}
-            className="mt-4 items-center rounded-xl bg-primary py-4"
+            className="mt-4 items-center rounded-full bg-primary py-4"
           >
             <Text className="text-base font-bold text-on-primary">{RECIPE_IMPORT_COPY.addMissingGroceryCta}</Text>
           </Pressable>
@@ -193,7 +193,7 @@ function RecipeImportReviewForm({
         <Pressable
           onPress={() => void handleSave()}
           disabled={saving}
-          className="mt-6 items-center rounded-xl bg-primary py-4"
+          className="mt-6 items-center rounded-full bg-primary py-4"
         >
           <Text className="text-base font-bold text-on-primary">
             {saving ? RECIPE_IMPORT_COPY.saving : RECIPE_IMPORT_COPY.saveCta}

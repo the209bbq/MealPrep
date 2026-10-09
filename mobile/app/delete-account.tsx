@@ -104,7 +104,7 @@ export default function DeleteAccountScreen() {
             <Text className="text-sm leading-5 text-muted">Sign in to delete your account from this page.</Text>
             <Pressable
               onPress={openAuthSheet}
-              className="mt-4 items-center rounded-xl bg-primary px-4 py-3"
+              className="mt-4 items-center rounded-full bg-primary px-4 py-3"
             >
               <Text className="font-bold text-on-primary">Sign in</Text>
             </Pressable>

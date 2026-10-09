@@ -30,7 +30,7 @@ export function CookConfirmBanner({
         <Pressable
           onPress={onYes}
           disabled={busy}
-          className="min-h-[40px] flex-1 items-center justify-center rounded-xl bg-primary px-3"
+          className="min-h-[40px] flex-1 items-center justify-center rounded-full bg-primary px-3"
           style={({ pressed }) => ({ opacity: pressed || busy ? 0.85 : 1 })}
         >
           <Text className="text-sm font-bold text-on-primary">{SEAMLESS_FLOW_COPY.cookConfirmYes}</Text>

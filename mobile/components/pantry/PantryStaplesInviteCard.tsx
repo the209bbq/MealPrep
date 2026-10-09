@@ -18,7 +18,7 @@ export function PantryStaplesInviteCard({ onPick, onDismiss }: PantryStaplesInvi
         <View className="flex-1">
           <Text className="text-base font-bold text-primary-dark">{PANTRY_STAPLES_COPY.inviteTitle}</Text>
           <Text className="mt-1 text-sm text-primary-dark/90">{PANTRY_STAPLES_COPY.inviteSubtitle}</Text>
-          <Pressable onPress={onPick} className="mt-3 items-center rounded-xl bg-primary py-3">
+          <Pressable onPress={onPick} className="mt-3 items-center rounded-full bg-primary py-3">
             <Text className="text-sm font-bold text-on-primary">{PANTRY_STAPLES_COPY.inviteCta}</Text>
           </Pressable>
           <Pressable onPress={onDismiss} className="mt-2 items-center py-2">

@@ -104,7 +104,7 @@ export function PantryScanReview({
       <Pressable
         disabled={saving || enabledCount === 0}
         onPress={onSave}
-        className={`flex-1 rounded-xl px-3 py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-primary'}`}
+        className={`flex-1 rounded-full px-3 py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-primary'}`}
       >
         <Text className="text-center text-sm font-bold text-on-primary">
           {saving ? 'Saving…' : PANTRY_SCAN_UI_COPY.addItems(enabledCount)}
@@ -239,7 +239,7 @@ export function PantryScanReviewStickyFooter(props: {
         <Pressable
           disabled={saving || enabledCount === 0}
           onPress={onSave}
-          className={`flex-[2] rounded-xl py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-primary'}`}
+          className={`flex-[2] rounded-full py-3 ${saving || enabledCount === 0 ? 'bg-slate/40' : 'bg-primary'}`}
         >
           <Text className="text-center text-sm font-bold text-on-primary">
             {saving ? 'Saving…' : PANTRY_SCAN_UI_COPY.addItems(enabledCount)}

@@ -178,7 +178,7 @@ export function PantryStorageScanButtons({
           <View className="mt-3 flex-row gap-2">
             <Pressable
               onPress={() => onRequestSignIn?.()}
-              className="flex-1 items-center rounded-xl bg-primary py-3"
+              className="flex-1 items-center rounded-full bg-primary py-3"
             >
               <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>
             </Pressable>

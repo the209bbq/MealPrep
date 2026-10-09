@@ -3,6 +3,21 @@ import { APP_BRAND } from '../config/appBrand';
 import { THEME } from '../config/appConfig';
 import { getWebBasePath, webAssetPath } from '../lib/webBasePath';
 
+/**
+ * Figtree (approved design D-2), served from our own site so no outside font service is called.
+ * App text has no font of its own, so it takes Figtree; icons set their own icon font and are
+ * left alone (the :not() below), as is anything else that names a font.
+ */
+function fontCss(): string {
+  const src = webAssetPath('/fonts/Figtree-Variable.woff2');
+  const stack = "Figtree, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  return [
+    `@font-face{font-family:Figtree;src:url(${src}) format('woff2');font-weight:300 900;font-style:normal;font-display:swap}`,
+    `html,body{font-family:${stack}}`,
+    `[dir]:not([class*="r-fontFamily-"]):not([style*="font-family"]),input,textarea,button{font-family:${stack}}`,
+  ].join('');
+}
+
 export default function Root({ children }: { children: React.ReactNode }) {
   const { bodyAttributes, bodyNodes, htmlAttributes, headNodes } = useServerDocumentContext();
 
@@ -28,6 +43,8 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <link rel="manifest" href={manifestHref} />
         <link rel="apple-touch-icon" href={appleIconHref} />
         <ScrollViewStyleReset />
+        <link rel="preload" href={webAssetPath('/fonts/Figtree-Variable.woff2')} as="font" type="font/woff2" crossOrigin="anonymous" />
+        <style dangerouslySetInnerHTML={{ __html: fontCss() }} />
         {headNodes}
       </head>
       <body suppressHydrationWarning {...bodyAttributes}>

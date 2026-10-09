@@ -348,7 +348,7 @@ export function DiscoverRecipesPanel({ onToggleMealPlan, isOnMealPlan, onAddMiss
                 {missingCount > 0 && onAddMissing ? (
                   <Pressable
                     onPress={() => onAddMissing(recipe)}
-                    className="mt-3 items-center rounded-xl bg-primary py-3"
+                    className="mt-3 items-center rounded-full bg-primary py-3"
                   >
                     <Text className="text-sm font-bold text-on-primary">{RECIPES_COPY.recipeCard.addMissingCta}</Text>
                   </Pressable>

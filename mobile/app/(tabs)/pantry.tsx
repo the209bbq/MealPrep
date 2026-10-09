@@ -903,7 +903,7 @@ export default function PantryScreen() {
                 setScanRecipeCount(null);
                 router.push(APP_ROUTES.home);
               }}
-              className="mt-3 items-center rounded-xl bg-primary py-3"
+              className="mt-3 items-center rounded-full bg-primary py-3"
             >
               <Text className="text-sm font-bold text-on-primary">See {scanRecipeCount} recipes</Text>
             </Pressable>
@@ -998,7 +998,7 @@ export default function PantryScreen() {
               {scanGuestSignInCta ? (
                 <Pressable
                   onPress={openAuthSheet}
-                  className="mt-3 items-center rounded-xl bg-primary py-2.5"
+                  className="mt-3 items-center rounded-full bg-primary py-2.5"
                 >
                   <Text className="text-sm font-bold text-on-primary">{GUEST_MODE_COPY.pantryScanSignInCta}</Text>
                 </Pressable>

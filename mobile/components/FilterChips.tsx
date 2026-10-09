@@ -18,9 +18,9 @@ export function FilterChips({ options, selectedId, onSelect, allowClear = true }
       {allowClear ? (
         <Pressable
           onPress={() => onSelect(null)}
-          className={`mr-2 rounded-full px-3 py-1.5 ${selectedId === null ? 'bg-primary' : 'border border-border bg-paper'}`}
+          className={`mr-2 min-h-[44px] items-center justify-center rounded-full px-4 ${selectedId === null ? 'bg-primary' : 'border border-border bg-card'}`}
         >
-          <Text className={`text-xs font-semibold ${selectedId === null ? 'text-on-primary' : 'text-muted'}`}>
+          <Text className={`text-sm ${selectedId === null ? 'font-bold text-on-primary' : 'font-semibold text-ink'}`}>
             Any
           </Text>
         </Pressable>
@@ -31,9 +31,9 @@ export function FilterChips({ options, selectedId, onSelect, allowClear = true }
           <Pressable
             key={item.id}
             onPress={() => onSelect(item.id)}
-            className={`mr-2 rounded-full px-3 py-1.5 ${active ? 'bg-primary' : 'border border-border bg-paper'}`}
+            className={`mr-2 min-h-[44px] items-center justify-center rounded-full px-4 ${active ? 'bg-primary' : 'border border-border bg-card'}`}
           >
-            <Text className={`text-xs font-semibold ${active ? 'text-on-primary' : 'text-muted'}`}>
+            <Text className={`text-sm ${active ? 'font-bold text-on-primary' : 'font-semibold text-ink'}`}>
               {item.label}
             </Text>
           </Pressable>

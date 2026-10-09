@@ -14,7 +14,7 @@ export function RecipesPantryEmptyState() {
       <View className="mt-4 flex-row gap-2">
         <Pressable
           onPress={() => router.push('/pantry')}
-          className="flex-1 items-center rounded-xl bg-primary py-3"
+          className="flex-1 items-center rounded-full bg-primary py-3"
         >
           <Text className="text-sm font-bold text-on-primary">{RECIPES_COPY.pantryEmptyCard.scanCta}</Text>
         </Pressable>

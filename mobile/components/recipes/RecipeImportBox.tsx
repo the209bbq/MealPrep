@@ -370,7 +370,7 @@ export function RecipeImportBox({
         <Pressable
           onPress={() => void runSmartImport()}
           disabled={loading}
-          className="mt-2 min-h-[40px] flex-row items-center justify-center rounded-xl bg-primary px-3 py-2"
+          className="mt-2 min-h-[40px] flex-row items-center justify-center rounded-full bg-primary px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel={RECIPE_IMPORT_COPY.importButtonAccessibility}
         >

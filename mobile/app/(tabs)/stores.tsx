@@ -85,7 +85,7 @@ export default function StoresScreen() {
             <Text className="text-sm text-muted">{STORES_TAB_COPY.loadFailed}</Text>
             <Pressable
               onPress={stores.retryStoreSearch}
-              className="mt-3 self-start rounded-xl bg-primary px-4 py-2"
+              className="mt-3 self-start rounded-full bg-primary px-4 py-2"
             >
               <Text className="text-xs font-bold text-on-primary">{STORES_TAB_COPY.retry}</Text>
             </Pressable>

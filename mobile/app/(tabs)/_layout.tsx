@@ -38,15 +38,17 @@ export default function TabsLayout() {
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: THEME.primary,
-          tabBarInactiveTintColor: THEME.slateMuted,
+          // Approved design (D-2): 68px white bar, green pill behind the current tab's icon.
+          tabBarInactiveTintColor: THEME.muted,
           tabBarStyle: {
             backgroundColor: THEME.card,
             borderTopColor: THEME.border,
-            height: 60,
-            paddingBottom: 6,
-            paddingTop: 6,
+            height: 68,
+            paddingBottom: 8,
+            paddingTop: 7,
           },
-          tabBarLabelStyle: { fontSize: 9, fontWeight: '600' },
+          tabBarIconStyle: { width: 56, height: 30 },
+          tabBarLabelStyle: { fontSize: 12, fontWeight: '700', marginTop: 2 },
         }}
       >
         {TABS.map((tab) => (
@@ -57,11 +59,22 @@ export default function TabsLayout() {
               title: tab.title,
               href: (tab.adminOnly && !isAdmin ? null : tab.href) as Href | null,
               tabBarIcon: ({ color, focused }) => (
-                <HydrationSafeIonicon
-                  name={(focused ? tab.iconActive : tab.icon) as IoniconName}
-                  size={22}
-                  color={color}
-                />
+                <View
+                  style={{
+                    width: 56,
+                    height: 30,
+                    borderRadius: 15,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: focused ? THEME.primaryLight : 'transparent',
+                  }}
+                >
+                  <HydrationSafeIonicon
+                    name={(focused ? tab.iconActive : tab.icon) as IoniconName}
+                    size={22}
+                    color={color}
+                  />
+                </View>
               ),
             }}
           />

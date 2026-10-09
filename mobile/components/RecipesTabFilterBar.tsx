@@ -282,7 +282,7 @@ export function RecipesTabFiltersEmptyState({ onClearAll }: { onClearAll: () => 
     <View className="mt-4 items-center rounded-2xl border border-dashed border-border bg-card px-5 py-8">
       <Text className="text-center text-base font-bold text-ink">{RECIPES_TAB_FILTER_COPY.emptyTitle}</Text>
       <Text className="mt-2 text-center text-sm text-muted">{RECIPES_TAB_FILTER_COPY.emptyBody}</Text>
-      <Pressable onPress={onClearAll} className="mt-4 rounded-xl bg-primary px-5 py-3">
+      <Pressable onPress={onClearAll} className="mt-4 rounded-full bg-primary px-5 py-3">
         <Text className="text-sm font-bold text-on-primary">{RECIPES_TAB_FILTER_COPY.clearFilters}</Text>
       </Pressable>
     </View>

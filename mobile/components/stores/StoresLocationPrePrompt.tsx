@@ -28,7 +28,7 @@ export function StoresLocationPrePrompt({
       <View className="mt-3 flex-row flex-wrap gap-2">
         <Pressable
           onPress={onUseLocation}
-          className="min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2"
+          className="min-h-[44px] flex-row items-center justify-center gap-2 rounded-full bg-primary px-4 py-2"
         >
           <Ionicons name="locate" size={18} color={THEME.onPrimary} />
           <Text className="text-sm font-bold text-on-primary">{STORES_TAB_COPY.useMyLocation}</Text>
@@ -49,7 +49,7 @@ export function StoresLocationPrePrompt({
             maxLength={10}
             className="flex-1 rounded-xl border border-border bg-paper px-4 py-3 text-base text-ink"
           />
-          <Pressable onPress={onSaveZip} className="justify-center rounded-xl bg-slate px-4 py-3">
+          <Pressable onPress={onSaveZip} className="justify-center rounded-full bg-slate px-4 py-3">
             <Text className="font-bold text-on-primary">Go</Text>
           </Pressable>
         </View>

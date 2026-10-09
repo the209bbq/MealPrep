@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { BrandLogo } from './BrandLogo';
 import { HydrationSafeIonicon } from './HydrationSafeIonicon';
 import { APP_ROUTES } from '../config/appRoutes';
-import { TABS, THEME } from '../config/appConfig';
+import { THEME } from '../config/appConfig';
 import { HOME_HUB_COPY } from '../config/homeHub';
 import { readAccountKitchenCache } from '../lib/account/accountKitchenCache';
 import { resolveAccountHeaderAccessibilityLabel } from '../lib/account/accountHeaderChrome';
@@ -19,8 +19,6 @@ export function AppHeader() {
   const hydrated = useHydrated();
   const { profile, session, demoMode, authReady, openAuthSheet, openAccountSheet } = useApp();
   const { openHub } = useHomeHubSheet();
-  const tab = TABS.find((t) => t.href === pathname || (pathname === '/' && t.name === 'index'));
-  const title = tab?.title ?? 'Home';
   const storedSessionHint = hydrated && !authReady && hasLikelyStoredAuthSession();
   const signedIn = demoMode || session != null || storedSessionHint;
   const bootstrapProfile =
@@ -38,49 +36,41 @@ export function AppHeader() {
   });
   const onHome = pathname === APP_ROUTES.home || pathname === '/index';
 
+  // Approved design (D-2): 64px green bar, fork mark in a cream circle, wordmark, round account button.
   return (
-    <View className="bg-slate px-4 pb-3 pt-2">
+    <View className="h-16 justify-center bg-primary pl-5 pr-4">
       <View className="flex-row items-center justify-between">
-        <View className="min-w-0 flex-1 flex-row items-center gap-2 pr-2">
+        <View className="min-w-0 flex-1 flex-row items-center pr-2">
+          <BrandLogo variant="header" />
+        </View>
+        <View className="shrink-0 flex-row items-center gap-1">
           {onHome ? (
             <Pressable
               onPress={() => openHub('weekPlan')}
               accessibilityRole="button"
               accessibilityLabel={HOME_HUB_COPY.openAccessibilityLabel}
-              hitSlop={8}
-              className="shrink-0 rounded-lg p-1.5"
+              className="h-11 w-11 items-center justify-center rounded-full"
               style={({ pressed }) => ({
-                backgroundColor: pressed ? 'rgba(255,255,255,0.12)' : 'transparent',
+                backgroundColor: pressed ? 'rgba(252,248,236,0.16)' : 'transparent',
               })}
             >
-              <HydrationSafeIonicon name="book-outline" size={22} color={THEME.onPrimary} />
+              <HydrationSafeIonicon name="book-outline" size={22} color={THEME.brandCream} />
             </Pressable>
           ) : null}
-          <BrandLogo variant="header" />
-          <Text className="shrink text-xs font-semibold text-on-primary-muted" numberOfLines={1}>
-            {title}
-          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={avatarAccessibilityLabel}
+            onPress={signedIn ? openAccountSheet : openAuthSheet}
+            className="h-11 w-11 items-center justify-center rounded-full"
+            style={{ borderWidth: 1.5, borderColor: 'rgba(252,248,236,0.55)' }}
+          >
+            {hydrated && accountChromeReady ? (
+              <ProfileAvatar name={avatarName} photoUrl={avatarPhoto} guest={!signedIn} size={36} onHeader />
+            ) : (
+              <View style={{ width: 36, height: 36, borderRadius: 18 }} />
+            )}
+          </Pressable>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={avatarAccessibilityLabel}
-          onPress={signedIn ? openAccountSheet : openAuthSheet}
-          className="shrink-0"
-        >
-          {hydrated && accountChromeReady ? (
-            <ProfileAvatar
-              name={avatarName}
-              photoUrl={avatarPhoto}
-              guest={!signedIn}
-              size={36}
-            />
-          ) : (
-            <View
-              style={{ width: 36, height: 36, borderRadius: 18 }}
-              className="border border-on-primary-muted/40 bg-slate"
-            />
-          )}
-        </Pressable>
       </View>
     </View>
   );

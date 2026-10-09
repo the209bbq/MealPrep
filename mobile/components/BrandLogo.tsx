@@ -13,24 +13,19 @@ export function BrandLogo({ variant, style }: BrandLogoProps) {
   const cream = APP_BRAND.colors.brandCream;
 
   if (variant === 'header') {
+    const mark = Math.max(headerMarkSize + 6, 36);
     return (
       <View
-        className="max-w-[58%] shrink flex-row items-center gap-1.5"
+        className="shrink flex-row items-center gap-2.5"
         accessibilityRole="header"
         accessibilityLabel={APP_BRAND.name}
       >
-        <View
-          className="overflow-hidden rounded-full"
-          style={{ backgroundColor: cream, width: headerMarkSize + 6, height: headerMarkSize + 6 }}
-        >
-          <Image
-            source={APP_BRAND_IMAGES.logoMark}
-            style={[{ width: headerMarkSize + 6, height: headerMarkSize + 6 }, style]}
-            resizeMode="cover"
-          />
+        <View className="overflow-hidden rounded-full" style={{ backgroundColor: cream, width: mark, height: mark }}>
+          <Image source={APP_BRAND_IMAGES.logoMark} style={[{ width: mark, height: mark }, style]} resizeMode="cover" />
         </View>
-        <Text className="shrink text-sm font-bold text-on-primary" numberOfLines={1}>
-          {APP_BRAND.shortName}
+        {/* Wordmark as in the approved logo: "Plan" picked out in light tomato on green. */}
+        <Text className="shrink text-[19px] font-extrabold text-cream" style={{ letterSpacing: -0.3 }} numberOfLines={1}>
+          Meal<Text style={{ color: '#F8A27F' }}>Plan</Text>atic
         </Text>
       </View>
     );

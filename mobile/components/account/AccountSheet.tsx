@@ -237,7 +237,7 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                 <Pressable
                   disabled={busy}
                   onPress={() => void persistFields()}
-                  className={`mt-4 rounded-xl bg-primary px-4 py-3 ${busy ? 'opacity-60' : ''}`}
+                  className={`mt-4 rounded-full bg-primary px-4 py-3 ${busy ? 'opacity-60' : ''}`}
                 >
                   <Text className="text-center font-bold text-on-primary">Save profile</Text>
                 </Pressable>

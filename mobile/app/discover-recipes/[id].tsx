@@ -224,7 +224,7 @@ export default function DiscoverRecipeDetailScreen() {
           {pantryMatch && pantryMatch.missingCount > 0 ? (
             <Pressable
               onPress={() => addMissingDiscoveryRecipeIngredientsToGrocery(recipe)}
-              className="mt-6 items-center rounded-xl bg-primary px-4 py-4"
+              className="mt-6 items-center rounded-full bg-primary px-4 py-4"
             >
               <Text className="text-center text-base font-bold text-on-primary">
                 {RECIPES_COPY.pantryCheck.addMissingCta}
@@ -234,7 +234,7 @@ export default function DiscoverRecipeDetailScreen() {
 
           <Pressable
             onPress={() => void toggleMealPlanDiscoveryRecipe(recipe)}
-            className={`mt-6 rounded-xl px-4 py-4 ${isOnMealPlan({ recipeApiId: recipeId }) ? 'bg-sand' : 'bg-slate'}`}
+            className={`mt-6 rounded-full px-4 py-4 ${isOnMealPlan({ recipeApiId: recipeId }) ? 'bg-sand' : 'bg-slate'}`}
           >
             <Text className="text-center text-base font-bold text-on-primary">
               {isOnMealPlan({ recipeApiId: recipeId }) ? 'Remove from meals to make' : 'Add to meals'}
@@ -244,7 +244,7 @@ export default function DiscoverRecipeDetailScreen() {
           <Pressable
             onPress={() => void onImport()}
             disabled={importing || imported || alreadyInLibrary}
-            className={`mt-3 rounded-xl px-4 py-4 ${imported || alreadyInLibrary ? 'bg-sand' : 'bg-primary'}`}
+            className={`mt-3 rounded-full px-4 py-4 ${imported || alreadyInLibrary ? 'bg-sand' : 'bg-primary'}`}
           >
             <Text className={`text-center text-base font-bold ${imported || alreadyInLibrary ? 'text-muted' : 'text-on-primary'}`}>
               {importing

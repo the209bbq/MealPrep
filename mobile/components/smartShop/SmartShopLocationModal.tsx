@@ -48,7 +48,7 @@ export function SmartShopLocationModal({
               maxLength={10}
               className="flex-1 rounded-xl border border-border bg-paper px-4 py-3 text-base text-ink"
             />
-            <Pressable onPress={onSaveZip} className="rounded-xl bg-slate px-4 py-3">
+            <Pressable onPress={onSaveZip} className="rounded-full bg-slate px-4 py-3">
               <Text className="font-bold text-on-primary">{SMART_SHOP_COPY.locationContinue}</Text>
             </Pressable>
           </View>

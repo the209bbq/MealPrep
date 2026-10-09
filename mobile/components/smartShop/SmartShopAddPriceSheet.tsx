@@ -460,7 +460,7 @@ function SmartShopAddPriceSheetForm({
               <View className="mt-4 flex-row gap-2">
                 <Pressable
                   onPress={() => handleAddAnother()}
-                  className="flex-1 rounded-xl bg-primary px-3 py-3"
+                  className="flex-1 rounded-full bg-primary px-3 py-3"
                 >
                   <Text className="text-center text-sm font-bold text-on-primary">
                     {SMART_SHOP_COPY.addPriceAddAnother}
@@ -570,7 +570,7 @@ function SmartShopAddPriceSheetForm({
                 <Pressable
                   onPress={() => void handleSave()}
                   disabled={submitting || scanning || signedIn === false}
-                  className="flex-1 rounded-xl bg-primary px-3 py-3"
+                  className="flex-1 rounded-full bg-primary px-3 py-3"
                 >
                   <Text className="text-center text-sm font-bold text-on-primary">
                     {submitting ? 'Saving…' : SMART_SHOP_COPY.addPriceSave}
