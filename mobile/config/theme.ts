@@ -23,6 +23,13 @@ export const THEME: ThemeTokens = {
   successAccent: themeColors.successAccent,
   onSuccess: themeColors.onSuccess,
   danger: themeColors.danger,
+  tomato: themeColors.tomato,
+  tomatoDark: themeColors.tomatoDark,
+  tomatoLight: themeColors.tomatoLight,
+  onTomato: themeColors.onTomato,
+  warning: themeColors.warning,
+  warningLight: themeColors.warningLight,
+  onWarning: themeColors.onWarning,
 };
 
 /** Tailwind / NativeWind color map (semantic tokens from theme.colors.json). */
@@ -50,5 +57,12 @@ export function tailwindThemeColors(): Record<string, string> {
     'success-accent': c.successAccent,
     'on-success': c.onSuccess,
     danger: c.danger,
+    tomato: c.tomato,
+    'tomato-dark': c.tomatoDark,
+    'tomato-light': c.tomatoLight,
+    'on-tomato': c.onTomato,
+    warning: c.warning,
+    'warning-light': c.warningLight,
+    'on-warning': c.onWarning,
   };
 }

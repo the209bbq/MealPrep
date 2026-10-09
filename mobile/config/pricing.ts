@@ -18,7 +18,8 @@ export const PLUS_INTERVAL_ORDER: readonly BillingInterval[] = ['year', 'month']
 
 export const PLUS_UPGRADE_COPY = {
   heading: 'MealPlanatic Plus',
-  benefit: 'Scan your pantry, fridge and shelf tags with your camera instead of typing.',
+  benefit: "Scan your fridge, pantry and price tags with your camera. Forky adds what he sees, so you don't type it in.",
+  close: 'Close',
   termsLinkLabel: 'See Terms.',
   notNow: 'Not now',
   signInToUpgrade: 'Sign in to upgrade',

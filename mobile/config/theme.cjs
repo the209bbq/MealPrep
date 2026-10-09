@@ -25,6 +25,13 @@ function tailwindThemeColors() {
     'success-accent': c.successAccent,
     'on-success': c.onSuccess,
     danger: c.danger,
+    tomato: c.tomato,
+    'tomato-dark': c.tomatoDark,
+    'tomato-light': c.tomatoLight,
+    'on-tomato': c.onTomato,
+    warning: c.warning,
+    'warning-light': c.warningLight,
+    'on-warning': c.onWarning,
   };
 }
 

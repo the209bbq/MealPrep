@@ -86,6 +86,7 @@ const options = read('components/billing/PlusUpgradeOptions.tsx');
 const handler = read('components/billing/CheckoutReturnHandler.tsx');
 const account = read('components/account/AccountPlanSection.tsx');
 const card = read('components/PhotoScanPlusUpgradeCard.tsx');
+const sheet = read('components/billing/PlusUpgradeSheet.tsx');
 const client = read('lib/billing/client.ts');
 
 // Renewal terms come before the buy button in the layout, and the terms link is there.
@@ -98,11 +99,26 @@ assert.match(options, /className="mt-3 text-sm leading-5 text-ink">\s*\{plusRene
 // Web only, and guests are asked to sign in rather than shown a dead button.
 assert.match(options, /Platform\.OS === 'web'/);
 assert.match(options, /openAuthSheet/);
-// Tap targets at least 44px (design scheme).
-assert.ok((options.match(/min-h-\[44px\]/g) ?? []).length >= 3);
+// Tap targets at least 44px (design scheme): both plan rows, the buy button, sign-in, "Not now".
+const tapHeights = [...options.matchAll(/min-h-\[(\d+)px\]/g)].map((m) => Number(m[1]));
+assert.ok(tapHeights.length >= 4, 'every pressable sets a minimum height');
+assert.ok(tapHeights.every((h) => h >= 44), `tap targets: ${tapHeights.join(', ')}`);
+// Approved colours (design D-2): tomato only on the button that starts the purchase.
+assert.match(options, /bg-tomato[^`]*`[\s\S]{0,200}plusSubscribeLabel\(interval\)/);
+assert.equal((options.match(/bg-tomato/g) ?? []).length, 1);
+assert.match(read('config/theme.colors.json'), /"tomato": "#C9431F"/);
+
+// The full Plus screen: one benefit line, the options, and a close button that is always there.
+assert.match(sheet, /PLUS_UPGRADE_COPY\.benefit/);
+assert.match(sheet, /<PlusUpgradeOptions onNotNow=\{onClose\} \/>/);
+assert.match(sheet, /accessibilityLabel=\{PLUS_UPGRADE_COPY\.close\}/);
+assert.match(sheet, /onRequestClose=\{onClose\}/);
+assert.match(sheet, /h-11 w-11/, 'close button is 44px');
+assert.doesNotMatch(sheet + options, /works out to|per month when|\bsave\b|best value|most popular/i);
+assert.match(card, /<PlusUpgradeSheet visible onClose=\{onDismiss\} \/>/);
 
 // The page never switches Plus on itself; it only re-reads the plan the server set.
-for (const source of [options, handler, account, card, client]) {
+for (const source of [options, sheet, handler, account, card, client]) {
   assert.doesNotMatch(source, /plan_comp|admin_set_user_plan|recompute_user_plan|\.update\(\s*\{\s*plan/);
 }
 assert.match(handler, /refreshProfilePlan\(\)/);

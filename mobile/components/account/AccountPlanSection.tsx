@@ -97,7 +97,7 @@ export function AccountPlanSection({ plan }: Props) {
             disabled={busy}
             accessibilityRole="button"
             accessibilityHint={PLUS_UPGRADE_COPY.manageHint}
-            className={`mt-3 min-h-[44px] items-center justify-center rounded-xl border border-primary bg-paper px-4 py-3 ${
+            className={`mt-3 min-h-[44px] items-center justify-center rounded-full border border-primary bg-card px-4 py-3 ${
               busy ? 'opacity-60' : ''
             }`}
           >

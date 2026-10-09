@@ -7,7 +7,7 @@ import { BillingError, startPlusCheckout } from '../../lib/billing/client';
 import { plusPriceLabel, plusRenewalDisclosure, plusSubscribeLabel } from '../../lib/billing/pricing';
 
 type Props = {
-  /** Shows a "Not now" button that calls this. */
+  /** Shows a "Not now" link that calls this. */
   onNotNow?: () => void;
 };
 
@@ -17,7 +17,10 @@ export function canBuyPlusHere(): boolean {
 }
 
 /**
- * Plan choice, renewal terms and the buy button.
+ * Plan choice, renewal terms and the buy button, laid out to the approved Plus mockup (D-2):
+ * white option cards with a green ring on the chosen one, then the terms, then a tomato pill.
+ * Tomato is kept for buttons that start a purchase.
+ *
  * Rules (California automatic renewal law, compliance handoff 1): the price, renewal period and
  * how to cancel sit directly above the button in normal-size text; nothing is pre-ticked beyond
  * the plan choice itself; no countdowns or pressure wording; the button states the price.
@@ -33,15 +36,17 @@ export function PlusUpgradeOptions({ onNotNow }: Props) {
   if (isGuest) {
     return (
       <View className="mt-3">
-        <Text className="text-sm leading-5 text-muted">{PLUS_UPGRADE_COPY.signInHint}</Text>
+        <Text className="text-sm leading-5 text-ink">{PLUS_UPGRADE_COPY.signInHint}</Text>
         <Pressable
           onPress={openAuthSheet}
           accessibilityRole="button"
-          className="mt-3 min-h-[44px] items-center justify-center rounded-xl bg-primary px-4 py-3"
+          className="mt-4 min-h-[54px] items-center justify-center rounded-full bg-primary px-5 py-3"
         >
-          <Text className="text-center font-bold text-on-primary">{PLUS_UPGRADE_COPY.signInToUpgrade}</Text>
+          <Text className="text-center text-base font-extrabold text-on-primary">
+            {PLUS_UPGRADE_COPY.signInToUpgrade}
+          </Text>
         </Pressable>
-        {onNotNow ? <NotNowButton onPress={onNotNow} /> : null}
+        {onNotNow ? <NotNowLink onPress={onNotNow} /> : null}
       </View>
     );
   }
@@ -61,7 +66,7 @@ export function PlusUpgradeOptions({ onNotNow }: Props) {
 
   return (
     <View className="mt-3">
-      <View accessibilityRole="radiogroup" className="gap-2">
+      <View accessibilityRole="radiogroup" className="gap-2.5">
         {PLUS_INTERVAL_ORDER.map((option) => {
           const selected = option === interval;
           return (
@@ -72,18 +77,18 @@ export function PlusUpgradeOptions({ onNotNow }: Props) {
               accessibilityRole="radio"
               accessibilityState={{ selected, disabled: busy }}
               accessibilityLabel={plusPriceLabel(option)}
-              className={`min-h-[44px] flex-row items-center rounded-xl border px-3 py-3 ${
-                selected ? 'border-primary bg-primary-light' : 'border-border bg-paper'
+              className={`min-h-[64px] flex-row items-center rounded-[18px] border-2 bg-card px-4 py-3 ${
+                selected ? 'border-primary' : 'border-border'
               }`}
             >
               <View
-                className={`mr-3 h-5 w-5 items-center justify-center rounded-full border-2 ${
-                  selected ? 'border-primary' : 'border-border'
+                className={`mr-3 h-[22px] w-[22px] items-center justify-center rounded-full border-2 ${
+                  selected ? 'border-primary' : 'border-muted'
                 }`}
               >
                 {selected ? <View className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
               </View>
-              <Text className="text-base font-bold text-ink">{plusPriceLabel(option)}</Text>
+              <Text className="text-[17px] font-extrabold text-ink">{plusPriceLabel(option)}</Text>
             </Pressable>
           );
         })}
@@ -94,7 +99,7 @@ export function PlusUpgradeOptions({ onNotNow }: Props) {
         <Text
           accessibilityRole="link"
           onPress={() => void Linking.openURL(LEGAL_LINKS.terms)}
-          className="text-sm font-semibold text-primary underline"
+          className="text-sm font-bold text-primary underline"
         >
           {PLUS_UPGRADE_COPY.termsLinkLabel}
         </Text>
@@ -105,11 +110,11 @@ export function PlusUpgradeOptions({ onNotNow }: Props) {
         disabled={busy}
         accessibilityRole="button"
         accessibilityState={{ disabled: busy, busy }}
-        className={`mt-3 min-h-[44px] items-center justify-center rounded-xl bg-primary px-4 py-3 ${
+        className={`mt-4 min-h-[54px] items-center justify-center rounded-full bg-tomato px-5 py-3 ${
           busy ? 'opacity-60' : ''
         }`}
       >
-        <Text className="text-center font-bold text-on-primary">
+        <Text className="text-center text-[17px] font-extrabold text-on-tomato">
           {busy ? PLUS_UPGRADE_COPY.starting : plusSubscribeLabel(interval)}
         </Text>
       </Pressable>
@@ -120,20 +125,20 @@ export function PlusUpgradeOptions({ onNotNow }: Props) {
         </Text>
       ) : null}
 
-      {onNotNow ? <NotNowButton onPress={onNotNow} disabled={busy} /> : null}
+      {onNotNow ? <NotNowLink onPress={onNotNow} disabled={busy} /> : null}
     </View>
   );
 }
 
-function NotNowButton({ onPress, disabled }: { onPress: () => void; disabled?: boolean }) {
+function NotNowLink({ onPress, disabled }: { onPress: () => void; disabled?: boolean }) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      className="mt-2 min-h-[44px] items-center justify-center rounded-xl border border-border bg-paper px-4 py-3"
+      className="mt-1 min-h-[44px] items-center justify-center px-4"
     >
-      <Text className="text-sm font-semibold text-muted">{PLUS_UPGRADE_COPY.notNow}</Text>
+      <Text className="text-[15px] font-bold text-muted">{PLUS_UPGRADE_COPY.notNow}</Text>
     </Pressable>
   );
 }
