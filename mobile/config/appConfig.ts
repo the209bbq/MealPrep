@@ -52,6 +52,7 @@ export const FEATURE_FLAG_DEFAULTS: FeatureFlags = {
   grocerySync: true,
   smartShop: true,
   maintenanceMode: false,
+  askForky: false,
 };
 
 /** Smart Shop / store pricing (no secrets in repo — use env + optional Supabase Edge Function). */
@@ -210,6 +211,10 @@ export const FEATURE_FLAG_LABELS: Record<keyof FeatureFlags, { title: string; bl
   maintenanceMode: {
     title: 'Maintenance mode',
     blurb: 'Non-admins see a full-screen maintenance page. Admins keep working.',
+  },
+  askForky: {
+    title: 'Ask Forky (AI chat)',
+    blurb: 'Typed questions answered by Claude (Anthropic) via the ask-forky Edge Function. Admins can try it while this is off. Turn on only after the privacy page names it.',
   },
 };
 

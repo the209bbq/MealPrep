@@ -44,7 +44,7 @@
   </head>
   <body>
     <h1>Privacy Policy</h1>
-    <p class="muted">MealPlanatic · Last updated: October 3, 2026</p>
+    <p class="muted">MealPlanatic · Last updated: October 9, 2026</p>
 
     <p>
       MealPlanatic helps you plan meals, track your pantry, build grocery lists, compare store prices, and discover
@@ -115,6 +115,13 @@
         <strong> deleted as soon as processing finishes</strong> (or if processing fails). We do not add imported recipes
         to a public shared library.
       </li>
+      <li>
+        Answer questions you type to <strong>Ask Forky</strong>, our AI helper: your question, the last few messages of
+        that chat, the names, amounts and use-by dates of items in your pantry, and a short list of recipe titles are
+        sent to <strong>Anthropic</strong> (the maker of the Claude AI model, via our Supabase Edge Function) to write
+        the answer. We do not send your name, email or photos, and we do not store your questions or Forky's answers
+        on our servers; we keep only a count of messages and their size.
+      </li>
       <li>Provide nutrition information where available (including USDA-sourced data served through our backend).</li>
       <li>Let you add meals to <strong>Google Calendar</strong> or download <strong>.ics</strong> files — we open a
         calendar link or file; we do not read or modify your Google Calendar account.</li>
@@ -137,7 +144,7 @@
     <h2>Service providers</h2>
     <p>
       We use <strong>Supabase</strong> (database, authentication, file storage, and server functions) to host and process
-      your data. Photo scanning uses <strong>Google Gemini</strong> only when you start a scan. Recipe search uses
+      your data. Photo scanning uses <strong>Google Gemini</strong> only when you start a scan. Ask Forky uses <strong>Anthropic</strong> only when you send him a question. Recipe search uses
       <strong>RecipeAPI.io</strong> through our proxy. Store deals may use <strong>Kroger</strong> APIs where configured.
       Nutrition data may include <strong>USDA</strong> sources via our backend. These providers process data on our
       instructions to run the app.
