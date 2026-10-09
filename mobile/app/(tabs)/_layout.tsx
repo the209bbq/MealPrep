@@ -46,7 +46,7 @@ export default function TabsLayout() {
             paddingBottom: 6,
             paddingTop: 6,
           },
-          tabBarLabelStyle: { fontSize: 9, fontWeight: '600' },
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         }}
       >
         {TABS.map((tab) => (
@@ -57,11 +57,22 @@ export default function TabsLayout() {
               title: tab.title,
               href: (tab.adminOnly && !isAdmin ? null : tab.href) as Href | null,
               tabBarIcon: ({ color, focused }) => (
-                <HydrationSafeIonicon
-                  name={(focused ? tab.iconActive : tab.icon) as IoniconName}
-                  size={22}
-                  color={color}
-                />
+                <View
+                  style={{
+                    width: 52,
+                    height: 28,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: focused ? THEME.primaryLight : 'transparent',
+                  }}
+                >
+                  <HydrationSafeIonicon
+                    name={(focused ? tab.iconActive : tab.icon) as IoniconName}
+                    size={20}
+                    color={color}
+                  />
+                </View>
               ),
             }}
           />

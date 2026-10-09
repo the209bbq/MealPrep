@@ -1,11 +1,13 @@
 {
   "name": "MealPlanatic",
   "shortName": "MealPlanatic",
+  "wordmarkAccent": "Plan",
   "pwaDescription": "Plan meals, use your pantry, and shop smarter.",
   "colors": {
     "brandCream": "#FCF8EC",
     "themePrimaryDark": "#163A26",
-    "iconBackground": "#1F4D33"
+    "iconBackground": "#1F4D33",
+    "wordmarkAccentOnDark": "#F8A27F"
   },
   "sourceMascot": "assets/brand/forkinator-mascot.png",
   "sourceLogo": "assets/brand/mealplanatic-logo-lockup.png",
@@ -23,7 +25,7 @@
     "logoMark": "assets/mealplanatic-logo-mark.png"
   },
   "ui": {
-    "headerMarkSize": 22,
+    "headerMarkSize": 30,
     "authLogoWidth": 260
   },
   "copy": {

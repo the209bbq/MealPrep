@@ -57,9 +57,11 @@ export function AppHeader() {
             </Pressable>
           ) : null}
           <BrandLogo variant="header" />
-          <Text className="shrink text-xs font-semibold text-on-primary-muted" numberOfLines={1}>
-            {title}
-          </Text>
+          {onHome ? null : (
+            <Text className="shrink text-xs font-semibold text-on-primary-muted" numberOfLines={1}>
+              {title}
+            </Text>
+          )}
         </View>
         <Pressable
           accessibilityRole="button"

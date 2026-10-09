@@ -19,15 +19,15 @@ export function RecipesTabCollapsibleSection({
   loading?: boolean;
 }) {
   return (
-    <View className="mt-2">
+    <View className="mt-4">
       <Pressable
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         accessibilityLabel={`${title}, ${expanded ? 'collapse' : 'expand'}`}
-        className="min-h-[44px] flex-row items-center justify-between rounded-xl border border-border bg-card px-3 py-2"
+        className="min-h-[44px] flex-row items-center justify-between py-1"
       >
-        <Text accessibilityRole="header" className="text-sm font-bold text-ink">
+        <Text accessibilityRole="header" className="text-lg font-extrabold text-ink">
           {title}
         </Text>
         <View className="flex-row items-center gap-2">
@@ -37,7 +37,7 @@ export function RecipesTabCollapsibleSection({
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={THEME.muted} />
         </View>
       </Pressable>
-      {bubbleRow ? <View className="mt-2">{bubbleRow}</View> : null}
+      {bubbleRow ? <View className="mt-1">{bubbleRow}</View> : null}
       {expanded && children ? <View className="mt-2">{children}</View> : null}
     </View>
   );

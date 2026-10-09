@@ -5,6 +5,8 @@ export type AppBrandColors = {
   brandCream: string;
   themePrimaryDark: string;
   iconBackground: string;
+  /** Colour of the accent word in the wordmark when it sits on the green header. */
+  wordmarkAccentOnDark: string;
 };
 
 /** Mascot placement on the square app icon, as fractions of the icon size. */
@@ -40,6 +42,8 @@ export type AppBrandCopy = {
 export type AppBrandConfig = {
   name: string;
   shortName: string;
+  /** Part of the name shown in the accent colour, as in the logo. */
+  wordmarkAccent: string;
   pwaDescription: string;
   colors: AppBrandColors;
   sourceMascot: string;
