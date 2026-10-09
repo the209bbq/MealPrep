@@ -30,7 +30,12 @@ interface RecipesUnifiedFeedCardProps {
   maskImage?: boolean;
   /** Appended to the default accessibility label (e.g. diet conflict warning). */
   accessibilityDietWarning?: string | null;
+  /** Home 2-column grid: half-width card with the shorter photo. */
+  grid?: boolean;
 }
+
+const GRID_CARD_STYLE = { width: '48.4%' } as const;
+const GRID_IMAGE_HEIGHT = 108;
 
 function RecipesUnifiedFeedCardInner({
   row,
@@ -44,7 +49,9 @@ function RecipesUnifiedFeedCardInner({
   maskTitle = false,
   maskImage = false,
   accessibilityDietWarning = null,
+  grid = false,
 }: RecipesUnifiedFeedCardProps) {
+  const imageHeight = grid ? GRID_IMAGE_HEIGHT : RECIPE_IMAGE.listHeight;
   const name = maskTitle ? '' : row.recipe.name;
   const imageUri = useMemo(() => {
     if (maskImage) return null;
@@ -61,6 +68,14 @@ function RecipesUnifiedFeedCardInner({
   }, [matchFailed, matchPending, row.match]);
   const hasIngredients = row.kind === 'kitchen' && row.recipe.ingredients.length > 0;
   const readyToCook = !matchPending && hasIngredients && row.match.missingCount === 0;
+  // Pantry match pill ("You have 6 of 8") — same numbers and wording as the pantry badge helper.
+  const pantryPill =
+    matchPending || matchFailed || row.match.totalIngredients === 0
+      ? null
+      : row.match.missingCount === 0
+        ? RECIPES_COPY.pantryOverlap.readyToCook
+        : RECIPES_COPY.pantryOverlap.youHave(row.match.matchedCount, row.match.totalIngredients);
+  const showShopLine = !(pantryPill && readyToCook);
   const ingredientLines = useMemo(() => dietCheckLinesFromRecipesTabRow(row), [row]);
   const accessibilityLabel = useMemo(() => {
     const base = maskTitle ? shopLine : `${row.recipe.name}. ${shopLine}`;
@@ -74,47 +89,58 @@ function RecipesUnifiedFeedCardInner({
       disabled={interactionLoading}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      className="relative mb-2 overflow-hidden rounded-xl border border-border bg-card"
+      className="relative mb-3 overflow-hidden rounded-[18px] border border-border bg-card"
+      style={grid ? GRID_CARD_STYLE : undefined}
     >
       <View className="relative">
         {maskImage ? (
           <View
             className="bg-border/40"
-            style={{ height: RECIPE_IMAGE.listHeight }}
+            style={{ height: imageHeight }}
             accessibilityLabel=""
           />
         ) : (
           <RecipeThumbnail
             uri={imageUri}
             accessibilityLabel=""
-            height={RECIPE_IMAGE.listHeight}
+            height={imageHeight}
             lazy
           />
         )}
         <DietAllergenBadge ingredientLines={ingredientLines} />
         {onToggleSave ? (
-          <View className="absolute right-2 top-2">
+          <View className="absolute right-1.5 top-1.5">
             <RecipeSaveButton
               saved={Boolean(saved)}
               onToggle={onToggleSave}
               size={20}
               disabled={saveDisabled}
+              className="h-11 w-11"
             />
           </View>
         ) : null}
       </View>
-      <View className="px-3 py-2.5">
+      <View className="p-3">
         {name ? (
-          <Text className="text-base font-semibold text-ink" numberOfLines={2}>
+          <Text className="text-[15px] font-bold leading-[18px] text-ink" numberOfLines={2}>
             {name}
           </Text>
         ) : null}
-        <Text
-          className={`mt-0.5 text-xs ${readyToCook ? 'text-success-accent' : 'text-danger'}`}
-          numberOfLines={1}
-        >
-          {shopLine}
-        </Text>
+        {pantryPill ? (
+          <View className="mt-2 self-start rounded-[10px] bg-primary-light px-2 py-1">
+            <Text className="text-xs font-bold text-primary" numberOfLines={1}>
+              {pantryPill}
+            </Text>
+          </View>
+        ) : null}
+        {showShopLine ? (
+          <Text
+            className={`mt-1.5 text-xs ${readyToCook ? 'text-success-accent' : 'text-danger'}`}
+            numberOfLines={1}
+          >
+            {shopLine}
+          </Text>
+        ) : null}
         {sourceTag ? (
           <Text className="mt-1 text-[11px] text-muted" numberOfLines={1}>
             {sourceTag}
@@ -122,13 +148,17 @@ function RecipesUnifiedFeedCardInner({
         ) : null}
         {onCook ? (
           <View className="mt-2">
-            <CookThisButton compact className="self-start" onPress={onCook} />
+            <CookThisButton
+              compact
+              className="min-h-[44px] justify-center self-start"
+              onPress={onCook}
+            />
           </View>
         ) : null}
       </View>
       {interactionLoading ? (
         <View
-          className="absolute inset-0 items-center justify-center rounded-xl bg-paper/70"
+          className="absolute inset-0 items-center justify-center rounded-[18px] bg-paper/70"
           accessibilityLabel="Loading recipe details"
         >
           <ActivityIndicator color={THEME.primary} />

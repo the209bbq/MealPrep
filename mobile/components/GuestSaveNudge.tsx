@@ -38,7 +38,7 @@ export function GuestSaveNudge({ className = 'mt-4' }: { className?: string }) {
 
   return (
     <View
-      className={`flex-row items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 ${className}`}
+      className={`flex-row items-center gap-2 rounded-[18px] border border-border bg-card py-2 pl-4 pr-1 ${className}`}
     >
       <Text className="min-w-0 flex-1 text-xs text-muted" numberOfLines={1}>
         {copy.message}
@@ -46,7 +46,7 @@ export function GuestSaveNudge({ className = 'mt-4' }: { className?: string }) {
       <Pressable
         onPress={openAuthSheet}
         accessibilityRole="button"
-        className="rounded-lg bg-primary px-2.5 py-1.5"
+        className="min-h-[44px] items-center justify-center rounded-full bg-primary px-4"
       >
         <Text className="text-xs font-bold text-on-primary">{copy.signInLabel}</Text>
       </Pressable>
@@ -55,7 +55,7 @@ export function GuestSaveNudge({ className = 'mt-4' }: { className?: string }) {
         accessibilityRole="button"
         accessibilityLabel={copy.dismissAccessibilityLabel}
         hitSlop={8}
-        className="p-1"
+        className="h-11 w-11 items-center justify-center"
       >
         <Ionicons name="close" size={18} color={THEME.muted} />
       </Pressable>

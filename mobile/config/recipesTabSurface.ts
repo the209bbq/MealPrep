@@ -70,5 +70,11 @@ export type MealDbCatalogCategory = (typeof MEALDB_CATALOG_CATEGORIES)[number];
 export const RECIPES_TAB_SURFACE_COPY = {
   classicSectionTitle: 'See more curated recipes!',
   creatorsSectionTitle: 'See more creator recipes!',
+  /** Approved Home design: page heading and the short section headings shown on screen. */
+  homeHeading: "What's for dinner?",
+  pantrySectionHeading: 'From your pantry',
+  creatorsSectionHeading: 'Creators',
+  seePantryLink: 'See pantry',
+  allCategoriesChip: 'All',
   categoryRowAccessibility: 'Browse classic recipes by category',
 } as const;

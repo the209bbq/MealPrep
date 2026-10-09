@@ -17,12 +17,18 @@ export function CookConfirmBanner({
   busy = false,
 }: CookConfirmBannerProps) {
   return (
-    <View className="mt-3 rounded-2xl border border-border bg-card px-3 py-3 shadow-sm">
+    <View className="mt-4 rounded-[18px] border border-border bg-card p-4">
       <View className="flex-row items-start justify-between gap-2">
-        <Text className="flex-1 text-sm font-semibold text-ink">
+        <Text className="flex-1 text-[15px] font-bold text-ink">
           {SEAMLESS_FLOW_COPY.cookConfirmQuestion(title)}
         </Text>
-        <Pressable onPress={onDismiss} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
+        <Pressable
+          onPress={onDismiss}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+          className="-mr-2 -mt-2 h-11 w-11 items-center justify-center"
+        >
           <Text className="text-lg leading-none text-muted">×</Text>
         </Pressable>
       </View>
@@ -30,7 +36,7 @@ export function CookConfirmBanner({
         <Pressable
           onPress={onYes}
           disabled={busy}
-          className="min-h-[40px] flex-1 items-center justify-center rounded-full bg-primary px-3"
+          className="min-h-[44px] flex-1 items-center justify-center rounded-full bg-primary px-3"
           style={({ pressed }) => ({ opacity: pressed || busy ? 0.85 : 1 })}
         >
           <Text className="text-sm font-bold text-on-primary">{SEAMLESS_FLOW_COPY.cookConfirmYes}</Text>
@@ -38,7 +44,7 @@ export function CookConfirmBanner({
         <Pressable
           onPress={onNotThisTime}
           disabled={busy}
-          className="min-h-[40px] flex-1 items-center justify-center rounded-xl border border-border bg-paper px-3"
+          className="min-h-[44px] flex-1 items-center justify-center rounded-full border border-border bg-card px-3"
           style={({ pressed }) => ({ opacity: pressed || busy ? 0.85 : 1 })}
         >
           <Text className="text-sm font-bold text-ink">{SEAMLESS_FLOW_COPY.cookConfirmNotThisTime}</Text>

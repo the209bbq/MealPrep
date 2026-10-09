@@ -95,7 +95,7 @@ function FilterQuestion({
         accessibilityRole="button"
         accessibilityLabel={`${question} select`}
         accessibilityState={{ expanded: open }}
-        className="flex-row items-center justify-between rounded-xl border border-border bg-card px-3 py-2.5"
+        className="min-h-[44px] flex-row items-center justify-between rounded-xl border border-border bg-card px-3 py-2.5"
       >
         <Text className="text-sm text-ink">{optionLabel(dimension, value)}</Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={THEME.muted} />
@@ -120,7 +120,7 @@ function FilterQuestion({
                 accessibilityRole="button"
                 accessibilityLabel={`${question} option ${label}`}
                 accessibilityState={{ selected, disabled }}
-                className={`border-b border-border px-3 py-2.5 ${disabled ? 'opacity-40' : ''}`}
+                className={`min-h-[44px] justify-center border-b border-border px-3 py-2.5 ${disabled ? 'opacity-40' : ''}`}
               >
                 <Text
                   className={`text-sm ${selected ? 'font-bold text-primary' : 'text-ink'}`}
@@ -167,26 +167,26 @@ export function RecipesTabFilterBar({
 
   return (
     <>
-      <View className="mt-1 flex-row items-center">
+      <View className="mt-3 flex-row items-center">
         <Pressable
           onPress={() => setSheetOpen(true)}
           accessibilityRole="button"
           accessibilityLabel={RECIPES_TAB_FILTER_COPY.filterButton}
-          className="min-h-0 flex-1 flex-row items-center rounded-full border border-border bg-paper px-3 py-1.5"
+          className="min-h-[44px] flex-1 flex-row items-center rounded-full border border-border bg-card px-4 py-1"
         >
-          <Ionicons name="options-outline" size={14} color={THEME.muted} />
+          <Ionicons name="options-outline" size={18} color={THEME.muted} />
           <View className="ml-2 flex-1">
-            <Text className="text-xs font-semibold text-ink">{RECIPES_TAB_FILTER_COPY.filterButton}</Text>
+            <Text className="text-sm font-semibold text-ink">{RECIPES_TAB_FILTER_COPY.filterButton}</Text>
             {active && summary ? (
-              <Text className="text-[10px] text-muted" numberOfLines={1}>
+              <Text className="text-[11px] text-muted" numberOfLines={1}>
                 {summary}
               </Text>
             ) : null}
           </View>
         </Pressable>
         {active ? (
-          <Pressable onPress={onClearAll} className="ml-2 px-2 py-1.5">
-            <Text className="text-xs font-semibold text-primary">{RECIPES_TAB_FILTER_COPY.clear}</Text>
+          <Pressable onPress={onClearAll} className="ml-1 min-h-[44px] justify-center px-3">
+            <Text className="text-sm font-bold text-primary">{RECIPES_TAB_FILTER_COPY.clear}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -264,7 +264,7 @@ export function RecipesTabFilterBar({
                     onClearAll();
                     closeSheet();
                   }}
-                  className="mt-2 items-center rounded-xl border border-border py-3"
+                  className="mt-2 min-h-[44px] items-center justify-center rounded-full border border-border py-3"
                 >
                   <Text className="text-sm font-bold text-ink">{RECIPES_TAB_FILTER_COPY.clearFilters}</Text>
                 </Pressable>
@@ -279,10 +279,10 @@ export function RecipesTabFilterBar({
 
 export function RecipesTabFiltersEmptyState({ onClearAll }: { onClearAll: () => void }) {
   return (
-    <View className="mt-4 items-center rounded-2xl border border-dashed border-border bg-card px-5 py-8">
+    <View className="mt-4 items-center rounded-[18px] border border-dashed border-border bg-card px-5 py-8">
       <Text className="text-center text-base font-bold text-ink">{RECIPES_TAB_FILTER_COPY.emptyTitle}</Text>
       <Text className="mt-2 text-center text-sm text-muted">{RECIPES_TAB_FILTER_COPY.emptyBody}</Text>
-      <Pressable onPress={onClearAll} className="mt-4 rounded-full bg-primary px-5 py-3">
+      <Pressable onPress={onClearAll} className="mt-4 min-h-[44px] items-center justify-center rounded-full bg-primary px-5">
         <Text className="text-sm font-bold text-on-primary">{RECIPES_TAB_FILTER_COPY.clearFilters}</Text>
       </Pressable>
     </View>
