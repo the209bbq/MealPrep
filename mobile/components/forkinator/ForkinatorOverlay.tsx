@@ -115,6 +115,7 @@ import {
 import { ForkinatorScannerPrompt } from './ForkinatorScannerPrompt';
 import { ForkInRoadPrompt } from './ForkInRoadPrompt';
 import { ForkInRoadQuizSheet } from './ForkInRoadQuizSheet';
+import { AskForkySheet } from './AskForkySheet';
 import {
   buildRestockReminderMessage,
   planStapleRestockLinesForCook,
@@ -831,6 +832,14 @@ export function ForkinatorOverlay() {
     router.push({ pathname: '/', params: { recipeId: row.recipe.id } });
   }, []);
 
+  // Ask Forky (AI chat): tapping the floating Forky opens it. Off for customers until the
+  // switch is on; admin accounts can try it first.
+  const askForkyAvailable = (featureFlags.askForky || profile.role === 'admin') && !demoMode;
+  const [askForkyOpen, setAskForkyOpen] = useState(false);
+  const handleAskForkyOpenRecipe = useCallback((recipeId: string) => {
+    router.push({ pathname: '/', params: { recipeId } });
+  }, []);
+
   const handleMascotActivate = useCallback(() => {
     const action = resolveForkinatorMascotTapAction({
       greetingPromptVisible: greetingPromptVisibleRef.current,
@@ -841,6 +850,8 @@ export function ForkinatorOverlay() {
       aisleSortPromptVisible: aisleSortPromptVisibleRef.current,
       scannerPromptVisible: scannerPromptVisibleRef.current,
     });
+    // A tap always means "I want to ask": open the chat, and still clear whatever bubble was up.
+    if (askForkyAvailable) setAskForkyOpen(true);
     if (action === 'dismissGreetingPrompt') {
       setGreetingPromptVisible(false);
       return;
@@ -865,9 +876,8 @@ export function ForkinatorOverlay() {
       setScannerPromptVisible(false);
       return;
     }
-    // No active prompt: tapping Forky does nothing for now (the tap-for-a-tip bubble was
-    // removed; it may come back later as a real tip).
-  }, [collapseForkInRoadPrompt, forkInRoadExpanded]);
+    // No active prompt: without Ask Forky, tapping Forky does nothing.
+  }, [askForkyAvailable, collapseForkInRoadPrompt, forkInRoadExpanded]);
 
   const applyDragDelta = useCallback(
     (dx: number, dy: number) => {
@@ -1163,6 +1173,14 @@ export function ForkinatorOverlay() {
         onClose={() => setForkInRoadQuizVisible(false)}
         onOpenRecipe={handleForkInRoadOpenRecipe}
       />
+      {askForkyAvailable ? (
+        <AskForkySheet
+          visible={askForkyOpen}
+          onClose={() => setAskForkyOpen(false)}
+          onOpenRecipe={handleAskForkyOpenRecipe}
+          onHelpMePick={handleForkInRoadHelpPress}
+        />
+      ) : null}
       <View
         pointerEvents="box-none"
         style={{
