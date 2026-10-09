@@ -20,6 +20,8 @@ on:
           - pantry-vision
           - recipe-import
           - recipeapi-proxy
+          - stripe-checkout
+          - stripe-portal
           - stripe-webhook
           - usda-proxy
           - viral-recipes

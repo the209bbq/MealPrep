@@ -13,7 +13,8 @@
 // Stripe dashboard -> Developers -> Webhooks -> endpoint
 //   https://<project-ref>.supabase.co/functions/v1/stripe-webhook
 // Events: checkout.session.completed, customer.subscription.created,
-//         customer.subscription.updated, customer.subscription.deleted
+//         customer.subscription.updated, customer.subscription.deleted,
+//         invoice.paid, invoice.payment_failed
 //
 // Design notes:
 // - The signature is checked on the raw body before anything is parsed.
@@ -31,6 +32,7 @@ import {
   isHandledEventType,
   shouldApplySubscriptionUpdate,
   stripeId,
+  subscriptionIdFromInvoice,
   subscriptionRowFromStripe,
   type SubscriptionRow,
 } from './subscriptionState.ts';
@@ -228,6 +230,13 @@ Deno.serve(async (req) => {
     const object = event.data?.object;
     if (eventType === 'checkout.session.completed') {
       await handleCheckoutCompleted(admin, stripeSecretKey, object);
+    } else if (eventType === 'invoice.paid' || eventType === 'invoice.payment_failed') {
+      // Renewal succeeded or a charge failed: re-read the subscription so status and period
+      // end are current. Invoices that are not for a subscription are ignored.
+      const subscriptionId = subscriptionIdFromInvoice(object);
+      if (subscriptionId) {
+        await handleSubscriptionObject(admin, stripeSecretKey, subscriptionId, null);
+      }
     } else {
       const metadata =
         object && typeof object === 'object'
