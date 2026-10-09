@@ -7,8 +7,11 @@ export const STORES_TAB_DEFAULT_ZIP = '95361';
 export const STORES_TAB_DISPLAY_LIMIT = 15;
 
 export const STORES_TAB_COPY = {
-  title: 'Stores',
-  searchPlaceholder: 'Search nearby stores',
+  title: 'Stores near you',
+  nearPrefix: 'Near',
+  changeLocation: 'Change',
+  changeLocationA11y: 'Change location',
+  searchPlaceholder: 'Search stores',
   emptySearch: 'No stores match your search.',
   loading: 'Finding nearby grocery stores…',
   updating: 'Updating nearby stores…',
@@ -38,6 +41,6 @@ export const STORES_TAB_COPY = {
   deliveryUbereats: 'Uber Eats',
   detailWebsite: 'Website',
   detailOrderOnline: 'Order online',
-  pricesComingSoon: 'Prices coming soon',
+  noPricesYet: 'No prices yet',
   locationModalTitle: 'Stores near you',
 } as const;

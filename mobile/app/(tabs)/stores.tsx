@@ -1,7 +1,6 @@
 import { Ionicons } from '../../lib/icons/Ionicons';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SmartShopLocationLine } from '../../components/smartShop/SmartShopLocationLine';
 import { SmartShopLocationModal } from '../../components/smartShop/SmartShopLocationModal';
 import { StoreDetailSheet } from '../../components/stores/StoreDetailSheet';
 import { StoresLocationPrePrompt } from '../../components/stores/StoresLocationPrePrompt';
@@ -32,13 +31,26 @@ export default function StoresScreen() {
 
   return (
     <View className="flex-1 bg-paper">
-      <SmartShopLocationLine
-        locationSummary={stores.locationSummary}
-        onChangePress={() => stores.setLocationModalOpen(true)}
-      />
-
-      <ScrollView className="flex-1 px-4 pb-8" keyboardShouldPersistTaps="handled">
-        <Text className="mt-4 text-2xl font-bold text-ink">{STORES_TAB_COPY.title}</Text>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text className="text-[28px] font-extrabold leading-8 text-ink">{STORES_TAB_COPY.title}</Text>
+        <View className="flex-row flex-wrap items-center">
+          <Ionicons name="location-outline" size={16} color={THEME.muted} />
+          <Text className="ml-1.5 shrink text-[15px] text-muted">
+            {STORES_TAB_COPY.nearPrefix} {stores.locationSummary}
+          </Text>
+          <Pressable
+            onPress={() => stores.setLocationModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={STORES_TAB_COPY.changeLocationA11y}
+            className="min-h-[44px] justify-center px-2 active:opacity-70"
+          >
+            <Text className="text-[15px] font-bold text-primary">{STORES_TAB_COPY.changeLocation}</Text>
+          </Pressable>
+        </View>
 
         {stores.showLocationPrePrompt ? (
           <StoresLocationPrePrompt
@@ -52,14 +64,15 @@ export default function StoresScreen() {
           />
         ) : null}
 
-        <View className="mt-3 flex-row items-center rounded-2xl border border-border bg-card px-3">
+        <View className="mt-3.5 h-12 flex-row items-center rounded-full border border-border bg-card px-4">
           <Ionicons name="search" size={20} color={THEME.muted} />
           <TextInput
             value={stores.query}
             onChangeText={stores.setQuery}
             placeholder={STORES_TAB_COPY.searchPlaceholder}
             placeholderTextColor={THEME.muted}
-            className="ml-2 flex-1 py-3 text-base text-ink"
+            accessibilityLabel={STORES_TAB_COPY.searchPlaceholder}
+            className="ml-2.5 h-12 min-w-0 flex-1 py-0 text-base text-ink"
             autoCapitalize="none"
             autoCorrect={false}
             clearButtonMode="while-editing"
@@ -81,30 +94,32 @@ export default function StoresScreen() {
         ) : null}
 
         {storesTabShowsLoadError(listPhase) ? (
-          <View className="mt-6 rounded-2xl border border-border bg-card px-4 py-4">
+          <View className="mt-3.5 rounded-[20px] border border-border bg-card px-4 py-4">
             <Text className="text-sm text-muted">{STORES_TAB_COPY.loadFailed}</Text>
             <Pressable
               onPress={stores.retryStoreSearch}
-              className="mt-3 self-start rounded-full bg-primary px-4 py-2"
+              accessibilityRole="button"
+              className="mt-3 min-h-[44px] items-center justify-center self-start rounded-full bg-primary px-4 active:opacity-80"
             >
-              <Text className="text-xs font-bold text-on-primary">{STORES_TAB_COPY.retry}</Text>
+              <Text className="text-sm font-bold text-on-primary">{STORES_TAB_COPY.retry}</Text>
             </Pressable>
           </View>
         ) : null}
 
         {storesTabShowsNoSearchResults(listPhase) ? (
-          <Text className="mt-6 text-sm text-muted">{STORES_TAB_COPY.emptySearch}</Text>
+          <Text className="mt-3.5 text-sm text-muted">{STORES_TAB_COPY.emptySearch}</Text>
         ) : null}
 
         {storesTabShowsNoStoresNearby(listPhase) ? (
-          <View className="mt-6">
+          <View className="mt-3.5">
             <Text className="text-sm text-muted">{STORES_TAB_COPY.noStores}</Text>
             {stores.canWidenSearch ? (
               <Pressable
                 onPress={stores.widenStoreSearch}
-                className="mt-3 self-start rounded-xl border border-border bg-card px-4 py-2"
+                accessibilityRole="button"
+                className="mt-3 min-h-[44px] items-center justify-center self-start rounded-full border border-primary bg-card px-4 active:opacity-80"
               >
-                <Text className="text-xs font-bold text-ink">{STORES_TAB_COPY.widenSearch}</Text>
+                <Text className="text-sm font-bold text-primary">{STORES_TAB_COPY.widenSearch}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -118,7 +133,7 @@ export default function StoresScreen() {
           <Text className="mt-3 text-sm text-danger">{stores.error}</Text>
         ) : null}
 
-        <Text className="mt-8 text-center text-[10px] leading-4 text-muted">{STORES_TAB_COPY.attribution}</Text>
+        <Text className="mt-2 text-xs leading-4 text-muted">{STORES_TAB_COPY.attribution}</Text>
       </ScrollView>
 
       <SmartShopLocationModal

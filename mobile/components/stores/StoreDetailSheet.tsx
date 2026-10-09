@@ -39,7 +39,7 @@ export function StoreDetailSheet({ store, searchOriginZip, onClose }: Props) {
         <View className="max-h-[85%] rounded-t-3xl border border-border bg-card px-4 pb-8 pt-4">
           <View className="mb-3 flex-row items-start justify-between gap-3">
             <View className="min-w-0 flex-1">
-              <Text className="text-xl font-bold text-ink">{store.chain || store.name}</Text>
+              <Text className="text-xl font-extrabold text-ink">{store.chain || store.name}</Text>
               {store.chain && store.name !== store.chain ? (
                 <Text className="mt-0.5 text-sm text-muted">{store.name}</Text>
               ) : null}
@@ -49,29 +49,32 @@ export function StoreDetailSheet({ store, searchOriginZip, onClose }: Props) {
                   <Text className="text-sm font-medium text-ink">{formatDistanceMiles(store.distanceMiles)}</Text>
                 ) : null}
                 {store.openNow != null ? (
-                  <Text
-                    className={`text-xs font-semibold ${store.openNow ? 'text-success-dark' : 'text-muted'}`}
-                  >
+                  <Text className={`text-[13px] font-semibold ${store.openNow ? 'text-primary' : 'text-muted'}`}>
                     {store.openNow ? STORES_TAB_COPY.openNow : STORES_TAB_COPY.closedNow}
                   </Text>
                 ) : null}
               </View>
             </View>
-            <Pressable onPress={onClose} accessibilityLabel="Close store details" className="rounded-full p-2">
+            <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close store details"
+              className="h-11 w-11 items-center justify-center rounded-full active:opacity-70"
+            >
               <Ionicons name="close" size={24} color={THEME.muted} />
             </Pressable>
           </View>
 
           {store.pricingTeaser === 'coming_soon' ? (
-            <View className="mb-4 rounded-xl border border-border bg-paper px-3 py-2">
-              <Text className="text-sm text-muted">{STORES_TAB_COPY.pricesComingSoon}</Text>
+            <View className="mb-4 rounded-2xl border border-border bg-paper px-4 py-3">
+              <Text className="text-[13px] font-semibold text-muted">{STORES_TAB_COPY.noPricesYet}</Text>
             </View>
           ) : null}
 
           <View className="gap-2">
             <Pressable
               onPress={() => void openExternalUrl(directionsUrl)}
-              className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3"
+              className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 active:opacity-80"
             >
               <Ionicons name="navigate" size={20} color={THEME.onPrimary} />
               <Text className="font-bold text-on-primary">{STORES_TAB_COPY.detailDirections}</Text>
@@ -80,7 +83,7 @@ export function StoreDetailSheet({ store, searchOriginZip, onClose }: Props) {
             {phone ? (
               <Pressable
                 onPress={() => void Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`)}
-                className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-paper px-4 py-3"
+                className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-full border border-primary bg-card px-4 py-3 active:opacity-80"
               >
                 <Ionicons name="call-outline" size={20} color={THEME.primary} />
                 <Text className="font-bold text-primary">{STORES_TAB_COPY.detailCall}</Text>
@@ -89,7 +92,7 @@ export function StoreDetailSheet({ store, searchOriginZip, onClose }: Props) {
 
             <Pressable
               onPress={() => void openExternalUrl(storePageUrl)}
-              className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-paper px-4 py-3"
+              className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-full border border-primary bg-card px-4 py-3 active:opacity-80"
             >
               <Ionicons name="storefront-outline" size={20} color={THEME.primary} />
               <Text className="font-bold text-primary">{storePageLabel}</Text>
@@ -98,7 +101,7 @@ export function StoreDetailSheet({ store, searchOriginZip, onClose }: Props) {
             {weeklyAd ? (
               <Pressable
                 onPress={() => void openExternalUrl(weeklyAd.url)}
-                className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl border border-border bg-paper px-4 py-3"
+                className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-full border border-primary bg-card px-4 py-3 active:opacity-80"
               >
                 <Ionicons name="newspaper-outline" size={20} color={THEME.primary} />
                 <Text className="font-bold text-primary">

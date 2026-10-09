@@ -23,18 +23,21 @@ export function StoresLocationPrePrompt({
   onSaveZip,
 }: Props) {
   return (
-    <View className="mt-4 rounded-2xl border border-border bg-card px-4 py-4">
-      <Text className="text-base font-semibold text-ink">{STORES_TAB_COPY.findStoresTitle}</Text>
+    <View className="mt-3.5 rounded-[20px] border border-border bg-card px-4 py-4">
+      <Text className="text-[17px] font-extrabold text-ink">{STORES_TAB_COPY.findStoresTitle}</Text>
       <View className="mt-3 flex-row flex-wrap gap-2">
         <Pressable
           onPress={onUseLocation}
-          className="min-h-[44px] flex-row items-center justify-center gap-2 rounded-full bg-primary px-4 py-2"
+          className="min-h-[44px] flex-row items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 active:opacity-80"
         >
           <Ionicons name="locate" size={18} color={THEME.onPrimary} />
           <Text className="text-sm font-bold text-on-primary">{STORES_TAB_COPY.useMyLocation}</Text>
         </Pressable>
-        <Pressable onPress={onEnterZip} className="min-h-[44px] justify-center rounded-xl border border-border px-4 py-2">
-          <Text className="text-sm font-semibold text-ink">{STORES_TAB_COPY.enterZip}</Text>
+        <Pressable
+          onPress={onEnterZip}
+          className="min-h-[44px] justify-center rounded-full border border-primary bg-card px-4 py-2 active:opacity-80"
+        >
+          <Text className="text-sm font-bold text-primary">{STORES_TAB_COPY.enterZip}</Text>
         </Pressable>
       </View>
       {locationDeniedHelp ? <Text className="mt-3 text-xs text-muted">{locationDeniedHelp}</Text> : null}
@@ -47,9 +50,12 @@ export function StoresLocationPrePrompt({
             placeholder={STORES_TAB_COPY.zipShort}
             placeholderTextColor={THEME.muted}
             maxLength={10}
-            className="flex-1 rounded-xl border border-border bg-paper px-4 py-3 text-base text-ink"
+            className="h-12 min-w-0 flex-1 rounded-full border border-border bg-card px-4 py-0 text-base text-ink"
           />
-          <Pressable onPress={onSaveZip} className="justify-center rounded-full bg-slate px-4 py-3">
+          <Pressable
+            onPress={onSaveZip}
+            className="min-h-[48px] min-w-[56px] items-center justify-center rounded-full bg-primary px-4 active:opacity-80"
+          >
             <Text className="font-bold text-on-primary">Go</Text>
           </Pressable>
         </View>
