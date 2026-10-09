@@ -171,7 +171,11 @@ function AdminUserPlanCard() {
       const row = refreshed.find((r) => r.id === selected.id) ?? { ...selected, plan: applied };
       setSelected(row);
       setMatches((prev) => (refreshed.length > 0 ? refreshed : prev.map((r) => (r.id === selected.id ? row : r))));
-      setStatus(`Saved — ${row.email} is now on ${PLAN_LABELS[applied]}.`);
+      setStatus(
+        applied === plan
+          ? `Saved — ${row.email} is now on ${PLAN_LABELS[applied]}.`
+          : `Manual Plus removed — ${row.email} still has ${PLAN_LABELS[applied]} through an active subscription.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update plan');
     } finally {
