@@ -9,6 +9,9 @@ export const HANDLED_EVENT_TYPES = [
   'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
+  // Second safety net for renewals and failed charges: the subscription is re-read on each.
+  'invoice.paid',
+  'invoice.payment_failed',
 ] as const;
 
 export type HandledEventType = (typeof HANDLED_EVENT_TYPES)[number];
@@ -94,7 +97,8 @@ export function subscriptionRowFromStripe(subscription: unknown): SubscriptionRo
     billing_interval: recurring ? asNonEmptyString(recurring.interval) : null,
     current_period_end:
       unixToIso(sub.current_period_end) ?? unixToIso(firstItem?.current_period_end) ?? null,
-    cancel_at_period_end: sub.cancel_at_period_end === true,
+    // Classic billing mode sets cancel_at_period_end; flexible mode sets cancel_at instead.
+    cancel_at_period_end: sub.cancel_at_period_end === true || typeof sub.cancel_at === 'number',
     metadata_user_id: asUuid(metadata.supabase_user_id),
   };
 }
@@ -111,6 +115,23 @@ export function shouldApplySubscriptionUpdate(
   if (existing.stripe_subscription_id === incoming.stripe_subscription_id) return true;
   if (isPlusActiveStatus(existing.status) && !isPlusActiveStatus(incoming.status)) return false;
   return true;
+}
+
+/**
+ * The subscription an invoice belongs to. Older API versions put it at `invoice.subscription`;
+ * newer ones at `invoice.parent.subscription_details.subscription`. Null for one-off invoices.
+ */
+export function subscriptionIdFromInvoice(invoice: unknown): string | null {
+  if (!invoice || typeof invoice !== 'object') return null;
+  const inv = invoice as Record<string, unknown>;
+  const direct = stripeId(inv.subscription);
+  if (direct) return direct;
+  const parent = inv.parent && typeof inv.parent === 'object' ? (inv.parent as Record<string, unknown>) : null;
+  const details =
+    parent?.subscription_details && typeof parent.subscription_details === 'object'
+      ? (parent.subscription_details as Record<string, unknown>)
+      : null;
+  return details ? stripeId(details.subscription) : null;
 }
 
 export interface ConsentRow {

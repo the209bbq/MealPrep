@@ -17,6 +17,7 @@ import {
   PLUS_ACTIVE_STATUSES,
   shouldApplySubscriptionUpdate,
   stripeId,
+  subscriptionIdFromInvoice,
   subscriptionRowFromStripe,
 } from '../supabase/functions/stripe-webhook/subscriptionState.ts';
 
@@ -161,7 +162,30 @@ function testStatusRules(): void {
 
   assert.equal(isHandledEventType('checkout.session.completed'), true);
   assert.equal(isHandledEventType('customer.subscription.deleted'), true);
-  assert.equal(isHandledEventType('invoice.paid'), false);
+  assert.equal(isHandledEventType('invoice.paid'), true);
+  assert.equal(isHandledEventType('invoice.payment_failed'), true);
+  assert.equal(isHandledEventType('charge.refunded'), false);
+
+  // Invoice -> subscription id, in both API shapes; one-off invoices give null.
+  assert.equal(subscriptionIdFromInvoice({ subscription: 'sub_1' }), 'sub_1');
+  assert.equal(
+    subscriptionIdFromInvoice({ parent: { subscription_details: { subscription: { id: 'sub_2' } } } }),
+    'sub_2',
+  );
+  assert.equal(subscriptionIdFromInvoice({ parent: { type: 'quote_details' } }), null);
+  assert.equal(subscriptionIdFromInvoice(null), null);
+
+  // Flexible billing mode signals "cancels at period end" with cancel_at, not the boolean.
+  const flexibleCancel = subscriptionRowFromStripe({
+    id: 'sub_f',
+    customer: 'cus_f',
+    status: 'active',
+    cancel_at_period_end: false,
+    cancel_at: 1_800_200_000,
+  });
+  assert.equal(flexibleCancel?.cancel_at_period_end, true);
+  const noCancel = subscriptionRowFromStripe({ id: 'sub_g', customer: 'cus_g', status: 'active', cancel_at: null });
+  assert.equal(noCancel?.cancel_at_period_end, false);
 
   // First event for a customer, or any event for the stored subscription: apply.
   assert.equal(shouldApplySubscriptionUpdate(null, { stripe_subscription_id: 'sub_1', status: 'active' }), true);
