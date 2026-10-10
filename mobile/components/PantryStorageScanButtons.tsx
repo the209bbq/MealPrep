@@ -29,6 +29,8 @@ export interface PantryStorageScanButtonsProps {
   onAutoOpenScanHandled?: () => void;
   /** Show the "Plus" badge on the scan card (user is not on the paid plan yet). */
   showPlusBadge?: boolean;
+  /** Replaces the "Plus" badge text, e.g. "3 free" for a free account with free scans left. */
+  badgeText?: string;
   /** 'receipt' shows the receipt card and prepares the photo as a tall receipt. Default 'shelf'. */
   variant?: 'shelf' | 'receipt';
 }
@@ -40,6 +42,7 @@ export function PantryStorageScanButtons({
   autoOpenScanMode,
   onAutoOpenScanHandled,
   showPlusBadge,
+  badgeText,
   variant = 'shelf',
 }: PantryStorageScanButtonsProps) {
   const card = scanCardContent(variant);
@@ -85,9 +88,9 @@ export function PantryStorageScanButtons({
           <Text className="text-base font-extrabold text-ink">{card.title}</Text>
           <Text className="mt-0.5 text-sm leading-5 text-muted">{card.subtitle}</Text>
         </View>
-        {showPlusBadge ? (
+        {showPlusBadge || badgeText ? (
           <View className="shrink-0 rounded-[10px] bg-tomato px-[9px] py-1">
-            <Text className="text-xs font-extrabold text-on-tomato">{PANTRY_SCAN_UI_COPY.scanCardPlusBadge}</Text>
+            <Text className="text-xs font-extrabold text-on-tomato">{badgeText ?? PANTRY_SCAN_UI_COPY.scanCardPlusBadge}</Text>
           </View>
         ) : null}
       </Pressable>

@@ -15,6 +15,8 @@ export interface PantryVisionResponse {
   model?: string;
   cached?: boolean;
   itemCount?: number;
+  /** Scan allowance after this scan. `remaining` and `limit` are null when the account is not capped. */
+  usage?: { isPlus: boolean; limit: number | null; remaining: number | null };
 }
 
 export interface PantryVisionErrorEnvelope {

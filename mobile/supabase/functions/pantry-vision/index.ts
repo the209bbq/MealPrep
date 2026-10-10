@@ -18,6 +18,13 @@
 //     crop in its own call and merges the results: about four extra calls for that photo.
 //     "auto" does it only when the first pass already found PANTRY_THOROUGH_MIN_ITEMS or more.
 //   PANTRY_THOROUGH_MIN_ITEMS = items in the first pass that mark a photo as busy (default 20)
+//   PANTRY_PLUS_MONTHLY_SCANS = shelf + receipt scans a month for a Plus account (default 40)
+//   PANTRY_PLUS_MONTHLY_TAG_SCANS = shelf price-tag scans a month for a Plus account (default 200)
+//   PANTRY_FREE_TOTAL_SCANS = one-time shelf scans for a free account (default 3; 0 = Plus only)
+//
+// Requires SQL migration 20261010040000_photo_scan_usage.sql for the allowances above. Until it is
+// applied, Plus accounts scan without a cap (and a warning is logged) and free accounts get no
+// free scans. Admin accounts are never capped.
 //
 // One log line per scan ("pantry-vision: scan ...") carries photo size, token counts and timing.
 // It never contains the user id, the photo or the item names.
@@ -410,12 +417,15 @@ type GeminiModelAttemptDebug = {
   message?: string;
 };
 
-async function userHasPlusPhotoScanAccess(userId: string): Promise<boolean> {
+type ScanTier = 'admin' | 'plus' | 'free';
+
+/** The account's plan, read with the service key. Null when it cannot be read (treated as no access). */
+async function loadScanTier(userId: string): Promise<ScanTier | null> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceKey) {
     console.error('pantry-vision: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for plan check');
-    return false;
+    return null;
   }
 
   const url = `${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=plan,role`;
@@ -429,24 +439,155 @@ async function userHasPlusPhotoScanAccess(userId: string): Promise<boolean> {
     });
   } catch (error) {
     console.warn('pantry-vision: plan lookup network error', error);
-    return false;
+    return null;
   }
 
   if (!response.ok) {
     console.warn(`pantry-vision: plan lookup http ${response.status}`);
-    return false;
+    return null;
   }
 
   try {
     const rows = (await response.json()) as Array<{ plan?: string; role?: string }>;
     const row = rows[0];
-    if (!row) return false;
-    if (row.role === 'admin') return true;
-    return row.plan === 'paid';
+    if (!row) return null;
+    if (row.role === 'admin') return 'admin';
+    return row.plan === 'paid' ? 'plus' : 'free';
   } catch (error) {
     console.warn('pantry-vision: plan lookup parse error', error);
-    return false;
+    return null;
   }
+}
+
+// --- Scan allowance (monthly cap for Plus, one-time free scans) ---
+
+const SCAN_LIMIT_DEFAULTS = { plusMonthly: 40, plusMonthlyTags: 200, freeTotal: 3 } as const;
+
+function parseScanLimit(raw: string | undefined, fallback: number): number {
+  const text = (raw ?? '').trim();
+  if (!text) return fallback;
+  const parsed = Number.parseInt(text, 10);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100_000 ? parsed : fallback;
+}
+
+type ScanAllowance = {
+  /** Row key in photo_scan_usage, or null when this scan is not counted (admin). */
+  period: string | null;
+  limit: number;
+};
+
+/** Which bucket a scan counts against, and how big the bucket is. */
+function scanAllowanceFor(
+  tier: ScanTier,
+  action: VisionAction,
+  now: Date,
+  env: { plusMonthly?: string; plusMonthlyTags?: string; freeTotal?: string } = {},
+): ScanAllowance {
+  if (tier === 'admin') return { period: null, limit: Number.POSITIVE_INFINITY };
+  if (tier === 'free') {
+    return { period: 'free', limit: parseScanLimit(env.freeTotal, SCAN_LIMIT_DEFAULTS.freeTotal) };
+  }
+  const month = now.toISOString().slice(0, 7);
+  return action === 'price-tag'
+    ? { period: `${month}|tag`, limit: parseScanLimit(env.plusMonthlyTags, SCAN_LIMIT_DEFAULTS.plusMonthlyTags) }
+    : { period: month, limit: parseScanLimit(env.plusMonthly, SCAN_LIMIT_DEFAULTS.plusMonthly) };
+}
+
+async function callScanRpc(name: string, args: Record<string, unknown>): Promise<Response | null> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceKey) return null;
+  try {
+    return await fetch(`${supabaseUrl}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(args),
+    });
+  } catch (error) {
+    console.warn(`pantry-vision: ${name} network error`, error);
+    return null;
+  }
+}
+
+type ScanClaim =
+  | { state: 'claimed'; remaining: number }
+  | { state: 'used-up' }
+  /** The counter could not be reached (migration not applied, database error). */
+  | { state: 'unavailable' };
+
+/** Takes one scan from the allowance before the model is called. */
+async function claimScan(userId: string, allowance: ScanAllowance): Promise<ScanClaim> {
+  if (allowance.period == null) return { state: 'claimed', remaining: Number.POSITIVE_INFINITY };
+  if (allowance.limit <= 0) return { state: 'used-up' };
+  const response = await callScanRpc('claim_photo_scan', {
+    p_user_id: userId,
+    p_period: allowance.period,
+    p_limit: allowance.limit,
+  });
+  if (!response || !response.ok) {
+    console.warn(`pantry-vision: claim_photo_scan failed ${response ? `http ${response.status}` : 'no response'}`);
+    return { state: 'unavailable' };
+  }
+  try {
+    const remaining = (await response.json()) as unknown;
+    if (typeof remaining !== 'number' || !Number.isFinite(remaining)) return { state: 'unavailable' };
+    return remaining < 0 ? { state: 'used-up' } : { state: 'claimed', remaining };
+  } catch {
+    return { state: 'unavailable' };
+  }
+}
+
+/** Records tokens after a scan, or gives the scan back when the model call failed. Never throws. */
+async function settleScan(
+  userId: string,
+  period: string | null,
+  usage: { inputTokens: number; outputTokens: number },
+  refund: boolean,
+): Promise<void> {
+  if (period == null) return;
+  const response = await callScanRpc('settle_photo_scan', {
+    p_user_id: userId,
+    p_period: period,
+    p_input_tokens: Math.round(usage.inputTokens),
+    p_output_tokens: Math.round(usage.outputTokens),
+    p_refund: refund,
+  });
+  if (!response || !response.ok) {
+    console.warn(`pantry-vision: settle_photo_scan failed ${response ? `http ${response.status}` : 'no response'}`);
+  }
+}
+
+function scanLimitResponse(tier: ScanTier, allowance: ScanAllowance, action: VisionAction): Response {
+  if (tier === 'free') {
+    const error =
+      allowance.limit > 0
+        ? `You have used your ${allowance.limit} free photo scans. Scanning is part of MealPlanatic Plus.`
+        : 'Photo scanning requires MealPlanatic Plus.';
+    return jsonResponse({ error, code: 'PLAN_REQUIRED', usage: { remaining: 0, limit: allowance.limit, isPlus: false } }, 403);
+  }
+  const what = action === 'price-tag' ? 'price-tag scans' : 'photo scans';
+  return jsonResponse(
+    {
+      error: `You have used all ${allowance.limit} ${what} for this month. They reset on the 1st.`,
+      code: 'SCAN_LIMIT_REACHED',
+      usage: { remaining: 0, limit: allowance.limit, isPlus: true },
+    },
+    429,
+  );
+}
+
+/** What the app is told about the allowance after a scan. Admin scans are not capped. */
+function usageForResponse(tier: ScanTier, allowance: ScanAllowance, remaining: number) {
+  const capped = allowance.period != null && Number.isFinite(remaining);
+  return {
+    isPlus: tier !== 'free',
+    limit: capped ? allowance.limit : null,
+    remaining: capped ? remaining : null,
+  };
 }
 
 function checkUserRateLimit(userId: string): boolean {
@@ -1622,8 +1763,8 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Sign in required', code: 'UNAUTHENTICATED' }, 401);
   }
 
-  const planAllowed = await userHasPlusPhotoScanAccess(userId);
-  if (!planAllowed) {
+  const tier = await loadScanTier(userId);
+  if (!tier) {
     return jsonResponse(
       {
         error: 'Photo scanning requires MealPlanatic Plus.',
@@ -1663,12 +1804,45 @@ Deno.serve(async (req) => {
     const contentHash = imageResult.imageHash || (await sha256Hex(imageResult.bytes));
     const cacheKey = `${PANTRY_VISION_CACHE_VERSION}|${imageResult.action}|${imageResult.scanLocation}|${contentHash}|t${imageResult.tiles.length}`;
 
+    // Free accounts get a few shelf scans to try the app. Receipts and price tags are Plus only.
+    if (tier === 'free' && imageResult.action !== 'pantry') {
+      return jsonResponse({ error: 'Photo scanning requires MealPlanatic Plus.', code: 'PLAN_REQUIRED' }, 403);
+    }
+    const allowance = scanAllowanceFor(tier, imageResult.action, new Date(), {
+      plusMonthly: Deno.env.get('PANTRY_PLUS_MONTHLY_SCANS') ?? undefined,
+      plusMonthlyTags: Deno.env.get('PANTRY_PLUS_MONTHLY_TAG_SCANS') ?? undefined,
+      freeTotal: Deno.env.get('PANTRY_FREE_TOTAL_SCANS') ?? undefined,
+    });
+    if (tier === 'free' && allowance.limit <= 0) {
+      return scanLimitResponse(tier, allowance, imageResult.action);
+    }
+
+    /**
+     * Claims one scan. Returns a Response when the scan must not run. When the counter cannot be
+     * reached, a paying account still scans (the cap is a cost guard, not a reason to fail a
+     * customer) and a free account does not (no counter, no free scans).
+     */
+    const claimOrRefuse = async (): Promise<{ counted: boolean; remaining: number } | Response> => {
+      const claim = await claimScan(userId, allowance);
+      if (claim.state === 'claimed') return { counted: allowance.period != null, remaining: claim.remaining };
+      if (claim.state === 'used-up') return scanLimitResponse(tier, allowance, imageResult.action);
+      if (tier === 'free') {
+        return jsonResponse({ error: 'Photo scanning requires MealPlanatic Plus.', code: 'PLAN_REQUIRED' }, 403);
+      }
+      return { counted: false, remaining: Number.POSITIVE_INFINITY };
+    };
+
     if (imageResult.action === 'price-tag') {
-      const { tag, model } = await callPriceTagGeminiWithFallbacks(
-        apiKey,
-        imageResult.mimeType,
-        imageBase64,
-      );
+      const claimed = await claimOrRefuse();
+      if (claimed instanceof Response) return claimed;
+      let tagScan: Awaited<ReturnType<typeof callPriceTagGeminiWithFallbacks>>;
+      try {
+        tagScan = await callPriceTagGeminiWithFallbacks(apiKey, imageResult.mimeType, imageBase64);
+      } catch (tagError) {
+        if (claimed.counted) await settleScan(userId, allowance.period, { inputTokens: 0, outputTokens: 0 }, true);
+        throw tagError;
+      }
+      const { tag, model } = tagScan;
       return jsonResponse(
         {
           itemName: tag.itemName,
@@ -1676,6 +1850,7 @@ Deno.serve(async (req) => {
           sizeUnit: tag.sizeUnit ?? null,
           saleValidUntil: tag.saleValidUntil ?? null,
           model,
+          usage: usageForResponse(tier, allowance, claimed.remaining),
         },
         200,
       );
@@ -1718,6 +1893,10 @@ Deno.serve(async (req) => {
     const stats = new ScanStats();
     const startedAt = Date.now();
 
+    // Taken before the model is called, so parallel requests cannot overshoot the allowance.
+    const claimed = await claimOrRefuse();
+    if (claimed instanceof Response) return claimed;
+
     const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
     let scan: Awaited<ReturnType<typeof callPantryGeminiWithFallbacks>>;
     try {
@@ -1737,6 +1916,8 @@ Deno.serve(async (req) => {
           kind: imageResult.action,
         }),
       );
+      // A scan that produced nothing is not charged against the allowance.
+      if (claimed.counted) await settleScan(userId, allowance.period, { inputTokens: 0, outputTokens: 0 }, true);
       throw scanError;
     }
     const { model, debug } = scan;
@@ -1786,11 +1967,20 @@ Deno.serve(async (req) => {
     );
 
     setCachedScan(cacheKey, items, model);
+    if (claimed.counted) {
+      await settleScan(
+        userId,
+        allowance.period,
+        { inputTokens: stats.promptTokens, outputTokens: stats.outputTokens + stats.thoughtTokens },
+        false,
+      );
+    }
 
     return jsonResponse(
       {
         items,
         model,
+        usage: usageForResponse(tier, allowance, claimed.remaining),
         debug: {
           ...debug,
           images: images.length,

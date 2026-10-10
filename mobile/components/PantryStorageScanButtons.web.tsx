@@ -27,6 +27,7 @@ export function PantryStorageScanButtons({
   autoOpenScanMode,
   onAutoOpenScanHandled,
   showPlusBadge,
+  badgeText,
   variant = 'shelf',
 }: PantryStorageScanButtonsProps) {
   const card = scanCardContent(variant);
@@ -148,9 +149,9 @@ export function PantryStorageScanButtons({
           <Text className="text-base font-extrabold text-ink">{card.title}</Text>
           <Text className="mt-0.5 text-sm leading-5 text-muted">{card.subtitle}</Text>
         </View>
-        {showPlusBadge ? (
+        {showPlusBadge || badgeText ? (
           <View className="shrink-0 rounded-[10px] bg-tomato px-[9px] py-1">
-            <Text className="text-xs font-extrabold text-on-tomato">{PANTRY_SCAN_UI_COPY.scanCardPlusBadge}</Text>
+            <Text className="text-xs font-extrabold text-on-tomato">{badgeText ?? PANTRY_SCAN_UI_COPY.scanCardPlusBadge}</Text>
           </View>
         ) : null}
       </Pressable>
