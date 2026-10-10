@@ -9,7 +9,7 @@ export const ACCOUNT_SHEET_COPY = {
   deleteAccount: 'Delete account',
   deleteAccountConfirmTitle: 'Delete your account?',
   deleteAccountConfirmBody:
-    'This permanently removes your pantry, recipes, grocery list, meal plan, and profile. Community store prices you shared may stay visible without your name. This cannot be undone.',
+    'This permanently removes your pantry, recipes, grocery list, meal plan, and profile. If you have MealPlanatic Plus, it is cancelled now and you will not be charged again. Community store prices you shared may stay visible without your name. This cannot be undone.',
   deleteAccountConfirmAction: 'Yes, delete my account',
   deleteAccountCancel: 'Cancel',
   adminEntryLabel: 'Admin tools',

@@ -30,6 +30,7 @@ import {
   asUuid,
   consentRowFromCheckoutSession,
   isHandledEventType,
+  resolveLinkedUserId,
   shouldApplySubscriptionUpdate,
   stripeId,
   subscriptionIdFromInvoice,
@@ -86,6 +87,13 @@ async function recordEvent(admin: Admin, eventId: string, type: string): Promise
   if (error) throw error;
 }
 
+/** True while the account still exists. Deleted accounts keep their billing rows, unlinked. */
+async function profileExists(admin: Admin, userId: string): Promise<boolean> {
+  const { data, error } = await admin.from('profiles').select('id').eq('id', userId).maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
 /**
  * Store the subscription and re-derive the user's plan.
  * `hintUserId` comes from the checkout session when the subscription metadata has no user id.
@@ -106,8 +114,11 @@ async function syncSubscription(
     | { user_id: string | null; stripe_subscription_id: string | null; status: string | null }
     | null;
 
-  // Prefer what we already know; never let an event re-point a customer at another account.
-  const userId = existingRow?.user_id ?? row.metadata_user_id ?? hintUserId;
+  // Prefer what we already know; never let an event re-point a customer at another account,
+  // and never link to an account that has been deleted since checkout.
+  const userId = await resolveLinkedUserId(existingRow?.user_id, [row.metadata_user_id, hintUserId], (id) =>
+    profileExists(admin, id),
+  );
 
   if (!shouldApplySubscriptionUpdate(existingRow, row)) {
     return { applied: false, userId };
@@ -161,6 +172,9 @@ async function handleSubscriptionObject(
 async function handleCheckoutCompleted(admin: Admin, secretKey: string, session: unknown): Promise<void> {
   const consent = consentRowFromCheckoutSession(session, new Date().toISOString());
   if (!consent) return; // Not a subscription checkout.
+
+  // The consent record is kept either way; it is only unlinked when the account is gone.
+  consent.user_id = await resolveLinkedUserId(null, [consent.user_id], (id) => profileExists(admin, id));
 
   const { error: consentError } = await admin
     .from('billing_consents')
