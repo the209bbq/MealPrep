@@ -180,5 +180,6 @@ export function storeRecordToLocation(store: import('../stores/types').StoreReco
     openingHours: store.openingHours,
     openNow: store.openNow,
     pricingTeaser: store.pricingTeaser,
+    knownBrand: store.knownBrand,
   };
 }

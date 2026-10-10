@@ -8,7 +8,7 @@ const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function nearbyStoresCacheKey(origin: { lat: number; lng: number }, radiusM: number): string {
   const gh = nearbyStoresCacheGeohash(origin.lat, origin.lng);
-  return `stores:nearby:v2:${gh}:${radiusM}`;
+  return `stores:nearby:v3:${gh}:${radiusM}`;
 }
 
 export function readCachedNearbyStores(

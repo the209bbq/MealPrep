@@ -5,6 +5,7 @@ import type { UserProfile } from '../../types/mealprep';
 import { nearbyStoresInstantPreview, searchNearbyStores, type StoreLocation } from '../deals';
 import { sortStoresByDistanceMiles, withDistancesFromOrigin } from './storeDistance';
 import { resolveSearchOriginFast } from './resolveOrigin';
+import { splitStoresByRecognition } from './storeRecognition';
 import { geocodeUsZipForStoresTab } from './storesTabGeocode';
 import { isValidUsZip } from '../smartShop/location';
 import { persistHomeLocation } from '../smartShop/profileLocation';
@@ -116,19 +117,30 @@ export function useNearbyStoresList(profile: UserProfile) {
     return resolveSearchOriginFast({ zip: searchZip });
   }, [profile.homeLat, profile.homeLng, profile.homeZip, profile.id, searchZip]);
 
-  const sortedStores = useMemo(() => {
+  /** Recognised chains and brands first, then unbranded local markets; closest first inside each group. */
+  const groupedStores = useMemo(() => {
     const withDistance = searchOrigin ? withDistancesFromOrigin(nearbyStores, searchOrigin) : nearbyStores;
-    return sortStoresByDistanceMiles(withDistance);
+    const { recognized, local } = splitStoresByRecognition(sortStoresByDistanceMiles(withDistance));
+    return { chains: recognized, local };
   }, [nearbyStores, searchOrigin]);
 
-  const filteredStores = useMemo(() => {
+  const { filteredChainStores, filteredLocalStores } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sortedStores;
-    return sortedStores.filter((store) => {
+    if (!q) return { filteredChainStores: groupedStores.chains, filteredLocalStores: groupedStores.local };
+    const matches = (store: StoreLocation) => {
       const haystack = `${store.chain} ${store.name} ${store.city} ${store.addressLine}`.toLowerCase();
       return haystack.includes(q);
-    });
-  }, [query, sortedStores]);
+    };
+    return {
+      filteredChainStores: groupedStores.chains.filter(matches),
+      filteredLocalStores: groupedStores.local.filter(matches),
+    };
+  }, [groupedStores, query]);
+
+  const filteredStores = useMemo(
+    () => [...filteredChainStores, ...filteredLocalStores],
+    [filteredChainStores, filteredLocalStores],
+  );
 
   const loadStores = useCallback(
     async (coords?: { lat: number; lng: number }, options?: { radiusMultiplier?: 1 | 2 }) => {
@@ -284,6 +296,8 @@ export function useNearbyStoresList(profile: UserProfile) {
     setZip,
     searchZip,
     filteredStores,
+    filteredChainStores,
+    filteredLocalStores,
     loadingStores,
     updatingStores,
     storeSearchFailed,
