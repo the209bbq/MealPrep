@@ -444,6 +444,11 @@ interface AppContextValue {
   registerSavedRecipeToggleOutcome: (handler: ((outcome: SavedRecipeToggleOutcome) => void) | null) => void;
   toggleGroceryItem: (id: string) => void;
   toggleGroceryItemsChecked: (ids: string[], checked?: boolean) => void;
+  /**
+   * Ticks grocery rows as bought WITHOUT adding them to the pantry. Used after a receipt scan,
+   * which has already added what was bought; ticking the normal way would add it twice.
+   */
+  markGroceryItemsBought: (ids: string[]) => void;
   addManualGroceryItem: (input: {
     name: string;
     quantity: number;
@@ -2263,6 +2268,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
+  const markGroceryItemsBought = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const idSet = new Set(ids);
+      setGrocery((prev) => {
+        const changedIds = prev.filter((item) => idSet.has(item.id) && !item.checked).map((item) => item.id);
+        if (changedIds.length === 0) return prev;
+        const changed = new Set(changedIds);
+        const next = prev.map((item) => (changed.has(item.id) ? { ...item, checked: true } : item));
+        if (demoMode) writeJson(STORAGE_KEYS.grocery, next);
+        else if (isGuest) writeGuestGrocery(next);
+        if (supabase && userId) {
+          for (const id of changedIds) {
+            if (id.startsWith('groc-')) continue;
+            void updateGroceryChecked(supabase, id, true).catch((error: unknown) => {
+              setKitchenError(error instanceof Error ? error.message : 'Failed to update grocery item');
+            });
+          }
+        }
+        return next;
+      });
+      // No restock and no ledger entry: the receipt already put these in the pantry, and
+      // unticking later must not take stock back out.
+    },
+    [demoMode, isGuest, supabase, userId],
+  );
+
   const addManualGroceryItem = useCallback(
     async (input: { name: string; quantity: number; unit: string; category: PantryCategory }) => {
       const trimmed = input.name.trim();
@@ -3228,6 +3260,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       registerSavedRecipeToggleOutcome,
       toggleGroceryItem,
       toggleGroceryItemsChecked,
+      markGroceryItemsBought,
       addManualGroceryItem,
       clearCheckedGroceryItems,
       removeGroceryItem,
@@ -3319,6 +3352,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       summary,
       toggleGroceryItem,
       toggleGroceryItemsChecked,
+      markGroceryItemsBought,
       addManualGroceryItem,
       clearCheckedGroceryItems,
       removeGroceryItem,

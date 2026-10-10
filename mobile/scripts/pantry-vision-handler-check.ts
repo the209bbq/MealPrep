@@ -190,7 +190,7 @@ function reset(): void {
   // --- 4. One numbers-only log line per scan ---
   const scanLine = logLines.find((line) => line.startsWith('pantry-vision: scan ok'));
   assert.ok(scanLine, 'scan log line written');
-  assert.match(scanLine!, /model=gemini-3\.8-flash items=3 passes=1 images=5 imageBytes=\d+ ms=\d+ calls=1 modelsTried=1 emptyAnswers=0 promptTokens=6200 outputTokens=900 thoughtTokens=2100 finish=STOP thorough=0 firstPassItems=3 tileCalls=0 tilesOk=0$/);
+  assert.match(scanLine!, /model=gemini-3\.8-flash items=3 passes=1 images=5 imageBytes=\d+ ms=\d+ calls=1 modelsTried=1 emptyAnswers=0 promptTokens=6200 outputTokens=900 thoughtTokens=2100 finish=STOP thorough=0 firstPassItems=3 tileCalls=0 tilesOk=0 kind=pantry$/);
   assert.doesNotMatch(scanLine!, /olives|0000-4000|hash-1/, 'no item names, user id or photo hash in the log line');
 
   // --- 5. No crops: single image, no captions, prompt does not mention several images ---
@@ -362,7 +362,7 @@ function reset(): void {
   assert.equal(result.json.debug.usage.calls, 5);
   assert.match(
     logLines.find((line) => line.startsWith('pantry-vision: scan ok'))!,
-    /items=63 .*calls=5 .*thorough=1 firstPassItems=22 tileCalls=4 tilesOk=4$/,
+    /items=63 .*calls=5 .*thorough=1 firstPassItems=22 tileCalls=4 tilesOk=4 kind=pantry$/,
   );
 
   // A photo that is not busy stays at one call (the default threshold is 20 items).
@@ -419,6 +419,98 @@ function reset(): void {
   assert.equal(result.json.itemCount, 25);
   assert.deepEqual(result.json.debug.thorough, { tileCalls: 4, tilesOk: 0, firstPassItems: 25 });
 
+  // --- 15. Receipt scan ---
+  const receiptLine = (name: string, quantity: number, unit: string, confidence = 0.9) => ({
+    name,
+    quantity,
+    unit,
+    category: 'dry_goods',
+    storage: 'pantry',
+    confidence,
+  });
+  const receiptAnswer = (lines: unknown[]) => () =>
+    geminiJson({
+      candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ items: lines }) }] } }],
+      usageMetadata: { promptTokenCount: 4700, candidatesTokenCount: 600, thoughtsTokenCount: 800 },
+    });
+
+  reset();
+  geminiReplies = [
+    receiptAnswer([
+      receiptLine('whole milk', 1, 'gallon'),
+      receiptLine('black beans', 2, 'can'),
+      receiptLine('Black Beans', 1, 'can'), // the same product on a second line: purchases add up
+      receiptLine('chicken breast', 1.25, 'lb'),
+      receiptLine('bananas', 6, 'each'),
+      receiptLine('bananas', 1.4, 'lb'), // different unit: not added together
+    ]),
+  ];
+  result = await scan({
+    action: 'receipt',
+    imageBase64: PHOTO,
+    mimeType: 'image/jpeg',
+    imageHash: 'hash-30',
+    tiles: [tile(1, 'top'), tile(2, 'middle'), tile(3, 'bottom')],
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.kind, 'receipt');
+  assert.equal(geminiCalls.length, 1, 'a receipt is one call');
+  parts = partsOf(geminiCalls[0]);
+  assert.equal(parts.filter((p) => p.inline_data).length, 4, 'whole receipt plus three strips');
+  assert.equal(parts[0].text, 'Whole receipt:');
+  assert.equal(parts[2].text, 'Zoomed strip of the same receipt (top):');
+  const receiptText = String(parts.at(-1)!.text);
+  assert.match(receiptText, /You read a grocery store receipt/);
+  assert.match(receiptText, /4 images of ONE receipt/);
+  assert.match(receiptText, /add them up into one entry/);
+  assert.match(receiptText, /Never output the store address, cashier name, card numbers, loyalty or member numbers/);
+  assert.match(receiptText, /bag fees, bottle deposits \(CRV\), coupons, discounts, savings, tax, subtotal, total/);
+  assert.doesNotMatch(receiptText, /shelf by shelf/, 'not the shelf instructions');
+  const receiptItems = result.json.items as Array<{ name: string; quantity: number; unit: string }>;
+  assert.deepEqual(
+    receiptItems.map((i) => `${i.name}|${i.quantity}|${i.unit}`),
+    ['bananas|6|each', 'black beans|3|can', 'chicken breast|1.25|lb', 'whole milk|1|gallon'],
+    'duplicate lines summed when the unit matches; otherwise the first unit is kept',
+  );
+  assert.match(logLines.find((line) => line.startsWith('pantry-vision: scan ok'))!, /items=4 .*kind=receipt$/);
+
+  // A long receipt never triggers the per-crop thorough scan, even when switched to always.
+  reset();
+  env.PANTRY_THOROUGH_SCAN = 'always';
+  geminiReplies = [receiptAnswer(Array.from({ length: 45 }, (_, i) => receiptLine(`item ${i + 1}`, 1, 'each')))];
+  result = await scan({
+    action: 'receipt',
+    imageBase64: PHOTO,
+    mimeType: 'image/jpeg',
+    imageHash: 'hash-31',
+    tiles: [tile(1, 'top'), tile(2, 'middle'), tile(3, 'bottom')],
+  });
+  assert.equal(geminiCalls.length, 1);
+  assert.equal(result.json.itemCount, 45);
+
+  // Not a receipt / nothing readable: an honest empty list, not an error.
+  reset();
+  geminiReplies = [receiptAnswer([])];
+  result = await scan({ action: 'receipt', imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-32' });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.itemCount, 0);
+  assert.doesNotMatch(String(partsOf(geminiCalls[0]).at(-1)!.text), /images of ONE receipt/);
+
+  // Same photo scanned as a shelf and as a receipt are different scans (no shared cache entry).
+  reset();
+  geminiReplies = [geminiItems(['corn']), receiptAnswer([receiptLine('rice', 1, 'bag')])];
+  await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-33' });
+  result = await scan({ action: 'receipt', imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-33' });
+  assert.equal(geminiCalls.length, 2);
+  assert.equal(result.json.items[0].name, 'rice');
+
+  // Receipts are a Plus feature like every other scan.
+  reset();
+  planRow = { plan: 'free' };
+  result = await scan({ action: 'receipt', imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-34' });
+  assert.equal(result.status, 403);
+  assert.equal(geminiCalls.length, 0);
+
   // --- Crop layout (client side, pure) ---
   const portrait = computeDetailTiles(3072, 4080);
   assert.equal(portrait.length, 4);
@@ -443,6 +535,14 @@ function reset(): void {
   assert.deepEqual(computeDetailTiles(0, 0), []);
   assert.equal(computeDetailTiles(4080, 3072).length, 4, 'landscape works too');
   assert.ok(PHOTO_SCAN.detailTiles.columns * PHOTO_SCAN.detailTiles.rows <= 4, 'client never sends more crops than the server accepts');
+  // Receipts are tall: three full-width strips, top to bottom.
+  const strips = computeDetailTiles(3072, 4080, PHOTO_SCAN.receiptTiles);
+  assert.deepEqual(strips.map((t) => t.position), ['top', 'middle', 'bottom']);
+  assert.ok(strips.every((t) => t.x === 0 && t.width === 3072), 'strips span the full width');
+  assert.equal(strips[0].y, 0);
+  assert.equal(strips[2].y + strips[2].height, 4080);
+  assert.ok(strips[0].y + strips[0].height > strips[1].y + 100 && strips[1].y + strips[1].height > strips[2].y + 100, 'strips overlap so no line is lost on a seam');
+  assert.ok(PHOTO_SCAN.receiptTiles.columns * PHOTO_SCAN.receiptTiles.rows <= 4);
 
   console.log = realLog;
   console.warn = realWarn;

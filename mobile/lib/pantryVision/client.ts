@@ -94,7 +94,11 @@ export interface AnalyzePantryPhotoOptions {
   scanLocation?: PantryStorageLocation;
   /** Skip client memory cache (e.g. explicit “scan again” for coverage). */
   bypassCache?: boolean;
+  /** 'receipt' reads a grocery receipt instead of a shelf. */
+  kind?: PantryScanKind;
 }
+
+export type PantryScanKind = 'shelf' | 'receipt';
 
 export async function ensurePreparedImageHash(prepared: PreparedPantryImage): Promise<PreparedPantryImage> {
   if (prepared.contentHash) return prepared;
@@ -123,7 +127,9 @@ export async function analyzePantryPhoto(
   }
 
   const withHash = await ensurePreparedImageHash(prepared);
-  const cacheKey = pantryScanCacheKey(withHash.contentHash ?? '', scanLocation);
+  const kind: PantryScanKind = options?.kind ?? 'shelf';
+  // A receipt and a shelf scan of the same image are different answers.
+  const cacheKey = `${pantryScanCacheKey(withHash.contentHash ?? '', scanLocation)}|${kind}`;
   if (!options?.bypassCache) {
     const cached = getCachedPantryScan(cacheKey);
     if (cached) {
@@ -138,6 +144,7 @@ export async function analyzePantryPhoto(
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({
+      action: kind === 'receipt' ? 'receipt' : undefined,
       imageBase64: withHash.base64,
       mimeType: withHash.mimeType,
       location: scanLocation,

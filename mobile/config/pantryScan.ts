@@ -15,6 +15,19 @@ export const PANTRY_SCAN_UI_COPY = {
   scanCardTitle: 'Scan your fridge',
   scanCardSubtitle: 'Take a photo and Forky adds what he sees.',
   scanCardPlusBadge: 'Plus',
+  receiptCardTitle: 'Scan a receipt',
+  receiptCardSubtitle: 'Just shopped? Snap the receipt and Forky adds what you bought.',
+  scanReceiptA11y: 'Scan a grocery receipt with camera or photo library',
+  /** Shown above the review list for a receipt: some lines top up things already in the pantry. */
+  receiptSummary: (found: number, already: number) =>
+    already > 0
+      ? `${found} item${found === 1 ? '' : 's'} from your receipt. ${already} top up things you already have.`
+      : `${found} item${found === 1 ? '' : 's'} from your receipt.`,
+  receiptNothingFoundTitle: 'No food items found',
+  receiptNothingFound:
+    'Forky could not read any food items on that receipt. Lay it flat in good light, fill the frame, and try again.',
+  groceryTickedOff: (count: number) =>
+    `Ticked ${count} item${count === 1 ? '' : 's'} off your grocery list.`,
   addItems: (count: number) => `Add ${count} item${count === 1 ? '' : 's'}`,
   addedToPantry: (count: number) =>
     `Added ${count} item${count === 1 ? '' : 's'} to pantry`,

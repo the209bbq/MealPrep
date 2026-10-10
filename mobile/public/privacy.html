@@ -103,6 +103,13 @@
         our Supabase Edge Function) to detect pantry items or read shelf tags.
       </li>
       <li>
+        Read a <strong>grocery receipt</strong> you choose to scan: the receipt photo is sent to Google Gemini (via our
+        Supabase Edge Function) to list the food items you bought, so they can be added to your pantry and ticked off
+        your grocery list. A receipt can also show the store, the date, and part of a card or loyalty number. We ask
+        for the food items only and do not save anything else from it, and we do not keep the receipt photo. You can
+        cover or crop anything you do not want to send.
+      </li>
+      <li>
         When you <strong>import a recipe from a link</strong>, we send that URL (and for some sites, page text, a social
         caption you paste, or a YouTube video reference processed by URL only — we do not download or store the video)
         to Google Gemini to extract recipe details for your private collection. YouTube channel names are refreshed about

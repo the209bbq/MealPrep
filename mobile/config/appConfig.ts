@@ -120,6 +120,14 @@ export const PHOTO_SCAN = {
     jpegQuality: 0.82,
     maxTileBytes: 900_000,
   },
+  /** Receipts are tall and narrow: full-width strips, top to bottom, instead of a grid. */
+  receiptTiles: {
+    minSourceLongEdge: 2200,
+    columns: 1,
+    rows: 3,
+    overlap: 0.12,
+    maxLongEdge: 1280,
+  },
   maxPayloadBytes: 2_800_000,
   /** Quality hints before upload (analysis on a downsampled thumb, not the full upload). */
   qualityAnalysisLongEdge: 256,
