@@ -324,26 +324,6 @@ const SCAN_RESULT_CACHE_TTL_MS = 30 * 60 * 1000;
 const SCAN_RESULT_CACHE_MAX = 200;
 const scanResultCache = new Map<string, { at: number; items: DetectedPantryItem[]; model: string }>();
 
-/**
- * Scans being worked on right now, by account and photo. A phone browser can send the same request
- * again when its connection drops (the camera opening is enough), while the first one is still
- * running here. The second request waits for the first answer instead of paying for the scan twice.
- */
-type SharedScan = { items: DetectedPantryItem[]; model: string };
-const scansInFlight = new Map<string, { at: number; result: Promise<SharedScan> }>();
-/** Longer than any scan can run; an entry older than this was left behind by a crash and is ignored. */
-const SCAN_IN_FLIGHT_MAX_MS = 3 * 60 * 1000;
-
-function scanInFlight(key: string, now = Date.now()): Promise<SharedScan> | null {
-  const entry = scansInFlight.get(key);
-  if (!entry) return null;
-  if (now - entry.at > SCAN_IN_FLIGHT_MAX_MS) {
-    scansInFlight.delete(key);
-    return null;
-  }
-  return entry.result;
-}
-
 function isModelNotFoundOrRetired(status: number, detail: string): boolean {
   if (status !== 404) return false;
   const lower = detail.toLowerCase();
@@ -578,6 +558,68 @@ async function settleScan(
   });
   if (!response || !response.ok) {
     console.warn(`pantry-vision: settle_photo_scan failed ${response ? `http ${response.status}` : 'no response'}`);
+  }
+}
+
+/** What a repeat of the same request is given: the answer the first request produced. */
+type SharedScanResult = { items: DetectedPantryItem[]; model: string; usage?: unknown };
+type ScanRequestState =
+  | { state: 'started' }
+  | { state: 'running' }
+  | { state: 'done'; result: SharedScanResult }
+  /** The table could not be reached (migration not applied, database error): scan without it. */
+  | { state: 'untracked' };
+
+/** A request still marked running after this long was abandoned (worker stopped); the next one takes over. */
+const SCAN_REQUEST_STALE_SECONDS = 150;
+/** How long a finished answer is handed to a repeat of the same request. */
+const SCAN_REQUEST_REUSE_SECONDS = 600;
+const SCAN_REQUEST_POLL_MS = 1500;
+/** A repeat waits at most this long for the first request, then reports busy. */
+const SCAN_REQUEST_MAX_WAIT_MS = 110_000;
+
+/**
+ * The same request can arrive twice: a phone browser resends it when its connection drops while
+ * the scan is still running. Every request runs in its own worker, so the two can only find each
+ * other in the database. The first takes the row; a repeat is told to wait, then given the answer.
+ */
+async function beginScanRequest(userId: string, key: string): Promise<ScanRequestState> {
+  const response = await callScanRpc('begin_photo_scan_request', {
+    p_user_id: userId,
+    p_key: key,
+    p_stale_seconds: SCAN_REQUEST_STALE_SECONDS,
+    p_reuse_seconds: SCAN_REQUEST_REUSE_SECONDS,
+  });
+  if (!response || !response.ok) {
+    console.warn(`pantry-vision: begin_photo_scan_request failed ${response ? `http ${response.status}` : 'no response'}`);
+    return { state: 'untracked' };
+  }
+  try {
+    const body = (await response.json()) as { state?: unknown; result?: unknown } | null;
+    if (body?.state === 'running') return { state: 'running' };
+    if (body?.state === 'done') {
+      const result = body.result as SharedScanResult | null;
+      if (result && Array.isArray(result.items) && typeof result.model === 'string') {
+        return { state: 'done', result };
+      }
+      return { state: 'untracked' };
+    }
+    if (body?.state === 'started') return { state: 'started' };
+    return { state: 'untracked' };
+  } catch {
+    return { state: 'untracked' };
+  }
+}
+
+/** Stores the answer for a repeat, or (null) clears the row after a failed or refused scan. Never throws. */
+async function finishScanRequest(userId: string, key: string, result: SharedScanResult | null): Promise<void> {
+  const response = await callScanRpc('finish_photo_scan_request', {
+    p_user_id: userId,
+    p_key: key,
+    p_result: result,
+  });
+  if (!response || !response.ok) {
+    console.warn(`pantry-vision: finish_photo_scan_request failed ${response ? `http ${response.status}` : 'no response'}`);
   }
 }
 
@@ -1890,38 +1932,42 @@ Deno.serve(async (req) => {
       );
     }
 
-    // The same photo from the same account is already being scanned: share that answer.
-    const inFlightKey = `${userId}|${cacheKey}`;
-    const running = scanInFlight(inFlightKey);
-    if (running) {
-      const shared = await running.catch(() => null);
-      if (shared) {
-        console.log(`pantry-vision: scan shared items=${shared.items.length} kind=${imageResult.action}`);
-        return jsonResponse(
-          {
-            items: shared.items,
-            model: shared.model,
-            scanLocation: imageResult.scanLocation,
-            kind: imageResult.action,
-            cached: true,
-            shared: true,
-            itemCount: shared.items.length,
-          },
-          200,
-        );
-      }
-      // The first request failed: this one runs on its own below.
+    // The same request from the same account may already be running in another worker (a phone
+    // browser resends when its connection drops). Wait for that answer instead of scanning twice.
+    const requestKey = cacheKey;
+    let request = await beginScanRequest(userId, requestKey);
+    const waitStartedAt = Date.now();
+    while (request.state === 'running' && Date.now() - waitStartedAt < SCAN_REQUEST_MAX_WAIT_MS) {
+      await new Promise((resolve) => setTimeout(resolve, SCAN_REQUEST_POLL_MS));
+      request = await beginScanRequest(userId, requestKey);
     }
-    let shareResult: (value: SharedScan) => void = () => {};
-    let shareFailure: () => void = () => {};
-    const sharedResult = new Promise<SharedScan>((resolve, reject) => {
-      shareResult = resolve;
-      shareFailure = () => reject(new Error('scan failed'));
-    });
-    // Nobody may be waiting: a failure with no listener must not crash the worker.
-    sharedResult.catch(() => {});
-    scansInFlight.set(inFlightKey, { at: Date.now(), result: sharedResult });
-    let scanFinished = false;
+    if (request.state === 'running') {
+      return jsonResponse(
+        { error: 'This photo is still being scanned. Try again in a moment.', code: 'UPSTREAM_BUSY' },
+        503,
+      );
+    }
+    if (request.state === 'done') {
+      const shared = request.result;
+      console.log(
+        `pantry-vision: scan shared items=${shared.items.length} waitedMs=${Date.now() - waitStartedAt} kind=${imageResult.action}`,
+      );
+      return jsonResponse(
+        {
+          items: shared.items,
+          model: shared.model,
+          usage: shared.usage,
+          scanLocation: imageResult.scanLocation,
+          kind: imageResult.action,
+          cached: true,
+          shared: true,
+          itemCount: shared.items.length,
+        },
+        200,
+      );
+    }
+    const tracked = request.state === 'started';
+    let answer: SharedScanResult | null = null;
     try {
       const isReceipt = imageResult.action === 'receipt';
       const images: GeminiImage[] = [
@@ -2020,8 +2066,7 @@ Deno.serve(async (req) => {
       );
 
       setCachedScan(cacheKey, items, model);
-      scanFinished = true;
-      shareResult({ items, model });
+      answer = { items, model, usage: usageForResponse(tier, allowance, claimed.remaining) };
       if (claimed.counted) {
         await settleScan(
           userId,
@@ -2055,9 +2100,8 @@ Deno.serve(async (req) => {
         200,
       );
     } finally {
-      // Whatever happened, later requests for this photo must not wait on this one.
-      if (!scanFinished) shareFailure();
-      scansInFlight.delete(inFlightKey);
+      // Whatever happened, a repeat must not wait on this request for longer than it ran.
+      if (tracked) await finishScanRequest(userId, requestKey, answer);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Something went wrong while analyzing your photo.';

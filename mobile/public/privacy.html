@@ -102,6 +102,8 @@
         Run <strong>AI photo scanning</strong>: images you choose to scan are sent to <strong>Google Gemini</strong> (via
         our Supabase Edge Function) to detect pantry items or read shelf tags. We keep a count of how many scans your
         account has used and their size, to apply plan limits; the count holds nothing from the photos.
+        So that a scan sent twice by a dropped connection is read only once, the list of items found by a scan is
+        held on our server for up to one hour, then deleted.
       </li>
       <li>
         Read a <strong>grocery receipt</strong> you choose to scan: the receipt photo is sent to Google Gemini (via our
