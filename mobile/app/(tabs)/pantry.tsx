@@ -64,6 +64,14 @@ import {
   subscribeOpenPantryShelfScan,
 } from '../../lib/pantry/openShelfScanRequest';
 import {
+  MAX_PARALLEL_SCANS,
+  canStartAnotherScan,
+  placeScanResult,
+  resetScanActivity,
+  setScanReviewReady,
+  setScanningCount,
+} from '../../lib/pantry/scanActivity';
+import {
   consumePantryExpiringHighlightRequest,
   subscribePantryExpiringHighlight,
 } from '../../lib/pantry/openExpiringHighlightRequest';
@@ -98,6 +106,7 @@ import { PantryStaplesInviteCard } from '../../components/pantry/PantryStaplesIn
 import { addDaysToIsoDate, todayIsoDate } from '../../lib/pantry/expiry';
 import { STAPLE_EXPIRY_QUICK_CHIPS } from '../../lib/pantry/stapleCatalog';
 
+/** 'loading' is no longer set: scans run in the background and are counted in `activeScans`. */
 type ScanPhase = 'idle' | 'loading' | 'review';
 
 type PantryConfirmAction =
@@ -144,7 +153,26 @@ export default function PantryScreen() {
     ? (locationFilterOverride ?? readStoredPantryLocationFilter())
     : 'all';
 
-  const [phase, setPhase] = useState<ScanPhase>('idle');
+  const [phase, setPhaseState] = useState<ScanPhase>('idle');
+  /** Same value as `phase`, readable from a scan that started before the latest render. */
+  const phaseRef = useRef<ScanPhase>('idle');
+  function setPhase(next: ScanPhase) {
+    phaseRef.current = next;
+    setPhaseState(next);
+  }
+  /** Photos currently with the model. Several can run at once while the app stays usable. */
+  const [activeScans, setActiveScans] = useState(0);
+  const activeScansRef = useRef(0);
+  function beginScan() {
+    activeScansRef.current += 1;
+    setActiveScans(activeScansRef.current);
+    setScanningCount(activeScansRef.current);
+  }
+  function endScan() {
+    activeScansRef.current = Math.max(0, activeScansRef.current - 1);
+    setActiveScans(activeScansRef.current);
+    setScanningCount(activeScansRef.current);
+  }
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<PantryScanReviewItem[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -152,6 +180,8 @@ export default function PantryScreen() {
   const [scanGuestSignInCta, setScanGuestSignInCta] = useState(false);
   const [scanNotice, setScanNotice] = useState<{ title: string; message: string } | null>(null);
   const [scanQualityWarning, setScanQualityWarning] = useState<string | null>(null);
+  /** Across the photos in the open list: how many items the scans found, and how many were already owned. */
+  const [scanSummary, setScanSummary] = useState<{ found: number; already: number } | null>(null);
   const [lastScanAttempt, setLastScanAttempt] = useState<
     | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
     | { kind: 'uri'; uri: string; location: PantryStorageLocation }
@@ -160,7 +190,6 @@ export default function PantryScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [modelLabel, setModelLabel] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
-  const [addPhotoBusy, setAddPhotoBusy] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<PantryItem | null>(null);
@@ -251,6 +280,12 @@ export default function PantryScreen() {
     tryConsumeExpiringHighlight();
     tryConsumeShelfScanRequest();
   }, [phase, tryConsumeExpiringHighlight, tryConsumeShelfScanRequest]);
+
+  // Lets the tab bar show that a list is waiting while the shopper is on another tab.
+  useEffect(() => {
+    setScanReviewReady(phase === 'review');
+  }, [phase]);
+  useEffect(() => () => resetScanActivity(), []);
 
   const visionReady = isPantryVisionConfigured();
   const accessToken = session?.access_token ?? null;
@@ -372,16 +407,20 @@ export default function PantryScreen() {
     const scanAccessToken = scanSession?.access_token ?? accessToken;
     const scanUserId = scanSession?.user?.id ?? userId;
 
+    if (!canStartAnotherScan(activeScansRef.current)) {
+      const message = PANTRY_SCAN_UI_COPY.tooManyScans(MAX_PARALLEL_SCANS);
+      if (phaseRef.current === 'review') setSaveError(message);
+      else setScanFailure(message, PANTRY_SCAN_UI_COPY.tooManyScansTitle, null);
+      return;
+    }
+
     setScanLocationHint(scanLocation);
     clearScanFailure();
     setScanQualityWarning(prepared.qualityWarnings?.join(' ') ?? null);
-    if (!options?.mergeIntoReview) {
-      setPhase('loading');
-      setPreviewUri(prepared.uri);
-    } else {
-      setAddPhotoBusy(true);
-      setSaveError(null);
-    }
+    setSaveError(null);
+    setPreviewUri(prepared.uri);
+    // The scan runs in the background from here: the screen stays usable and more photos can be added.
+    beginScan();
 
     const attempt = { kind: 'prepared' as const, prepared, location: scanLocation };
 
@@ -397,7 +436,7 @@ export default function PantryScreen() {
     }
 
     try {
-      const { detectionsToReviewItems } = await import('../../lib/pantryVision/reviewItems');
+      const { detectionsToReviewItems, summarizeScanAgainstPantry } = await import('../../lib/pantryVision/reviewItems');
       const result = await pantryVisionClient.analyzePantryPhoto(prepared, scanAccessToken, {
         scanLocation,
         bypassCache: options?.mergeIntoReview,
@@ -410,9 +449,25 @@ export default function PantryScreen() {
         demoMode,
         scanLocation,
       );
-      if (options?.mergeIntoReview) {
+      const summary = summarizeScanAgainstPantry(result.items, pantry);
+      // Decided when the answer arrives, not when the photo was taken: an earlier photo may
+      // have opened the list in the meantime, and this one's items then join it.
+      const placement = placeScanResult({
+        reviewOpen: phaseRef.current === 'review',
+        newItemCount: rows.length,
+        othersScanning: Math.max(0, activeScansRef.current - 1),
+      });
+      if (placement === 'merge-into-review') {
+        setScanSummary((prev) => ({
+          found: (prev?.found ?? 0) + summary.found,
+          already: (prev?.already ?? 0) + summary.alreadyInPantry,
+        }));
         if (rows.length === 0) {
-          setSaveError(PANTRY_SCAN_UI_COPY.noNewItemsInPhoto);
+          setSaveError(
+            summary.found > 0
+              ? PANTRY_SCAN_UI_COPY.allAlreadyInPantry(summary.found)
+              : PANTRY_SCAN_UI_COPY.noNewItemsInPhoto,
+          );
         } else {
           setReviewItems((prev) => {
             const merged = mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation);
@@ -425,12 +480,23 @@ export default function PantryScreen() {
         setLastScanAttempt(attempt);
         return;
       }
-      if (rows.length === 0) {
+      if (placement === 'nothing-found' || placement === 'nothing-found-quiet') {
+        if (summary.found > 0) {
+          // The scan worked: everything it saw is already owned. Say that, not "try a closer shot".
+          setScanError(null);
+          setScanErrorTitle(null);
+          setLastScanAttempt(null);
+          setScanNotice({
+            title: PANTRY_SCAN_UI_COPY.allAlreadyInPantryTitle,
+            message: PANTRY_SCAN_UI_COPY.allAlreadyInPantry(summary.found),
+          });
+          return;
+        }
         logPantryScanFailure('EMPTY_DETECTIONS');
-        setScanNoItemsFound(attempt);
-        setPhase('idle');
+        if (placement === 'nothing-found') setScanNoItemsFound(attempt);
         return;
       }
+      setScanSummary({ found: summary.found, already: summary.alreadyInPantry });
       clearScanFailure();
       setLastScanAttempt(attempt);
       setModelLabel(result.model);
@@ -472,22 +538,19 @@ export default function PantryScreen() {
                     ? error.message
                     : PHOTO_SCAN.scanFailedMessage;
       const canRetry = !(error instanceof PantryVisionNotConfiguredError);
-      if (options?.mergeIntoReview) {
+      if (phaseRef.current === 'review') {
+        // A list from another photo is open: report beside it and leave the list alone.
         setSaveError(message);
       } else {
         setScanFailure(message, title, canRetry ? attempt : null);
-        setPhase('idle');
       }
     } finally {
-      if (options?.mergeIntoReview) {
-        setAddPhotoBusy(false);
-      }
+      endScan();
     }
   }
 
   async function runVisionFromUri(uri: string, scanLocation: PantryStorageLocation) {
     clearScanFailure();
-    setPhase('loading');
     setPreviewUri(uri);
     const attempt = { kind: 'uri' as const, uri, location: scanLocation };
     try {
@@ -505,7 +568,6 @@ export default function PantryScreen() {
         logPantryScanFailure('UNKNOWN');
         setScanFailure(PHOTO_SCAN.scanFailedMessage, PHOTO_SCAN.scanFailedTitle, attempt);
       }
-      setPhase('idle');
     }
   }
 
@@ -671,6 +733,7 @@ export default function PantryScreen() {
       submitScanCorrectionsFeedback();
       setPhase('idle');
       setReviewItems([]);
+      setScanSummary(null);
       setPreviewUri(null);
       setPendingScanPhotoPath(null);
       scanSessionIdRef.current = null;
@@ -692,6 +755,7 @@ export default function PantryScreen() {
   function handleCancelReview() {
     setPhase('idle');
     setReviewItems([]);
+    setScanSummary(null);
     setPreviewUri(null);
     setPendingScanPhotoPath(null);
     scanSessionIdRef.current = null;
@@ -933,7 +997,7 @@ export default function PantryScreen() {
           {scanControlsVisible ? (
             <View className="gap-2">
               <PantryStorageScanButtons
-                disabled={phase === 'loading' || !featureFlags.photoScan}
+                disabled={!featureFlags.photoScan}
                 guestPhotoScanBlocked={shouldBlockGuestPantryPhotoScan(photoScanGate)}
                 authPhotoScanPending={
                   shouldDeferPantryPhotoScanForAuth(photoScanGate) ||
@@ -959,13 +1023,17 @@ export default function PantryScreen() {
             </View>
           ) : null}
 
-          {phase === 'loading' ? (
-            <View className="items-center rounded-[18px] border border-border bg-card px-4 py-6">
-              <ActivityIndicator size="large" color={THEME.primary} />
-              <Text className="mt-2 text-sm text-muted">Analyzing photo…</Text>
-              <Text className="mt-2 max-w-sm text-center text-xs text-muted">
-                {PHOTO_SCAN.analyzingPhotoMessage}
-              </Text>
+          {activeScans > 0 && phase !== 'review' ? (
+            <View
+              className="flex-row items-center gap-3 rounded-[18px] border border-border bg-card px-4 py-3.5"
+              accessibilityRole="progressbar"
+              accessibilityLabel={PANTRY_SCAN_UI_COPY.scanningPhotos(activeScans)}
+            >
+              <ActivityIndicator color={THEME.primary} />
+              <View className="min-w-0 flex-1">
+                <Text className="text-sm font-bold text-ink">{PANTRY_SCAN_UI_COPY.scanningPhotos(activeScans)}</Text>
+                <Text className="mt-0.5 text-xs leading-4 text-muted">{PANTRY_SCAN_UI_COPY.scanningKeepGoing}</Text>
+              </View>
             </View>
           ) : null}
 
@@ -1033,6 +1101,23 @@ export default function PantryScreen() {
             </View>
           ) : null}
 
+          {phase === 'review' && activeScans > 0 ? (
+            <View className="flex-row items-center gap-3 rounded-[18px] border border-border bg-card px-4 py-3">
+              <ActivityIndicator color={THEME.primary} />
+              <Text className="min-w-0 flex-1 text-xs leading-4 text-muted">
+                {PANTRY_SCAN_UI_COPY.moreStillScanning(activeScans)}
+              </Text>
+            </View>
+          ) : null}
+
+          {phase === 'review' && scanSummary && scanSummary.already > 0 ? (
+            <View className="rounded-[18px] border border-border bg-card px-4 py-3">
+              <Text className="text-sm font-semibold text-ink">
+                {PANTRY_SCAN_UI_COPY.scanSummary(scanSummary.found, scanSummary.already)}
+              </Text>
+            </View>
+          ) : null}
+
           {phase === 'review' ? (
             <Card>
               <PantryScanReview
@@ -1042,7 +1127,7 @@ export default function PantryScreen() {
                 onSave={() => void handleSaveReview()}
                 onCancel={handleCancelReview}
                 onAddAnotherPhoto={() => void handleAddAnotherPhotoFromReview()}
-                addPhotoBusy={addPhotoBusy}
+                addPhotoBusy={false}
                 saving={saving}
                 modelLabel={isAdmin ? modelLabel : undefined}
                 saveError={saveError}

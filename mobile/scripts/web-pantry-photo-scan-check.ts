@@ -121,7 +121,7 @@ async function main() {
 
     await page
       .getByText('Review scan', { exact: false })
-      .or(page.getByText('Analyzing photo', { exact: false }))
+      .or(page.getByText('Scanning 1 photo', { exact: false }))
       .first()
       .waitFor({ timeout: 60_000 });
 

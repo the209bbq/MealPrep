@@ -81,6 +81,19 @@ export function normalizeDetectionsForReview(
   }));
 }
 
+/**
+ * What a scan found against what the shopper already has. The review list only shows the new
+ * items, so without this a re-scan of a stocked shelf looks like the scanner missed most of it.
+ */
+export function summarizeScanAgainstPantry(
+  detections: PantryVisionDetection[],
+  pantry: PantryItem[],
+): { found: number; alreadyInPantry: number; fresh: number } {
+  const normalized = normalizeDetectionsForReview(detections);
+  const fresh = filterDetectionsNotAlreadyInPantry(normalized, pantry).length;
+  return { found: normalized.length, alreadyInPantry: normalized.length - fresh, fresh };
+}
+
 export function detectionsToReviewItems(
   detections: PantryVisionDetection[],
   pantry: PantryItem[],

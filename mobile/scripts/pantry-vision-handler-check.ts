@@ -29,6 +29,8 @@ let handler: Handler | null = null;
 type GeminiCall = { model: string; body: Record<string, unknown> };
 const geminiCalls: GeminiCall[] = [];
 let geminiReplies: Array<() => Response> = [];
+/** When set, answers every model call from the request itself (calls can arrive in any order). */
+let geminiRouter: ((call: GeminiCall) => Response) | null = null;
 let planRow: { plan: string; role?: string } | null = { plan: 'paid' };
 
 function geminiJson(body: unknown, status = 200): Response {
@@ -77,7 +79,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (url.startsWith('https://generativelanguage.googleapis.com/')) {
     const model = decodeURIComponent(/models\/([^:]+):generateContent/.exec(url)?.[1] ?? '');
-    geminiCalls.push({ model, body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> });
+    const call = { model, body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> };
+    geminiCalls.push(call);
+    if (geminiRouter) return geminiRouter(call);
     const reply = geminiReplies.shift();
     if (!reply) throw new Error(`unexpected Gemini call to ${model}`);
     return reply();
@@ -129,6 +133,9 @@ function reset(): void {
   geminiCalls.length = 0;
   logLines.length = 0;
   geminiReplies = [];
+  geminiRouter = null;
+  delete env.PANTRY_THOROUGH_SCAN;
+  delete env.PANTRY_THOROUGH_MIN_ITEMS;
   delete env.PANTRY_VERIFY_PASS;
   delete env.PANTRY_LEGACY_SAMPLING;
   delete env.GEMINI_THINKING_LEVEL;
@@ -183,7 +190,7 @@ function reset(): void {
   // --- 4. One numbers-only log line per scan ---
   const scanLine = logLines.find((line) => line.startsWith('pantry-vision: scan ok'));
   assert.ok(scanLine, 'scan log line written');
-  assert.match(scanLine!, /model=gemini-3\.8-flash items=3 passes=1 images=5 imageBytes=\d+ ms=\d+ calls=1 modelsTried=1 emptyAnswers=0 promptTokens=6200 outputTokens=900 thoughtTokens=2100 finish=STOP$/);
+  assert.match(scanLine!, /model=gemini-3\.8-flash items=3 passes=1 images=5 imageBytes=\d+ ms=\d+ calls=1 modelsTried=1 emptyAnswers=0 promptTokens=6200 outputTokens=900 thoughtTokens=2100 finish=STOP thorough=0 firstPassItems=3 tileCalls=0 tilesOk=0$/);
   assert.doesNotMatch(scanLine!, /olives|0000-4000|hash-1/, 'no item names, user id or photo hash in the log line');
 
   // --- 5. No crops: single image, no captions, prompt does not mention several images ---
@@ -316,6 +323,101 @@ function reset(): void {
   result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-12' });
   assert.equal(result.status, 502);
   assert.ok(logLines.some((line) => /^pantry-vision: scan failed model=none items=0 .*emptyAnswers=\d+/.test(line)));
+
+  // --- 14. Thorough scan: a busy photo gets each crop checked on its own ---
+  const fourTiles = [tile(1, 'top left'), tile(2, 'top right'), tile(3, 'bottom left'), tile(4, 'bottom right')];
+  const names = (prefix: string, count: number) => Array.from({ length: count }, (_, i) => `${prefix} ${i + 1}`);
+  /** Which crop a call is about, from the fixed caption the function wrote. Null for the whole-photo pass. */
+  const cropOf = (call: GeminiCall): string | null => {
+    const texts = partsOf(call).map((p) => String(p.text ?? ''));
+    if (!texts.some((t) => t.startsWith('Full photo, for context'))) return null;
+    return /Zoomed crop of the same photo \(([a-z ]+)\):/.exec(texts.join('\n'))?.[1] ?? '';
+  };
+
+  reset();
+  geminiRouter = (call) => {
+    const crop = cropOf(call);
+    if (crop == null) return geminiItems(names('first pass item', 22))();
+    // Each crop finds things the whole-photo pass missed, plus one item a neighbour also sees.
+    return geminiItems([...names(`${crop} item`, 10), 'first pass item 1', 'shared edge item'])();
+  };
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-20', tiles: fourTiles });
+  assert.equal(result.status, 200);
+  assert.equal(geminiCalls.length, 5, 'one whole-photo call, then one call per crop');
+  const cropCalls = geminiCalls.filter((c) => cropOf(c) != null);
+  assert.deepEqual(cropCalls.map((c) => cropOf(c)).sort(), ['bottom left', 'bottom right', 'top left', 'top right']);
+  for (const call of cropCalls) {
+    assert.equal(partsOf(call).filter((p) => p.inline_data).length, 2, 'a crop call carries the full photo and that one crop');
+    const cropPrompt = String(partsOf(call).at(-1)!.text);
+    assert.match(cropPrompt, /List EVERY food product visible in the ZOOMED CROP/);
+    assert.match(cropPrompt, new RegExp(`zoomed crop of its ${cropOf(call)} part`));
+    assert.match(cropPrompt, /STILL list it with your best specific name and a lower confidence/);
+  }
+  // 22 from the first pass + 4 x 10 new per crop + 1 shared edge item, with repeats merged.
+  assert.equal(result.json.itemCount, 22 + 40 + 1);
+  const itemNames = (result.json.items as Array<{ name: string }>).map((i) => i.name);
+  assert.equal(new Set(itemNames).size, itemNames.length, 'no duplicate rows after merging');
+  assert.equal(itemNames.filter((n) => n === 'shared edge item').length, 1);
+  assert.deepEqual(result.json.debug.thorough, { tileCalls: 4, tilesOk: 4, firstPassItems: 22 });
+  assert.equal(result.json.debug.usage.calls, 5);
+  assert.match(
+    logLines.find((line) => line.startsWith('pantry-vision: scan ok'))!,
+    /items=63 .*calls=5 .*thorough=1 firstPassItems=22 tileCalls=4 tilesOk=4$/,
+  );
+
+  // A photo that is not busy stays at one call (the default threshold is 20 items).
+  reset();
+  geminiRouter = () => geminiItems(names('item', 19))();
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-21', tiles: fourTiles });
+  assert.equal(geminiCalls.length, 1, 'below the threshold: no extra calls');
+  assert.equal(result.json.itemCount, 19);
+
+  // Busy, but a small photo with no crops: nothing more to look at.
+  reset();
+  geminiRouter = () => geminiItems(names('item', 30))();
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-22' });
+  assert.equal(geminiCalls.length, 1);
+
+  // Switches: off never runs it; always runs it whatever the first pass found; threshold is adjustable.
+  reset();
+  env.PANTRY_THOROUGH_SCAN = 'off';
+  geminiRouter = () => geminiItems(names('item', 40))();
+  await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-23', tiles: fourTiles });
+  assert.equal(geminiCalls.length, 1);
+
+  reset();
+  env.PANTRY_THOROUGH_SCAN = 'always';
+  geminiRouter = () => geminiItems(['corn'])();
+  await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-24', tiles: fourTiles });
+  assert.equal(geminiCalls.length, 5);
+
+  reset();
+  env.PANTRY_THOROUGH_MIN_ITEMS = '5';
+  geminiRouter = () => geminiItems(names('item', 6))();
+  await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-25', tiles: fourTiles });
+  assert.equal(geminiCalls.length, 5);
+
+  // One crop keeps failing: the scan still succeeds with the first pass and the other crops.
+  reset();
+  geminiRouter = (call) => {
+    const crop = cropOf(call);
+    if (crop == null) return geminiItems(names('first pass item', 25))();
+    if (crop === 'top right') return geminiJson({ error: { message: 'bad request' } }, 400);
+    return geminiItems(names(`${crop} item`, 5))();
+  };
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-26', tiles: fourTiles });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.itemCount, 25 + 15);
+  assert.deepEqual(result.json.debug.thorough, { tileCalls: 4, tilesOk: 3, firstPassItems: 25 });
+
+  // Every crop fails: the first-pass list is still returned.
+  reset();
+  geminiRouter = (call) =>
+    cropOf(call) == null ? geminiItems(names('first pass item', 25))() : geminiJson({ error: { message: 'bad request' } }, 400);
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-27', tiles: fourTiles });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.itemCount, 25);
+  assert.deepEqual(result.json.debug.thorough, { tileCalls: 4, tilesOk: 0, firstPassItems: 25 });
 
   // --- Crop layout (client side, pure) ---
   const portrait = computeDetailTiles(3072, 4080);

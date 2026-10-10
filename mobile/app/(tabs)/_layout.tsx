@@ -10,12 +10,16 @@ import { TABS, THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
 import { HomeHubSheetProvider } from '../../context/HomeHubSheetContext';
 import { useHydrated } from '../../hooks/useHydrated';
+import { useScanActivity } from '../../hooks/useScanActivity';
+import { pantryTabBadge } from '../../lib/pantry/scanActivity';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 export default function TabsLayout() {
   const { maintenanceActive, isAdmin } = useApp();
   const hydrated = useHydrated();
+  // Pantry photo scans run in the background; the badge says one is running or a list is waiting.
+  const pantryBadge = pantryTabBadge(useScanActivity());
 
   if (hydrated && maintenanceActive) {
     return (
@@ -58,6 +62,8 @@ export default function TabsLayout() {
             options={{
               title: tab.title,
               href: (tab.adminOnly && !isAdmin ? null : tab.href) as Href | null,
+              tabBarBadge: tab.name === 'pantry' ? pantryBadge : undefined,
+              tabBarBadgeStyle: { backgroundColor: THEME.tomato, color: THEME.card, fontWeight: '700' },
               tabBarIcon: ({ color, focused }) => (
                 <View
                   style={{
