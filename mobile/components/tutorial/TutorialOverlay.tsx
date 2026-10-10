@@ -16,13 +16,12 @@ import {
   pinnedForkinatorPosition,
 } from '../../lib/forkinator/pinnedDock';
 import {
+  autoStartTutorialOnce,
   endTutorial,
   measureTutorialTarget,
   nextTutorialStep,
   previousTutorialStep,
-  shouldAutoStartTutorial,
   spotlightForRect,
-  startTutorial,
   tutorialCardPlacement,
   type TutorialRect,
 } from '../../lib/tutorial/tutorialStore';
@@ -77,14 +76,14 @@ export function TutorialOverlay() {
   const step = TUTORIAL_STEPS[Math.min(stepIndex, TUTORIAL_STEPS.length - 1)];
   const routeReady = onStepRoute(pathname, step);
 
-  // New visitors get the tour once (only when it is switched on for everyone).
+  // New visitors get the tour once. Checked a moment after the app opens, on a tab screen,
+  // and never again in this app load (see autoStartTutorialOnce).
+  const onTabRoute = isForkinatorTabRoute(pathname);
   useEffect(() => {
-    if (!shouldAutoStartTutorial()) return;
-    const timer = setTimeout(() => {
-      if (shouldAutoStartTutorial() && isForkinatorTabRoute(pathname)) startTutorial();
-    }, AUTO_START_DELAY_MS);
+    if (!onTabRoute) return;
+    const timer = setTimeout(autoStartTutorialOnce, AUTO_START_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [pathname]);
+  }, [onTabRoute]);
 
   // The tour is Forky's introduction: his separate one-line greeting is not needed after it.
   useEffect(() => {

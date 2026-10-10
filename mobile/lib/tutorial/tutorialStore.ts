@@ -46,8 +46,24 @@ function markTutorialDone(): void {
   writeJson(TUTORIAL_DONE_STORAGE_KEY, true);
 }
 
+let autoStartConsidered = false;
+
+/** Opens the tour at the first step. Does nothing while it is already open. */
 export function startTutorial(): void {
+  if (state.active) return;
   publish({ active: true, stepIndex: 0 });
+}
+
+/**
+ * The automatic start for a new visitor, at most once per app load. (Found live on 2026-10-10:
+ * re-checking on every screen change restarted the tour from step 1 each time it moved to a new tab.)
+ */
+export function autoStartTutorialOnce(): boolean {
+  if (autoStartConsidered) return false;
+  autoStartConsidered = true;
+  if (state.active || !shouldAutoStartTutorial()) return false;
+  startTutorial();
+  return true;
 }
 
 export function nextTutorialStep(): void {
@@ -140,6 +156,7 @@ export function tutorialCardPlacement(
 /** Test helper. */
 export function resetTutorialForTests(): void {
   state = { active: false, stepIndex: 0 };
+  autoStartConsidered = false;
   targets.clear();
   listeners.clear();
 }

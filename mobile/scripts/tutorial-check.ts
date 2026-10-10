@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TUTORIAL, TUTORIAL_COPY, TUTORIAL_STEPS, type TutorialTargetId } from '../config/tutorial';
 import {
+  autoStartTutorialOnce,
   canOpenTutorialFromAccount,
   endTutorial,
   getTutorialState,
@@ -81,6 +82,25 @@ startTutorial();
 for (let i = 0; i < TUTORIAL_STEPS.length; i += 1) nextTutorialStep();
 assert.equal(getTutorialState().active, false);
 unsubscribe();
+
+// --- Moving between tabs never restarts the tour (bug found live, 2026-10-10) ---
+resetTutorialForTests();
+writeJson(TUTORIAL_DONE_STORAGE_KEY, false);
+assert.equal(autoStartTutorialOnce(), TUTORIAL.liveForEveryone, 'a new visitor gets the tour when it is live');
+if (TUTORIAL.liveForEveryone) {
+  nextTutorialStep();
+  nextTutorialStep();
+  assert.equal(getTutorialState().stepIndex, 2);
+  assert.equal(autoStartTutorialOnce(), false, 'asked again after a screen change: nothing happens');
+  startTutorial();
+  assert.equal(getTutorialState().stepIndex, 2, 'starting an open tour does not send it back to step 1');
+  endTutorial();
+  assert.equal(autoStartTutorialOnce(), false, 'and it does not come back after Skip');
+}
+resetTutorialForTests();
+writeJson(TUTORIAL_DONE_STORAGE_KEY, true);
+assert.equal(autoStartTutorialOnce(), false, 'a visitor who already saw it is left alone');
+assert.equal(getTutorialState().active, false);
 
 // --- Who sees it ---
 assert.equal(shouldAutoStartTutorial({ liveForEveryone: false, done: false }), false);
