@@ -296,6 +296,9 @@ async function smartShopWithMockStores(page: Page): Promise<void> {
   const shopCta = page.getByText(GROCERY_COPY.findStoresNearMe, { exact: false }).first();
   await shopCta.waitFor({ timeout: 15_000 });
   await shopCta.click();
+  // The button opens the Stores tab for now; Smart Shop is still reachable by its address.
+  await page.waitForURL(/\/stores/, { timeout: 15_000 });
+  await page.goto(`${page.url().replace(/\/stores\/?(\?.*)?$/, '')}/smart-shop`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.waitForURL(/\/smart-shop/, { timeout: 15_000 });
   await page.waitForLoadState('networkidle', { timeout: 60_000 }).catch(() => undefined);
 

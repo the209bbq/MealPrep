@@ -7,6 +7,7 @@ export const APP_ROUTES = {
   /** Recipe feed and imports (same screen as home). */
   recipes: '/' as Href,
   grocery: '/grocery' as Href,
+  stores: '/stores' as Href,
   /** Legacy email links; screen redirects to home. */
   profile: '/profile' as Href,
   admin: '/admin' as Href,
