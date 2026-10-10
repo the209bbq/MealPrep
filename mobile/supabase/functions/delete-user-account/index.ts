@@ -1,14 +1,23 @@
-// Delete the signed-in user's account and kitchen data — paste into Supabase Dashboard:
-// Edge Functions → delete-user-account → Via Editor
+// Delete the signed-in user's account and kitchen data.
 //
-// Settings: leave "Verify JWT" ENABLED.
+// Deploy: Actions -> "Deploy Supabase function" -> delete-user-account (gateway JWT verification ON).
+// It imports ../_shared, so it can no longer be pasted into the dashboard editor as one file.
 //
-// Requires SQL migration: 20261002150000_account_deletion_fks_and_rpc.sql
-// (and 20261002143000_avatars_storage.sql for avatars bucket).
+// Requires SQL migrations: 20261002150000_account_deletion_fks_and_rpc.sql,
+// 20261002143000_avatars_storage.sql (avatars bucket) and 20261009020000_billing_subscriptions.sql.
 //
-// Secrets: SUPABASE_SERVICE_ROLE_KEY (default), SUPABASE_URL, SUPABASE_ANON_KEY.
+// Secrets: SUPABASE_SERVICE_ROLE_KEY (default), SUPABASE_URL, SUPABASE_ANON_KEY,
+//          STRIPE_SECRET_KEY (same key stripe-checkout uses).
+//
+// Order matters: MealPlanatic Plus is cancelled at Stripe FIRST. If that fails, nothing is
+// deleted and the caller is told, because a deleted account with a live subscription would keep
+// being charged with no way left to cancel. Billing rows are kept after deletion (consumer law
+// asks for a 3-year record); the database unlinks them from the account.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { stripeRequest } from '../_shared/billingServer.ts';
+import { isLiveSubscriptionStatus } from '../_shared/billingText.ts';
+import { stopBillingForCustomers } from '../_shared/stopBilling.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -92,6 +101,65 @@ async function deleteUserStorage(admin: ReturnType<typeof createClient>, userId:
   }
 }
 
+const CANCEL_FAILED_MESSAGE =
+  'We could not cancel your MealPlanatic Plus subscription, so your account was not deleted. ' +
+  'Try again in a few minutes, or cancel in Account, Manage subscription first.';
+
+function cancelFailedResponse(): Response {
+  return new Response(JSON.stringify({ error: CANCEL_FAILED_MESSAGE, code: 'CANCEL_FAILED' }), {
+    status: 502,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+/**
+ * Cancels the user's Stripe subscriptions and closes any open Checkout page.
+ * Returns false when billing could not be stopped; the account must then be left alone.
+ */
+async function stopUserBilling(admin: ReturnType<typeof createClient>, userId: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from('billing_subscriptions')
+    .select('stripe_customer_id, status')
+    .eq('user_id', userId);
+  if (error) {
+    console.error('[delete-user-account] billing lookup failed', error.message);
+    return false;
+  }
+
+  const rows = (data ?? []) as Array<{ stripe_customer_id: string | null; status: string | null }>;
+  const customerIds = rows.map((row) => row.stripe_customer_id ?? '').filter(Boolean);
+  if (customerIds.length === 0) return true; // Never started a checkout.
+
+  const stripeSecretKey = (Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim();
+  if (!stripeSecretKey) {
+    // Without the key nothing can be cancelled. Only safe when no subscription is live.
+    const hasLive = rows.some((row) => isLiveSubscriptionStatus(row.status));
+    if (hasLive) console.error('[delete-user-account] STRIPE_SECRET_KEY missing; live subscription not cancelled');
+    return !hasLive;
+  }
+
+  try {
+    const result = await stopBillingForCustomers(customerIds, (method, path, form) =>
+      stripeRequest(stripeSecretKey, method, path, form ? { form } : {}),
+    );
+    console.log(
+      '[delete-user-account] billing stopped',
+      JSON.stringify({
+        canceled: result.canceledSubscriptions.length,
+        expiredSessions: result.expiredCheckoutSessions.length,
+        missingCustomers: result.missingCustomers.length,
+      }),
+    );
+    return true;
+  } catch (stripeError) {
+    console.error(
+      '[delete-user-account] could not stop billing',
+      stripeError instanceof Error ? stripeError.message : String(stripeError),
+    );
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -136,6 +204,10 @@ Deno.serve(async (req) => {
 
   const userId = userData.user.id;
   const admin = createClient(supabaseUrl, serviceKey);
+
+  if (!(await stopUserBilling(admin, userId))) {
+    return cancelFailedResponse();
+  }
 
   const { error: rpcError } = await admin.rpc('delete_user_owned_data', { p_user_id: userId });
   if (rpcError) {

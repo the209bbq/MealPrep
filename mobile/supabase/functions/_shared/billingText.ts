@@ -8,7 +8,7 @@
 export const DISCLOSURE_VERSION = '2026-10-08.1';
 
 /** Version of the Terms of Use the customer accepts at checkout (the date printed on the page). */
-export const TERMS_VERSION = '2026-10-03';
+export const TERMS_VERSION = '2026-10-09';
 
 export type BillingInterval = 'month' | 'year';
 

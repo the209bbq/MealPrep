@@ -15,6 +15,7 @@ import {
   isHandledEventType,
   isPlusActiveStatus,
   PLUS_ACTIVE_STATUSES,
+  resolveLinkedUserId,
   shouldApplySubscriptionUpdate,
   stripeId,
   subscriptionIdFromInvoice,
@@ -257,6 +258,39 @@ function testConsent(): void {
   assert.equal(sparse?.user_id, null);
 }
 
+/** T-4: an event for an account that has been deleted must not try to link to it. */
+async function testDeletedAccountLink(): Promise<void> {
+  const OTHER = '11111111-2222-4333-8444-555555555555';
+  const lookups: string[] = [];
+  const existsOnly = (...alive: string[]) => async (id: string) => {
+    lookups.push(id);
+    return alive.includes(id);
+  };
+
+  // Renewal after the account was deleted: the row was unlinked, metadata still names the user.
+  assert.equal(await resolveLinkedUserId(null, [USER, null], existsOnly()), null);
+  // Same event while the account exists links as before.
+  assert.equal(await resolveLinkedUserId(null, [USER, null], existsOnly(USER)), USER);
+  // The checkout hint is used when the metadata id is absent, and checked the same way.
+  assert.equal(await resolveLinkedUserId(null, [null, USER], existsOnly(USER)), USER);
+  assert.equal(await resolveLinkedUserId(undefined, [null, USER], existsOnly()), null);
+  // A deleted metadata account does not block a live hint.
+  assert.equal(await resolveLinkedUserId(null, [USER, OTHER], existsOnly(OTHER)), OTHER);
+
+  // An already-linked row keeps its account and needs no lookup; metadata cannot re-point it.
+  lookups.length = 0;
+  assert.equal(await resolveLinkedUserId(OTHER, [USER], existsOnly(USER)), OTHER);
+  assert.deepEqual(lookups, []);
+
+  // A database error while checking must surface (the webhook then answers 500 and Stripe retries).
+  await assert.rejects(
+    resolveLinkedUserId(null, [USER], async () => {
+      throw new Error('db down');
+    }),
+    /db down/,
+  );
+}
+
 function testSourceRules(): void {
   const index = fs.readFileSync(
     path.join(mobileRoot, 'supabase/functions/stripe-webhook/index.ts'),
@@ -268,7 +302,15 @@ function testSourceRules(): void {
     'signature must be checked before parsing',
   );
   // The webhook must never set the plan directly; only recompute_user_plan may.
-  assert.doesNotMatch(index, /from\('profiles'\)/, 'webhook must not write profiles');
+  // It may read profiles (to see whether an account still exists) but never write them.
+  assert.doesNotMatch(
+    index,
+    /from\('profiles'\)\s*\.(update|upsert|insert|delete)\(/,
+    'webhook must not write profiles',
+  );
+  // T-4: both the subscription row and the consent row go through the deleted-account guard.
+  assert.equal((index.match(/resolveLinkedUserId\(/g) ?? []).length, 2, 'subscription and consent both guarded');
+  assert.doesNotMatch(index, /existingRow\?\.user_id \?\? row\.metadata_user_id/, 'unguarded user link is gone');
   assert.match(index, /rpc\('recompute_user_plan'/);
   // Only supabase-js may be imported remotely (bundler rule); no Stripe SDK.
   const remote = index.match(/from\s+['"]https?:\/\/[^'"]+['"]/g) ?? [];
@@ -280,6 +322,7 @@ function testSourceRules(): void {
   testSubscriptionMapping();
   testStatusRules();
   testConsent();
+  await testDeletedAccountLink();
   testSourceRules();
   console.log('stripe-webhook-check: ok');
 })().catch((error) => {

@@ -85,7 +85,7 @@ export class StripeRequestError extends Error {
 /** One call to Stripe. Throws StripeRequestError with Stripe's message on a non-2xx reply. */
 export async function stripeRequest<T>(
   secretKey: string,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'DELETE',
   path: string,
   options: { form?: Parameters<typeof encodeStripeForm>[0]; idempotencyKey?: string } = {},
 ): Promise<T> {

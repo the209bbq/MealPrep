@@ -66,7 +66,8 @@ export default function DeleteAccountScreen() {
         <Text className="text-2xl font-bold text-ink">Delete your MealPlanatic account</Text>
         <Text className="mt-3 text-sm leading-6 text-muted">
           You can permanently delete your account and the personal data we store for you. This includes your profile,
-          pantry, saved recipes, meal plan, grocery lists, saved stores, and scan photos tied to your account.
+          pantry, saved recipes, meal plan, grocery lists, saved stores, and scan photos tied to your account. Deleting
+          your account also cancels MealPlanatic Plus and stops future charges.
         </Text>
 
         <Text className="mt-4 text-sm leading-6 text-muted">

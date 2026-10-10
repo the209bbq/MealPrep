@@ -134,6 +134,26 @@ export function subscriptionIdFromInvoice(invoice: unknown): string | null {
   return details ? stripeId(details.subscription) : null;
 }
 
+/**
+ * Which account a billing row may be linked to.
+ *
+ * A row that is already linked keeps its account (an event must never re-point a customer at
+ * someone else). Otherwise the id comes from Stripe metadata, which outlives the account: if
+ * that account has since been deleted, linking to it breaks the foreign key and the event
+ * fails on every retry. So a candidate is used only while its profile still exists.
+ */
+export async function resolveLinkedUserId(
+  existingUserId: string | null | undefined,
+  candidates: ReadonlyArray<string | null | undefined>,
+  profileExists: (userId: string) => Promise<boolean>,
+): Promise<string | null> {
+  if (existingUserId) return existingUserId;
+  for (const candidate of candidates) {
+    if (candidate && (await profileExists(candidate))) return candidate;
+  }
+  return null;
+}
+
 export interface ConsentRow {
   user_id: string | null;
   stripe_customer_id: string | null;
