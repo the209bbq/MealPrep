@@ -25,6 +25,13 @@ export const PANTRY_SCAN_UI_COPY = {
   addAnotherPhoto: 'Add another photo',
   addAnotherPhotoBusy: 'Scanning photo…',
   noNewItemsInPhoto: 'No new items in that photo — try a different angle.',
+  scanningPhotos: (count: number) => `Scanning ${count} photo${count === 1 ? '' : 's'}…`,
+  scanningKeepGoing:
+    'You can keep using the app, or add another photo. What Forky finds shows up here when it is ready.',
+  moreStillScanning: (count: number) =>
+    `${count} more photo${count === 1 ? ' is' : 's are'} still scanning. New items will be added to this list.`,
+  tooManyScansTitle: 'Still scanning',
+  tooManyScans: (max: number) => `${max} photos are already scanning. Add another when one finishes.`,
 } as const;
 
 export function readLastPantryScanLocation(): PantryStorageLocation {
