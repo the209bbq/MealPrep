@@ -194,7 +194,7 @@ export default function PantryScreen() {
     const scanLocation = readLastPantryScanLocation();
     try {
       const { preparePantryImageFromFile } = await import('../../lib/pantryVision/prepareImage.web');
-      const prepared = await preparePantryImageFromFile(file);
+      const prepared = await preparePantryImageFromFile(file, { detailTiles: true });
       setScanLocationHint(scanLocation);
       await runVisionFromPrepared(prepared, scanLocation);
     } catch (error) {
@@ -492,7 +492,7 @@ export default function PantryScreen() {
     const attempt = { kind: 'uri' as const, uri, location: scanLocation };
     try {
       const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
-      const prepared = await preparePantryImage(uri);
+      const prepared = await preparePantryImage(uri, { detailTiles: true });
       await runVisionFromPrepared(prepared, scanLocation);
     } catch (error) {
       if (error instanceof PantryImageQualityError && error.reason === 'blank') {
@@ -517,7 +517,7 @@ export default function PantryScreen() {
         const { preparePantryImageFromFile } = await import('../../lib/pantryVision/prepareImage.web');
         const file = await pickWebImageFile();
         if (!file) return;
-        const prepared = await preparePantryImageFromFile(file);
+        const prepared = await preparePantryImageFromFile(file, { detailTiles: true });
         await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
       } catch (error) {
         if (error instanceof PantryImageQualityError && error.reason === 'blank') {
@@ -560,7 +560,7 @@ export default function PantryScreen() {
       });
       if (result.canceled || !result.assets[0]) return;
       const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
-      const prepared = await preparePantryImage(result.assets[0].uri);
+      const prepared = await preparePantryImage(result.assets[0].uri, { detailTiles: true });
       await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
       return;
     }
@@ -570,7 +570,7 @@ export default function PantryScreen() {
     });
     if (result.canceled || !result.assets[0]) return;
     const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
-    const prepared = await preparePantryImage(result.assets[0].uri);
+    const prepared = await preparePantryImage(result.assets[0].uri, { detailTiles: true });
     await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
   }
 

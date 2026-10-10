@@ -142,6 +142,12 @@ export async function analyzePantryPhoto(
       mimeType: withHash.mimeType,
       location: scanLocation,
       imageHash: withHash.contentHash,
+      // Zoomed crops of the same photo; an older pantry-vision ignores the field.
+      tiles: withHash.detailTiles?.map((tile) => ({
+        imageBase64: tile.base64,
+        mimeType: tile.mimeType,
+        position: tile.position,
+      })),
     }),
   });
 
