@@ -567,9 +567,12 @@ export default function PantryScreen() {
         PantryVisionPlanRequiredError,
         PantryVisionRateLimitError,
         PantryVisionScanError,
+        PantryVisionUnavailableError,
       } = pantryVisionClient;
       const title =
-        error instanceof PantryVisionRateLimitError
+        error instanceof PantryVisionUnavailableError
+          ? PHOTO_SCAN.scanUnavailableTitle
+          : error instanceof PantryVisionRateLimitError
           ? 'Too many scans'
           : error instanceof PantryVisionAuthError
             ? 'Sign in required'
