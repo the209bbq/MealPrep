@@ -1700,6 +1700,18 @@ async function runThoroughTileScans(
 const UPSTREAM_BUSY_MESSAGE =
   'Vision scan is busy right now. Try again in a moment.';
 
+/**
+ * Google refused the request because of the account, not the photo: the prepaid credit has run
+ * out (402) or the key is not accepted (401). Trying again cannot help until the owner fixes it,
+ * so the app is told "unavailable", not "busy". Seen live on 2026-10-10 (credit used up).
+ */
+class ScanUnavailableError extends Error {}
+const SCAN_UNAVAILABLE_MESSAGE = 'Photo scanning is temporarily unavailable. Please try again later.';
+
+function isAccountRefusal(error: GeminiAttemptError): boolean {
+  return error.kind === 'http' && (error.status === 402 || error.status === 401);
+}
+
 async function callPantryGeminiWithFallbacks(
   apiKey: string,
   images: GeminiImage[],
@@ -1764,6 +1776,8 @@ async function callPantryGeminiWithFallbacks(
       message: failureMessage,
     });
     console.warn(`pantry-vision: gemini failed ${failures[failures.length - 1]}`);
+    // The same account answers for every model: no point trying the others.
+    if (isAccountRefusal(result.error)) throw new ScanUnavailableError(failureMessage);
   }
 
   const summary = failures.slice(-4).join(' | ');
@@ -1801,6 +1815,7 @@ async function callPriceTagGeminiWithFallbacks(
     }
     failures.push(formatAttemptError(model, result.error, perCallGeminiTimeoutMs()));
     console.warn(`pantry-vision: price-tag failed ${failures[failures.length - 1]}`);
+    if (isAccountRefusal(result.error)) throw new ScanUnavailableError(failures[failures.length - 1]);
   }
 
   const summary = failures.slice(-4).join(' | ');
@@ -2104,6 +2119,11 @@ Deno.serve(async (req) => {
       if (tracked) await finishScanRequest(userId, requestKey, answer);
     }
   } catch (error) {
+    if (error instanceof ScanUnavailableError) {
+      // One fixed line to search the log for; Google's own wording stays in the line above it.
+      console.warn('pantry-vision: ALERT scanner unavailable: Google refused the account (billing or key)');
+      return jsonResponse({ error: SCAN_UNAVAILABLE_MESSAGE, code: 'SCAN_UNAVAILABLE' }, 503);
+    }
     const message = error instanceof Error ? error.message : 'Something went wrong while analyzing your photo.';
     return jsonResponse({ error: message, code: 'UPSTREAM_ERROR' }, 502);
   }

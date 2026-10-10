@@ -158,6 +158,9 @@ export const PHOTO_SCAN = {
   noItemsFoundMessage:
     'We didn’t spot any pantry items in that photo. Try a closer shot with labels facing the camera.',
   scanBusyMessage: 'Scanning is busy right now. Try again in a moment.',
+  /** The scanner is down for everyone (not this photo, not this account). */
+  scanUnavailableTitle: 'Scanning is unavailable',
+  scanUnavailableMessage: 'Photo scanning is temporarily unavailable. Your photo is fine. Please try again later.',
   /** Client fetch timeout; keep above pantry-vision GEMINI_REQUEST_TOTAL_BUDGET_MS (~110s). */
   visionRequestTimeoutMs: 125_000,
   tryAgainLabel: 'Try again',

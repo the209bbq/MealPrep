@@ -50,6 +50,14 @@ export class PantryVisionScanError extends Error {
   }
 }
 
+/** Scanning is down for everyone (the AI provider refused our account). Retrying will not help. */
+export class PantryVisionUnavailableError extends PantryVisionScanError {
+  constructor(message: string) {
+    super(message, 'UPSTREAM_ERROR');
+    this.name = 'PantryVisionUnavailableError';
+  }
+}
+
 async function parseErrorResponse(response: Response, text: string): Promise<never> {
   let json: PantryVisionErrorEnvelope = {};
   try {
@@ -63,6 +71,10 @@ async function parseErrorResponse(response: Response, text: string): Promise<nev
     throw new PantryVisionNotConfiguredError(
       json.error ?? 'Pantry photo scan is not available on this app yet. Ask an admin to finish setup.',
     );
+  }
+  if (json.code === 'SCAN_UNAVAILABLE') {
+    logPantryScanFailure('UPSTREAM_ERROR', json.code);
+    throw new PantryVisionUnavailableError(PHOTO_SCAN.scanUnavailableMessage);
   }
   if (response.status === 401 || json.code === 'UNAUTHENTICATED') {
     logPantryScanFailure('UNAUTHENTICATED');

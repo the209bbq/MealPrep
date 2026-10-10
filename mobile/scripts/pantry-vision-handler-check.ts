@@ -756,6 +756,28 @@ function reset(): void {
   assert.equal(untracked.status, 200);
   assert.equal(untracked.json.items.length, 1);
 
+  // --- Google refuses the account (prepaid credit used up): "unavailable", not "busy" ---
+  // (Seen live on 2026-10-10: every scan failed with 402 and the app said "busy, try again".)
+  reset();
+  planRow = { plan: 'free' };
+  fixedUser = 9201;
+  geminiRouter = () => geminiJson({ error: { message: 'Your prepayment credits are depleted.' } }, 402);
+  const refusedScan = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'billing-1' });
+  assert.equal(refusedScan.status, 503);
+  assert.equal(refusedScan.json.code, 'SCAN_UNAVAILABLE');
+  assert.doesNotMatch(String(refusedScan.json.error), /credit|prepay|Google|Gemini/i, 'no billing detail reaches the app');
+  assert.equal(geminiCalls.length, 1, 'the other models are not tried: the same account answers for all of them');
+  assert.equal(usageRows.get(`${userIdFor(9201)}|free`)?.scans ?? 0, 0, 'the free scan is given back');
+  assert.ok(logLines.some((line) => line.includes('ALERT scanner unavailable')), 'one fixed line to search the log for');
+  assert.equal([...scanRequests.keys()].some((key) => key.includes('billing-1')), false);
+  // An ordinary upstream failure is still the old answer.
+  reset();
+  planRow = { plan: 'paid' };
+  geminiRouter = () => geminiJson({ error: { message: 'overloaded' } }, 503);
+  const busyScan = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'busy-1' });
+  assert.equal(busyScan.status, 502);
+  assert.equal(busyScan.json.code, 'UPSTREAM_ERROR');
+
   // --- Crop layout (client side, pure) ---
   const portrait = computeDetailTiles(3072, 4080);
   assert.equal(portrait.length, 4);
