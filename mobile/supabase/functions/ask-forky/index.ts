@@ -7,7 +7,7 @@
 //   ANTHROPIC_API_KEY         Anthropic API key. Set a monthly spend limit on it in the Anthropic console.
 //   FORKY_MODEL               optional: model id (default claude-haiku-4-5). Change here, no redeploy of the app.
 //   FORKY_PLUS_MONTHLY_LIMIT  optional: messages a month for Plus (default 200)
-//   FORKY_FREE_TOTAL_LIMIT    optional: one-time messages for a free account (default 5; 0 = Plus only)
+//   FORKY_FREE_TOTAL_LIMIT    optional: one-time messages for a free account (default 2; 0 = Plus only)
 // Provided by the platform: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
 //
 // Request:  POST { question, history: [{role,text}], pantry: [{name,amount?,expiresOn?}],
@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date();
-    const { period, isPlus } = forkyUsagePeriod(profileRow?.plan, now);
+    const { period, isPlus } = forkyUsagePeriod(profileRow?.plan, now, isAdmin);
     const limit = isPlus
       ? parseCap(Deno.env.get('FORKY_PLUS_MONTHLY_LIMIT'), ASK_FORKY_DEFAULT_CAPS.plusPerMonth)
       : parseCap(Deno.env.get('FORKY_FREE_TOTAL_LIMIT'), ASK_FORKY_DEFAULT_CAPS.freeTotal);

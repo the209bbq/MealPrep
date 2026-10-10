@@ -17,7 +17,7 @@ export const ASK_FORKY_LIMITS = {
 } as const;
 
 /** Monthly allowance for Plus, and a one-time allowance for free accounts. */
-export const ASK_FORKY_DEFAULT_CAPS = { plusPerMonth: 200, freeTotal: 5 } as const;
+export const ASK_FORKY_DEFAULT_CAPS = { plusPerMonth: 200, freeTotal: 2 } as const;
 
 export const ASK_FORKY_DEFAULT_MODEL = 'claude-haiku-4-5';
 
@@ -251,9 +251,16 @@ export function readForkyReply(apiResponse: unknown, request: ForkyRequest): For
   };
 }
 
-/** Which allowance a message counts against: the calendar month for Plus, one lifetime bucket for free. */
-export function forkyUsagePeriod(plan: string | null | undefined, now: Date): { period: string; isPlus: boolean } {
-  if (plan === 'paid') {
+/**
+ * Which allowance a message counts against: the calendar month for Plus, one lifetime bucket for
+ * free. An admin account counts as Plus, so the owner can keep testing after the free questions.
+ */
+export function forkyUsagePeriod(
+  plan: string | null | undefined,
+  now: Date,
+  isAdmin = false,
+): { period: string; isPlus: boolean } {
+  if (plan === 'paid' || isAdmin) {
     return { period: now.toISOString().slice(0, 7), isPlus: true };
   }
   return { period: 'free', isPlus: false };

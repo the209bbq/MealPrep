@@ -128,12 +128,14 @@ assert.equal(needsSafetyNote('dinner idea', 'Try tacos.', false), false);
 assert.deepEqual(forkyUsagePeriod('paid', new Date('2026-10-09T20:00:00Z')), { period: '2026-10', isPlus: true });
 assert.deepEqual(forkyUsagePeriod('free', new Date('2026-10-09T20:00:00Z')), { period: 'free', isPlus: false });
 assert.deepEqual(forkyUsagePeriod(null, new Date()), { period: 'free', isPlus: false });
+// An admin on the free plan gets the Plus allowance, so testing does not stop at two questions.
+assert.deepEqual(forkyUsagePeriod('free', new Date('2026-10-09T20:00:00Z'), true), { period: '2026-10', isPlus: true });
 assert.equal(parseCap('50', 200), 50);
 assert.equal(parseCap('0', 5), 0);
 assert.equal(parseCap('', 200), 200);
 assert.equal(parseCap('-3', 200), 200);
 assert.equal(parseCap('abc', 200), 200);
-assert.deepEqual(ASK_FORKY_DEFAULT_CAPS, { plusPerMonth: 200, freeTotal: 5 });
+assert.deepEqual(ASK_FORKY_DEFAULT_CAPS, { plusPerMonth: 200, freeTotal: 2 });
 
 // --- Server function rules, checked in the source.
 const fn = read('supabase/functions/ask-forky/index.ts');
