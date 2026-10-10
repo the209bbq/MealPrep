@@ -34,6 +34,9 @@ let geminiRouter: ((call: GeminiCall) => Response) | null = null;
 let planRow: { plan: string; role?: string } | null = { plan: 'paid' };
 const usageRows = new Map<string, { scans: number; inputTokens: number; outputTokens: number }>();
 let usageTableExists = true;
+const scanRequests = new Map<string, { status: 'running' | 'done'; result: unknown }>();
+let requestTableExists = true;
+let beginPolls = 0;
 
 function geminiJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -83,6 +86,28 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     // Stand-in for the photo_scan_usage table and its two functions.
     if (!usageTableExists) return new Response(JSON.stringify({ message: 'function not found' }), { status: 404 });
     const args = JSON.parse(String(init?.body ?? '{}')) as Record<string, any>;
+    // Stand-in for photo_scan_requests and its two functions.
+    if (url.endsWith('/begin_photo_scan_request')) {
+      if (!requestTableExists) return new Response(JSON.stringify({ message: 'function not found' }), { status: 404 });
+      const requestKey = `${args.p_user_id}|${args.p_key}`;
+      const existing = scanRequests.get(requestKey);
+      if (!existing) {
+        scanRequests.set(requestKey, { status: 'running', result: null });
+        return new Response(JSON.stringify({ state: 'started' }), { status: 200 });
+      }
+      beginPolls += 1;
+      if (existing.status === 'done') {
+        return new Response(JSON.stringify({ state: 'done', result: existing.result }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ state: 'running' }), { status: 200 });
+    }
+    if (url.endsWith('/finish_photo_scan_request')) {
+      if (!requestTableExists) return new Response(JSON.stringify({ message: 'function not found' }), { status: 404 });
+      const requestKey = `${args.p_user_id}|${args.p_key}`;
+      if (args.p_result == null) scanRequests.delete(requestKey);
+      else scanRequests.set(requestKey, { status: 'done', result: args.p_result });
+      return new Response('null', { status: 200 });
+    }
     const key = `${args.p_user_id}|${args.p_period}`;
     const row = usageRows.get(key) ?? { scans: 0, inputTokens: 0, outputTokens: 0 };
     if (url.endsWith('/claim_photo_scan')) {
@@ -163,6 +188,8 @@ function reset(): void {
   geminiRouter = null;
   fixedUser = null;
   usageTableExists = true;
+  requestTableExists = true;
+  beginPolls = 0;
   delete env.PANTRY_PLUS_MONTHLY_SCANS;
   delete env.PANTRY_PLUS_MONTHLY_TAG_SCANS;
   delete env.PANTRY_FREE_TOTAL_SCANS;
@@ -645,42 +672,53 @@ function reset(): void {
   assert.equal(result.json.code, 'PLAN_REQUIRED');
   assert.equal(geminiCalls.length, 1);
 
-  // --- The same photo sent twice while the first is still running costs one scan ---
-  // (A phone browser resends a request when its connection drops; seen live on 2026-10-10.)
+  // --- The same request sent twice while the first is still running costs one scan ---
+  // (A phone browser resends a request when its connection drops; seen live on 2026-10-10.
+  // Each request runs in its own worker, so the two meet in the photo_scan_requests table.)
   reset();
-  planRow = { plan: 'paid' };
+  planRow = { plan: 'free' };
   fixedUser = 9101;
   let releaseModel: () => void = () => {};
   const modelHeld = new Promise<void>((resolve) => (releaseModel = resolve));
   geminiRouter = () => geminiItems(['Black Beans', 'Rice'])();
-  const realRouter = geminiRouter;
-  let heldCalls = 0;
-  geminiRouter = (call) => {
-    heldCalls += 1;
-    return realRouter(call);
-  };
-  const slowFetch = globalThis.fetch;
+  const plainFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     if (url.startsWith('https://generativelanguage.googleapis.com/')) await modelHeld;
-    return slowFetch(input, init);
+    return plainFetch(input, init);
   }) as typeof fetch;
   const first = scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-1' });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await new Promise((resolve) => setTimeout(resolve, 30));
   const replay = scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-1' });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.ok(beginPolls >= 1, 'the repeat found the first request and is waiting');
   releaseModel();
   const [firstResult, replayResult] = await Promise.all([first, replay]);
-  globalThis.fetch = slowFetch;
+  globalThis.fetch = plainFetch;
   assert.equal(firstResult.status, 200);
   assert.equal(replayResult.status, 200);
-  assert.equal(heldCalls, 1, 'the model is called once for the two requests');
+  assert.equal(geminiCalls.length, 1, 'the model is called once for the two requests');
   assert.deepEqual(replayResult.json.items, firstResult.json.items);
   assert.equal(replayResult.json.shared, true);
-  assert.equal(usageRows.get(`${userIdFor(9101)}|${MONTH}`)?.scans, 1, 'one scan is counted, not two');
+  assert.equal(usageRows.get(`${userIdFor(9101)}|free`)?.scans, 1, 'one free scan is used, not two');
+  assert.deepEqual(replayResult.json.usage, firstResult.json.usage, 'the repeat reports the same scans left');
   assert.ok(logLines.some((line) => line.startsWith('pantry-vision: scan shared items=2')));
-  // Another account sending the same photo is its own scan while the first runs.
-  // A first request that fails does not take the second down with it.
+  assert.equal(logLines.filter((line) => line.startsWith('pantry-vision: scan ok')).length, 1);
+
+  // A repeat that arrives after the first has finished gets the stored answer too.
+  const late = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-1' });
+  assert.equal(late.status, 200);
+  assert.equal(geminiCalls.length, 1);
+  assert.equal(usageRows.get(`${userIdFor(9101)}|free`)?.scans, 1);
+
+  // Another account sending the same photo is not tied to the first account's request.
+  fixedUser = 9103;
+  planRow = { plan: 'paid' };
+  const other = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-1' });
+  assert.equal(other.status, 200);
+  assert.equal(other.json.shared, undefined, 'another account is never handed a stored request');
+
+  // A scan that fails leaves nothing behind that blocks or answers the next try.
   reset();
   planRow = { plan: 'paid' };
   fixedUser = 9102;
@@ -689,13 +727,34 @@ function reset(): void {
     if (failFirst) return geminiJson({ error: { message: 'bad request' } }, 400);
     return geminiItems(['Oats'])();
   };
-  const failing = scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-2' });
-  const failed = await failing;
+  const failed = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-2' });
   assert.notEqual(failed.status, 200);
+  assert.equal(scanRequests.has(`${userIdFor(9102)}|v9|pantry|pantry|replay-2|t0`), false, 'the failed request cleared its row');
   failFirst = false;
   const retried = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-2' });
-  assert.equal(retried.status, 200, 'a failed scan leaves nothing behind that blocks the next try');
+  assert.equal(retried.status, 200);
   assert.equal(retried.json.shared, undefined);
+
+  // A refused scan (allowance used up) clears its row as well.
+  reset();
+  planRow = { plan: 'free' };
+  fixedUser = 9104;
+  env.PANTRY_FREE_TOTAL_SCANS = '1';
+  geminiRouter = () => geminiItems(['Oats'])();
+  assert.equal((await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'refuse-1' })).status, 200);
+  const refused = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'refuse-2' });
+  assert.equal(refused.status, 403);
+  assert.equal([...scanRequests.keys()].some((key) => key.includes('refuse-2')), false);
+
+  // Before the migration is applied, scans still work (untracked, as before).
+  reset();
+  planRow = { plan: 'paid' };
+  fixedUser = 9105;
+  requestTableExists = false;
+  geminiRouter = () => geminiItems(['Oats'])();
+  const untracked = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'nomig-req' });
+  assert.equal(untracked.status, 200);
+  assert.equal(untracked.json.items.length, 1);
 
   // --- Crop layout (client side, pure) ---
   const portrait = computeDetailTiles(3072, 4080);
