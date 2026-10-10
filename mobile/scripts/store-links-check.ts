@@ -12,6 +12,8 @@ import {
   resolveWeeklyAdLink,
 } from '../lib/stores/storeLinks';
 import { STORE_LINK_FALLBACK_ZIP } from '../lib/stores/storeLinkFixtures';
+import { STORE_CHAINS } from '../config/storeChains';
+import { WEEKLY_AD_CHAINS } from '../config/weeklyAds';
 
 const base: StoreLocation = {
   id: 'test',
@@ -165,5 +167,28 @@ assert.equal(
 const maps = googleMapsPlaceSearchUrl(base);
 assert.ok(maps.includes('Riverbank%20Market'), 'maps search uses name + address, not lat/lng');
 assert.ok(!maps.includes('37.735'), 'maps search does not use raw coordinates when address present');
+
+// The Stores tab (storeChains) and Smart Shop (weeklyAds) each list a weekly-ad link per chain.
+// They must point at the same page, so a fix in one list is not missed in the other.
+// Food 4 Less differs on purpose: Smart Shop opens the NorCal site's home page.
+const WEEKLY_AD_URL_EXCEPTIONS = new Set(['food_4_less_norcal']);
+for (const ad of WEEKLY_AD_CHAINS) {
+  if (WEEKLY_AD_URL_EXCEPTIONS.has(ad.key)) continue;
+  const chain = STORE_CHAINS.find((c) => c.key === ad.key);
+  assert.ok(chain, `weekly-ad chain ${ad.key} exists in storeChains`);
+  assert.equal(chain.weeklyAdUrl, ad.url, `${ad.key}: Stores tab and Smart Shop open the same weekly-ad page`);
+}
+// Dead since the chains rebuilt their sites (404 seen 2026-10-10).
+for (const chain of STORE_CHAINS) {
+  assert.ok(!/\/wp\/weekly-ad/.test(chain.weeklyAdUrl ?? ''), `${chain.key}: old /wp/weekly-ad link`);
+}
+assert.equal(
+  resolveWeeklyAdLink({ ...base, name: 'Save Mart', chain: 'Save Mart', website: undefined })?.url,
+  'https://savemart.com/flyers',
+);
+assert.equal(
+  resolveWeeklyAdLink({ ...base, name: 'FoodMaxx', chain: 'FoodMaxx', website: undefined })?.url,
+  'https://foodmaxx.com/flyers',
+);
 
 console.log('store-links-check: ok');

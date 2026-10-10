@@ -45,14 +45,14 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     matchPatterns: ['save mart', 'savemart'],
     storePagePathPattern: '^https://([a-z0-9-]+\\.)?savemart\\.com/stores/.+',
     allowedWebsiteHosts: ['savemart.com'],
-    weeklyAdUrl: 'https://www.savemart.com/wp/weekly-ad',
+    weeklyAdUrl: 'https://savemart.com/flyers',
     delivery: { instacartSlug: 'savemart', instacart: true, doordash: true, ubereats: true },
   },
   {
     key: 'foodmaxx',
     displayName: 'FoodMaxx',
     matchPatterns: ['foodmaxx', 'food maxx'],
-    weeklyAdUrl: 'https://www.foodmaxx.com/wp/weekly-ad',
+    weeklyAdUrl: 'https://foodmaxx.com/flyers',
     delivery: { instacartSlug: 'foodmaxx', instacart: true, doordash: true, ubereats: true },
   },
   {
