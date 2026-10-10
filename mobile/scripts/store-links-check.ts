@@ -191,4 +191,50 @@ assert.equal(
   'https://foodmaxx.com/flyers',
 );
 
+// The weekly ad is the tapped store's ad wherever the store's own page tells us which store it is.
+const saveMartOakdale = {
+  ...base,
+  name: 'Save Mart',
+  chain: 'Save Mart',
+  website: 'https://www.savemart.com/stores/693c06f6-bf8b-4be7-90ae-f5040ef21b57/OAKDALE/48/OAKDALE',
+};
+assert.deepEqual(resolveWeeklyAdLink(saveMartOakdale), {
+  url: 'https://savemart.com/stores/48/flyers',
+  storeSpecific: true,
+});
+assert.equal(
+  resolveWeeklyAdLink({ ...saveMartOakdale, website: 'https://savemart.com/' })?.url,
+  'https://savemart.com/flyers',
+  'a Save Mart with only the chain home page falls back to the chain ad page',
+);
+assert.equal(resolveWeeklyAdLink(groceryOutlet)?.storeSpecific, true);
+assert.equal(
+  resolveWeeklyAdLink({ ...base, name: 'Grocery Outlet', chain: 'Grocery Outlet', website: undefined })?.url,
+  'https://www.groceryoutlet.com/circulars',
+);
+// Safeway and Walmart: the store's own page carries that store's "View weekly ad" button.
+const safewayManteca = {
+  ...base,
+  name: 'Safeway',
+  chain: 'Safeway',
+  website: 'https://local.safeway.com/safeway/ca/manteca/1187-s-main-st.html',
+};
+assert.deepEqual(resolveWeeklyAdLink(safewayManteca), { url: safewayManteca.website, storeSpecific: true });
+assert.equal(
+  resolveWeeklyAdLink({ ...safewayManteca, website: undefined })?.url,
+  'https://www.safeway.com/weeklyad',
+);
+const walmartModesto = { ...base, name: 'Walmart', chain: 'Walmart', website: 'https://www.walmart.com/store/1587' };
+assert.deepEqual(resolveWeeklyAdLink(walmartModesto), { url: walmartModesto.website, storeSpecific: true });
+assert.equal(
+  resolveWeeklyAdLink({ ...walmartModesto, website: 'http://www.walmart.com' })?.url,
+  'https://www.walmart.com/shop/deals',
+  'a Walmart with only the chain home page falls back to the deals page',
+);
+// Target's store page only links the chain-wide ad, so it keeps the chain page.
+assert.equal(
+  resolveWeeklyAdLink({ ...base, name: 'Target', chain: 'Target', website: 'https://www.target.com/sl/riverbank/2096' })?.url,
+  'https://www.target.com/weekly-ad',
+);
+
 console.log('store-links-check: ok');
