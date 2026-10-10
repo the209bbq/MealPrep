@@ -90,7 +90,7 @@ export function PantryStorageScanButtons({
       );
       if (!file) return;
       const { preparePantryImageFromFile } = await import('../lib/pantryVision/prepareImage.web');
-      const prepared = await preparePantryImageFromFile(file);
+      const prepared = await preparePantryImageFromFile(file, { detailTiles: true });
       onImagePrepared(scanLocation, prepared);
     } catch (error: unknown) {
       if (error instanceof PantryImageQualityError && error.reason === 'blank') {
