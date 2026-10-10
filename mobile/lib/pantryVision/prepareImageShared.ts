@@ -6,8 +6,11 @@ export type PreparePantryImageOptions = {
   maxPayloadBytes?: number;
   /** Skip blank/dark/blur analysis (e.g. recipe cookbook photos). */
   skipQualityCheck?: boolean;
-  /** Also produce zoomed crops for dense shelf photos. Pantry scans only; defaults to off. */
-  detailTiles?: boolean;
+  /**
+   * Also produce zoomed crops. `true` is the shelf grid; 'receipt' is full-width strips for a tall
+   * receipt. Defaults to off.
+   */
+  detailTiles?: boolean | 'receipt';
 };
 
 export type DetailTileRect = {

@@ -9,6 +9,7 @@ import {
   computeLongEdgeResize,
   evaluateImageQuality,
   PantryImageQualityError,
+  type DetailTileLayout,
   type PreparePantryImageOptions,
 } from './prepareImageShared';
 import type { PreparedPantryImage, PreparedPantryImageTile } from './types';
@@ -98,11 +99,11 @@ function canvasToJpegBase64(canvas: HTMLCanvasElement, quality: number): string 
  * Best effort: a crop that cannot be drawn or will not fit is left out, and the scan goes
  * ahead with the main image alone.
  */
-function encodeDetailTiles(bitmap: ImageBitmap): PreparedPantryImageTile[] {
+function encodeDetailTiles(bitmap: ImageBitmap, layout: DetailTileLayout): PreparedPantryImageTile[] {
   const settings = PHOTO_SCAN.detailTiles;
   const tiles: PreparedPantryImageTile[] = [];
   try {
-    for (const rect of computeDetailTiles(bitmap.width, bitmap.height)) {
+    for (const rect of computeDetailTiles(bitmap.width, bitmap.height, layout)) {
       const canvas = document.createElement('canvas');
       canvas.width = rect.targetWidth;
       canvas.height = rect.targetHeight;
@@ -168,8 +169,11 @@ export async function preparePantryImageFromFile(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas not available');
   ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-  const wantsTiles = (options?.detailTiles ?? false) && PHOTO_SCAN.detailTiles.enabled;
-  const detailTiles = wantsTiles ? encodeDetailTiles(bitmap) : [];
+  const tileOption = options?.detailTiles ?? false;
+  const wantsTiles = Boolean(tileOption) && PHOTO_SCAN.detailTiles.enabled;
+  const detailTiles = wantsTiles
+    ? encodeDetailTiles(bitmap, tileOption === 'receipt' ? PHOTO_SCAN.receiptTiles : PHOTO_SCAN.detailTiles)
+    : [];
   bitmap.close?.();
 
   let qualityWarnings: string[] | undefined;

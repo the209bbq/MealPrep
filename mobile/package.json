@@ -100,7 +100,7 @@
     "test:pantry-staples-link": "npx tsx scripts/pantry-staples-link-check.ts",
     "test:pantry-scan-restock": "npx tsx scripts/pantry-scan-restock-regression.ts",
     "test:pantry-scan-review": "npx tsx scripts/pantry-scan-review-dedupe-check.ts",
-    "test:pantry-vision": "npx tsx scripts/pantry-vision-postprocess-check.ts && npx tsx scripts/pantry-scan-background-check.ts",
+    "test:pantry-vision": "npx tsx scripts/pantry-vision-postprocess-check.ts && npx tsx scripts/pantry-scan-background-check.ts && npx tsx scripts/pantry-receipt-scan-check.ts",
     "test:pantry-vision-gemini": "npx tsx scripts/pantry-vision-gemini-inline-check.ts && npx tsx scripts/pantry-vision-gemini-budget-check.ts && npx tsx scripts/pantry-vision-second-pass-check.ts && npx tsx scripts/pantry-vision-merge-inline-check.ts && npx tsx scripts/pantry-vision-handler-check.ts",
     "test:pantry-vision-merge": "npx tsx scripts/pantry-vision-merge-check.ts",
     "test:ingredient-normalize-pantry": "npx tsx scripts/ingredient-normalize-pantry-check.ts",

@@ -79,6 +79,7 @@ import { readJson, writeJson } from '../../lib/storage';
 import { logPantryScanFailure } from '../../lib/pantryVision/scanLog';
 import { PantryImageQualityError } from '../../lib/pantryVision/prepareImageShared';
 import type { PantryScanReviewItem, PreparedPantryImage } from '../../lib/pantryVision/types';
+import type { PantryScanKind } from '../../lib/pantryVision/client';
 import {
   shouldBlockGuestPantryPhotoScan,
   shouldDeferPantryPhotoScanForAuth,
@@ -135,6 +136,9 @@ export default function PantryScreen() {
     savePantryScanReview,
     userPreferences,
     setUserPreference,
+    grocery,
+    markGroceryItemsBought,
+    showNotice,
     addManualPantryItem,
     updatePantryItemEntry,
     deletePantryItemEntry,
@@ -181,7 +185,11 @@ export default function PantryScreen() {
   const [scanNotice, setScanNotice] = useState<{ title: string; message: string } | null>(null);
   const [scanQualityWarning, setScanQualityWarning] = useState<string | null>(null);
   /** Across the photos in the open list: how many items the scans found, and how many were already owned. */
-  const [scanSummary, setScanSummary] = useState<{ found: number; already: number } | null>(null);
+  const [scanSummary, setScanSummary] = useState<{ found: number; already: number; receipt?: boolean } | null>(null);
+  /** The open list includes a receipt: saving also ticks matching grocery rows, and "Add another photo" reads a receipt. */
+  const reviewHasReceiptRef = useRef(false);
+  /** Kind of the most recent scan attempt, for "Try again". */
+  const lastAttemptKindRef = useRef<PantryScanKind>('shelf');
   const [lastScanAttempt, setLastScanAttempt] = useState<
     | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
     | { kind: 'uri'; uri: string; location: PantryStorageLocation }
@@ -371,18 +379,21 @@ export default function PantryScreen() {
 
   function retryLastScan() {
     if (!lastScanAttempt) return;
+    const kind = lastAttemptKindRef.current;
     if (lastScanAttempt.kind === 'prepared') {
-      void runVisionFromPrepared(lastScanAttempt.prepared, lastScanAttempt.location);
+      void runVisionFromPrepared(lastScanAttempt.prepared, lastScanAttempt.location, { kind });
       return;
     }
-    void runVisionFromUri(lastScanAttempt.uri, lastScanAttempt.location);
+    void runVisionFromUri(lastScanAttempt.uri, lastScanAttempt.location, kind);
   }
 
   async function runVisionFromPrepared(
     prepared: PreparedPantryImage,
     scanLocation: PantryStorageLocation,
-    options?: { mergeIntoReview?: boolean },
+    options?: { mergeIntoReview?: boolean; kind?: PantryScanKind },
   ) {
+    const scanKind: PantryScanKind = options?.kind ?? 'shelf';
+    const isReceipt = scanKind === 'receipt';
     if (!featureFlags.photoScan) {
       const message = 'Photo pantry scan is turned off. An admin can re-enable it in feature toggles.';
       if (Platform.OS === 'web') {
@@ -423,16 +434,20 @@ export default function PantryScreen() {
     beginScan();
 
     const attempt = { kind: 'prepared' as const, prepared, location: scanLocation };
+    lastAttemptKindRef.current = scanKind;
 
     const pantryVisionClient = await import('../../lib/pantryVision/client');
 
-    setPendingScanPhotoPath(null);
-    if (scanUserId) {
-      const uploadPromise = uploadScanPhoto(prepared, 'pantry', scanUserId);
-      pantryScanUploadRef.current = uploadPromise;
-      void uploadPromise.then(setPendingScanPhotoPath);
-    } else {
-      pantryScanUploadRef.current = null;
+    // A receipt photo is never kept: it is sent for reading and nothing is stored.
+    if (!isReceipt) {
+      setPendingScanPhotoPath(null);
+      if (scanUserId) {
+        const uploadPromise = uploadScanPhoto(prepared, 'pantry', scanUserId);
+        pantryScanUploadRef.current = uploadPromise;
+        void uploadPromise.then(setPendingScanPhotoPath);
+      } else {
+        pantryScanUploadRef.current = null;
+      }
     }
 
     try {
@@ -440,14 +455,18 @@ export default function PantryScreen() {
       const result = await pantryVisionClient.analyzePantryPhoto(prepared, scanAccessToken, {
         scanLocation,
         bypassCache: options?.mergeIntoReview,
+        kind: scanKind,
       });
+      // A receipt keeps items already owned: more was bought, and saving adds to the existing row.
+      const reviewOptions = { includeAlreadyInPantry: isReceipt };
       const rows = detectionsToReviewItems(
         result.items,
         pantry,
         recipes,
-        prepared.uri,
+        isReceipt ? null : prepared.uri,
         demoMode,
         scanLocation,
+        reviewOptions,
       );
       const summary = summarizeScanAgainstPantry(result.items, pantry);
       // Decided when the answer arrives, not when the photo was taken: an earlier photo may
@@ -461,7 +480,9 @@ export default function PantryScreen() {
         setScanSummary((prev) => ({
           found: (prev?.found ?? 0) + summary.found,
           already: (prev?.already ?? 0) + summary.alreadyInPantry,
+          receipt: Boolean(prev?.receipt) || isReceipt,
         }));
+        if (isReceipt && rows.length > 0) reviewHasReceiptRef.current = true;
         if (rows.length === 0) {
           setSaveError(
             summary.found > 0
@@ -470,7 +491,7 @@ export default function PantryScreen() {
           );
         } else {
           setReviewItems((prev) => {
-            const merged = mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation);
+            const merged = mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation, reviewOptions);
             registerAiBaselineEntries(merged, aiBaselineRef.current);
             return merged;
           });
@@ -493,10 +514,19 @@ export default function PantryScreen() {
           return;
         }
         logPantryScanFailure('EMPTY_DETECTIONS');
-        if (placement === 'nothing-found') setScanNoItemsFound(attempt);
+        if (placement === 'nothing-found') {
+          setScanNoItemsFound(attempt);
+          if (isReceipt) {
+            setScanNotice({
+              title: PANTRY_SCAN_UI_COPY.receiptNothingFoundTitle,
+              message: PANTRY_SCAN_UI_COPY.receiptNothingFound,
+            });
+          }
+        }
         return;
       }
-      setScanSummary({ found: summary.found, already: summary.alreadyInPantry });
+      setScanSummary({ found: summary.found, already: summary.alreadyInPantry, receipt: isReceipt });
+      reviewHasReceiptRef.current = isReceipt;
       clearScanFailure();
       setLastScanAttempt(attempt);
       setModelLabel(result.model);
@@ -549,14 +579,19 @@ export default function PantryScreen() {
     }
   }
 
-  async function runVisionFromUri(uri: string, scanLocation: PantryStorageLocation) {
+  async function runVisionFromUri(
+    uri: string,
+    scanLocation: PantryStorageLocation,
+    kind: PantryScanKind = 'shelf',
+  ) {
+    lastAttemptKindRef.current = kind;
     clearScanFailure();
     setPreviewUri(uri);
     const attempt = { kind: 'uri' as const, uri, location: scanLocation };
     try {
       const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
-      const prepared = await preparePantryImage(uri, { detailTiles: true });
-      await runVisionFromPrepared(prepared, scanLocation);
+      const prepared = await preparePantryImage(uri, { detailTiles: kind === 'receipt' ? 'receipt' : true });
+      await runVisionFromPrepared(prepared, scanLocation, { kind });
     } catch (error) {
       if (error instanceof PantryImageQualityError && error.reason === 'blank') {
         logPantryScanFailure('BAD_IMAGE', error.message);
@@ -573,14 +608,17 @@ export default function PantryScreen() {
 
   async function handleAddAnotherPhotoFromReview() {
     const scanLocation = scanLocationHint;
+    // A long receipt is often two photos: the next photo of a receipt list is read as a receipt too.
+    const kind: PantryScanKind = reviewHasReceiptRef.current ? 'receipt' : 'shelf';
+    const detailTiles = kind === 'receipt' ? ('receipt' as const) : true;
     if (Platform.OS === 'web') {
       try {
         const { pickWebImageFile } = await import('../../lib/web/pickWebImageFile');
         const { preparePantryImageFromFile } = await import('../../lib/pantryVision/prepareImage.web');
         const file = await pickWebImageFile();
         if (!file) return;
-        const prepared = await preparePantryImageFromFile(file, { detailTiles: true });
-        await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
+        const prepared = await preparePantryImageFromFile(file, { detailTiles });
+        await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true, kind });
       } catch (error) {
         if (error instanceof PantryImageQualityError && error.reason === 'blank') {
           setSaveError(error.message);
@@ -593,17 +631,22 @@ export default function PantryScreen() {
     Alert.alert(PANTRY_SCAN_UI_COPY.choosePhotoSourceTitle, PANTRY_SCAN_UI_COPY.choosePhotoSourceMessage, [
       {
         text: PANTRY_SCAN_UI_COPY.takePhoto,
-        onPress: () => void pickNativePhotoAndMerge(scanLocation, 'camera'),
+        onPress: () => void pickNativePhotoAndMerge(scanLocation, 'camera', kind),
       },
       {
         text: PANTRY_SCAN_UI_COPY.chooseFromLibrary,
-        onPress: () => void pickNativePhotoAndMerge(scanLocation, 'library'),
+        onPress: () => void pickNativePhotoAndMerge(scanLocation, 'library', kind),
       },
       { text: 'Cancel', style: 'cancel' },
     ]);
   }
 
-  async function pickNativePhotoAndMerge(scanLocation: PantryStorageLocation, source: 'camera' | 'library') {
+  async function pickNativePhotoAndMerge(
+    scanLocation: PantryStorageLocation,
+    source: 'camera' | 'library',
+    kind: PantryScanKind = 'shelf',
+  ) {
+    const detailTiles = kind === 'receipt' ? ('receipt' as const) : true;
     const { access } = await resolvePhotoScanAccess(photoScanAccess, session);
     if (access !== 'allowed') {
       const copy = photoScanAccessUserMessage(access);
@@ -622,8 +665,8 @@ export default function PantryScreen() {
       });
       if (result.canceled || !result.assets[0]) return;
       const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
-      const prepared = await preparePantryImage(result.assets[0].uri, { detailTiles: true });
-      await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
+      const prepared = await preparePantryImage(result.assets[0].uri, { detailTiles });
+      await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true, kind });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -632,8 +675,8 @@ export default function PantryScreen() {
     });
     if (result.canceled || !result.assets[0]) return;
     const { preparePantryImage } = await import('../../lib/pantryVision/prepareImage');
-    const prepared = await preparePantryImage(result.assets[0].uri, { detailTiles: true });
-    await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true });
+    const prepared = await preparePantryImage(result.assets[0].uri, { detailTiles });
+    await runVisionFromPrepared(prepared, scanLocation, { mergeIntoReview: true, kind });
   }
 
   function promptGuestPhotoScanSignIn() {
@@ -646,7 +689,7 @@ export default function PantryScreen() {
     setScanFailure(message, PHOTO_SCAN.scanFailedTitle, null);
   }
 
-  async function handleNativeScan(source: 'camera' | 'library') {
+  async function handleNativeScan(source: 'camera' | 'library', kind: PantryScanKind = 'shelf') {
     const scanLocation = readLastPantryScanLocation();
     const { access } = await resolvePhotoScanAccess(photoScanAccess, session);
     if (access !== 'allowed') {
@@ -675,7 +718,7 @@ export default function PantryScreen() {
         quality: PHOTO_SCAN.jpegQuality,
       });
       if (result.canceled || !result.assets[0]) return;
-      await runVisionFromUri(result.assets[0].uri, scanLocation);
+      await runVisionFromUri(result.assets[0].uri, scanLocation, kind);
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -683,7 +726,7 @@ export default function PantryScreen() {
       quality: PHOTO_SCAN.jpegQuality,
     });
     if (result.canceled || !result.assets[0]) return;
-    await runVisionFromUri(result.assets[0].uri, scanLocation);
+    await runVisionFromUri(result.assets[0].uri, scanLocation, kind);
   }
 
   function submitScanCorrectionsFeedback() {
@@ -730,6 +773,16 @@ export default function PantryScreen() {
         scanPhotoPath = await pantryScanUploadRef.current;
       }
       await savePantryScanReview(reviewItems, scanPhotoPath, scanLocationHint);
+      if (reviewHasReceiptRef.current) {
+        // What was bought is now in the pantry, so the matching grocery rows are done.
+        const { groceryIdsBoughtOnReceipt } = await import('../../lib/pantryVision/reviewItems');
+        const boughtIds = groceryIdsBoughtOnReceipt(reviewItems, grocery);
+        if (boughtIds.length > 0) {
+          markGroceryItemsBought(boughtIds);
+          showNotice(PANTRY_SCAN_UI_COPY.groceryTickedOff(boughtIds.length));
+        }
+      }
+      reviewHasReceiptRef.current = false;
       submitScanCorrectionsFeedback();
       setPhase('idle');
       setReviewItems([]);
@@ -756,6 +809,7 @@ export default function PantryScreen() {
     setPhase('idle');
     setReviewItems([]);
     setScanSummary(null);
+    reviewHasReceiptRef.current = false;
     setPreviewUri(null);
     setPendingScanPhotoPath(null);
     scanSessionIdRef.current = null;
@@ -1019,6 +1073,27 @@ export default function PantryScreen() {
                 showPlusBadge={showScanPlusBadge}
               />
 
+              <PantryStorageScanButtons
+                variant="receipt"
+                disabled={!featureFlags.photoScan}
+                guestPhotoScanBlocked={shouldBlockGuestPantryPhotoScan(photoScanGate)}
+                authPhotoScanPending={
+                  shouldDeferPantryPhotoScanForAuth(photoScanGate) ||
+                  shouldDeferPhotoScanForProfile(photoScanAccess)
+                }
+                photoScanGate={photoScanGate}
+                photoScanAccess={photoScanAccess}
+                contextSession={session}
+                scanLocation={scanLocationHint}
+                onPrepareError={handleWebPrepareError}
+                onImagePrepared={(location, prepared) => {
+                  void runVisionFromPrepared(prepared, location, { kind: 'receipt' });
+                }}
+                onRequestNativeScan={(_location, source) => void handleNativeScan(source, 'receipt')}
+                onRequestSignIn={openAuthSheet}
+                showPlusBadge={showScanPlusBadge}
+              />
+
               {featureFlags.photoScan ? <PantryScanTip /> : null}
             </View>
           ) : null}
@@ -1110,10 +1185,12 @@ export default function PantryScreen() {
             </View>
           ) : null}
 
-          {phase === 'review' && scanSummary && scanSummary.already > 0 ? (
+          {phase === 'review' && scanSummary && (scanSummary.receipt || scanSummary.already > 0) ? (
             <View className="rounded-[18px] border border-border bg-card px-4 py-3">
               <Text className="text-sm font-semibold text-ink">
-                {PANTRY_SCAN_UI_COPY.scanSummary(scanSummary.found, scanSummary.already)}
+                {scanSummary.receipt
+                  ? PANTRY_SCAN_UI_COPY.receiptSummary(scanSummary.found, scanSummary.already)
+                  : PANTRY_SCAN_UI_COPY.scanSummary(scanSummary.found, scanSummary.already)}
               </Text>
             </View>
           ) : null}
