@@ -114,7 +114,7 @@ assert.match(overlay, /isForkinatorTabRoute\(pathname\)/);
 assert.equal((overlay.match(/preferBelow: true,/g) ?? []).length, 6, 'every cloud opens under him');
 assert.match(overlay, /setTimeout\(\(\) => setCloudOpen\(false\), FORKINATOR_CLOUD_AUTO_COLLAPSE_MS\)/, 'clouds fold away by themselves');
 assert.match(overlay, /thinkDotsVisible/);
-assert.doesNotMatch(overlay, /<ForkInRoadPrompt\b/, 'the always-on "Can\'t decide?" pill is gone; Home has its own card');
+assert.doesNotMatch(overlay, /<ForkInRoadPrompt\b/, 'the always-on "Can\'t decide?" pill is gone');
 assert.match(overlay, /<Pressable\s+onPress=\{handleMascotActivate\}/);
 const logo = read('components/BrandLogo.tsx');
 const headerVariant = logo.slice(logo.indexOf("variant === 'header'"), logo.indexOf('return (\n    <View className="items-center py-2"'.replace(/\n/g, logo.includes('\r\n') ? '\r\n' : '\n')));
@@ -123,5 +123,10 @@ assert.match(headerVariant, /FORKINATOR_PINNED_WIDTH_PX/, 'the bar keeps his spo
 assert.match(logo, /logoFullTransparent/, 'the sign-in sheet keeps the full logo');
 const overlays = read('components/AppOverlays.tsx');
 assert.match(overlays, /FORKY_LAYER_Z_INDEX = 9000/, 'Forky sits under open sheets (z-index 9999 on the web)');
+
+// The green "Can't decide?" card is gone from Home (owner, 2026-10-10): Forky in the bar is the way in.
+const home = read('app/(tabs)/index.tsx');
+assert.doesNotMatch(home, /FORKINATOR_FORK_IN_ROAD_HOME_CARD_MESSAGE|requestForkInRoadQuiz|FORKY_CARD_IMAGE/);
+assert.match(overlay, /label: FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL,/, 'the quiz is still reachable from his cloud');
 
 console.log('forky-pinned-check: ok');

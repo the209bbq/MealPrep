@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useHydrated } from '../../hooks/useHydrated';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   Text,
@@ -86,11 +85,6 @@ import { useHomeRecipesRefresh } from '../../hooks/useHomeRecipesRefresh';
 import { useForkInRoadHomeIdle } from '../../hooks/useForkInRoadHomeIdle';
 import { resetForkInRoadHomeIdleTimer } from '../../lib/forkinator/forkInRoadIdle';
 import {
-  FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL,
-  FORKINATOR_FORK_IN_ROAD_HOME_CARD_MESSAGE,
-} from '../../lib/forkinator/forkInRoadPromptCopy';
-import { requestForkInRoadQuiz } from '../../lib/forkinator/forkInRoadQuizRequest';
-import {
   HomeWebPullRefreshIndicator,
   useHomeScrollRefresh,
 } from '../../hooks/useHomeScrollRefresh';
@@ -119,11 +113,6 @@ import {
 } from '../../lib/mealCalendar/scheduleTarget';
 import type { CreatorFeedCardModel } from '../../lib/recipes/creatorFeedRows';
 import { sourceTagForRecipesTabRow } from '../../lib/recipes/searchResultSourceTag';
-
-/** Forky on the green "Help me pick" card (source art is 131 x 360). */
-const FORKY_CARD_IMAGE: number = require('../../assets/forkinator/forkinator-full.png');
-const FORKY_CARD_IMAGE_WIDTH = 56;
-const FORKY_CARD_IMAGE_HEIGHT = 154;
 
 function RecipesFeedSectionLabel({ title, className }: { title: string; className?: string }) {
   return (
@@ -986,11 +975,6 @@ export default function HomeScreen() {
     [pantry],
   );
 
-  /** Opens Forky's existing fork-in-the-road quiz (state lives in ForkinatorOverlay). */
-  const handleHelpMePick = useCallback(() => {
-    requestForkInRoadQuiz();
-  }, []);
-
   function openSavedRecipeRow(row: RecipesTabRow) {
     if (row.kind === 'kitchen' && row.recipe.id.startsWith('viral-preview-')) {
       const record = savedRecipes.records.find((entry) => {
@@ -1093,41 +1077,6 @@ export default function HomeScreen() {
           <CreatorRecipesFeedModeDropdown value={feedMode} onChange={handleFeedModeChange} />
         ) : null}
       </View>
-
-      {!searching ? (
-        <View
-          className="relative mt-4 overflow-hidden rounded-[20px] bg-primary p-4"
-          style={{ paddingLeft: 84 }}
-        >
-          <Image
-            source={FORKY_CARD_IMAGE}
-            accessibilityLabel="Forky"
-            resizeMode="contain"
-            style={{
-              position: 'absolute',
-              left: 14,
-              top: 10,
-              width: FORKY_CARD_IMAGE_WIDTH,
-              height: FORKY_CARD_IMAGE_HEIGHT,
-              transform: [{ rotate: '-6deg' }],
-            }}
-          />
-          <Text className="text-base font-bold leading-5 text-cream">
-            {FORKINATOR_FORK_IN_ROAD_HOME_CARD_MESSAGE}
-          </Text>
-          <Pressable
-            onPress={handleHelpMePick}
-            accessibilityRole="button"
-            accessibilityLabel={FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL}
-            className="mt-2.5 min-h-[44px] items-center justify-center self-start rounded-full bg-cream px-[18px]"
-            style={({ pressed }) => ({ opacity: pressed ? 0.88 : 1 })}
-          >
-            <Text className="text-[15px] font-bold text-primary">
-              {FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
 
       <Card
         className="mt-4"

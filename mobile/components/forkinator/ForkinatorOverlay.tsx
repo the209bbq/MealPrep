@@ -790,7 +790,7 @@ export function ForkinatorOverlay() {
     setForkInRoadQuizVisible(true);
   }, []);
 
-  // Home "Help me pick" card opens this same quiz.
+  // Any screen can ask for this same quiz (the Home card that did was removed 2026-10-10).
   useEffect(
     () => subscribeForkInRoadQuizRequest(handleForkInRoadHelpPress),
     [handleForkInRoadHelpPress],
