@@ -26,6 +26,7 @@ import {
 import { canSyncForkinatorWebCameraScan } from '../../lib/forkinator/forkinatorWebCameraScan';
 import { pickWebImageFile } from '../../lib/web/pickWebImageFile';
 import { useApp } from '../../context/AppContext';
+import { useTutorialState } from '../../hooks/useTutorial';
 import { THEME } from '../../config/appConfig';
 import { readForkinatorHasScanned } from '../../lib/forkinator/hasScanned';
 import {
@@ -585,9 +586,13 @@ export function ForkinatorOverlay() {
     return () => clearTimeout(timer);
   }, [forkInRoadExpanded]);
 
+  // While the first-time tour is open Forky's own clouds and bubbles stay out of its way.
+  const tutorialActive = useTutorialState().active;
+
   /** Think bubbles: Forky has something to say and its cloud is folded away. */
   const thinkDotsVisible =
     forkinatorUiReady &&
+    !tutorialActive &&
     ((shownPrompt != null && !cloudOpen) ||
       (shownPrompt == null && forkInRoadPromptVisible && !forkInRoadExpanded));
 
@@ -890,7 +895,7 @@ export function ForkinatorOverlay() {
       {greetingPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={greetingPromptLayout}
-          visible={shownPrompt === 'greeting' && cloudOpen}
+          visible={shownPrompt === 'greeting' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={FORKINATOR_GREETING_MESSAGE}
           accessibilityLabel={FORKINATOR_GREETING_A11Y_LABEL}
@@ -900,7 +905,7 @@ export function ForkinatorOverlay() {
       {restockPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={restockPromptLayout}
-          visible={shownPrompt === 'restock' && cloudOpen}
+          visible={shownPrompt === 'restock' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={restockPromptMessage}
           accessibilityLabel={FORKINATOR_RESTOCK_PROMPT_A11Y_LABEL}
@@ -915,7 +920,7 @@ export function ForkinatorOverlay() {
       {expirationPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={expirationPromptLayout}
-          visible={shownPrompt === 'expiration' && cloudOpen}
+          visible={shownPrompt === 'expiration' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={expirationExpirationMessage}
           accessibilityLabel={FORKINATOR_EXPIRATION_PROMPT_A11Y_LABEL}
@@ -930,7 +935,7 @@ export function ForkinatorOverlay() {
       {aisleSortPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={aisleSortPromptLayout}
-          visible={shownPrompt === 'aisleSort' && cloudOpen}
+          visible={shownPrompt === 'aisleSort' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={FORKINATOR_AISLE_SORT_MESSAGE}
           accessibilityLabel={FORKINATOR_AISLE_SORT_A11Y_LABEL}
@@ -945,7 +950,7 @@ export function ForkinatorOverlay() {
       {forkInRoadCloudLayout ? (
         <ForkinatorScannerPrompt
           layout={forkInRoadCloudLayout}
-          visible={forkInRoadPromptVisible && forkInRoadExpanded}
+          visible={forkInRoadPromptVisible && forkInRoadExpanded && !tutorialActive}
           reduceMotion={reduceMotion}
           message={FORKINATOR_FORK_IN_ROAD_MESSAGE}
           accessibilityLabel={FORKINATOR_FORK_IN_ROAD_A11Y_LABEL}
@@ -960,7 +965,7 @@ export function ForkinatorOverlay() {
       {scannerPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={scannerPromptLayout}
-          visible={shownPrompt === 'scanner' && cloudOpen}
+          visible={shownPrompt === 'scanner' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={FORKINATOR_SCANNER_NUDGE_MESSAGE}
           accessibilityLabel={FORKINATOR_SCANNER_NUDGE_A11Y_LABEL}

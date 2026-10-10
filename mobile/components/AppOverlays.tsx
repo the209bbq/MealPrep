@@ -3,6 +3,7 @@ import { AccountOverlays } from './account/AccountOverlays';
 import { CheckoutReturnHandler } from './billing/CheckoutReturnHandler';
 import { ForkinatorOverlay } from './forkinator/ForkinatorOverlay';
 import { MealMadeReviewOverlay } from './MealMadeReviewOverlay';
+import { TutorialOverlay } from './tutorial/TutorialOverlay';
 import { UndoToastAppHost } from './UndoToastHosts';
 
 /**
@@ -24,6 +25,7 @@ export function AppOverlays() {
         <UndoToastAppHost />
         <MealMadeReviewOverlay />
       </View>
+      <TutorialOverlay />
     </>
   );
 }

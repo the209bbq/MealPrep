@@ -17,6 +17,7 @@ import { CATEGORY_LABELS, THEME } from '../../config/appConfig';
 import { APP_ROUTES } from '../../config/appRoutes';
 import { GROCERY_COPY } from '../../config/grocery';
 import { useApp } from '../../context/AppContext';
+import { useTutorialTarget } from '../../hooks/useTutorial';
 import { groupGroceryByAisle } from '../../lib/grocery';
 import { inferGroceryCategoryFromName } from '../../lib/grocery/categorize';
 import {
@@ -65,6 +66,8 @@ export default function GroceryScreen() {
 
   const insets = useSafeAreaInsets();
   const [cartExpanded, setCartExpanded] = useState(true);
+  // The first-time tour lights up the add-item field.
+  const tutorialAddRef = useTutorialTarget('grocery-add');
   const [addOpen, setAddOpen] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualQty, setManualQty] = useState('1');
@@ -249,6 +252,7 @@ export default function GroceryScreen() {
           </View>
 
           <Pressable
+            ref={tutorialAddRef}
             onPress={() => {
               setAisleTouched(false);
               setManualCategory(inferGroceryCategoryFromName(manualName));

@@ -28,6 +28,7 @@ import { CreatorRecipesFeedModeDropdown } from '../../components/recipes/Creator
 import { RecipesFeedCardSkeleton } from '../../components/recipes/RecipesFeedCardSkeleton';
 import { RecipesUnifiedFeedCard } from '../../components/recipes/RecipesUnifiedFeedCard';
 import { RecipesTabFilterBar, RecipesTabFiltersEmptyState } from '../../components/RecipesTabFilterBar';
+import { useTutorialTarget } from '../../hooks/useTutorial';
 import { RECIPES_COPY } from '../../config/recipesCopy';
 import { THEME, isCreatorRecipesConfigured } from '../../config/appConfig';
 import { APP_ROUTES } from '../../config/appRoutes';
@@ -127,6 +128,8 @@ function RecipesFeedSectionLabel({ title, className }: { title: string; classNam
 
 export default function HomeScreen() {
   const hydrated = useHydrated();
+  // The first-time tour lights up the recipe search.
+  const tutorialSearchRef = useTutorialTarget('home-search');
   const params = useLocalSearchParams<{
     recipeId?: string;
     url?: string;
@@ -1051,7 +1054,7 @@ export default function HomeScreen() {
         {RECIPES_TAB_SURFACE_COPY.homeHeading}
       </Text>
 
-      <View className="mt-4 min-w-0 flex-row items-center gap-2">
+      <View ref={tutorialSearchRef} className="mt-4 min-w-0 flex-row items-center gap-2">
         <View
           className="min-h-[48px] min-w-0 flex-1 flex-row items-center rounded-full border border-border bg-card pl-4 pr-3"
           style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
