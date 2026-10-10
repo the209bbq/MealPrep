@@ -252,6 +252,10 @@ function fakeStripe(state: {
     'at least 7 days and no more than 30 days',
     'Deleting your account cancels Plus',
     'at least 18 to buy Plus',
+    'MealPlanatic is operated by',
+    'governed by the laws of the State of California',
+    '40 shelf or receipt scans',
+    '3 shelf scans in total',
   ]) {
     assert.ok(terms.includes(phrase), `terms.html should say: ${phrase}`);
   }
@@ -261,6 +265,7 @@ function fakeStripe(state: {
   const privacy = fs.readFileSync(path.join(mobileRoot, 'public/privacy.html'), 'utf8').replace(/\s+/g, ' ');
   assert.ok(privacy.includes('<strong>Stripe</strong>'), 'privacy.html names Stripe as the payment provider');
   assert.ok(privacy.includes('We keep billing records'), 'privacy.html says billing records outlive the account');
+  assert.ok(privacy.includes('MealPlanatic is operated by'), 'privacy.html names who operates the app');
 
   console.log('delete-account-billing-check: ok');
 })().catch((error) => {
