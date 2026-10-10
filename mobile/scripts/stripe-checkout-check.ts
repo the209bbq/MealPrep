@@ -15,6 +15,11 @@ import {
   renewalDisclosure,
   TERMS_VERSION,
 } from '../supabase/functions/_shared/billingText.ts';
+import {
+  hasLiveStripeSubscription,
+  isUnknownStripeCustomer,
+  planOpenCheckoutSessions,
+} from '../supabase/functions/_shared/checkoutGuards.ts';
 import { PLUS_ACTIVE_STATUSES } from '../supabase/functions/stripe-webhook/subscriptionState.ts';
 
 const mobileRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -98,6 +103,50 @@ for (const status of ['canceled', 'unpaid', 'incomplete', null, undefined]) {
   assert.equal(isLiveSubscriptionStatus(status), false);
 }
 
+// --- T-5: never two subscriptions for one customer ---
+assert.equal(hasLiveStripeSubscription([]), false);
+assert.equal(hasLiveStripeSubscription([{ status: 'canceled' }, { status: 'incomplete_expired' }, { status: 'incomplete' }]), false);
+for (const status of PLUS_ACTIVE_STATUSES) {
+  assert.equal(hasLiveStripeSubscription([{ status: 'canceled' }, { status }]), true, `${status} blocks a second checkout`);
+}
+assert.equal(hasLiveStripeSubscription([{ status: null }, {}]), false);
+
+const openYearly = { id: 'cs_year', url: 'https://checkout.stripe.com/c/pay/cs_year', metadata: { price_id: 'price_year' } };
+const openMonthly = { id: 'cs_month', url: 'https://checkout.stripe.com/c/pay/cs_month', metadata: { price_id: 'price_month' } };
+// Nothing open: make a new page.
+assert.deepEqual(planOpenCheckoutSessions([], { priceId: 'price_year' }), { reuseUrl: null, expireIds: [] });
+// Same plan already open (the "two tabs, minutes apart" case): hand the same page back, close nothing.
+assert.deepEqual(planOpenCheckoutSessions([openYearly], { priceId: 'price_year' }), { reuseUrl: openYearly.url, expireIds: [] });
+// The other plan is open: close it, then make the new page, so only one page can be paid.
+assert.deepEqual(planOpenCheckoutSessions([openMonthly], { priceId: 'price_year' }), { reuseUrl: null, expireIds: ['cs_month'] });
+// Both open: reuse the matching one and close the other.
+assert.deepEqual(planOpenCheckoutSessions([openMonthly, openYearly], { priceId: 'price_year' }), {
+  reuseUrl: openYearly.url,
+  expireIds: ['cs_month'],
+});
+// Two pages for the same plan: keep one, close the spare.
+assert.deepEqual(
+  planOpenCheckoutSessions([openYearly, { ...openYearly, id: 'cs_year_2' }], { priceId: 'price_year' }),
+  { reuseUrl: openYearly.url, expireIds: ['cs_year_2'] },
+);
+// A matching page with no link cannot be reused: close it.
+assert.deepEqual(planOpenCheckoutSessions([{ id: 'cs_nolink', url: null, metadata: { price_id: 'price_year' } }], { priceId: 'price_year' }), {
+  reuseUrl: null,
+  expireIds: ['cs_nolink'],
+});
+assert.deepEqual(planOpenCheckoutSessions([{ id: 'cs_nometa', url: 'https://x.test' }], { priceId: 'price_year' }), {
+  reuseUrl: null,
+  expireIds: ['cs_nometa'],
+});
+
+// --- T-6: a customer id Stripe does not know ---
+assert.equal(isUnknownStripeCustomer({ status: 400, stripeCode: 'resource_missing' }), true);
+assert.equal(isUnknownStripeCustomer({ status: 404, stripeCode: null }), true);
+assert.equal(isUnknownStripeCustomer({ status: 500, stripeCode: null }), false);
+assert.equal(isUnknownStripeCustomer({ status: 400, stripeCode: 'parameter_invalid' }), false);
+assert.equal(isUnknownStripeCustomer(new Error('network')), false);
+assert.equal(isUnknownStripeCustomer(null), false);
+
 // Source rules for the two functions that start payments.
 const checkout = read('supabase/functions/stripe-checkout/index.ts');
 const portal = read('supabase/functions/stripe-portal/index.ts');
@@ -121,6 +170,29 @@ assert.match(checkout, /terms_version: TERMS_VERSION/);
 assert.match(checkout, /ALREADY_SUBSCRIBED/);
 assert.match(checkout, /client_reference_id: userId/);
 assert.match(checkout, /subscription_data: \{[\s\S]*supabase_user_id: userId/);
+// T-5 wiring: Stripe is asked about subscriptions and open pages before a new page is created,
+// and a matching open page is returned instead of creating another.
+const createAt = checkout.indexOf("'POST', '/checkout/sessions', {");
+assert.ok(createAt > 0);
+for (const marker of [
+  "'/subscriptions',",
+  'hasLiveStripeSubscription(subscriptions.data',
+  "form: { customer: customerId, status: 'open', limit: 20 }",
+  'planOpenCheckoutSessions(openSessions, { priceId: price.id })',
+  'if (openPlan.reuseUrl) {',
+]) {
+  const at = checkout.indexOf(marker);
+  assert.ok(at > 0 && at < createAt, `before creating a session: ${marker}`);
+}
+assert.match(checkout, /\/checkout\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/expire/);
+// The price id that reuse depends on is written into every session's metadata.
+assert.match(checkout, /metadata: \{\s*supabase_user_id: userId,\s*price_id: price\.id,/);
+// T-6 wiring: only an unknown-customer answer starts over; other Stripe errors still fail the request.
+assert.match(checkout, /if \(!isUnknownStripeCustomer\(lookupError\)\) throw lookupError;/);
+// The stale row is unlinked, never deleted (billing records are kept).
+assert.doesNotMatch(checkout, /from\('billing_subscriptions'\)\s*\.delete\(/);
+assert.match(checkout, /\.update\(\{ user_id: null, updated_at: [^}]+\}\)\s*\.eq\('user_id', userId\)\s*\.eq\('stripe_customer_id', staleCustomerId\)/);
+
 // Neither function may change the plan; only the webhook's recompute does.
 for (const source of [checkout, portal]) {
   assert.doesNotMatch(source, /from\('profiles'\)|recompute_user_plan|plan_comp/);

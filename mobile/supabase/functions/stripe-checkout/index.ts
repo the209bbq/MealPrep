@@ -22,6 +22,10 @@
 // - The renewal wording is built from the real Stripe price, shown beside the pay button, and
 //   its version is saved in the session metadata for the consent record the webhook writes.
 // - The customer must tick an unticked box agreeing to automatic renewal before paying.
+// - Stripe is asked whether the customer already has a subscription or an open Checkout page
+//   before a new page is made, so nobody can end up paying twice.
+// - A stored customer id Stripe does not know (a test-mode id after the switch to live keys) is
+//   replaced with a new customer instead of failing checkout for that account for good.
 
 import {
   billingContextFromRequest,
@@ -42,6 +46,12 @@ import {
   renewalDisclosure,
   TERMS_VERSION,
 } from '../_shared/billingText.ts';
+import {
+  hasLiveStripeSubscription,
+  isUnknownStripeCustomer,
+  planOpenCheckoutSessions,
+  type OpenCheckoutSession,
+} from '../_shared/checkoutGuards.ts';
 
 interface StripePrice {
   id: string;
@@ -89,10 +99,52 @@ Deno.serve(async (req) => {
 
     // One Stripe customer per account, created once and remembered.
     let customerId = existing?.stripe_customer_id ?? null;
+    let openSessions: OpenCheckoutSession[] = [];
+
+    if (customerId) {
+      // Ask Stripe, not our table: our row only shows a subscription once the webhook has landed.
+      try {
+        const subscriptions = await stripeRequest<{ data: Array<{ status?: string }> }>(
+          stripeSecretKey,
+          'GET',
+          '/subscriptions',
+          { form: { customer: customerId, status: 'all', limit: 20 } },
+        );
+        if (hasLiveStripeSubscription(subscriptions.data ?? [])) {
+          return jsonResponse(
+            { error: 'You already have MealPlanatic Plus. Use Manage subscription to make changes.', code: 'ALREADY_SUBSCRIBED' },
+            409,
+          );
+        }
+        const sessions = await stripeRequest<{ data: OpenCheckoutSession[] }>(
+          stripeSecretKey,
+          'GET',
+          '/checkout/sessions',
+          { form: { customer: customerId, status: 'open', limit: 20 } },
+        );
+        openSessions = sessions.data ?? [];
+      } catch (lookupError) {
+        if (!isUnknownStripeCustomer(lookupError)) throw lookupError;
+        // Stripe has no such customer under this key. Start again with a new one below.
+        console.warn('stripe-checkout: stored customer is unknown to Stripe; creating a new one');
+        const staleCustomerId = customerId;
+        customerId = null;
+        // The old row is kept as a record but unlinked, so it no longer counts for this account.
+        const { error: unlinkError } = await admin
+          .from('billing_subscriptions')
+          .update({ user_id: null, updated_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .eq('stripe_customer_id', staleCustomerId);
+        if (unlinkError) throw unlinkError;
+      }
+    }
+
     if (!customerId) {
       const customer = await stripeRequest<{ id: string }>(stripeSecretKey, 'POST', '/customers', {
         form: { email: userEmail, metadata: { supabase_user_id: userId } },
-        idempotencyKey: `mp-customer-${userId}`,
+        // Not keyed on the user alone: after a stale customer is dropped, Stripe must not hand
+        // the same idempotent answer back.
+        idempotencyKey: `mp-customer-${userId}-${existing?.stripe_customer_id ?? 'first'}`,
       });
       customerId = customer.id;
       const { error: insertError } = await admin
@@ -111,6 +163,31 @@ Deno.serve(async (req) => {
     if (!price || price.unit_amount === null || price.recurring?.interval !== interval) {
       console.error('stripe-checkout: no active price for lookup key', PRICE_LOOKUP_KEYS[interval]);
       return jsonResponse({ error: 'This plan is not available right now.', code: 'PRICE_NOT_FOUND' }, 503);
+    }
+
+    // A page already open for this plan is handed back; any other open page is closed first,
+    // so there is never more than one page this customer could pay on.
+    const openPlan = planOpenCheckoutSessions(openSessions, { priceId: price.id });
+    for (const sessionId of openPlan.expireIds) {
+      try {
+        await stripeRequest(stripeSecretKey, 'POST', `/checkout/sessions/${encodeURIComponent(sessionId)}/expire`);
+      } catch (expireError) {
+        // Paid or expired a moment ago. If it was paid, do not open a second page.
+        const status = expireError instanceof StripeRequestError ? expireError.status : 0;
+        if (status < 400 || status >= 500) throw expireError;
+        const recheck = await stripeRequest<{ data: Array<{ status?: string }> }>(stripeSecretKey, 'GET', '/subscriptions', {
+          form: { customer: customerId, status: 'all', limit: 20 },
+        });
+        if (hasLiveStripeSubscription(recheck.data ?? [])) {
+          return jsonResponse(
+            { error: 'You already have MealPlanatic Plus. Use Manage subscription to make changes.', code: 'ALREADY_SUBSCRIBED' },
+            409,
+          );
+        }
+      }
+    }
+    if (openPlan.reuseUrl) {
+      return jsonResponse({ url: openPlan.reuseUrl });
     }
 
     const urls = checkoutReturnUrls(appUrl);
