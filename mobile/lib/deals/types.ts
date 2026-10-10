@@ -25,6 +25,8 @@ export interface StoreLocation {
   openingHours?: string;
   openNow?: boolean;
   pricingTeaser?: 'coming_soon';
+  /** True when the catalog row carries a brand or matches a known grocery chain. */
+  knownBrand?: boolean;
 }
 
 export interface ItemStoreDeal {

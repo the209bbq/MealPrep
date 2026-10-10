@@ -6,6 +6,9 @@ export const STORES_TAB_DEFAULT_ZIP = '95361';
 /** Max stores shown on the Stores tab (closest first after merge). */
 export const STORES_TAB_DISPLAY_LIMIT = 15;
 
+/** Max unbranded stores listed behind "More local markets" (closest first). */
+export const STORES_TAB_LOCAL_MARKETS_LIMIT = 15;
+
 export const STORES_TAB_COPY = {
   title: 'Stores near you',
   nearPrefix: 'Near',
@@ -42,5 +45,9 @@ export const STORES_TAB_COPY = {
   detailWebsite: 'Website',
   detailOrderOnline: 'Order online',
   noPricesYet: 'No prices yet',
+  moreLocalMarkets: 'More local markets',
+  hideLocalMarkets: 'Hide local markets',
+  localMarketsHeading: 'Local markets',
+  localMarketsNote: 'Smaller shops from open map data. Some may be closed or may not sell groceries.',
   locationModalTitle: 'Stores near you',
 } as const;

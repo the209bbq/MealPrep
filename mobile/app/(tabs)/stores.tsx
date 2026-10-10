@@ -126,7 +126,12 @@ export default function StoresScreen() {
         ) : null}
 
         {!storesTabShowsLoading(listPhase) || stores.filteredStores.length > 0 ? (
-          <StoresNearbyList stores={stores.filteredStores} onSelectStore={setSelectedStore} />
+          <StoresNearbyList
+            stores={stores.filteredChainStores}
+            localStores={stores.filteredLocalStores}
+            searching={listPhase.hasSearchQuery}
+            onSelectStore={setSelectedStore}
+          />
         ) : null}
 
         {stores.error && !storesTabShowsLoadError(listPhase) ? (
