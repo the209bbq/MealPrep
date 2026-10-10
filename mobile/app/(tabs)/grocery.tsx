@@ -458,7 +458,9 @@ export default function GroceryScreen() {
             style={{ paddingBottom: shopCtaBottomPad }}
           >
             <Pressable
-              onPress={() => router.push(APP_ROUTES.smartShop)}
+              // For now this opens the Stores tab (owner, 2026-10-10). It goes back to Smart Shop
+              // (APP_ROUTES.smartShop) once live prices are in.
+              onPress={() => router.push(APP_ROUTES.stores)}
               accessibilityRole="button"
               accessibilityLabel={GROCERY_COPY.findStoresNearMe}
               className="h-[54px] flex-row items-center justify-center gap-2 rounded-full bg-tomato px-5 active:opacity-90"
