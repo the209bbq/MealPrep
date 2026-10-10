@@ -51,7 +51,7 @@ for (const step of TUTORIAL_STEPS) {
   // Compliance rule 4: no dollar or percentage savings claims.
   assert.doesNotMatch(`${step.title} ${step.message}`, /\$\d|\d+ ?%|save money|cheapest/i, step.id);
 }
-assert.equal(TUTORIAL.liveForEveryone, false, 'off for customers until the owner has walked through it on a phone');
+assert.equal(TUTORIAL.liveForEveryone, true, 'live for everyone (owner, 2026-10-10)');
 
 // --- Start, step, skip ---
 resetTutorialForTests();
