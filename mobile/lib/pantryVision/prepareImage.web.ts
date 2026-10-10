@@ -5,12 +5,14 @@ import {
   resolveImageMimeType,
 } from '../web/inferImageMimeType';
 import {
+  computeDetailTiles,
   computeLongEdgeResize,
   evaluateImageQuality,
   PantryImageQualityError,
+  type DetailTileLayout,
   type PreparePantryImageOptions,
 } from './prepareImageShared';
-import type { PreparedPantryImage } from './types';
+import type { PreparedPantryImage, PreparedPantryImageTile } from './types';
 
 function readFileAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -92,6 +94,42 @@ function canvasToJpegBase64(canvas: HTMLCanvasElement, quality: number): string 
   return base64;
 }
 
+/**
+ * Zoomed crops cut from the original bitmap (not from the already-shrunk main image).
+ * Best effort: a crop that cannot be drawn or will not fit is left out, and the scan goes
+ * ahead with the main image alone.
+ */
+function encodeDetailTiles(bitmap: ImageBitmap, layout: DetailTileLayout): PreparedPantryImageTile[] {
+  const settings = PHOTO_SCAN.detailTiles;
+  const tiles: PreparedPantryImageTile[] = [];
+  try {
+    for (const rect of computeDetailTiles(bitmap.width, bitmap.height, layout)) {
+      const canvas = document.createElement('canvas');
+      canvas.width = rect.targetWidth;
+      canvas.height = rect.targetHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return [];
+      ctx.drawImage(bitmap, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.targetWidth, rect.targetHeight);
+
+      let quality: number = settings.jpegQuality;
+      let base64 = canvasToJpegBase64(canvas, quality);
+      let byteLength = Math.floor((base64.length * 3) / 4);
+      while (byteLength > settings.maxTileBytes && quality > 0.5) {
+        quality -= 0.08;
+        base64 = canvasToJpegBase64(canvas, quality);
+        byteLength = Math.floor((base64.length * 3) / 4);
+      }
+      canvas.width = 0;
+      canvas.height = 0;
+      if (byteLength > settings.maxTileBytes) continue;
+      tiles.push({ mimeType: 'image/jpeg', base64, byteLength, position: rect.position });
+    }
+  } catch {
+    return [];
+  }
+  return tiles;
+}
+
 function evaluateCanvasQuality(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d');
   if (!ctx) {
@@ -131,6 +169,11 @@ export async function preparePantryImageFromFile(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas not available');
   ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+  const tileOption = options?.detailTiles ?? false;
+  const wantsTiles = Boolean(tileOption) && PHOTO_SCAN.detailTiles.enabled;
+  const detailTiles = wantsTiles
+    ? encodeDetailTiles(bitmap, tileOption === 'receipt' ? PHOTO_SCAN.receiptTiles : PHOTO_SCAN.detailTiles)
+    : [];
   bitmap.close?.();
 
   let qualityWarnings: string[] | undefined;
@@ -172,6 +215,7 @@ export async function preparePantryImageFromFile(
     byteLength,
     contentHash: undefined,
     qualityWarnings,
+    detailTiles: detailTiles.length > 0 ? detailTiles : undefined,
   };
 }
 

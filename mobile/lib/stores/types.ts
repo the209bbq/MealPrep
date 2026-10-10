@@ -24,6 +24,8 @@ export interface StoreRecord {
   openNow?: boolean;
   /** When set, show a non-numeric pricing teaser (no invented prices). */
   pricingTeaser?: 'coming_soon';
+  /** True when the catalog row carries a brand or matches a known grocery chain (Stores tab lists these first). */
+  knownBrand?: boolean;
   /** Original OSM `shop` tag when sourced from Overpass (static fallback filtering). */
   osmShop?: string;
 }

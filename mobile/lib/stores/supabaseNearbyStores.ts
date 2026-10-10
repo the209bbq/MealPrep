@@ -1,58 +1,14 @@
 import { isSupabaseConfigured } from '../../config/appConfig';
+import { STORE_SEARCH } from '../../config/storeSearch';
 import { getSupabase } from '../supabase';
-import { resolveGroceryChainFromHaystack } from './groceryFilter';
-import { resolveOpenNowFromOsmHours } from './openingHours';
 import { roundCoordsForPrivacy } from './geoPrivacy';
+import { rowToStoreRecord, selectNearbyCatalogStores, type NearbyStoresRow } from './nearbyCatalogRows';
 import {
   readCachedNearbyStores,
   readCachedNearbyStoresStale,
   writeCachedNearbyStores,
 } from './storeSearchCache';
 import type { StoreRecord } from './types';
-
-type NearbyStoresRow = {
-  id: string;
-  name: string;
-  brand: string | null;
-  category: string | null;
-  address_line: string;
-  city: string;
-  state: string;
-  zip: string;
-  lat: number;
-  lng: number;
-  phone: string | null;
-  website: string | null;
-  opening_hours: string | null;
-  sources: string[] | null;
-  distance_m: number;
-};
-
-function rowToStoreRecord(row: NearbyStoresRow): StoreRecord {
-  const haystack = `${row.name} ${row.brand ?? ''}`.toLowerCase();
-  const known = resolveGroceryChainFromHaystack(haystack);
-  const chain = known?.displayName ?? (row.brand?.trim() || row.name);
-  const openingHours = row.opening_hours?.trim() || undefined;
-  const distanceMiles = Math.round((row.distance_m / 1609.344) * 100) / 100;
-  return {
-    id: row.id,
-    name: row.name,
-    chain,
-    addressLine: row.address_line ?? '',
-    city: row.city ?? '',
-    state: row.state ?? '',
-    zip: row.zip ?? '',
-    lat: row.lat,
-    lng: row.lng,
-    distanceMiles,
-    source: 'osm',
-    pricingSource: 'none',
-    phone: row.phone?.trim() || undefined,
-    website: row.website?.trim() || undefined,
-    openingHours,
-    openNow: resolveOpenNowFromOsmHours(openingHours),
-  };
-}
 
 export type FetchSupabaseNearbyResult =
   | { ok: true; stores: StoreRecord[]; fromCache?: boolean }
@@ -64,7 +20,7 @@ export async function fetchNearbyStoresFromSupabase(
 ): Promise<FetchSupabaseNearbyResult> {
   const rounded = roundCoordsForPrivacy(origin.lat, origin.lng);
   const radiusM = options.radiusM;
-  const limit = options.limit ?? 40;
+  const limit = options.limit ?? STORE_SEARCH.nearbyRpcLimit;
 
   const cached = readCachedNearbyStores(rounded, radiusM);
   if (cached?.length) {
@@ -97,7 +53,10 @@ export async function fetchNearbyStoresFromSupabase(
     return { ok: false, reason: 'empty' };
   }
 
-  const stores = rows.map(rowToStoreRecord);
+  const stores = selectNearbyCatalogStores(rows.map(rowToStoreRecord));
+  if (stores.length === 0) {
+    return { ok: false, reason: 'empty' };
+  }
   writeCachedNearbyStores(rounded, radiusM, stores);
   return { ok: true, stores };
 }

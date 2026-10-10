@@ -100,8 +100,34 @@ export const getRecipeApiProxyUrl = (): string => {
 export const PHOTO_SCAN = {
   enabled: true,
   /** Long edge sent to pantry-vision (native + web use the same rule). */
-  maxImageDimension: 1280,
-  jpegQuality: 0.7,
+  maxImageDimension: 1536,
+  /** Small label text turns to mush below about 0.8. */
+  jpegQuality: 0.82,
+  /**
+   * Zoomed crops of the same photo, sent with it (web). The model gives every image the same
+   * fixed budget however many pixels it has, so a whole shelf in one image leaves each label
+   * only a few readable pixels. Overlapping crops give the labels several times more detail.
+   */
+  detailTiles: {
+    enabled: true,
+    /** Only worth doing when the original has real extra detail over the main image. */
+    minSourceLongEdge: 2200,
+    columns: 2,
+    rows: 2,
+    /** Each crop extends this share of its size into its neighbours, so a product on a seam is whole in one of them. */
+    overlap: 0.12,
+    maxLongEdge: 1280,
+    jpegQuality: 0.82,
+    maxTileBytes: 900_000,
+  },
+  /** Receipts are tall and narrow: full-width strips, top to bottom, instead of a grid. */
+  receiptTiles: {
+    minSourceLongEdge: 2200,
+    columns: 1,
+    rows: 3,
+    overlap: 0.12,
+    maxLongEdge: 1280,
+  },
   maxPayloadBytes: 2_800_000,
   /** Quality hints before upload (analysis on a downsampled thumb, not the full upload). */
   qualityAnalysisLongEdge: 256,

@@ -15,7 +15,7 @@ export const DEFAULT_GEMINI_FALLBACK_MODELS = [
 ] as const;
 
 /** Per upstream HTTP call (each Gemini generateContent). Override via `GEMINI_REQUEST_TIMEOUT_MS` secret. */
-export const DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 38_000;
+export const DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 50_000;
 
 /** @deprecated Use resolveGeminiRequestTimeoutMs — kept for tests importing the default cap. */
 export const GEMINI_REQUEST_TIMEOUT_MS = DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;

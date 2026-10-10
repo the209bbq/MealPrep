@@ -115,7 +115,8 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
   {
     key: 'walmart',
     displayName: 'Walmart',
-    matchPatterns: ['walmart supercenter', 'walmart neighborhood', 'neighborhood market', 'walmart'],
+    // A bare 'neighborhood market' also matched other names (e.g. the closed Fresh & Easy chain).
+    matchPatterns: ['walmart supercenter', 'walmart neighborhood', 'walmart'],
     storePageUrl: 'https://www.walmart.com/store/finder?location={zip}',
     storePagePathPattern: '^https://([a-z0-9-]+\\.)?walmart\\.com/store/.+',
     allowedWebsiteHosts: ['walmart.com'],

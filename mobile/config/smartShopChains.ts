@@ -80,7 +80,8 @@ export const GROCERY_CHAINS: readonly GroceryChainConfig[] = [
   {
     key: 'walmart',
     displayName: 'Walmart',
-    matchPatterns: ['walmart supercenter', 'walmart neighborhood', 'neighborhood market', 'walmart'],
+    // A bare 'neighborhood market' also matched other names (e.g. the closed Fresh & Easy chain).
+    matchPatterns: ['walmart supercenter', 'walmart neighborhood', 'walmart'],
     distanceBoostMiles: 0.25,
     delivery: { instacartAvailable: true, doordashAvailable: true, deliverySearchName: 'Walmart' },
   },

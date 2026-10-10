@@ -10,6 +10,7 @@ import { photoScanAccessUserMessage } from '../lib/plans/photoScanAccess';
 import { PantryImageQualityError } from '../lib/pantryVision/prepareImageShared';
 import { pickWebImageFile } from '../lib/web/pickWebImageFile';
 import { PhotoScanPlusUpgradeCard } from './PhotoScanPlusUpgradeCard';
+import { scanCardContent } from '../lib/pantry/scanCardContent';
 import type { PantryStorageScanButtonsProps } from './PantryStorageScanButtons';
 
 export function PantryStorageScanButtons({
@@ -26,7 +27,9 @@ export function PantryStorageScanButtons({
   autoOpenScanMode,
   onAutoOpenScanHandled,
   showPlusBadge,
+  variant = 'shelf',
 }: PantryStorageScanButtonsProps) {
+  const card = scanCardContent(variant);
   const [guestGateOpen, setGuestGateOpen] = useState(false);
   const [plusGateOpen, setPlusGateOpen] = useState(false);
   const [pickerBusy, setPickerBusy] = useState(false);
@@ -90,7 +93,9 @@ export function PantryStorageScanButtons({
       );
       if (!file) return;
       const { preparePantryImageFromFile } = await import('../lib/pantryVision/prepareImage.web');
-      const prepared = await preparePantryImageFromFile(file);
+      const prepared = await preparePantryImageFromFile(file, {
+        detailTiles: variant === 'receipt' ? 'receipt' : true,
+      });
       onImagePrepared(scanLocation, prepared);
     } catch (error: unknown) {
       if (error instanceof PantryImageQualityError && error.reason === 'blank') {
@@ -134,14 +139,14 @@ export function PantryStorageScanButtons({
           pickersDisabled ? 'opacity-50' : ''
         }`}
         accessibilityRole="button"
-        accessibilityLabel={PANTRY_SCAN_UI_COPY.scanShelfA11y}
+        accessibilityLabel={card.a11y}
       >
         <View className="h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tomato-light">
-          <Ionicons name="camera-outline" size={24} color={THEME.tomatoDark} />
+          <Ionicons name={card.icon} size={24} color={THEME.tomatoDark} />
         </View>
         <View className="min-w-0 flex-1">
-          <Text className="text-base font-extrabold text-ink">{PANTRY_SCAN_UI_COPY.scanCardTitle}</Text>
-          <Text className="mt-0.5 text-sm leading-5 text-muted">{PANTRY_SCAN_UI_COPY.scanCardSubtitle}</Text>
+          <Text className="text-base font-extrabold text-ink">{card.title}</Text>
+          <Text className="mt-0.5 text-sm leading-5 text-muted">{card.subtitle}</Text>
         </View>
         {showPlusBadge ? (
           <View className="shrink-0 rounded-[10px] bg-tomato px-[9px] py-1">

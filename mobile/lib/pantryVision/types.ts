@@ -53,4 +53,14 @@ export interface PreparedPantryImage {
   contentHash?: string;
   /** Non-blocking quality hints; scan still uploads to vision. */
   qualityWarnings?: string[];
+  /** Zoomed crops of the same photo for dense shelves (see PHOTO_SCAN.detailTiles). */
+  detailTiles?: PreparedPantryImageTile[];
+}
+
+export interface PreparedPantryImageTile {
+  mimeType: 'image/jpeg';
+  base64: string;
+  byteLength: number;
+  /** "top left", "bottom right", ... */
+  position: string;
 }

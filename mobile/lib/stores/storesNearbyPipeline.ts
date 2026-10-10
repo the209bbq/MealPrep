@@ -1,9 +1,10 @@
-import { STORES_TAB_DISPLAY_LIMIT } from '../../config/storesTab';
+import { STORES_TAB_DISPLAY_LIMIT, STORES_TAB_LOCAL_MARKETS_LIMIT } from '../../config/storesTab';
 import { isSupabaseConfigured } from '../../config/appConfig';
 import { mergeKrogerLocations, type KrogerLocationRow } from './krogerMerge';
 import { roundCoordsForPrivacy } from './geoPrivacy';
 import { applyOriginDistancesAndSort } from './storeDistance';
 import { isNearbyListStoreNameAllowed } from './catalogStoreFilter';
+import { splitStoresByRecognition } from './storeRecognition';
 import type { StoreRecord } from './types';
 
 export type StoresNearbyPipelineOrigin = { lat: number; lng: number };
@@ -26,17 +27,20 @@ export function mergeCatalogWithKrogerLocations(
 }
 
 /**
- * Closest-first from the search origin. No open-now boost, chain boost, or favorites.
+ * Stores tab order: recognised chains and brands first (closest first, up to `displayLimit`),
+ * then unbranded local markets (closest first, up to `localLimit`). No open-now boost or favorites.
  * Call after RPC + Kroger merge + fallback merge.
  */
 export function sortAndLimitStoresForStoresTab(
   stores: StoreRecord[],
   origin: StoresNearbyPipelineOrigin,
   displayLimit = STORES_TAB_DISPLAY_LIMIT,
+  localLimit = STORES_TAB_LOCAL_MARKETS_LIMIT,
 ): StoreRecord[] {
   const sorted = applyOriginDistancesAndSort(stores, origin);
-  if (displayLimit <= 0) return sorted;
-  return sorted.slice(0, displayLimit);
+  const { recognized, local } = splitStoresByRecognition(sorted);
+  if (displayLimit <= 0) return [...recognized, ...local];
+  return [...recognized.slice(0, displayLimit), ...local.slice(0, Math.max(0, localLimit))];
 }
 
 export function finalizeStoresTabNearbyList(

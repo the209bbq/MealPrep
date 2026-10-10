@@ -6,7 +6,86 @@ export type PreparePantryImageOptions = {
   maxPayloadBytes?: number;
   /** Skip blank/dark/blur analysis (e.g. recipe cookbook photos). */
   skipQualityCheck?: boolean;
+  /**
+   * Also produce zoomed crops. `true` is the shelf grid; 'receipt' is full-width strips for a tall
+   * receipt. Defaults to off.
+   */
+  detailTiles?: boolean | 'receipt';
 };
+
+export type DetailTileRect = {
+  /** Crop rectangle in source pixels. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Size to encode the crop at. */
+  targetWidth: number;
+  targetHeight: number;
+  /** Where the crop sits in the photo, for the model: "top left", "bottom right", ... */
+  position: string;
+};
+
+export type DetailTileLayout = {
+  minSourceLongEdge: number;
+  columns: number;
+  rows: number;
+  overlap: number;
+  maxLongEdge: number;
+};
+
+function tilePositionLabel(row: number, rows: number, column: number, columns: number): string {
+  const vertical = rows === 1 ? '' : row === 0 ? 'top' : row === rows - 1 ? 'bottom' : 'middle';
+  const horizontal = columns === 1 ? '' : column === 0 ? 'left' : column === columns - 1 ? 'right' : 'centre';
+  return [vertical, horizontal].filter(Boolean).join(' ') || 'full';
+}
+
+/**
+ * Overlapping crops that together cover the whole photo, top-to-bottom then left-to-right.
+ * Returns none when the original is too small for a crop to show more than the main image does.
+ */
+export function computeDetailTiles(
+  sourceWidth: number,
+  sourceHeight: number,
+  layout: DetailTileLayout = PHOTO_SCAN.detailTiles,
+): DetailTileRect[] {
+  const width = Math.floor(sourceWidth);
+  const height = Math.floor(sourceHeight);
+  const columns = Math.max(1, Math.floor(layout.columns));
+  const rows = Math.max(1, Math.floor(layout.rows));
+  if (!(width > 0) || !(height > 0)) return [];
+  if (Math.max(width, height) < layout.minSourceLongEdge) return [];
+  if (columns * rows < 2) return [];
+
+  const overlap = Math.min(0.4, Math.max(0, layout.overlap));
+  const cellW = width / columns;
+  const cellH = height / rows;
+  const padX = columns > 1 ? cellW * overlap : 0;
+  const padY = rows > 1 ? cellH * overlap : 0;
+
+  const tiles: DetailTileRect[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const left = Math.max(0, Math.floor(column * cellW - padX));
+      const top = Math.max(0, Math.floor(row * cellH - padY));
+      const right = Math.min(width, Math.ceil((column + 1) * cellW + padX));
+      const bottom = Math.min(height, Math.ceil((row + 1) * cellH + padY));
+      const tileW = right - left;
+      const tileH = bottom - top;
+      const target = computeLongEdgeResize(tileW, tileH, layout.maxLongEdge);
+      tiles.push({
+        x: left,
+        y: top,
+        width: tileW,
+        height: tileH,
+        targetWidth: target.width,
+        targetHeight: target.height,
+        position: tilePositionLabel(row, rows, column, columns),
+      });
+    }
+  }
+  return tiles;
+}
 
 export type ImageQualityRejectReason = 'blank' | 'too_dark' | 'too_blurry';
 
