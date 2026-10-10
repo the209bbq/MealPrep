@@ -293,7 +293,7 @@ async function smartShopWithMockStores(page: Page): Promise<void> {
     );
   });
 
-  const shopCta = page.getByText(GROCERY_COPY.comparePricesNearYou, { exact: false }).first();
+  const shopCta = page.getByText(GROCERY_COPY.findStoresNearMe, { exact: false }).first();
   await shopCta.waitFor({ timeout: 15_000 });
   await shopCta.click();
   await page.waitForURL(/\/smart-shop/, { timeout: 15_000 });

@@ -32,7 +32,7 @@ export const GROCERY_COPY = {
   /** Primary CTA from grocery tab → Smart Shop (prefilled open items + saved location). */
   findStoresForList: (count: number) => `Find stores for this list (${count})`,
   /** Approved design: grocery tab button that opens Smart Shop. No savings claims or figures here. */
-  comparePricesNearYou: 'Compare prices near you',
+  findStoresNearMe: 'Find stores near me',
   addedMissingSingle: (name: string) => `Added ${name} to your grocery list`,
   addedMissingPlural: (count: number) => `Added ${count} missing items to your grocery list`,
   alreadyOnGroceryList: 'Those missing items are already on your grocery list',
