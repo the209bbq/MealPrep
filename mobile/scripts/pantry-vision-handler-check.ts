@@ -645,6 +645,58 @@ function reset(): void {
   assert.equal(result.json.code, 'PLAN_REQUIRED');
   assert.equal(geminiCalls.length, 1);
 
+  // --- The same photo sent twice while the first is still running costs one scan ---
+  // (A phone browser resends a request when its connection drops; seen live on 2026-10-10.)
+  reset();
+  planRow = { plan: 'paid' };
+  fixedUser = 9101;
+  let releaseModel: () => void = () => {};
+  const modelHeld = new Promise<void>((resolve) => (releaseModel = resolve));
+  geminiRouter = () => geminiItems(['Black Beans', 'Rice'])();
+  const realRouter = geminiRouter;
+  let heldCalls = 0;
+  geminiRouter = (call) => {
+    heldCalls += 1;
+    return realRouter(call);
+  };
+  const slowFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.startsWith('https://generativelanguage.googleapis.com/')) await modelHeld;
+    return slowFetch(input, init);
+  }) as typeof fetch;
+  const first = scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-1' });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const replay = scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-1' });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  releaseModel();
+  const [firstResult, replayResult] = await Promise.all([first, replay]);
+  globalThis.fetch = slowFetch;
+  assert.equal(firstResult.status, 200);
+  assert.equal(replayResult.status, 200);
+  assert.equal(heldCalls, 1, 'the model is called once for the two requests');
+  assert.deepEqual(replayResult.json.items, firstResult.json.items);
+  assert.equal(replayResult.json.shared, true);
+  assert.equal(usageRows.get(`${userIdFor(9101)}|${MONTH}`)?.scans, 1, 'one scan is counted, not two');
+  assert.ok(logLines.some((line) => line.startsWith('pantry-vision: scan shared items=2')));
+  // Another account sending the same photo is its own scan while the first runs.
+  // A first request that fails does not take the second down with it.
+  reset();
+  planRow = { plan: 'paid' };
+  fixedUser = 9102;
+  let failFirst = true;
+  geminiRouter = () => {
+    if (failFirst) return geminiJson({ error: { message: 'bad request' } }, 400);
+    return geminiItems(['Oats'])();
+  };
+  const failing = scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-2' });
+  const failed = await failing;
+  assert.notEqual(failed.status, 200);
+  failFirst = false;
+  const retried = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'replay-2' });
+  assert.equal(retried.status, 200, 'a failed scan leaves nothing behind that blocks the next try');
+  assert.equal(retried.json.shared, undefined);
+
   // --- Crop layout (client side, pure) ---
   const portrait = computeDetailTiles(3072, 4080);
   assert.equal(portrait.length, 4);

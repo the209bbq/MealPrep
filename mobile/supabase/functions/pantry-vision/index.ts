@@ -324,6 +324,26 @@ const SCAN_RESULT_CACHE_TTL_MS = 30 * 60 * 1000;
 const SCAN_RESULT_CACHE_MAX = 200;
 const scanResultCache = new Map<string, { at: number; items: DetectedPantryItem[]; model: string }>();
 
+/**
+ * Scans being worked on right now, by account and photo. A phone browser can send the same request
+ * again when its connection drops (the camera opening is enough), while the first one is still
+ * running here. The second request waits for the first answer instead of paying for the scan twice.
+ */
+type SharedScan = { items: DetectedPantryItem[]; model: string };
+const scansInFlight = new Map<string, { at: number; result: Promise<SharedScan> }>();
+/** Longer than any scan can run; an entry older than this was left behind by a crash and is ignored. */
+const SCAN_IN_FLIGHT_MAX_MS = 3 * 60 * 1000;
+
+function scanInFlight(key: string, now = Date.now()): Promise<SharedScan> | null {
+  const entry = scansInFlight.get(key);
+  if (!entry) return null;
+  if (now - entry.at > SCAN_IN_FLIGHT_MAX_MS) {
+    scansInFlight.delete(key);
+    return null;
+  }
+  return entry.result;
+}
+
 function isModelNotFoundOrRetired(status: number, detail: string): boolean {
   if (status !== 404) return false;
   const lower = detail.toLowerCase();
@@ -1870,135 +1890,175 @@ Deno.serve(async (req) => {
       );
     }
 
-    const isReceipt = imageResult.action === 'receipt';
-    const images: GeminiImage[] = [
-      {
-        mimeType: imageResult.mimeType,
-        base64: imageBase64,
-        caption: imageResult.tiles.length > 0 ? (isReceipt ? 'Whole receipt:' : 'Full photo:') : undefined,
-      },
-      ...imageResult.tiles.map((tile) => ({
-        mimeType: tile.mimeType,
-        base64: tile.base64,
-        caption: isReceipt
-          ? tile.position
-            ? `Zoomed strip of the same receipt (${tile.position}):`
-            : 'Zoomed strip of the same receipt:'
-          : tile.position
-            ? `Zoomed crop of the same photo (${tile.position}):`
-            : 'Zoomed crop of the same photo:',
-      })),
-    ];
-    const imageBytes = imageResult.bytes.byteLength + imageResult.tiles.reduce((sum, tile) => sum + tile.byteLength, 0);
-    const stats = new ScanStats();
-    const startedAt = Date.now();
-
-    // Taken before the model is called, so parallel requests cannot overshoot the allowance.
-    const claimed = await claimOrRefuse();
-    if (claimed instanceof Response) return claimed;
-
-    const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
-    let scan: Awaited<ReturnType<typeof callPantryGeminiWithFallbacks>>;
+    // The same photo from the same account is already being scanned: share that answer.
+    const inFlightKey = `${userId}|${cacheKey}`;
+    const running = scanInFlight(inFlightKey);
+    if (running) {
+      const shared = await running.catch(() => null);
+      if (shared) {
+        console.log(`pantry-vision: scan shared items=${shared.items.length} kind=${imageResult.action}`);
+        return jsonResponse(
+          {
+            items: shared.items,
+            model: shared.model,
+            scanLocation: imageResult.scanLocation,
+            kind: imageResult.action,
+            cached: true,
+            shared: true,
+            itemCount: shared.items.length,
+          },
+          200,
+        );
+      }
+      // The first request failed: this one runs on its own below.
+    }
+    let shareResult: (value: SharedScan) => void = () => {};
+    let shareFailure: () => void = () => {};
+    const sharedResult = new Promise<SharedScan>((resolve, reject) => {
+      shareResult = resolve;
+      shareFailure = () => reject(new Error('scan failed'));
+    });
+    // Nobody may be waiting: a failure with no listener must not crash the worker.
+    sharedResult.catch(() => {});
+    scansInFlight.set(inFlightKey, { at: Date.now(), result: sharedResult });
+    let scanFinished = false;
     try {
-      scan = await callPantryGeminiWithFallbacks(apiKey, images, imageResult.scanLocation, stats, budget, isReceipt);
-    } catch (scanError) {
-      console.warn(
+      const isReceipt = imageResult.action === 'receipt';
+      const images: GeminiImage[] = [
+        {
+          mimeType: imageResult.mimeType,
+          base64: imageBase64,
+          caption: imageResult.tiles.length > 0 ? (isReceipt ? 'Whole receipt:' : 'Full photo:') : undefined,
+        },
+        ...imageResult.tiles.map((tile) => ({
+          mimeType: tile.mimeType,
+          base64: tile.base64,
+          caption: isReceipt
+            ? tile.position
+              ? `Zoomed strip of the same receipt (${tile.position}):`
+              : 'Zoomed strip of the same receipt:'
+            : tile.position
+              ? `Zoomed crop of the same photo (${tile.position}):`
+              : 'Zoomed crop of the same photo:',
+        })),
+      ];
+      const imageBytes = imageResult.bytes.byteLength + imageResult.tiles.reduce((sum, tile) => sum + tile.byteLength, 0);
+      const stats = new ScanStats();
+      const startedAt = Date.now();
+
+      // Taken before the model is called, so parallel requests cannot overshoot the allowance.
+      const claimed = await claimOrRefuse();
+      if (claimed instanceof Response) return claimed;
+
+      const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
+      let scan: Awaited<ReturnType<typeof callPantryGeminiWithFallbacks>>;
+      try {
+        scan = await callPantryGeminiWithFallbacks(apiKey, images, imageResult.scanLocation, stats, budget, isReceipt);
+      } catch (scanError) {
+        console.warn(
+          formatScanLogLine({
+            ok: false,
+            model: '',
+            items: 0,
+            passes: 0,
+            images: images.length,
+            imageBytes,
+            ms: Date.now() - startedAt,
+            attempts: 0,
+            stats,
+            kind: imageResult.action,
+          }),
+        );
+        // A scan that produced nothing is not charged against the allowance.
+        if (claimed.counted) await settleScan(userId, allowance.period, { inputTokens: 0, outputTokens: 0 }, true);
+        throw scanError;
+      }
+      const { model, debug } = scan;
+      let items = scan.items;
+      const firstPassItems = items.length;
+      let thorough = { tileCalls: 0, tilesOk: 0 };
+      if (
+        // A receipt is printed text read in one pass; splitting it would count lines on a seam twice.
+        !isReceipt &&
+        shouldRunThoroughScan({
+          mode: parseThoroughScanMode(Deno.env.get('PANTRY_THOROUGH_SCAN') ?? undefined),
+          tileCount: imageResult.tiles.length,
+          firstPassItems,
+          minItems: parseThoroughMinItems(Deno.env.get('PANTRY_THOROUGH_MIN_ITEMS') ?? undefined),
+        }) &&
+        !budget.isExhausted()
+      ) {
+        const tileScan = await runThoroughTileScans(
+          apiKey,
+          model,
+          images[0],
+          imageResult.tiles.map((tile, index) => ({ image: images[index + 1], position: tile.position })),
+          imageResult.scanLocation,
+          budget,
+          stats,
+        );
+        thorough = { tileCalls: tileScan.tileCalls, tilesOk: tileScan.tilesOk };
+        // The same product seen in the whole photo and in a crop, or in two overlapping crops, is one row.
+        items = mergeItemPasses(items, tileScan.items);
+      }
+      console.log(
         formatScanLogLine({
-          ok: false,
-          model: '',
-          items: 0,
-          passes: 0,
+          ok: true,
+          model,
+          items: items.length,
+          passes: debug.geminiPasses,
           images: images.length,
           imageBytes,
           ms: Date.now() - startedAt,
-          attempts: 0,
+          attempts: debug.modelAttempts.length,
           stats,
+          firstPassItems,
+          tileCalls: thorough.tileCalls,
+          tilesOk: thorough.tilesOk,
           kind: imageResult.action,
         }),
       );
-      // A scan that produced nothing is not charged against the allowance.
-      if (claimed.counted) await settleScan(userId, allowance.period, { inputTokens: 0, outputTokens: 0 }, true);
-      throw scanError;
-    }
-    const { model, debug } = scan;
-    let items = scan.items;
-    const firstPassItems = items.length;
-    let thorough = { tileCalls: 0, tilesOk: 0 };
-    if (
-      // A receipt is printed text read in one pass; splitting it would count lines on a seam twice.
-      !isReceipt &&
-      shouldRunThoroughScan({
-        mode: parseThoroughScanMode(Deno.env.get('PANTRY_THOROUGH_SCAN') ?? undefined),
-        tileCount: imageResult.tiles.length,
-        firstPassItems,
-        minItems: parseThoroughMinItems(Deno.env.get('PANTRY_THOROUGH_MIN_ITEMS') ?? undefined),
-      }) &&
-      !budget.isExhausted()
-    ) {
-      const tileScan = await runThoroughTileScans(
-        apiKey,
-        model,
-        images[0],
-        imageResult.tiles.map((tile, index) => ({ image: images[index + 1], position: tile.position })),
-        imageResult.scanLocation,
-        budget,
-        stats,
-      );
-      thorough = { tileCalls: tileScan.tileCalls, tilesOk: tileScan.tilesOk };
-      // The same product seen in the whole photo and in a crop, or in two overlapping crops, is one row.
-      items = mergeItemPasses(items, tileScan.items);
-    }
-    console.log(
-      formatScanLogLine({
-        ok: true,
-        model,
-        items: items.length,
-        passes: debug.geminiPasses,
-        images: images.length,
-        imageBytes,
-        ms: Date.now() - startedAt,
-        attempts: debug.modelAttempts.length,
-        stats,
-        firstPassItems,
-        tileCalls: thorough.tileCalls,
-        tilesOk: thorough.tilesOk,
-        kind: imageResult.action,
-      }),
-    );
 
-    setCachedScan(cacheKey, items, model);
-    if (claimed.counted) {
-      await settleScan(
-        userId,
-        allowance.period,
-        { inputTokens: stats.promptTokens, outputTokens: stats.outputTokens + stats.thoughtTokens },
-        false,
-      );
-    }
+      setCachedScan(cacheKey, items, model);
+      scanFinished = true;
+      shareResult({ items, model });
+      if (claimed.counted) {
+        await settleScan(
+          userId,
+          allowance.period,
+          { inputTokens: stats.promptTokens, outputTokens: stats.outputTokens + stats.thoughtTokens },
+          false,
+        );
+      }
 
-    return jsonResponse(
-      {
-        items,
-        model,
-        usage: usageForResponse(tier, allowance, claimed.remaining),
-        debug: {
-          ...debug,
-          images: images.length,
-          thorough: { ...thorough, firstPassItems },
-          usage: {
-            promptTokens: stats.promptTokens,
-            outputTokens: stats.outputTokens,
-            thoughtTokens: stats.thoughtTokens,
-            calls: stats.calls,
+      return jsonResponse(
+        {
+          items,
+          model,
+          usage: usageForResponse(tier, allowance, claimed.remaining),
+          debug: {
+            ...debug,
+            images: images.length,
+            thorough: { ...thorough, firstPassItems },
+            usage: {
+              promptTokens: stats.promptTokens,
+              outputTokens: stats.outputTokens,
+              thoughtTokens: stats.thoughtTokens,
+              calls: stats.calls,
+            },
           },
+          scanLocation: imageResult.scanLocation,
+          kind: imageResult.action,
+          cached: false,
+          itemCount: items.length,
         },
-        scanLocation: imageResult.scanLocation,
-        kind: imageResult.action,
-        cached: false,
-        itemCount: items.length,
-      },
-      200,
-    );
+        200,
+      );
+    } finally {
+      // Whatever happened, later requests for this photo must not wait on this one.
+      if (!scanFinished) shareFailure();
+      scansInFlight.delete(inFlightKey);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Something went wrong while analyzing your photo.';
     return jsonResponse({ error: message, code: 'UPSTREAM_ERROR' }, 502);
