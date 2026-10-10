@@ -11,6 +11,7 @@ import { PantryImageQualityError } from '../lib/pantryVision/prepareImageShared'
 import { pickWebImageFile } from '../lib/web/pickWebImageFile';
 import { PhotoScanPlusUpgradeCard } from './PhotoScanPlusUpgradeCard';
 import { scanCardContent } from '../lib/pantry/scanCardContent';
+import { useTutorialTarget } from '../hooks/useTutorial';
 import type { PantryStorageScanButtonsProps } from './PantryStorageScanButtons';
 
 export function PantryStorageScanButtons({
@@ -31,6 +32,8 @@ export function PantryStorageScanButtons({
   variant = 'shelf',
 }: PantryStorageScanButtonsProps) {
   const card = scanCardContent(variant);
+  // The first-time tour lights this card up.
+  const tutorialRef = useTutorialTarget(variant === 'receipt' ? 'pantry-receipt' : 'pantry-scan');
   const [guestGateOpen, setGuestGateOpen] = useState(false);
   const [plusGateOpen, setPlusGateOpen] = useState(false);
   const [pickerBusy, setPickerBusy] = useState(false);
@@ -128,7 +131,7 @@ export function PantryStorageScanButtons({
   }, [autoOpenScanMode, disabled, onAutoOpenScanHandled]);
 
   return (
-    <View>
+    <View ref={tutorialRef}>
       {authPhotoScanPending ? (
         <Text className="mb-2 text-xs text-muted">{GUEST_MODE_COPY.pantryScanAuthLoading}</Text>
       ) : null}

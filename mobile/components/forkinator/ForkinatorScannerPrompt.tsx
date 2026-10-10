@@ -34,7 +34,7 @@ type ForkinatorScannerPromptProps = {
   actionButton?: ForkinatorPromptActionButton;
 };
 
-function TailCircles({ placement }: { placement: ScannerPromptPlacement }) {
+function TailCircles({ placement, offsetX }: { placement: ScannerPromptPlacement; offsetX?: number }) {
   const sizes = [10, 7, 5];
   if (placement === 'left' || placement === 'right') {
     // Side cloud: tail runs horizontally toward Forky's head, biggest circle by the cloud.
@@ -74,6 +74,8 @@ function TailCircles({ placement }: { placement: ScannerPromptPlacement }) {
       pointerEvents="none"
       style={{
         alignItems: 'center',
+        // Pinned Forky stands at the left of the top bar: the tail lines up under him.
+        ...(offsetX != null ? { alignSelf: 'flex-start' as const, marginLeft: offsetX } : null),
         marginTop: isAbove ? PROMPT_BUBBLE_TAIL_GAP : 0,
         marginBottom: isAbove ? 0 : PROMPT_BUBBLE_TAIL_GAP,
         transform: isAbove ? undefined : [{ scaleY: -1 }],
@@ -217,13 +219,13 @@ export function ForkinatorScannerPrompt({
     >
       {tailFirst ? (
         <>
-          <TailCircles placement={layout.placement} />
+          <TailCircles placement={layout.placement} offsetX={layout.tailOffsetX} />
           {body}
         </>
       ) : (
         <>
           {body}
-          <TailCircles placement={layout.placement} />
+          <TailCircles placement={layout.placement} offsetX={layout.tailOffsetX} />
         </>
       )}
     </Animated.View>

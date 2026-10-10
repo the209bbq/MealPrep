@@ -33,6 +33,8 @@ export type ScannerPromptLayout = {
   height: number;
   bodyWidth: number;
   bodyHeight: number;
+  /** Above/below clouds: where the tail starts, from the cloud's left edge, so it points at Forky. */
+  tailOffsetX?: number;
 };
 
 export type ScannerPromptLayoutInput = {
@@ -53,6 +55,8 @@ export type ScannerPromptLayoutInput = {
   preferSideOverAbove?: boolean;
   /** When true, try above before side (aisle cloud on right-docked Forky). */
   preferAboveBeforeSide?: boolean;
+  /** Forky pinned in the top bar: the cloud always opens under him, never over the bar. */
+  preferBelow?: boolean;
 };
 
 function estimateMessageLineCount(message: string, contentWidth: number): number {
@@ -205,6 +209,21 @@ export function layoutScannerPrompt(input: ScannerPromptLayoutInput): ScannerPro
       bodyHeight,
     };
   };
+
+  if (input.preferBelow) {
+    const left = clamp(mascotCenterX - bodyWidth / 2, minLeft, maxRight - bodyWidth);
+    return {
+      left,
+      top: input.mascotY + input.mascotHeight + gap,
+      placement: 'below',
+      width: bodyWidth,
+      height: aboveHeight,
+      bodyWidth,
+      bodyHeight,
+      // Tail circles are at most 10px wide; keep them inside the cloud's rounded corners.
+      tailOffsetX: clamp(mascotCenterX - left - 5, 10, bodyWidth - 20),
+    };
+  }
 
   if (input.preferAboveBeforeSide) {
     const above = aboveLayout();

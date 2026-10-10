@@ -12,6 +12,7 @@ import { readLastAccountUserId } from '../lib/account/lastAccountUser';
 import { useApp } from '../context/AppContext';
 import { useHomeHubSheet } from '../context/HomeHubSheetContext';
 import { useHydrated } from '../hooks/useHydrated';
+import { useTutorialTarget } from '../hooks/useTutorial';
 import { ProfileAvatar } from './account/ProfileAvatar';
 
 export function AppHeader() {
@@ -19,6 +20,8 @@ export function AppHeader() {
   const hydrated = useHydrated();
   const { profile, session, demoMode, authReady, openAuthSheet, openAccountSheet } = useApp();
   const { openHub } = useHomeHubSheet();
+  // The first-time tour lights up the week-plan button.
+  const tutorialWeekPlanRef = useTutorialTarget('home-week-plan');
   const storedSessionHint = hydrated && !authReady && hasLikelyStoredAuthSession();
   const signedIn = demoMode || session != null || storedSessionHint;
   const bootstrapProfile =
@@ -46,6 +49,7 @@ export function AppHeader() {
         <View className="shrink-0 flex-row items-center gap-1">
           {onHome ? (
             <Pressable
+              ref={tutorialWeekPlanRef}
               onPress={() => openHub('weekPlan')}
               accessibilityRole="button"
               accessibilityLabel={HOME_HUB_COPY.openAccessibilityLabel}

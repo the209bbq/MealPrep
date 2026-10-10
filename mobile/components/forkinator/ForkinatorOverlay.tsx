@@ -5,25 +5,13 @@ import {
   RECIPES_TAB_FILTERS_STORAGE_KEY,
 } from '../../config/recipesTabFilters';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  PanResponder,
-  Platform,
-  useWindowDimensions,
-  View,
-  type ViewProps,
-} from 'react-native';
+import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotionEnabled } from '../../hooks/useReduceMotionEnabled';
 import {
   FORKINATOR_ACCESSIBILITY_HINT,
   FORKINATOR_ACCESSIBILITY_LABEL,
 } from '../../lib/forkinator/a11y';
-import {
-  FORKINATOR_HIT_HEIGHT_PX,
-  FORKINATOR_HIT_INSET_LEFT_PX,
-  FORKINATOR_HIT_INSET_TOP_PX,
-  FORKINATOR_HIT_WIDTH_PX,
-} from '../../lib/forkinator/hitArea';
 import {
   FORKINATOR_GREETING_AUTO_HIDE_MS,
   FORKINATOR_GREETING_AUTO_SHOW_DELAY_MS,
@@ -38,6 +26,8 @@ import {
 import { canSyncForkinatorWebCameraScan } from '../../lib/forkinator/forkinatorWebCameraScan';
 import { pickWebImageFile } from '../../lib/web/pickWebImageFile';
 import { useApp } from '../../context/AppContext';
+import { useTutorialState } from '../../hooks/useTutorial';
+import { THEME } from '../../config/appConfig';
 import { readForkinatorHasScanned } from '../../lib/forkinator/hasScanned';
 import {
   markForkinatorAisleSortPromptShown,
@@ -79,20 +69,18 @@ import { requestGroceryAisleCombineView } from '../../lib/grocery/groceryCombine
 import { APP_ROUTES } from '../../config/appRoutes';
 import type { PantryItem } from '../../types/mealprep';
 import {
-  FORK_IN_ROAD_PILL_MIN_WIDTH_PX,
-  layoutForkInRoadPill,
-} from '../../lib/forkinator/forkInRoadPillLayout';
-import {
-  clampForkinatorPosition,
-  defaultForkinatorPositionForTab,
-  FORKINATOR_HEIGHT_PX,
-  FORKINATOR_WIDTH_PX,
-  readForkinatorPosition,
-  resolveForkinatorPosition,
-  writeForkinatorPosition,
-  type ForkinatorBounds,
-  type ForkinatorPosition,
-} from '../../lib/forkinator/position';
+  appColumnSideInset,
+  FORKINATOR_CLOUD_AUTO_COLLAPSE_MS,
+  FORKINATOR_PINNED_HEIGHT_PX,
+  FORKINATOR_PINNED_HIT_HEIGHT_PX,
+  FORKINATOR_PINNED_HIT_PAD_LEFT_PX,
+  FORKINATOR_PINNED_HIT_WIDTH_PX,
+  FORKINATOR_PINNED_WIDTH_PX,
+  forkinatorThinkDots,
+  isForkinatorTabRoute,
+  pinnedForkinatorPosition,
+  resolvePinnedForkinatorTap,
+} from '../../lib/forkinator/pinnedDock';
 import { layoutScannerPrompt } from '../../lib/forkinator/scannerPromptLayout';
 import {
   FORKINATOR_SCANNER_PROMPT_AUTO_SHOW_DELAY_MS,
@@ -100,20 +88,12 @@ import {
   resolveForkinatorMascotTapAction,
   shouldAutoShowForkinatorScannerPrompt,
 } from '../../lib/forkinator/scannerNudgeCooldown';
-import {
-  FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS,
-  isForkinatorTapRelease,
-} from '../../lib/forkinator/tapGesture';
-import {
-  forkinatorDragSurfaceWebStyle,
-  forkinatorMascotImageWebStyle,
-} from '../../lib/forkinator/webTouchStyle';
+import { forkinatorMascotImageWebStyle } from '../../lib/forkinator/webTouchStyle';
 import {
   resolveForkinatorMascotPose,
   type ForkinatorMascotPose,
 } from '../../lib/forkinator/forkinatorPose';
 import { ForkinatorScannerPrompt } from './ForkinatorScannerPrompt';
-import { ForkInRoadPrompt } from './ForkInRoadPrompt';
 import { ForkInRoadQuizSheet } from './ForkInRoadQuizSheet';
 import { AskForkySheet } from './AskForkySheet';
 import {
@@ -134,7 +114,12 @@ import {
 import {
   markForkInRoadPromptEngaged,
 } from '../../lib/forkinator/forkInRoadPrompt';
-import { FORKINATOR_FORK_IN_ROAD_MESSAGE } from '../../lib/forkinator/forkInRoadPromptCopy';
+import {
+  FORKINATOR_FORK_IN_ROAD_A11Y_LABEL,
+  FORKINATOR_FORK_IN_ROAD_BUTTON_A11Y_LABEL,
+  FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL,
+  FORKINATOR_FORK_IN_ROAD_MESSAGE,
+} from '../../lib/forkinator/forkInRoadPromptCopy';
 import { buildForkInRoadCandidateRows } from '../../lib/forkinator/forkInRoadQuiz';
 import { subscribeForkInRoadQuizRequest } from '../../lib/forkinator/forkInRoadQuizRequest';
 import { filterRecipesTabRowsForDietPrefs } from '../../lib/diet/filterRows';
@@ -156,14 +141,6 @@ const FORKINATOR_MASCOT_POSE_SOURCES: Record<ForkinatorMascotPose, number> = {
 };
 
 const IS_WEB = Platform.OS === 'web';
-
-type PointerTrack = {
-  pointerId: number;
-  startPageX: number;
-  startPageY: number;
-  startedAt: number;
-  maxDistance: number;
-};
 
 export function ForkinatorOverlay() {
   const insets = useSafeAreaInsets();
@@ -207,7 +184,6 @@ export function ForkinatorOverlay() {
     }),
     [authReady, demoMode, profile.plan, profile.role, profileReady, session],
   );
-  const [dragPosition, setDragPosition] = useState<ForkinatorPosition | null>(null);
   const [greetingPromptVisible, setGreetingPromptVisible] = useState(false);
   const [scannerPromptVisible, setScannerPromptVisible] = useState(false);
   const [expirationPromptVisible, setExpirationPromptVisible] = useState(false);
@@ -222,15 +198,9 @@ export function ForkinatorOverlay() {
   const [mascotImageLoaded, setMascotImageLoaded] = useState(false);
   const [expirationPromptItems, setExpirationPromptItems] = useState<PantryItem[]>([]);
   const [tipsAutoShowEpoch, setTipsAutoShowEpoch] = useState(0);
-  const positionRef = useRef<ForkinatorPosition | null>(null);
-  const dragOrigin = useRef<ForkinatorPosition>({ x: 0, y: 0 });
-  const pressStartedAt = useRef(0);
-  const pointerTrackRef = useRef<PointerTrack | null>(null);
-  const dragSurfaceRef = useRef<View>(null);
   const greetingAutoShowStartedRef = useRef(false);
   const expirationAutoShowStartedRef = useRef(false);
   const scannerAutoShowStartedRef = useRef(false);
-  const lastPointerActivateAtRef = useRef(0);
   const autoShowPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blockScannerThisSessionRef = useRef(false);
   const greetingPromptVisibleRef = useRef(false);
@@ -294,20 +264,6 @@ export function ForkinatorOverlay() {
     return true;
   }, [visibleAutoPromptKind]);
 
-  const bounds: ForkinatorBounds = useMemo(
-    () => ({
-      width,
-      height,
-      insetTop: insets.top,
-      insetRight: insets.right,
-      insetBottom: insets.bottom,
-      insetLeft: insets.left,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
-    }),
-    [height, insets.bottom, insets.left, insets.right, insets.top, width],
-  );
-
   const isGroceryScreen =
     pathname === '/grocery' ||
     pathname.endsWith('/grocery') ||
@@ -319,32 +275,14 @@ export function ForkinatorOverlay() {
     pathname === '/(tabs)' ||
     pathname.endsWith('/(tabs)');
 
-  useEffect(() => {
-    if (width <= 0 || height <= 0) return;
-    if (!readForkinatorPosition()) return;
-    resolveForkinatorPosition(bounds);
-  }, [bounds, height, tipsAutoShowEpoch, width]);
-
-  const persistedPosition = useMemo((): ForkinatorPosition | null => {
-    if (width <= 0 || height <= 0) return null;
-    const stored = readForkinatorPosition();
-    if (!stored) return null;
-    return clampForkinatorPosition(stored, bounds);
-  }, [bounds, height, tipsAutoShowEpoch, width]);
-
-  const tabDefaultPosition = useMemo(
-    () =>
-      width > 0 && height > 0
-        ? clampForkinatorPosition(defaultForkinatorPositionForTab(bounds, isHomeScreen), bounds)
-        : null,
-    [bounds, height, isHomeScreen, width],
+  // Forky is pinned in the tab screens' top bar, where the round logo used to be. He does not
+  // move or drag, and he stays off full-screen pages (they have a back button in that corner).
+  const onTabRoute = isForkinatorTabRoute(pathname);
+  const columnInset = appColumnSideInset(width);
+  const position = useMemo(
+    () => (onTabRoute && width > 0 && height > 0 ? pinnedForkinatorPosition(width, insets.left) : null),
+    [height, insets.left, onTabRoute, width],
   );
-
-  const position = dragPosition ?? persistedPosition ?? tabDefaultPosition;
-
-  useEffect(() => {
-    positionRef.current = position;
-  }, [position]);
 
   useEffect(() => {
     greetingPromptVisibleRef.current = greetingPromptVisible;
@@ -404,7 +342,6 @@ export function ForkinatorOverlay() {
       setExpirationPromptItems([]);
       setRestockPromptMessage('');
       setRestockUndoLines([]);
-      setDragPosition(null);
       setTipsAutoShowEpoch((epoch) => epoch + 1);
     });
   }, []);
@@ -611,6 +548,54 @@ export function ForkinatorOverlay() {
     setForkInRoadExpanded(false);
   }, []);
 
+  /**
+   * Which message Forky has right now, if any (one at a time, same order as before).
+   * Its cloud opens under him, folds away by itself after a few seconds, and leaves two small
+   * think bubbles at his feet; tapping him opens it again.
+   */
+  const shownPrompt: ForkinatorAutoPromptKind | null = !forkinatorUiReady
+    ? null
+    : greetingPromptVisible
+      ? 'greeting'
+      : expirationPromptVisible && !restockPromptVisible
+        ? 'expiration'
+        : restockPromptVisible
+          ? 'restock'
+          : aisleSortPromptVisible
+            ? 'aisleSort'
+            : scannerPromptVisible
+              ? 'scanner'
+              : null;
+  const [cloudOpen, setCloudOpen] = useState(false);
+  const [cloudPrompt, setCloudPrompt] = useState<ForkinatorAutoPromptKind | null>(null);
+  if (cloudPrompt !== shownPrompt) {
+    // A new message opens its cloud (adjusted during render, not in an effect).
+    setCloudPrompt(shownPrompt);
+    setCloudOpen(shownPrompt != null);
+  }
+
+  useEffect(() => {
+    if (!shownPrompt || !cloudOpen) return;
+    const timer = setTimeout(() => setCloudOpen(false), FORKINATOR_CLOUD_AUTO_COLLAPSE_MS);
+    return () => clearTimeout(timer);
+  }, [cloudOpen, shownPrompt]);
+
+  useEffect(() => {
+    if (!forkInRoadExpanded) return;
+    const timer = setTimeout(() => setForkInRoadExpanded(false), FORKINATOR_CLOUD_AUTO_COLLAPSE_MS);
+    return () => clearTimeout(timer);
+  }, [forkInRoadExpanded]);
+
+  // While the first-time tour is open Forky's own clouds and bubbles stay out of its way.
+  const tutorialActive = useTutorialState().active;
+
+  /** Think bubbles: Forky has something to say and its cloud is folded away. */
+  const thinkDotsVisible =
+    forkinatorUiReady &&
+    !tutorialActive &&
+    ((shownPrompt != null && !cloudOpen) ||
+      (shownPrompt == null && forkInRoadPromptVisible && !forkInRoadExpanded));
+
   const handleMascotImageLoad = useCallback(() => {
     setMascotImageLoaded(true);
   }, []);
@@ -620,35 +605,38 @@ export function ForkinatorOverlay() {
     return layoutScannerPrompt({
       mascotX: position.x,
       mascotY: position.y,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
+      mascotWidth: FORKINATOR_PINNED_WIDTH_PX,
+      mascotHeight: FORKINATOR_PINNED_HEIGHT_PX,
+      preferBelow: true,
       screenWidth: width,
       screenHeight: height,
       insetTop: insets.top,
-      insetRight: insets.right,
+      insetRight: insets.right + columnInset,
       insetBottom: insets.bottom,
-      insetLeft: insets.left,
+      insetLeft: insets.left + columnInset,
       message: FORKINATOR_GREETING_MESSAGE,
     });
-  }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
+  }, [columnInset, height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 
   const expirationPromptLayout = useMemo(() => {
     if (!position || expirationPromptItems.length === 0) return null;
     return layoutScannerPrompt({
       mascotX: position.x,
       mascotY: position.y,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
+      mascotWidth: FORKINATOR_PINNED_WIDTH_PX,
+      mascotHeight: FORKINATOR_PINNED_HEIGHT_PX,
+      preferBelow: true,
       screenWidth: width,
       screenHeight: height,
       insetTop: insets.top,
-      insetRight: insets.right,
+      insetRight: insets.right + columnInset,
       insetBottom: insets.bottom,
-      insetLeft: insets.left,
+      insetLeft: insets.left + columnInset,
       message: expirationExpirationMessage,
       includeActionButton: true,
     });
   }, [
+    columnInset,
     expirationExpirationMessage,
     expirationPromptItems.length,
     height,
@@ -665,38 +653,39 @@ export function ForkinatorOverlay() {
     return layoutScannerPrompt({
       mascotX: position.x,
       mascotY: position.y,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
+      mascotWidth: FORKINATOR_PINNED_WIDTH_PX,
+      mascotHeight: FORKINATOR_PINNED_HEIGHT_PX,
+      preferBelow: true,
       screenWidth: width,
       screenHeight: height,
       insetTop: insets.top,
-      insetRight: insets.right,
+      insetRight: insets.right + columnInset,
       insetBottom: insets.bottom,
-      insetLeft: insets.left,
+      insetLeft: insets.left + columnInset,
       message: FORKINATOR_AISLE_SORT_MESSAGE,
       includeActionButton: true,
-      preferAboveBeforeSide: height >= 700,
-      preferSideOverAbove: height < 700,
     });
-  }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
+  }, [columnInset, height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 
   const restockPromptLayout = useMemo(() => {
     if (!position || !restockPromptMessage) return null;
     return layoutScannerPrompt({
       mascotX: position.x,
       mascotY: position.y,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
+      mascotWidth: FORKINATOR_PINNED_WIDTH_PX,
+      mascotHeight: FORKINATOR_PINNED_HEIGHT_PX,
+      preferBelow: true,
       screenWidth: width,
       screenHeight: height,
       insetTop: insets.top,
-      insetRight: insets.right,
+      insetRight: insets.right + columnInset,
       insetBottom: insets.bottom,
-      insetLeft: insets.left,
+      insetLeft: insets.left + columnInset,
       message: restockPromptMessage,
       includeActionButton: true,
     });
   }, [
+    columnInset,
     height,
     insets.bottom,
     insets.left,
@@ -707,58 +696,43 @@ export function ForkinatorOverlay() {
     width,
   ]);
 
-  const forkInRoadPillLayout = useMemo(() => {
-    if (!position) return null;
-    return layoutForkInRoadPill({
-      mascotX: position.x,
-      mascotY: position.y,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
-      screenWidth: width,
-      screenHeight: height,
-      insetTop: insets.top,
-      insetRight: insets.right,
-      insetBottom: insets.bottom,
-      insetLeft: insets.left,
-      pillWidth: FORK_IN_ROAD_PILL_MIN_WIDTH_PX,
-    });
-  }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
-
   const forkInRoadCloudLayout = useMemo(() => {
     if (!position) return null;
     return layoutScannerPrompt({
       mascotX: position.x,
       mascotY: position.y,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
+      mascotWidth: FORKINATOR_PINNED_WIDTH_PX,
+      mascotHeight: FORKINATOR_PINNED_HEIGHT_PX,
+      preferBelow: true,
       screenWidth: width,
       screenHeight: height,
       insetTop: insets.top,
-      insetRight: insets.right,
+      insetRight: insets.right + columnInset,
       insetBottom: insets.bottom,
-      insetLeft: insets.left,
+      insetLeft: insets.left + columnInset,
       message: FORKINATOR_FORK_IN_ROAD_MESSAGE,
       includeActionButton: true,
     });
-  }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
+  }, [columnInset, height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 
   const scannerPromptLayout = useMemo(() => {
     if (!position) return null;
     return layoutScannerPrompt({
       mascotX: position.x,
       mascotY: position.y,
-      mascotWidth: FORKINATOR_WIDTH_PX,
-      mascotHeight: FORKINATOR_HEIGHT_PX,
+      mascotWidth: FORKINATOR_PINNED_WIDTH_PX,
+      mascotHeight: FORKINATOR_PINNED_HEIGHT_PX,
+      preferBelow: true,
       screenWidth: width,
       screenHeight: height,
       insetTop: insets.top,
-      insetRight: insets.right,
+      insetRight: insets.right + columnInset,
       insetBottom: insets.bottom,
-      insetLeft: insets.left,
+      insetLeft: insets.left + columnInset,
       message: FORKINATOR_SCANNER_NUDGE_MESSAGE,
       includeCameraButton: true,
     });
-  }, [height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
+  }, [columnInset, height, insets.bottom, insets.left, insets.right, insets.top, position, width]);
 
   const handleScannerCameraPress = useCallback(() => {
     setScannerPromptVisible(false);
@@ -821,7 +795,7 @@ export function ForkinatorOverlay() {
     setForkInRoadQuizVisible(true);
   }, []);
 
-  // Home "Help me pick" card opens this same quiz.
+  // Any screen can ask for this same quiz (the Home card that did was removed 2026-10-10).
   useEffect(
     () => subscribeForkInRoadQuizRequest(handleForkInRoadHelpPress),
     [handleForkInRoadHelpPress],
@@ -832,7 +806,7 @@ export function ForkinatorOverlay() {
     router.push({ pathname: '/', params: { recipeId: row.recipe.id } });
   }, []);
 
-  // Ask Forky (AI chat): tapping the floating Forky opens it. Off for customers until the
+  // Ask Forky (AI chat): tapping Forky in the top bar opens it. Off for customers until the
   // switch is on; admin accounts can try it first.
   const askForkyAvailable = (featureFlags.askForky || profile.role === 'admin') && !demoMode;
   const [askForkyOpen, setAskForkyOpen] = useState(false);
@@ -841,6 +815,21 @@ export function ForkinatorOverlay() {
   }, []);
 
   const handleMascotActivate = useCallback(() => {
+    const pinnedTap = resolvePinnedForkinatorTap({
+      promptShowing: shownPrompt != null,
+      cloudOpen,
+      forkInRoadPromptVisible,
+      forkInRoadExpanded,
+      askForkyAvailable,
+    });
+    if (pinnedTap === 'reopenCloud') {
+      setCloudOpen(true);
+      return;
+    }
+    if (pinnedTap === 'openForkInRoadCloud') {
+      setForkInRoadExpanded(true);
+      return;
+    }
     const action = resolveForkinatorMascotTapAction({
       greetingPromptVisible: greetingPromptVisibleRef.current,
       expirationPromptVisible: expirationPromptVisibleRef.current,
@@ -877,154 +866,17 @@ export function ForkinatorOverlay() {
       return;
     }
     // No active prompt: without Ask Forky, tapping Forky does nothing.
-  }, [askForkyAvailable, collapseForkInRoadPrompt, forkInRoadExpanded]);
-
-  const applyDragDelta = useCallback(
-    (dx: number, dy: number) => {
-      const base = dragOrigin.current;
-      const next = clampForkinatorPosition({ x: base.x + dx, y: base.y + dy }, bounds);
-      setDragPosition(next);
-    },
-    [bounds],
-  );
-
-  const finishInteraction = useCallback(
-    (dx: number, dy: number, durationMs: number) => {
-      const base = dragOrigin.current;
-      const next = clampForkinatorPosition({ x: base.x + dx, y: base.y + dy }, bounds);
-      dragOrigin.current = next;
-      setDragPosition(next);
-      if (!isForkinatorTapRelease(dx, dy, durationMs)) {
-        writeForkinatorPosition(next);
-      }
-
-      if (isForkinatorTapRelease(dx, dy, durationMs)) {
-        lastPointerActivateAtRef.current = Date.now();
-        handleMascotActivate();
-      }
-    },
-    [bounds, handleMascotActivate],
-  );
-
-  const panResponder = useMemo(() => {
-    if (IS_WEB) {
-      return PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: () => false,
-      });
-    }
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        pressStartedAt.current = Date.now();
-        const current =
-          positionRef.current ?? defaultForkinatorPositionForTab(bounds, isHomeScreen);
-        dragOrigin.current = current;
-      },
-      onPanResponderMove: (_event, gesture) => {
-        applyDragDelta(gesture.dx, gesture.dy);
-      },
-      onPanResponderRelease: (_event, gesture) => {
-        const durationMs = Date.now() - pressStartedAt.current;
-        finishInteraction(gesture.dx, gesture.dy, durationMs);
-      },
-      onPanResponderTerminationRequest: () => false,
-    });
-  }, [applyDragDelta, bounds, finishInteraction, isHomeScreen]);
-
-  const endPointerInteraction = useCallback(
-    (track: PointerTrack, pageX: number, pageY: number) => {
-      const dx = pageX - track.startPageX;
-      const dy = pageY - track.startPageY;
-      const durationMs = Date.now() - track.startedAt;
-      finishInteraction(dx, dy, durationMs);
-      pointerTrackRef.current = null;
-    },
-    [finishInteraction],
-  );
-
-  const onPointerDown: NonNullable<ViewProps['onPointerDown']> = useCallback((event) => {
-    if (!IS_WEB) return;
-    const native = event.nativeEvent;
-    const pointerId = native.pointerId ?? 0;
-    pressStartedAt.current = Date.now();
-    const current =
-      positionRef.current ?? defaultForkinatorPositionForTab(bounds, isHomeScreen);
-    dragOrigin.current = current;
-    pointerTrackRef.current = {
-      pointerId,
-      startPageX: native.pageX,
-      startPageY: native.pageY,
-      startedAt: Date.now(),
-      maxDistance: 0,
-    };
-    const node = dragSurfaceRef.current as unknown as {
-      setPointerCapture?: (id: number) => void;
-    } | null;
-    node?.setPointerCapture?.(pointerId);
-    event.preventDefault();
-  }, [bounds, isHomeScreen]);
-
-  const onPointerMove: NonNullable<ViewProps['onPointerMove']> = useCallback((event) => {
-    if (!IS_WEB) return;
-    const track = pointerTrackRef.current;
-    if (!track) return;
-    const native = event.nativeEvent;
-    if (native.pointerId !== track.pointerId) return;
-    const dx = native.pageX - track.startPageX;
-    const dy = native.pageY - track.startPageY;
-    track.maxDistance = Math.max(track.maxDistance, Math.hypot(dx, dy));
-    applyDragDelta(dx, dy);
-    event.preventDefault();
-  }, [applyDragDelta]);
-
-  const onPointerUp: NonNullable<ViewProps['onPointerUp']> = useCallback((event) => {
-    if (!IS_WEB) return;
-    const track = pointerTrackRef.current;
-    if (!track) return;
-    const native = event.nativeEvent;
-    if (native.pointerId !== track.pointerId) return;
-    endPointerInteraction(track, native.pageX, native.pageY);
-    event.preventDefault();
-  }, [endPointerInteraction]);
-
-  const onPointerCancel: NonNullable<ViewProps['onPointerCancel']> = useCallback((event) => {
-    if (!IS_WEB) return;
-    const track = pointerTrackRef.current;
-    if (!track) return;
-    endPointerInteraction(track, event.nativeEvent.pageX, event.nativeEvent.pageY);
-  }, [endPointerInteraction]);
-
-  const onKeyDown = useCallback(
-    (event: { nativeEvent: { key: string }; preventDefault: () => void }) => {
-      if (!IS_WEB) return;
-      const key = event.nativeEvent.key;
-      if (key !== 'Enter' && key !== ' ' && key !== 'Spacebar') return;
-      event.preventDefault();
-      handleMascotActivate();
-    },
-    [handleMascotActivate],
-  );
-
-  const onWebClick = useCallback(
-    (event: { preventDefault: () => void }) => {
-      if (!IS_WEB) return;
-      if (pointerTrackRef.current) return;
-      const sincePointerActivate = Date.now() - lastPointerActivateAtRef.current;
-      if (sincePointerActivate < FORKINATOR_WEB_POINTER_ACTIVATE_DEDUPE_MS) {
-        event.preventDefault();
-        return;
-      }
-      event.preventDefault();
-      handleMascotActivate();
-    },
-    [handleMascotActivate],
-  );
+  }, [
+    askForkyAvailable,
+    cloudOpen,
+    collapseForkInRoadPrompt,
+    forkInRoadExpanded,
+    forkInRoadPromptVisible,
+    shownPrompt,
+  ]);
 
   if (!position || width <= 0 || height <= 0) return null;
 
-  const webDragStyle = forkinatorDragSurfaceWebStyle();
   const imageWebStyle = forkinatorMascotImageWebStyle();
   const mascotPose = resolveForkinatorMascotPose({
     expirationPromptVisible,
@@ -1034,18 +886,6 @@ export function ForkinatorOverlay() {
     scannerPromptVisible,
     greetingPromptVisible,
   });
-  const dragInteractionProps: ViewProps = IS_WEB
-    ? ({
-        onPointerDown,
-        onPointerMove,
-        onPointerUp,
-        onPointerCancel,
-        onKeyDown,
-        onClick: onWebClick,
-        tabIndex: 0,
-      } as ViewProps & { onClick?: typeof onWebClick; tabIndex?: number })
-    : panResponder.panHandlers;
-
   return (
     <View
       pointerEvents="box-none"
@@ -1055,7 +895,7 @@ export function ForkinatorOverlay() {
       {greetingPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={greetingPromptLayout}
-          visible={greetingPromptVisible && forkinatorUiReady}
+          visible={shownPrompt === 'greeting' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={FORKINATOR_GREETING_MESSAGE}
           accessibilityLabel={FORKINATOR_GREETING_A11Y_LABEL}
@@ -1065,12 +905,7 @@ export function ForkinatorOverlay() {
       {restockPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={restockPromptLayout}
-          visible={
-            forkinatorUiReady &&
-            restockPromptVisible &&
-            !greetingPromptVisible &&
-            !expirationPromptVisible
-          }
+          visible={shownPrompt === 'restock' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={restockPromptMessage}
           accessibilityLabel={FORKINATOR_RESTOCK_PROMPT_A11Y_LABEL}
@@ -1085,15 +920,7 @@ export function ForkinatorOverlay() {
       {expirationPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={expirationPromptLayout}
-          visible={
-            forkinatorUiReady &&
-            expirationPromptVisible &&
-            !greetingPromptVisible &&
-            !restockPromptVisible &&
-            !aisleSortPromptVisible &&
-            !scannerPromptVisible &&
-            !forkInRoadPromptVisible
-          }
+          visible={shownPrompt === 'expiration' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={expirationExpirationMessage}
           accessibilityLabel={FORKINATOR_EXPIRATION_PROMPT_A11Y_LABEL}
@@ -1108,15 +935,7 @@ export function ForkinatorOverlay() {
       {aisleSortPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={aisleSortPromptLayout}
-          visible={
-            forkinatorUiReady &&
-            aisleSortPromptVisible &&
-            !greetingPromptVisible &&
-            !expirationPromptVisible &&
-            !restockPromptVisible &&
-            !scannerPromptVisible &&
-            !forkInRoadPromptVisible
-          }
+          visible={shownPrompt === 'aisleSort' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={FORKINATOR_AISLE_SORT_MESSAGE}
           accessibilityLabel={FORKINATOR_AISLE_SORT_A11Y_LABEL}
@@ -1128,30 +947,25 @@ export function ForkinatorOverlay() {
           }}
         />
       ) : null}
-      {forkInRoadPillLayout && forkInRoadCloudLayout ? (
-        <ForkInRoadPrompt
-          pillLayout={forkInRoadPillLayout}
-          cloudLayout={forkInRoadCloudLayout}
-          expanded={forkInRoadExpanded}
-          visible={forkInRoadPromptVisible}
+      {forkInRoadCloudLayout ? (
+        <ForkinatorScannerPrompt
+          layout={forkInRoadCloudLayout}
+          visible={forkInRoadPromptVisible && forkInRoadExpanded && !tutorialActive}
           reduceMotion={reduceMotion}
-          onExpand={() => setForkInRoadExpanded(true)}
-          onCollapse={collapseForkInRoadPrompt}
-          onHelpPress={handleForkInRoadHelpPress}
+          message={FORKINATOR_FORK_IN_ROAD_MESSAGE}
+          accessibilityLabel={FORKINATOR_FORK_IN_ROAD_A11Y_LABEL}
+          onPress={collapseForkInRoadPrompt}
+          actionButton={{
+            label: FORKINATOR_FORK_IN_ROAD_BUTTON_LABEL,
+            accessibilityLabel: FORKINATOR_FORK_IN_ROAD_BUTTON_A11Y_LABEL,
+            onPress: handleForkInRoadHelpPress,
+          }}
         />
       ) : null}
       {scannerPromptLayout ? (
         <ForkinatorScannerPrompt
           layout={scannerPromptLayout}
-          visible={
-            forkinatorUiReady &&
-            scannerPromptVisible &&
-            !greetingPromptVisible &&
-            !expirationPromptVisible &&
-            !restockPromptVisible &&
-            !aisleSortPromptVisible &&
-            !forkInRoadPromptVisible
-          }
+          visible={shownPrompt === 'scanner' && cloudOpen && !tutorialActive}
           reduceMotion={reduceMotion}
           message={FORKINATOR_SCANNER_NUDGE_MESSAGE}
           accessibilityLabel={FORKINATOR_SCANNER_NUDGE_A11Y_LABEL}
@@ -1181,14 +995,33 @@ export function ForkinatorOverlay() {
           onHelpMePick={handleForkInRoadHelpPress}
         />
       ) : null}
+      {thinkDotsVisible
+        ? forkinatorThinkDots(position).map((dot) => (
+            <View
+              key={dot.size}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: dot.left,
+                top: dot.top,
+                width: dot.size,
+                height: dot.size,
+                borderRadius: dot.size / 2,
+                backgroundColor: '#FFFFFF',
+                borderWidth: 1,
+                borderColor: THEME.primary,
+              }}
+            />
+          ))
+        : null}
       <View
         pointerEvents="box-none"
         style={{
           position: 'absolute',
           left: position.x,
           top: position.y,
-          width: FORKINATOR_WIDTH_PX,
-          height: FORKINATOR_HEIGHT_PX,
+          width: FORKINATOR_PINNED_WIDTH_PX,
+          height: FORKINATOR_PINNED_HEIGHT_PX,
         }}
       >
         {(Object.keys(FORKINATOR_MASCOT_POSE_SOURCES) as ForkinatorMascotPose[]).map((pose) => (
@@ -1200,8 +1033,8 @@ export function ForkinatorOverlay() {
                 position: 'absolute',
                 left: 0,
                 top: 0,
-                width: FORKINATOR_WIDTH_PX,
-                height: FORKINATOR_HEIGHT_PX,
+                width: FORKINATOR_PINNED_WIDTH_PX,
+                height: FORKINATOR_PINNED_HEIGHT_PX,
                 opacity: pose === mascotPose ? 1 : 0,
               },
               imageWebStyle,
@@ -1214,21 +1047,17 @@ export function ForkinatorOverlay() {
             {...(IS_WEB ? ({ draggable: false } as object) : null)}
           />
         ))}
-        <View
-          ref={dragSurfaceRef}
-          {...dragInteractionProps}
-          accessible
+        <Pressable
+          onPress={handleMascotActivate}
           accessibilityRole="button"
           accessibilityLabel={FORKINATOR_ACCESSIBILITY_LABEL}
           accessibilityHint={FORKINATOR_ACCESSIBILITY_HINT}
-          focusable
           style={{
             position: 'absolute',
-            left: FORKINATOR_HIT_INSET_LEFT_PX,
-            top: FORKINATOR_HIT_INSET_TOP_PX,
-            width: FORKINATOR_HIT_WIDTH_PX,
-            height: FORKINATOR_HIT_HEIGHT_PX,
-            ...webDragStyle,
+            left: -FORKINATOR_PINNED_HIT_PAD_LEFT_PX,
+            top: 0,
+            width: FORKINATOR_PINNED_HIT_WIDTH_PX,
+            height: FORKINATOR_PINNED_HIT_HEIGHT_PX,
           }}
         />
       </View>

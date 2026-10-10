@@ -8,6 +8,7 @@ import { StoresNearbyList } from '../../components/stores/StoresNearbyList';
 import { STORES_TAB_COPY } from '../../config/storesTab';
 import { THEME } from '../../config/appConfig';
 import { useApp } from '../../context/AppContext';
+import { useTutorialTarget } from '../../hooks/useTutorial';
 import type { StoreLocation } from '../../lib/deals/types';
 import { useNearbyStoresList } from '../../lib/stores/useNearbyStoresList';
 import {
@@ -21,6 +22,8 @@ export default function StoresScreen() {
   const { profile } = useApp();
   const stores = useNearbyStoresList(profile);
   const [selectedStore, setSelectedStore] = useState<StoreLocation | null>(null);
+  // The first-time tour lights up the store search.
+  const tutorialSearchRef = useTutorialTarget('stores-search');
 
   const listPhase = {
     loadingStores: stores.loadingStores,
@@ -64,7 +67,7 @@ export default function StoresScreen() {
           />
         ) : null}
 
-        <View className="mt-3.5 h-12 flex-row items-center rounded-full border border-border bg-card px-4">
+        <View ref={tutorialSearchRef} className="mt-3.5 h-12 flex-row items-center rounded-full border border-border bg-card px-4">
           <Ionicons name="search" size={20} color={THEME.muted} />
           <TextInput
             value={stores.query}

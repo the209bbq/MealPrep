@@ -4,6 +4,7 @@ import { Alert, Pressable, Text, View } from 'react-native';
 import { THEME } from '../config/appConfig';
 import { PANTRY_SCAN_UI_COPY } from '../config/pantryScan';
 import { scanCardContent } from '../lib/pantry/scanCardContent';
+import { useTutorialTarget } from '../hooks/useTutorial';
 import type { PantryPhotoScanGateInput } from '../lib/guest/pantryPhotoScanGate';
 import type { PhotoScanAccessInput } from '../lib/plans/photoScanAccess';
 import type { PreparedPantryImage } from '../lib/pantryVision/types';
@@ -46,6 +47,8 @@ export function PantryStorageScanButtons({
   variant = 'shelf',
 }: PantryStorageScanButtonsProps) {
   const card = scanCardContent(variant);
+  // The first-time tour lights this card up.
+  const tutorialRef = useTutorialTarget(variant === 'receipt' ? 'pantry-receipt' : 'pantry-scan');
   function openSourceMenu() {
     Alert.alert(PANTRY_SCAN_UI_COPY.choosePhotoSourceTitle, PANTRY_SCAN_UI_COPY.choosePhotoSourceMessage, [
       {
@@ -71,7 +74,7 @@ export function PantryStorageScanButtons({
   }, [autoOpenScanMode, disabled, onAutoOpenScanHandled, onRequestNativeScan, scanLocation]);
 
   return (
-    <View>
+    <View ref={tutorialRef}>
       <Pressable
         disabled={disabled}
         onPress={openSourceMenu}

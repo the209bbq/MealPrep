@@ -28,6 +28,8 @@ import { pickProfilePhotoFromLibrary } from './pickProfilePhoto';
 import { HomeZipField } from './HomeZipField';
 import { formatHomeZipInput, validateOptionalHomeZip } from '../../lib/profile/homeZip';
 import { resetForkinatorTips } from '../../lib/forkinator/resetForkinatorTips';
+import { TUTORIAL_COPY } from '../../config/tutorial';
+import { canOpenTutorialFromAccount, startTutorial } from '../../lib/tutorial/tutorialStore';
 
 type AccountSheetProps = {
   visible: boolean;
@@ -106,6 +108,13 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
   function runResetForkyTips() {
     resetForkinatorTips();
     setStatus(ACCOUNT_SHEET_COPY.resetForkyTipsDoneToast);
+  }
+
+  /** The tour runs over the app's own screens, so this sheet closes first. */
+  function openTutorial() {
+    onClose();
+    router.navigate('/');
+    startTutorial();
   }
 
   function confirmResetForkyTips() {
@@ -280,6 +289,20 @@ function AccountSheetBody({ onClose }: { onClose: () => void }) {
                 </Text>
               </Pressable>
             </View>
+
+            {canOpenTutorialFromAccount({ isAdmin }) ? (
+              <View className="mt-4 rounded-2xl border border-border bg-card px-4 py-3">
+                <Text className="text-sm font-bold text-ink">{TUTORIAL_COPY.accountTitle}</Text>
+                <Text className="mt-1 text-xs text-muted">{TUTORIAL_COPY.accountBody}</Text>
+                <Pressable
+                  onPress={openTutorial}
+                  className="mt-3 min-h-[44px] justify-center rounded-xl border border-border bg-paper px-4 py-3"
+                  accessibilityRole="button"
+                >
+                  <Text className="text-center font-bold text-slate">{TUTORIAL_COPY.accountButton}</Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             <InstallAppBanner />
 
