@@ -25,6 +25,14 @@ export const PANTRY_SCAN_UI_COPY = {
   addAnotherPhoto: 'Add another photo',
   addAnotherPhotoBusy: 'Scanning photo…',
   noNewItemsInPhoto: 'No new items in that photo — try a different angle.',
+  /** Shown above the review list when some of what the scan found is already in the pantry. */
+  scanSummary: (found: number, already: number) =>
+    `Found ${found} item${found === 1 ? '' : 's'}: ${found - already} new, ${already} already in your pantry.`,
+  allAlreadyInPantryTitle: 'Nothing new in that photo',
+  allAlreadyInPantry: (found: number) =>
+    found === 1
+      ? 'Forky found 1 item, and it is already in your pantry.'
+      : `Forky found ${found} items, and all of them are already in your pantry.`,
   scanningPhotos: (count: number) => `Scanning ${count} photo${count === 1 ? '' : 's'}…`,
   scanningKeepGoing:
     'You can keep using the app, or add another photo. What Forky finds shows up here when it is ready.',

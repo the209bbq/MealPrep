@@ -8,6 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PANTRY_SCAN_UI_COPY } from '../config/pantryScan';
+import { summarizeScanAgainstPantry } from '../lib/pantryVision/reviewItems';
+import type { PantryItem } from '../types/mealprep';
 import {
   MAX_PARALLEL_SCANS,
   canStartAnotherScan,
@@ -76,6 +78,46 @@ assert.match(PANTRY_SCAN_UI_COPY.moreStillScanning(1), /^1 more photo is still s
 assert.match(PANTRY_SCAN_UI_COPY.moreStillScanning(2), /^2 more photos are still scanning/);
 assert.match(PANTRY_SCAN_UI_COPY.tooManyScans(4), /^4 photos are already scanning/);
 
+// --- A re-scan says what it found, not just what is new ---
+const det = (name: string, confidence = 0.9) => ({
+  name,
+  quantity: 1,
+  unit: 'can',
+  category: 'dry_goods' as const,
+  confidence,
+});
+const owned = (name: string): PantryItem =>
+  ({
+    id: `p-${name}`,
+    ingredientId: name.replace(/\s+/g, '-'),
+    name,
+    category: 'dry_goods',
+    quantity: 1,
+    unit: 'can',
+    location: 'pantry',
+    updatedAt: '2026-10-09T00:00:00.000Z',
+  }) as unknown as PantryItem;
+
+const scanFound = [det('black olives'), det('green beans'), det('corn'), det('tomato soup'), det('mystery tin', 0.1)];
+// Empty pantry: everything usable is new. The 0.1-confidence row is junk and is not counted as found.
+assert.deepEqual(summarizeScanAgainstPantry(scanFound, []), { found: 4, alreadyInPantry: 0, fresh: 4 });
+// Two already owned: found stays 4, only 2 are new.
+assert.deepEqual(summarizeScanAgainstPantry(scanFound, [owned('black olives'), owned('corn')]), {
+  found: 4,
+  alreadyInPantry: 2,
+  fresh: 2,
+});
+// All owned: the scan worked, nothing is new.
+assert.deepEqual(
+  summarizeScanAgainstPantry(scanFound, [owned('black olives'), owned('corn'), owned('green beans'), owned('tomato soup')]),
+  { found: 4, alreadyInPantry: 4, fresh: 0 },
+);
+assert.deepEqual(summarizeScanAgainstPantry([], [owned('corn')]), { found: 0, alreadyInPantry: 0, fresh: 0 });
+
+assert.equal(PANTRY_SCAN_UI_COPY.scanSummary(36, 25), 'Found 36 items: 11 new, 25 already in your pantry.');
+assert.equal(PANTRY_SCAN_UI_COPY.allAlreadyInPantry(25), 'Forky found 25 items, and all of them are already in your pantry.');
+assert.equal(PANTRY_SCAN_UI_COPY.allAlreadyInPantry(1), 'Forky found 1 item, and it is already in your pantry.');
+
 // --- The pantry screen is wired the background way ---
 const pantry = read('app/(tabs)/pantry.tsx');
 assert.doesNotMatch(pantry, /setPhase\('loading'\)/, 'a scan no longer puts the screen in a blocking loading state');
@@ -97,6 +139,15 @@ assert.doesNotMatch(uriBlock, /setPhase\(/);
 assert.match(pantry, /activeScans > 0 && phase !== 'review'/);
 assert.match(pantry, /phase === 'review' && activeScans > 0/);
 assert.match(pantry, /setScanReviewReady\(phase === 'review'\)/);
+
+// All-already-owned is reported as such, before the "nothing spotted, try a closer shot" message.
+const emptyBlock = pantry.slice(pantry.indexOf("if (placement === 'nothing-found' ||"), pantry.indexOf("setScanSummary({ found: summary.found"));
+assert.ok(
+  emptyBlock.indexOf('allAlreadyInPantry(summary.found)') > 0 &&
+    emptyBlock.indexOf('allAlreadyInPantry(summary.found)') < emptyBlock.indexOf('setScanNoItemsFound(attempt)'),
+);
+assert.match(pantry, /scanSummary\.already > 0/);
+assert.equal((pantry.match(/setScanSummary\(null\)/g) ?? []).length, 2, 'summary cleared on save and on cancel');
 
 const layout = read('app/(tabs)/_layout.tsx');
 assert.match(layout, /tabBarBadge: tab\.name === 'pantry' \? pantryBadge : undefined/);

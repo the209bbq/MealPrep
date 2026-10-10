@@ -180,6 +180,8 @@ export default function PantryScreen() {
   const [scanGuestSignInCta, setScanGuestSignInCta] = useState(false);
   const [scanNotice, setScanNotice] = useState<{ title: string; message: string } | null>(null);
   const [scanQualityWarning, setScanQualityWarning] = useState<string | null>(null);
+  /** Across the photos in the open list: how many items the scans found, and how many were already owned. */
+  const [scanSummary, setScanSummary] = useState<{ found: number; already: number } | null>(null);
   const [lastScanAttempt, setLastScanAttempt] = useState<
     | { kind: 'prepared'; prepared: PreparedPantryImage; location: PantryStorageLocation }
     | { kind: 'uri'; uri: string; location: PantryStorageLocation }
@@ -434,7 +436,7 @@ export default function PantryScreen() {
     }
 
     try {
-      const { detectionsToReviewItems } = await import('../../lib/pantryVision/reviewItems');
+      const { detectionsToReviewItems, summarizeScanAgainstPantry } = await import('../../lib/pantryVision/reviewItems');
       const result = await pantryVisionClient.analyzePantryPhoto(prepared, scanAccessToken, {
         scanLocation,
         bypassCache: options?.mergeIntoReview,
@@ -447,6 +449,7 @@ export default function PantryScreen() {
         demoMode,
         scanLocation,
       );
+      const summary = summarizeScanAgainstPantry(result.items, pantry);
       // Decided when the answer arrives, not when the photo was taken: an earlier photo may
       // have opened the list in the meantime, and this one's items then join it.
       const placement = placeScanResult({
@@ -455,8 +458,16 @@ export default function PantryScreen() {
         othersScanning: Math.max(0, activeScansRef.current - 1),
       });
       if (placement === 'merge-into-review') {
+        setScanSummary((prev) => ({
+          found: (prev?.found ?? 0) + summary.found,
+          already: (prev?.already ?? 0) + summary.alreadyInPantry,
+        }));
         if (rows.length === 0) {
-          setSaveError(PANTRY_SCAN_UI_COPY.noNewItemsInPhoto);
+          setSaveError(
+            summary.found > 0
+              ? PANTRY_SCAN_UI_COPY.allAlreadyInPantry(summary.found)
+              : PANTRY_SCAN_UI_COPY.noNewItemsInPhoto,
+          );
         } else {
           setReviewItems((prev) => {
             const merged = mergeSecondScanIntoReview(prev, result.items, pantry, recipes, scanLocation);
@@ -470,10 +481,22 @@ export default function PantryScreen() {
         return;
       }
       if (placement === 'nothing-found' || placement === 'nothing-found-quiet') {
+        if (summary.found > 0) {
+          // The scan worked: everything it saw is already owned. Say that, not "try a closer shot".
+          setScanError(null);
+          setScanErrorTitle(null);
+          setLastScanAttempt(null);
+          setScanNotice({
+            title: PANTRY_SCAN_UI_COPY.allAlreadyInPantryTitle,
+            message: PANTRY_SCAN_UI_COPY.allAlreadyInPantry(summary.found),
+          });
+          return;
+        }
         logPantryScanFailure('EMPTY_DETECTIONS');
         if (placement === 'nothing-found') setScanNoItemsFound(attempt);
         return;
       }
+      setScanSummary({ found: summary.found, already: summary.alreadyInPantry });
       clearScanFailure();
       setLastScanAttempt(attempt);
       setModelLabel(result.model);
@@ -710,6 +733,7 @@ export default function PantryScreen() {
       submitScanCorrectionsFeedback();
       setPhase('idle');
       setReviewItems([]);
+      setScanSummary(null);
       setPreviewUri(null);
       setPendingScanPhotoPath(null);
       scanSessionIdRef.current = null;
@@ -731,6 +755,7 @@ export default function PantryScreen() {
   function handleCancelReview() {
     setPhase('idle');
     setReviewItems([]);
+    setScanSummary(null);
     setPreviewUri(null);
     setPendingScanPhotoPath(null);
     scanSessionIdRef.current = null;
@@ -1081,6 +1106,14 @@ export default function PantryScreen() {
               <ActivityIndicator color={THEME.primary} />
               <Text className="min-w-0 flex-1 text-xs leading-4 text-muted">
                 {PANTRY_SCAN_UI_COPY.moreStillScanning(activeScans)}
+              </Text>
+            </View>
+          ) : null}
+
+          {phase === 'review' && scanSummary && scanSummary.already > 0 ? (
+            <View className="rounded-[18px] border border-border bg-card px-4 py-3">
+              <Text className="text-sm font-semibold text-ink">
+                {PANTRY_SCAN_UI_COPY.scanSummary(scanSummary.found, scanSummary.already)}
               </Text>
             </View>
           ) : null}

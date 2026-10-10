@@ -14,6 +14,10 @@
 //   GEMINI_THINKING_LEVEL = low | medium | high for Gemini 3 models (unset = Google's default, medium)
 //   PANTRY_VERIFY_PASS = on to run a second "what did I miss" call per scan (doubles cost; default off)
 //   PANTRY_LEGACY_SAMPLING = on to send temperature/topP to Gemini 3 models again (default off)
+//   PANTRY_THOROUGH_SCAN = auto | off | always (default auto). A thorough scan checks each zoomed
+//     crop in its own call and merges the results: about four extra calls for that photo.
+//     "auto" does it only when the first pass already found PANTRY_THOROUGH_MIN_ITEMS or more.
+//   PANTRY_THOROUGH_MIN_ITEMS = items in the first pass that mark a photo as busy (default 20)
 //
 // One log line per scan ("pantry-vision: scan ...") carries photo size, token counts and timing.
 // It never contains the user id, the photo or the item names.
@@ -301,7 +305,7 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_RETRY_BACKOFF_MS = 450;
 const GEMINI_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 503]);
 const geminiModelTimeoutMemory = new ModelTimeoutMemory();
-const PANTRY_VISION_CACHE_VERSION = 'v7';
+const PANTRY_VISION_CACHE_VERSION = 'v8';
 const PANTRY_VISION_SINGLE_PASS_MIN_ITEMS = 8;
 const PANTRY_VISION_SINGLE_PASS_MIN_AVG_CONFIDENCE = 0.72;
 const PANTRY_MAX_ITEMS = 120;
@@ -795,13 +799,23 @@ function sanitizePriceTag(raw: unknown): SanitizedPriceTag | null {
   };
 }
 
-function geminiEnumeratePrompt(scanLocation: (typeof PANTRY_STORAGE)[number], tileCount: number = 0): string {
+function geminiEnumeratePrompt(
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+  tileCount: number = 0,
+  /** Thorough scan: this call covers one zoomed crop only. Value is the crop's position, or '' if unknown. */
+  cropFocus: string | null = null,
+): string {
   const photos =
-    tileCount > 0
-      ? `You are given ${tileCount + 1} images of ONE photo: first the full photo, then ${tileCount} zoomed crops of the same photo ` +
-        'that overlap each other. Use the full photo to see the layout and the crops to read labels. ' +
-        'A product that shows in more than one image is still ONE product: list it once.\n'
-      : '';
+    cropFocus != null
+      ? 'You are given 2 images of ONE photo: first the full photo for context, then a zoomed crop of ' +
+        (cropFocus ? `its ${cropFocus} part` : 'one part of it') +
+        '. List EVERY food product visible in the ZOOMED CROP, including products cut off at its edge. ' +
+        'Do not list products that only show in the full photo outside the crop; other crops are checked separately.\n'
+      : tileCount > 0
+        ? `You are given ${tileCount + 1} images of ONE photo: first the full photo, then ${tileCount} zoomed crops of the same photo ` +
+          'that overlap each other. Use the full photo to see the layout and the crops to read labels. ' +
+          'A product that shows in more than one image is still ONE product: list it once.\n'
+        : '';
   return (
     'You inventory edible kitchen products from a photo for a home recipe app. Be complete: list EVERY food product you can see. ' +
     'Do NOT summarize, sample, or stop early.\n' +
@@ -1306,6 +1320,10 @@ function formatScanLogLine(scan: {
   ms: number;
   attempts: number;
   stats: ScanStats;
+  /** Items after the first whole-photo pass, before any thorough crop calls. */
+  firstPassItems?: number;
+  tileCalls?: number;
+  tilesOk?: number;
 }): string {
   const { stats } = scan;
   return (
@@ -1314,8 +1332,93 @@ function formatScanLogLine(scan: {
     ` images=${scan.images} imageBytes=${scan.imageBytes} ms=${scan.ms}` +
     ` calls=${stats.calls} modelsTried=${scan.attempts} emptyAnswers=${stats.emptyAnswers}` +
     ` promptTokens=${stats.promptTokens} outputTokens=${stats.outputTokens} thoughtTokens=${stats.thoughtTokens}` +
-    ` finish=${stats.lastFinishReason || 'unknown'}`
+    ` finish=${stats.lastFinishReason || 'unknown'}` +
+    ` thorough=${(scan.tileCalls ?? 0) > 0 ? 1 : 0} firstPassItems=${scan.firstPassItems ?? scan.items}` +
+    ` tileCalls=${scan.tileCalls ?? 0} tilesOk=${scan.tilesOk ?? 0}`
   );
+}
+
+// --- Thorough scan: one call per zoomed crop ---
+// Asked to list a whole busy shelf in one answer, the model stops early (36 of 100+ on the
+// owner's pantry). Asked about one crop at a time it has a quarter as much to list, so less
+// gets left out. It costs about four extra calls, so by default it runs only on busy photos.
+
+type ThoroughScanMode = 'auto' | 'off' | 'always';
+const PANTRY_THOROUGH_MIN_ITEMS_DEFAULT = 20;
+
+function parseThoroughScanMode(raw: string | undefined): ThoroughScanMode {
+  const value = (raw ?? '').trim().toLowerCase();
+  return value === 'off' || value === 'always' ? value : 'auto';
+}
+
+function parseThoroughMinItems(raw: string | undefined): number {
+  const parsed = Number.parseInt((raw ?? '').trim(), 10);
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 500 ? parsed : PANTRY_THOROUGH_MIN_ITEMS_DEFAULT;
+}
+
+function shouldRunThoroughScan(input: {
+  mode: ThoroughScanMode;
+  tileCount: number;
+  firstPassItems: number;
+  minItems: number;
+}): boolean {
+  if (input.mode === 'off') return false;
+  if (input.tileCount < 2) return false; // small photo: no crops, nothing more to look at
+  if (input.mode === 'always') return true;
+  return input.firstPassItems >= input.minItems;
+}
+
+/** One crop, checked by itself (with the full photo for context). Same-model retries only. */
+async function scanOneTile(
+  apiKey: string,
+  model: string,
+  main: GeminiImage,
+  tile: GeminiImage,
+  cropFocus: string,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+  budget: RequestTimeBudget,
+  stats: ScanStats,
+): Promise<DetectedPantryItem[] | null> {
+  let httpRetries = 0;
+  while (true) {
+    if (budget.isExhausted()) return null;
+    const result = await callPantryGeminiPass(
+      apiKey,
+      model,
+      [{ ...main, caption: 'Full photo, for context:' }, tile],
+      geminiEnumeratePrompt(scanLocation, 1, cropFocus),
+      GEMINI_MAX_OUTPUT_TOKENS,
+      budget,
+      stats,
+    );
+    if ('items' in result) return result.items;
+    if (result.error.kind === 'timeout' || !shouldRetrySameModelAfterError(result.error, httpRetries)) {
+      console.warn(`pantry-vision: thorough crop failed ${formatAttemptError(model, result.error, perCallGeminiTimeoutMs())}`);
+      return null;
+    }
+    httpRetries += 1;
+    await sleep(GEMINI_RETRY_BACKOFF_MS * httpRetries);
+  }
+}
+
+/**
+ * Checks every crop in parallel and returns what they found. A crop that fails is skipped:
+ * the first pass and the other crops still stand.
+ */
+async function runThoroughTileScans(
+  apiKey: string,
+  model: string,
+  main: GeminiImage,
+  tiles: Array<{ image: GeminiImage; position: string }>,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+  budget: RequestTimeBudget,
+  stats: ScanStats,
+): Promise<{ items: DetectedPantryItem[]; tileCalls: number; tilesOk: number }> {
+  const results = await Promise.all(
+    tiles.map((tile) => scanOneTile(apiKey, model, main, tile.image, tile.position, scanLocation, budget, stats)),
+  );
+  const ok = results.filter((items): items is DetectedPantryItem[] => items != null);
+  return { items: ok.flat(), tileCalls: tiles.length, tilesOk: ok.length };
 }
 
 const UPSTREAM_BUSY_MESSAGE =
@@ -1326,12 +1429,12 @@ async function callPantryGeminiWithFallbacks(
   images: GeminiImage[],
   scanLocation: (typeof PANTRY_STORAGE)[number],
   stats: ScanStats = new ScanStats(),
+  budget: RequestTimeBudget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS),
 ): Promise<{
   items: DetectedPantryItem[];
   model: string;
   debug: { modelAttempts: GeminiModelAttemptDebug[]; geminiPasses: number };
 }> {
-  const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
   const imageIsLarge = isLargePantryImageBase64(images[0]?.base64 ?? '');
   const candidates = orderModelsForAttempt(
     Deno.env.get('GEMINI_MODEL') ?? undefined,
@@ -1533,9 +1636,10 @@ Deno.serve(async (req) => {
     const stats = new ScanStats();
     const startedAt = Date.now();
 
+    const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
     let scan: Awaited<ReturnType<typeof callPantryGeminiWithFallbacks>>;
     try {
-      scan = await callPantryGeminiWithFallbacks(apiKey, images, imageResult.scanLocation, stats);
+      scan = await callPantryGeminiWithFallbacks(apiKey, images, imageResult.scanLocation, stats, budget);
     } catch (scanError) {
       console.warn(
         formatScanLogLine({
@@ -1552,7 +1656,32 @@ Deno.serve(async (req) => {
       );
       throw scanError;
     }
-    const { items, model, debug } = scan;
+    const { model, debug } = scan;
+    let items = scan.items;
+    const firstPassItems = items.length;
+    let thorough = { tileCalls: 0, tilesOk: 0 };
+    if (
+      shouldRunThoroughScan({
+        mode: parseThoroughScanMode(Deno.env.get('PANTRY_THOROUGH_SCAN') ?? undefined),
+        tileCount: imageResult.tiles.length,
+        firstPassItems,
+        minItems: parseThoroughMinItems(Deno.env.get('PANTRY_THOROUGH_MIN_ITEMS') ?? undefined),
+      }) &&
+      !budget.isExhausted()
+    ) {
+      const tileScan = await runThoroughTileScans(
+        apiKey,
+        model,
+        images[0],
+        imageResult.tiles.map((tile, index) => ({ image: images[index + 1], position: tile.position })),
+        imageResult.scanLocation,
+        budget,
+        stats,
+      );
+      thorough = { tileCalls: tileScan.tileCalls, tilesOk: tileScan.tilesOk };
+      // The same product seen in the whole photo and in a crop, or in two overlapping crops, is one row.
+      items = mergeItemPasses(items, tileScan.items);
+    }
     console.log(
       formatScanLogLine({
         ok: true,
@@ -1564,6 +1693,9 @@ Deno.serve(async (req) => {
         ms: Date.now() - startedAt,
         attempts: debug.modelAttempts.length,
         stats,
+        firstPassItems,
+        tileCalls: thorough.tileCalls,
+        tilesOk: thorough.tilesOk,
       }),
     );
 
@@ -1576,6 +1708,7 @@ Deno.serve(async (req) => {
         debug: {
           ...debug,
           images: images.length,
+          thorough: { ...thorough, firstPassItems },
           usage: {
             promptTokens: stats.promptTokens,
             outputTokens: stats.outputTokens,
