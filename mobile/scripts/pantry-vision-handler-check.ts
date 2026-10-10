@@ -32,6 +32,8 @@ let geminiReplies: Array<() => Response> = [];
 /** When set, answers every model call from the request itself (calls can arrive in any order). */
 let geminiRouter: ((call: GeminiCall) => Response) | null = null;
 let planRow: { plan: string; role?: string } | null = { plan: 'paid' };
+const usageRows = new Map<string, { scans: number; inputTokens: number; outputTokens: number }>();
+let usageTableExists = true;
 
 function geminiJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -77,6 +79,26 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.startsWith('https://project.supabase.test/rest/v1/profiles')) {
     return new Response(JSON.stringify(planRow ? [planRow] : []), { status: 200 });
   }
+  if (url.startsWith('https://project.supabase.test/rest/v1/rpc/')) {
+    // Stand-in for the photo_scan_usage table and its two functions.
+    if (!usageTableExists) return new Response(JSON.stringify({ message: 'function not found' }), { status: 404 });
+    const args = JSON.parse(String(init?.body ?? '{}')) as Record<string, any>;
+    const key = `${args.p_user_id}|${args.p_period}`;
+    const row = usageRows.get(key) ?? { scans: 0, inputTokens: 0, outputTokens: 0 };
+    if (url.endsWith('/claim_photo_scan')) {
+      if (row.scans >= args.p_limit) return new Response('-1', { status: 200 });
+      row.scans += 1;
+      usageRows.set(key, row);
+      return new Response(String(args.p_limit - row.scans), { status: 200 });
+    }
+    if (url.endsWith('/settle_photo_scan')) {
+      if (args.p_refund) row.scans = Math.max(0, row.scans - 1);
+      row.inputTokens += args.p_input_tokens;
+      row.outputTokens += args.p_output_tokens;
+      usageRows.set(key, row);
+      return new Response('null', { status: 200 });
+    }
+  }
   if (url.startsWith('https://generativelanguage.googleapis.com/')) {
     const model = decodeURIComponent(/models\/([^:]+):generateContent/.exec(url)?.[1] ?? '');
     const call = { model, body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> };
@@ -109,15 +131,20 @@ const tile = (n: number, position: string) => ({
 });
 
 let userCounter = 0;
+let fixedUser: number | null = null;
+const userIdFor = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const MONTH = new Date().toISOString().slice(0, 7);
 async function scan(body: Record<string, unknown>): Promise<{ status: number; json: Record<string, any> }> {
   assert.ok(handler, 'pantry-vision registered a handler');
-  userCounter += 1; // a fresh user per request keeps the per-minute limit out of the way
+  // A fresh user per request keeps the per-minute limit out of the way, unless a test pins one.
+  if (fixedUser == null) userCounter += 1;
+  else userCounter = fixedUser;
   const response = await handler!(
     new Request('https://project.supabase.test/functions/v1/pantry-vision', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${jwtFor(`00000000-0000-4000-8000-${String(userCounter).padStart(12, '0')}`)}`,
+        Authorization: `Bearer ${jwtFor(userIdFor(userCounter))}`,
       },
       body: JSON.stringify(body),
     }),
@@ -134,6 +161,11 @@ function reset(): void {
   logLines.length = 0;
   geminiReplies = [];
   geminiRouter = null;
+  fixedUser = null;
+  usageTableExists = true;
+  delete env.PANTRY_PLUS_MONTHLY_SCANS;
+  delete env.PANTRY_PLUS_MONTHLY_TAG_SCANS;
+  delete env.PANTRY_FREE_TOTAL_SCANS;
   delete env.PANTRY_THOROUGH_SCAN;
   delete env.PANTRY_THOROUGH_MIN_ITEMS;
   delete env.PANTRY_VERIFY_PASS;
@@ -309,9 +341,9 @@ function reset(): void {
   assert.equal(geminiCalls[0].model, 'gemini-2.5-flash');
   assert.equal((geminiCalls[0].body.generationConfig as Record<string, any>).temperature, 0);
 
-  // --- 12. Still gated: a free account is refused before any model call ---
+  // --- 12. An account whose plan cannot be read is refused before any model call ---
   reset();
-  planRow = { plan: 'free' };
+  planRow = null;
   result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-11' });
   assert.equal(result.status, 403);
   assert.equal(result.json.code, 'PLAN_REQUIRED');
@@ -504,12 +536,114 @@ function reset(): void {
   assert.equal(geminiCalls.length, 2);
   assert.equal(result.json.items[0].name, 'rice');
 
-  // Receipts are a Plus feature like every other scan.
+  // Receipts are Plus only: a free account's free scans do not cover them.
   reset();
   planRow = { plan: 'free' };
   result = await scan({ action: 'receipt', imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'hash-34' });
   assert.equal(result.status, 403);
+  assert.equal(result.json.code, 'PLAN_REQUIRED');
   assert.equal(geminiCalls.length, 0);
+
+  // --- 16. Allowances: 3 free scans once, a monthly cap for Plus ---
+  // Free account: three shelf scans, then the Plus offer. Each answer says how many are left.
+  reset();
+  planRow = { plan: 'free' };
+  fixedUser = 9001;
+  geminiRouter = () => geminiItems(['corn'])();
+  const freeLeft: Array<number | null> = [];
+  for (const hash of ['free-1', 'free-2', 'free-3']) {
+    result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: hash });
+    assert.equal(result.status, 200);
+    assert.deepEqual({ isPlus: result.json.usage.isPlus, limit: result.json.usage.limit }, { isPlus: false, limit: 3 });
+    freeLeft.push(result.json.usage.remaining);
+  }
+  assert.deepEqual(freeLeft, [2, 1, 0]);
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'free-4' });
+  assert.equal(result.status, 403);
+  assert.equal(result.json.code, 'PLAN_REQUIRED');
+  assert.match(result.json.error, /used your 3 free photo scans/);
+  assert.equal(geminiCalls.length, 3, 'the fourth photo never reaches the model');
+  assert.equal(usageRows.get(`${userIdFor(9001)}|free`)!.scans, 3);
+  // Free scans do not come back next month: the row is keyed 'free', not by month.
+  assert.ok(!usageRows.has(`${userIdFor(9001)}|${MONTH}`));
+  // Price tags stay Plus only.
+  result = await scan({ action: 'price-tag', imageBase64: PHOTO, mimeType: 'image/jpeg' });
+  assert.equal(result.status, 403);
+
+  // Free scans switched off by secret: Plus only, as before.
+  reset();
+  planRow = { plan: 'free' };
+  env.PANTRY_FREE_TOTAL_SCANS = '0';
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'free-off' });
+  assert.equal(result.status, 403);
+  assert.equal(result.json.error, 'Photo scanning requires MealPlanatic Plus.');
+  assert.equal(geminiCalls.length, 0);
+
+  // Plus account: shelf and receipt scans share one monthly allowance.
+  reset();
+  env.PANTRY_PLUS_MONTHLY_SCANS = '2';
+  fixedUser = 9002;
+  geminiRouter = () => geminiItems(['corn'])();
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'plus-1' });
+  assert.deepEqual(result.json.usage, { isPlus: true, limit: 2, remaining: 1 });
+  result = await scan({ action: 'receipt', imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'plus-2' });
+  assert.equal(result.json.usage.remaining, 0);
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'plus-3' });
+  assert.equal(result.status, 429);
+  assert.equal(result.json.code, 'SCAN_LIMIT_REACHED');
+  assert.match(result.json.error, /used all 2 photo scans for this month\. They reset on the 1st\./);
+  assert.equal(geminiCalls.length, 2);
+  // Tokens are recorded against the month for cost tracking (output includes thinking).
+  assert.deepEqual(usageRows.get(`${userIdFor(9002)}|${MONTH}`), { scans: 2, inputTokens: 12400, outputTokens: 6000 });
+  // The same photo again is answered from the cache and is not charged, even at the cap.
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'plus-1' });
+  assert.equal(result.status, 200);
+  assert.equal(result.json.cached, true);
+  // Price tags count in their own bucket and still work when the photo allowance is used up.
+  geminiRouter = () =>
+    geminiJson({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ itemName: 'milk', price: 3.49 }) }] } }] });
+  result = await scan({ action: 'price-tag', imageBase64: PHOTO, mimeType: 'image/jpeg' });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.json.usage, { isPlus: true, limit: 200, remaining: 199 });
+  assert.equal(usageRows.get(`${userIdFor(9002)}|${MONTH}|tag`)!.scans, 1);
+
+  // A scan that fails is given back.
+  reset();
+  env.PANTRY_PLUS_MONTHLY_SCANS = '5';
+  fixedUser = 9003;
+  geminiRouter = () => geminiJson({ error: { message: 'bad request' } }, 400);
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'fail-1' });
+  assert.equal(result.status, 502);
+  assert.equal(usageRows.get(`${userIdFor(9003)}|${MONTH}`)!.scans, 0, 'a failed scan does not use up the allowance');
+
+  // Admin accounts are never capped or counted.
+  reset();
+  planRow = { plan: 'free', role: 'admin' };
+  env.PANTRY_PLUS_MONTHLY_SCANS = '1';
+  fixedUser = 9004;
+  geminiRouter = () => geminiItems(['corn'])();
+  for (const hash of ['admin-1', 'admin-2', 'admin-3']) {
+    result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: hash });
+    assert.equal(result.status, 200);
+  }
+  assert.deepEqual(result.json.usage, { isPlus: true, limit: null, remaining: null });
+  assert.ok(![...usageRows.keys()].some((key) => key.startsWith(userIdFor(9004))));
+
+  // The usage table is not there yet (function deployed before the migration):
+  // a paying account still scans, uncapped; a free account gets no free scans.
+  reset();
+  usageTableExists = false;
+  fixedUser = 9005;
+  geminiRouter = () => geminiItems(['corn'])();
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'nomig-1' });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.json.usage, { isPlus: true, limit: null, remaining: null });
+  planRow = { plan: 'free' };
+  fixedUser = 9006;
+  result = await scan({ imageBase64: PHOTO, mimeType: 'image/jpeg', imageHash: 'nomig-2' });
+  assert.equal(result.status, 403);
+  assert.equal(result.json.code, 'PLAN_REQUIRED');
+  assert.equal(geminiCalls.length, 1);
 
   // --- Crop layout (client side, pure) ---
   const portrait = computeDetailTiles(3072, 4080);
