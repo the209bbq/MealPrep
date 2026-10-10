@@ -460,11 +460,11 @@ export default function GroceryScreen() {
             <Pressable
               onPress={() => router.push(APP_ROUTES.smartShop)}
               accessibilityRole="button"
-              accessibilityLabel={GROCERY_COPY.comparePricesNearYou}
+              accessibilityLabel={GROCERY_COPY.findStoresNearMe}
               className="h-[54px] flex-row items-center justify-center gap-2 rounded-full bg-tomato px-5 active:opacity-90"
             >
               <Ionicons name="location-outline" size={20} color={THEME.onTomato} />
-              <Text className="text-[17px] font-extrabold text-on-tomato">{GROCERY_COPY.comparePricesNearYou}</Text>
+              <Text className="text-[17px] font-extrabold text-on-tomato">{GROCERY_COPY.findStoresNearMe}</Text>
             </Pressable>
           </View>
         ) : null}
