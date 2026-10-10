@@ -5,11 +5,10 @@
 
 export const TUTORIAL = {
   /**
-   * While false the tour never starts by itself: only an admin account can open it, from the
-   * account menu, so it can be checked on a phone before customers see it. Set true to show it
-   * once to every new visitor and to put "Take the tour" in everyone's account menu.
+   * On (owner, 2026-10-10): every new visitor gets the tour once, and "Take the tour" is in
+   * everyone's account menu. Set false to hide it from everyone except admin accounts.
    */
-  liveForEveryone: false,
+  liveForEveryone: true,
   /** How often the lit-up area is re-measured while the tour is open (screens settle, lists load). */
   remeasureMs: 350,
   /** Space between the lit-up area and its outline. */
