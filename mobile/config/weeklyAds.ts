@@ -25,13 +25,13 @@ export const WEEKLY_AD_CHAINS: readonly WeeklyAdChainConfig[] = [
     key: 'save_mart',
     displayName: 'Save Mart',
     matchPatterns: ['save mart', 'savemart'],
-    url: 'https://www.savemart.com/wp/weekly-ad',
+    url: 'https://savemart.com/flyers',
   },
   {
     key: 'foodmaxx',
     displayName: 'FoodMaxx',
     matchPatterns: ['foodmaxx', 'food maxx'],
-    url: 'https://www.foodmaxx.com/wp/weekly-ad',
+    url: 'https://foodmaxx.com/flyers',
   },
   {
     key: 'grocery_outlet',

@@ -34,6 +34,11 @@ export interface StoreChainConfig {
   weeklyAdUrl?: string;
   /** When true, weekly ad is hosted off the primary domain (labeled in UI). */
   weeklyAdIsThirdParty?: boolean;
+  /**
+   * The chain's own page for one store shows that store's weekly ad (a "View weekly ad" button).
+   * When we know the store's page, the weekly-ad link opens it instead of the chain-wide ad page.
+   */
+  weeklyAdOnStorePage?: boolean;
   excludeStore?: (store: Pick<StoreLocation, 'name' | 'chain' | 'krogerLocationId' | 'pricingSource'>) => boolean;
   delivery?: StoreChainDeliveryAvailability;
 }
@@ -45,14 +50,14 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     matchPatterns: ['save mart', 'savemart'],
     storePagePathPattern: '^https://([a-z0-9-]+\\.)?savemart\\.com/stores/.+',
     allowedWebsiteHosts: ['savemart.com'],
-    weeklyAdUrl: 'https://www.savemart.com/wp/weekly-ad',
+    weeklyAdUrl: 'https://savemart.com/flyers',
     delivery: { instacartSlug: 'savemart', instacart: true, doordash: true, ubereats: true },
   },
   {
     key: 'foodmaxx',
     displayName: 'FoodMaxx',
     matchPatterns: ['foodmaxx', 'food maxx'],
-    weeklyAdUrl: 'https://www.foodmaxx.com/wp/weekly-ad',
+    weeklyAdUrl: 'https://foodmaxx.com/flyers',
     delivery: { instacartSlug: 'foodmaxx', instacart: true, doordash: true, ubereats: true },
   },
   {
@@ -80,6 +85,7 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
       '^https://((local\\.)?safeway\\.com/.+|([a-z0-9-]+\\.)?safeway\\.com/(?!store-locator)[^?#]+)',
     allowedWebsiteHosts: ['safeway.com'],
     weeklyAdUrl: 'https://www.safeway.com/weeklyad',
+    weeklyAdOnStorePage: true,
     delivery: { instacartSlug: 'safeway', instacart: true, doordash: true, ubereats: true },
   },
   {
@@ -121,6 +127,7 @@ export const STORE_CHAINS: readonly StoreChainConfig[] = [
     storePagePathPattern: '^https://([a-z0-9-]+\\.)?walmart\\.com/store/.+',
     allowedWebsiteHosts: ['walmart.com'],
     weeklyAdUrl: 'https://www.walmart.com/shop/deals',
+    weeklyAdOnStorePage: true,
     delivery: { deliverySearchName: 'Walmart', instacart: true, doordash: true, ubereats: true },
   },
   {

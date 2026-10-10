@@ -12,6 +12,8 @@ import {
   resolveWeeklyAdLink,
 } from '../lib/stores/storeLinks';
 import { STORE_LINK_FALLBACK_ZIP } from '../lib/stores/storeLinkFixtures';
+import { STORE_CHAINS } from '../config/storeChains';
+import { WEEKLY_AD_CHAINS } from '../config/weeklyAds';
 
 const base: StoreLocation = {
   id: 'test',
@@ -165,5 +167,74 @@ assert.equal(
 const maps = googleMapsPlaceSearchUrl(base);
 assert.ok(maps.includes('Riverbank%20Market'), 'maps search uses name + address, not lat/lng');
 assert.ok(!maps.includes('37.735'), 'maps search does not use raw coordinates when address present');
+
+// The Stores tab (storeChains) and Smart Shop (weeklyAds) each list a weekly-ad link per chain.
+// They must point at the same page, so a fix in one list is not missed in the other.
+// Food 4 Less differs on purpose: Smart Shop opens the NorCal site's home page.
+const WEEKLY_AD_URL_EXCEPTIONS = new Set(['food_4_less_norcal']);
+for (const ad of WEEKLY_AD_CHAINS) {
+  if (WEEKLY_AD_URL_EXCEPTIONS.has(ad.key)) continue;
+  const chain = STORE_CHAINS.find((c) => c.key === ad.key);
+  assert.ok(chain, `weekly-ad chain ${ad.key} exists in storeChains`);
+  assert.equal(chain.weeklyAdUrl, ad.url, `${ad.key}: Stores tab and Smart Shop open the same weekly-ad page`);
+}
+// Dead since the chains rebuilt their sites (404 seen 2026-10-10).
+for (const chain of STORE_CHAINS) {
+  assert.ok(!/\/wp\/weekly-ad/.test(chain.weeklyAdUrl ?? ''), `${chain.key}: old /wp/weekly-ad link`);
+}
+assert.equal(
+  resolveWeeklyAdLink({ ...base, name: 'Save Mart', chain: 'Save Mart', website: undefined })?.url,
+  'https://savemart.com/flyers',
+);
+assert.equal(
+  resolveWeeklyAdLink({ ...base, name: 'FoodMaxx', chain: 'FoodMaxx', website: undefined })?.url,
+  'https://foodmaxx.com/flyers',
+);
+
+// The weekly ad is the tapped store's ad wherever the store's own page tells us which store it is.
+const saveMartOakdale = {
+  ...base,
+  name: 'Save Mart',
+  chain: 'Save Mart',
+  website: 'https://www.savemart.com/stores/693c06f6-bf8b-4be7-90ae-f5040ef21b57/OAKDALE/48/OAKDALE',
+};
+assert.deepEqual(resolveWeeklyAdLink(saveMartOakdale), {
+  url: 'https://savemart.com/stores/48/flyers',
+  storeSpecific: true,
+});
+assert.equal(
+  resolveWeeklyAdLink({ ...saveMartOakdale, website: 'https://savemart.com/' })?.url,
+  'https://savemart.com/flyers',
+  'a Save Mart with only the chain home page falls back to the chain ad page',
+);
+assert.equal(resolveWeeklyAdLink(groceryOutlet)?.storeSpecific, true);
+assert.equal(
+  resolveWeeklyAdLink({ ...base, name: 'Grocery Outlet', chain: 'Grocery Outlet', website: undefined })?.url,
+  'https://www.groceryoutlet.com/circulars',
+);
+// Safeway and Walmart: the store's own page carries that store's "View weekly ad" button.
+const safewayManteca = {
+  ...base,
+  name: 'Safeway',
+  chain: 'Safeway',
+  website: 'https://local.safeway.com/safeway/ca/manteca/1187-s-main-st.html',
+};
+assert.deepEqual(resolveWeeklyAdLink(safewayManteca), { url: safewayManteca.website, storeSpecific: true });
+assert.equal(
+  resolveWeeklyAdLink({ ...safewayManteca, website: undefined })?.url,
+  'https://www.safeway.com/weeklyad',
+);
+const walmartModesto = { ...base, name: 'Walmart', chain: 'Walmart', website: 'https://www.walmart.com/store/1587' };
+assert.deepEqual(resolveWeeklyAdLink(walmartModesto), { url: walmartModesto.website, storeSpecific: true });
+assert.equal(
+  resolveWeeklyAdLink({ ...walmartModesto, website: 'http://www.walmart.com' })?.url,
+  'https://www.walmart.com/shop/deals',
+  'a Walmart with only the chain home page falls back to the deals page',
+);
+// Target's store page only links the chain-wide ad, so it keeps the chain page.
+assert.equal(
+  resolveWeeklyAdLink({ ...base, name: 'Target', chain: 'Target', website: 'https://www.target.com/sl/riverbank/2096' })?.url,
+  'https://www.target.com/weekly-ad',
+);
 
 console.log('store-links-check: ok');

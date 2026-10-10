@@ -6,9 +6,10 @@ import {
 } from '../../config/weeklyAds';
 import type { StoreLocation } from '../../lib/deals/types';
 import { openExternalUrl } from '../../lib/smartShop/openExternalUrl';
+import { resolveWeeklyAdLink } from '../../lib/stores/storeLinks';
 
 interface StoreWeeklyAdButtonProps {
-  store: Pick<StoreLocation, 'name' | 'chain' | 'krogerLocationId' | 'pricingSource'>;
+  store: Pick<StoreLocation, 'name' | 'chain' | 'krogerLocationId' | 'pricingSource' | 'website'>;
   className?: string;
 }
 
@@ -23,10 +24,13 @@ export function StoreWeeklyAdButton({ store, className }: StoreWeeklyAdButtonPro
   if (!chain) return null;
 
   const label = weeklyAdButtonLabel(chain);
+  // The ad for this store when we can tell which store it is; otherwise the chain's page.
+  const storeLink = resolveWeeklyAdLink(store);
+  const url = storeLink?.storeSpecific ? storeLink.url : chain.url;
 
   return (
     <Pressable
-      onPress={() => void openExternalUrl(chain.url).catch(() => undefined)}
+      onPress={() => void openExternalUrl(url).catch(() => undefined)}
       className={`min-h-[40px] flex-row items-center justify-center rounded-xl border border-success bg-success-light px-3 py-2 ${className ?? ''}`}
     >
       <Text className="text-xs font-bold text-success-dark">{label}</Text>

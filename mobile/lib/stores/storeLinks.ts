@@ -100,19 +100,43 @@ function groceryOutletStoreWeeklyAdUrl(website: string): string | null {
   return `https://www.groceryoutlet.com/circulars/storeid/${m[1]}`;
 }
 
+/** Save Mart store pages look like /stores/<uuid>/<NAME>/<store number>/<CITY>; the ad lives at /stores/<number>/flyers. */
+function saveMartStoreWeeklyAdUrl(website: string): string | null {
+  const m = website.match(/savemart\.com\/stores\/[0-9a-f-]{36}\/[^/]+\/(\d+)(?:\/|$)/i);
+  if (!m) return null;
+  return `https://savemart.com/stores/${m[1]}/flyers`;
+}
+
+const STORE_WEEKLY_AD_FROM_WEBSITE: Record<string, (website: string) => string | null> = {
+  grocery_outlet: groceryOutletStoreWeeklyAdUrl,
+  save_mart: saveMartStoreWeeklyAdUrl,
+};
+
 export type WeeklyAdLink = {
   url: string;
   thirdParty?: boolean;
+  /** True when the link is for this one store, not the chain's "pick your store" page. */
+  storeSpecific?: boolean;
 };
 
+/**
+ * The ad for the store the shopper tapped, where we can tell which store that is:
+ *  1. a per-store ad address built from the store's own web page (Save Mart, Grocery Outlet);
+ *  2. the store's own page, for chains whose store page carries that store's ad (Safeway, Walmart);
+ *  3. otherwise the chain's weekly-ad page, which asks the shopper to pick a store.
+ */
 export function resolveWeeklyAdLink(
   store: Pick<StoreLocation, 'name' | 'chain' | 'krogerLocationId' | 'pricingSource' | 'website'>,
 ): WeeklyAdLink | undefined {
   const chain = resolveStoreChainConfig(store);
   const website = store.website?.trim();
-  if (website && chain?.key === 'grocery_outlet') {
-    const fromSite = groceryOutletStoreWeeklyAdUrl(website);
-    if (fromSite) return { url: fromSite };
+  if (website && chain) {
+    const fromSite = STORE_WEEKLY_AD_FROM_WEBSITE[chain.key]?.(website);
+    if (fromSite) return { url: fromSite, storeSpecific: true };
+    if (chain.weeklyAdOnStorePage) {
+      const storePage = resolveExactStoreWebsiteUrl(store, chain);
+      if (storePage) return { url: storePage, storeSpecific: true };
+    }
   }
   if (!chain?.weeklyAdUrl) return undefined;
   return {
