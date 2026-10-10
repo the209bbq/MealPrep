@@ -19,7 +19,7 @@ export const DEFAULT_GEMINI_VISION_FALLBACK_MODELS = [
 ] as const;
 
 /** Per Gemini HTTP call; edge function reads `GEMINI_REQUEST_TIMEOUT_MS` secret (same default). */
-export const DEFAULT_GEMINI_VISION_REQUEST_TIMEOUT_MS = 38_000;
+export const DEFAULT_GEMINI_VISION_REQUEST_TIMEOUT_MS = 50_000;
 
 export type GeminiVisionModelId =
   | typeof DEFAULT_GEMINI_VISION_MODEL

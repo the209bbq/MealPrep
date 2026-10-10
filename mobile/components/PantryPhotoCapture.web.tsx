@@ -17,7 +17,7 @@ export function PantryPhotoCapture({ onImagePrepared, onError, disabled }: Pantr
     event.target.value = '';
     if (!file) return;
     void import('../lib/pantryVision/prepareImage.web')
-      .then(({ preparePantryImageFromFile }) => preparePantryImageFromFile(file))
+      .then(({ preparePantryImageFromFile }) => preparePantryImageFromFile(file, { detailTiles: true }))
       .then(onImagePrepared)
       .catch((error: unknown) => {
         onError(error instanceof Error ? error.message : 'Could not prepare photo');

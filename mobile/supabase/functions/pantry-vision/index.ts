@@ -1,5 +1,6 @@
-// Pantry shelf vision — paste this ENTIRE file into Supabase Dashboard:
-// Edge Functions → pantry-vision → Via Editor
+// Pantry shelf vision.
+// Deploy: Actions -> "Deploy Supabase function" -> pantry-vision (deploys what is on main).
+// The file is still self-contained, so it can also be pasted into the dashboard editor.
 //
 // Settings: leave "Verify JWT" ENABLED (default). Anonymous calls are rejected at the gateway;
 // this handler reads the user id from the JWT for rate limiting.
@@ -9,7 +10,17 @@
 // Optional secrets:
 //   GEMINI_MODEL = e.g. gemini-3.8-flash (defaults below; keep in sync with mobile/config/geminiConfig.ts)
 //   GEMINI_FALLBACK_MODELS = comma-separated backup model ids (optional)
-//   GEMINI_REQUEST_TIMEOUT_MS = per-call timeout (default 38000; dense photos may need 40000+)
+//   GEMINI_REQUEST_TIMEOUT_MS = per-call timeout (default 50000)
+//   GEMINI_THINKING_LEVEL = low | medium | high for Gemini 3 models (unset = Google's default, medium)
+//   PANTRY_VERIFY_PASS = on to run a second "what did I miss" call per scan (doubles cost; default off)
+//   PANTRY_LEGACY_SAMPLING = on to send temperature/topP to Gemini 3 models again (default off)
+//   PANTRY_THOROUGH_SCAN = auto | off | always (default auto). A thorough scan checks each zoomed
+//     crop in its own call and merges the results: about four extra calls for that photo.
+//     "auto" does it only when the first pass already found PANTRY_THOROUGH_MIN_ITEMS or more.
+//   PANTRY_THOROUGH_MIN_ITEMS = items in the first pass that mark a photo as busy (default 20)
+//
+// One log line per scan ("pantry-vision: scan ...") carries photo size, token counts and timing.
+// It never contains the user id, the photo or the item names.
 
 // BEGIN GEMINI_ORCHESTRATION (keep in sync with geminiOrchestration.ts — npm run test:pantry-vision-gemini)
 /** @sync mobile/config/geminiConfig.ts */
@@ -23,7 +34,7 @@ const DEFAULT_GEMINI_FALLBACK_MODELS = [
 ] as const;
 
 /** Per upstream HTTP call (each Gemini generateContent). Override via `GEMINI_REQUEST_TIMEOUT_MS` secret. */
-const DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 38_000;
+const DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 50_000;
 
 /** @deprecated Use resolveGeminiRequestTimeoutMs — kept for tests importing the default cap. */
 const GEMINI_REQUEST_TIMEOUT_MS = DEFAULT_GEMINI_REQUEST_TIMEOUT_MS;
@@ -294,7 +305,7 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_RETRY_BACKOFF_MS = 450;
 const GEMINI_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 503]);
 const geminiModelTimeoutMemory = new ModelTimeoutMemory();
-const PANTRY_VISION_CACHE_VERSION = 'v6';
+const PANTRY_VISION_CACHE_VERSION = 'v9';
 const PANTRY_VISION_SINGLE_PASS_MIN_ITEMS = 8;
 const PANTRY_VISION_SINGLE_PASS_MIN_AVG_CONFIDENCE = 0.72;
 const PANTRY_MAX_ITEMS = 120;
@@ -328,6 +339,9 @@ const corsHeaders = {
 };
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+/** Zoomed crops of the same photo sent with it (see PHOTO_SCAN.detailTiles on the client). */
+const MAX_DETAIL_TILES = 4;
+const MAX_DETAIL_TILE_BYTES = 1_500_000;
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const PANTRY_CATEGORIES = [
@@ -484,7 +498,19 @@ function parseScanLocationHint(raw: unknown): (typeof PANTRY_STORAGE)[number] {
   return 'pantry';
 }
 
-type VisionAction = 'pantry' | 'price-tag';
+type VisionAction = 'pantry' | 'price-tag' | 'receipt';
+
+function parseVisionAction(raw: unknown): VisionAction {
+  return raw === 'price-tag' || raw === 'receipt' ? raw : 'pantry';
+}
+
+type DetailTile = {
+  mimeType: string;
+  base64: string;
+  byteLength: number;
+  /** "top left", "bottom right", ... Free text from the client is never passed to the model. */
+  position: string;
+};
 
 type ImageFromRequest = {
   bytes: Uint8Array;
@@ -492,7 +518,44 @@ type ImageFromRequest = {
   scanLocation: (typeof PANTRY_STORAGE)[number];
   action: VisionAction;
   imageHash?: string;
+  tiles: DetailTile[];
 };
+
+const TILE_POSITION_WORDS = new Set(['top', 'middle', 'bottom', 'left', 'centre', 'center', 'right']);
+
+/** Keeps only the fixed position words, so nothing a client sends can become an instruction. */
+function sanitizeTilePosition(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => TILE_POSITION_WORDS.has(word))
+    .slice(0, 2)
+    .join(' ');
+}
+
+/**
+ * Optional zoomed crops. Anything malformed or oversized is dropped rather than failing the
+ * scan: the main photo alone still gives a result.
+ */
+function parseDetailTiles(raw: unknown): DetailTile[] {
+  if (!Array.isArray(raw)) return [];
+  const tiles: DetailTile[] = [];
+  for (const entry of raw.slice(0, MAX_DETAIL_TILES)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const row = entry as Record<string, unknown>;
+    const rawBase64 = typeof row.imageBase64 === 'string' ? row.imageBase64.trim() : '';
+    if (!rawBase64) continue;
+    const base64 = rawBase64.includes(',') ? (rawBase64.split(',').pop() ?? '') : rawBase64;
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) continue;
+    const mimeType = normalizeMime(typeof row.mimeType === 'string' ? row.mimeType : undefined);
+    if (!ALLOWED_MIME.has(mimeType)) continue;
+    const byteLength = estimateBase64Bytes(base64);
+    if (byteLength <= 0 || byteLength > MAX_DETAIL_TILE_BYTES) continue;
+    tiles.push({ mimeType, base64, byteLength, position: sanitizeTilePosition(row.position) });
+  }
+  return tiles;
+}
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -521,10 +584,10 @@ async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Re
       typeof locationField === 'string' ? locationField : undefined,
     );
     const actionField = form.get('action');
-    const action: VisionAction = actionField === 'price-tag' ? 'price-tag' : 'pantry';
+    const action: VisionAction = parseVisionAction(actionField);
     const hashField = form.get('imageHash');
     const imageHash = typeof hashField === 'string' ? hashField.trim() : undefined;
-    return { bytes: buffer, mimeType, scanLocation, action, imageHash };
+    return { bytes: buffer, mimeType, scanLocation, action, imageHash, tiles: [] };
   }
 
   let body: {
@@ -533,6 +596,7 @@ async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Re
     location?: string;
     action?: string;
     imageHash?: string;
+    tiles?: unknown;
   };
   try {
     body = (await req.json()) as {
@@ -541,13 +605,14 @@ async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Re
       location?: string;
       action?: string;
       imageHash?: string;
+      tiles?: unknown;
     };
   } catch {
     return jsonResponse({ error: 'Invalid JSON body', code: 'BAD_REQUEST' }, 400);
   }
 
   const scanLocation = parseScanLocationHint(body.location);
-  const action: VisionAction = body.action === 'price-tag' ? 'price-tag' : 'pantry';
+  const action: VisionAction = parseVisionAction(body.action);
   const imageHash = typeof body.imageHash === 'string' ? body.imageHash.trim() : undefined;
 
   const raw = body.imageBase64?.trim() ?? '';
@@ -568,7 +633,7 @@ async function readImageFromRequest(req: Request): Promise<ImageFromRequest | Re
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    return { bytes, mimeType, scanLocation, action, imageHash };
+    return { bytes, mimeType, scanLocation, action, imageHash, tiles: action === 'price-tag' ? [] : parseDetailTiles(body.tiles) };
   } catch {
     return jsonResponse({ error: 'Invalid base64 image data', code: 'BAD_REQUEST' }, 400);
   }
@@ -738,40 +803,133 @@ function sanitizePriceTag(raw: unknown): SanitizedPriceTag | null {
   };
 }
 
-function geminiEnumeratePrompt(scanLocation: (typeof PANTRY_STORAGE)[number]): string {
+function geminiEnumeratePrompt(
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+  tileCount: number = 0,
+  /** Thorough scan: this call covers one zoomed crop only. Value is the crop's position, or '' if unknown. */
+  cropFocus: string | null = null,
+): string {
+  const photos =
+    cropFocus != null
+      ? 'You are given 2 images of ONE photo: first the full photo for context, then a zoomed crop of ' +
+        (cropFocus ? `its ${cropFocus} part` : 'one part of it') +
+        '. List EVERY food product visible in the ZOOMED CROP, including products cut off at its edge. ' +
+        'Do not list products that only show in the full photo outside the crop; other crops are checked separately.\n'
+      : tileCount > 0
+        ? `You are given ${tileCount + 1} images of ONE photo: first the full photo, then ${tileCount} zoomed crops of the same photo ` +
+          'that overlap each other. Use the full photo to see the layout and the crops to read labels. ' +
+          'A product that shows in more than one image is still ONE product: list it once.\n'
+        : '';
   return (
-    'You inventory edible kitchen products from a photo for a home recipe app. Do NOT summarize or skip items.\n' +
+    'You inventory edible kitchen products from a photo for a home recipe app. Be complete: list EVERY food product you can see. ' +
+    'Do NOT summarize, sample, or stop early.\n' +
+    photos +
     scanLocationPromptHint(scanLocation) +
-    '\nRules:\n' +
-    '- Read the FRONT product label only. Ignore ingredient lists, nutrition panels, and side/back text.\n' +
-    '- Skip non-food (pet food, cleaning supplies, napkins, appliances, empty jars, bags, tools).\n' +
-    '- Do not guess: omit anything you cannot read clearly from the front label. Do NOT list products that are not visible.\n' +
-    '- Do NOT use barcodes. Never put store or product brand names in name (no Kraft, WinCo, Goldfish, etc.).\n' +
-    '- name: generic recipe ingredient only, lowercase, singular when natural (egg, cheddar cheese, milk). Be specific when it matters: honey peanut butter not almond butter; pancake syrup not maple syrup; powdered drink mix not juice brand; bread not bread mix; cheddar cheese crackers not just crackers.\n' +
-    '- Check lower shelves, back rows, and partially hidden items behind front-facing packages.\n' +
-    '- Scan shelf by shelf top-to-bottom; on each shelf go left-to-right.\n' +
+    '\nHow to work:\n' +
+    '- Go shelf by shelf, top to bottom; on each shelf go left to right. Then check lower shelves, back rows, and items partly hidden behind others.\n' +
+    '- Before you answer, count the products you can see and make sure your list has about that many entries.\n' +
+    'What to list:\n' +
     '- One JSON object per distinct product. If three identical cans are visible, quantity 3 and unit "can".\n' +
-    '- quantity is optional rough count when visible; default 1. Use realistic units (oz, lb, each, bottle, jar, can). Set confidence 0-1.\n' +
+    '- Identify each product from its front label, and from its packaging, shape and colour when the label is small or partly hidden.\n' +
+    '- If you can tell what kind of food it is but are not sure of the exact product, STILL list it with your best specific name and a lower confidence (0.3 to 0.6). The user reviews the list and removes mistakes; a missing item is worse than an uncertain one.\n' +
+    '- Leave something out only when you cannot tell what food it is at all. Never list a product that is not in the photo.\n' +
+    '- Skip non-food (pet food, cleaning supplies, napkins, appliances, empty jars, bags, tools).\n' +
+    '- Ignore ingredient lists, nutrition panels, and barcodes.\n' +
+    'How to name:\n' +
+    '- name: generic recipe ingredient only, lowercase, singular when natural (egg, cheddar cheese, milk). Never put store or product brand names in name (no Kraft, WinCo, Goldfish, etc.).\n' +
+    '- Be specific when it matters: honey peanut butter not almond butter; pancake syrup not maple syrup; powdered drink mix not juice brand; bread not bread mix; cheddar cheese crackers not just crackers.\n' +
+    '- quantity is a rough count when visible; default 1. Use realistic units (oz, lb, each, bottle, jar, can, box, bag).\n' +
+    '- confidence 0-1: 0.85 or more when the label is clearly readable, lower when you are inferring.\n' +
     'Examples: {"name":"black olives","quantity":1,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.9}\n' +
     '{"name":"cheddar cheese","quantity":1,"unit":"block","category":"dairy","storage":"fridge","confidence":0.88}\n' +
     '{"name":"eggs","quantity":12,"unit":"each","category":"dairy","storage":"fridge","confidence":0.9}\n' +
-    '{"name":"milk","quantity":1,"unit":"gallon","category":"dairy","storage":"fridge","confidence":0.87}\n' +
+    '{"name":"tomato soup","quantity":2,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.5}\n' +
     'Return JSON only matching the schema.'
   );
 }
 
-function geminiVerifyPrompt(scanLocation: (typeof PANTRY_STORAGE)[number], passOneNames: string[]): string {
+function geminiVerifyPrompt(
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+  passOneNames: string[],
+  tileCount: number = 0,
+): string {
   const list = passOneNames.slice(0, 80).map((n) => `- ${n}`).join('\n');
+  const photos =
+    tileCount > 0
+      ? `You are given ${tileCount + 1} images of ONE photo: the full photo, then ${tileCount} overlapping zoomed crops of it.\n`
+      : '';
   return (
     'You verify a pantry inventory from the same photo.\n' +
+    photos +
     scanLocationPromptHint(scanLocation) +
     '\nFirst pass already found:\n' +
     list +
     '\nLook at the image again. Return ONLY additional visible food products missing from that list.\n' +
-    'Same rules as before: name what the product actually is, generic recipe names (brands in brand field), check lower shelves and back rows, front label only, no non-food, no guesses, omit items not visible.\n' +
+    'Same rules as before: generic recipe names with no brand names, check lower shelves and back rows, no non-food, ' +
+    'and list a product you can only partly identify with a lower confidence rather than leaving it out. Never list a product that is not in the photo.\n' +
     'If nothing new is visible, return {"items":[]}.\n' +
     'Do NOT repeat first-pass items. Do NOT re-list the full inventory. JSON only.'
   );
+}
+
+/**
+ * Grocery receipt: printed lines instead of labels. The answer uses the same item shape as a
+ * shelf scan, so the app's review list works unchanged. The model is told to return food
+ * items only; nothing else on the receipt (card digits, loyalty number, cashier) is asked for.
+ */
+function receiptPrompt(tileCount: number = 0): string {
+  const photos =
+    tileCount > 0
+      ? `You are given ${tileCount + 1} images of ONE receipt: first the whole receipt, then ${tileCount} zoomed strips of it from top to bottom ` +
+        'that overlap each other. Use the strips to read the print. A line that shows in two strips is still ONE line: count it once.\n'
+      : '';
+  return (
+    'You read a grocery store receipt from a photo for a home pantry app. List every FOOD or DRINK product that was bought. ' +
+    'Be complete: go line by line from the top of the receipt to the bottom and do not stop early.\n' +
+    photos +
+    'What to list:\n' +
+    '- One JSON object per product. If the same product is on more than one line, or a line shows a count (2 @ 1.99, QTY 3, 3 x), add them up into one entry.\n' +
+    '- Receipts abbreviate. Expand each line to a plain generic ingredient name, lowercase, singular when natural, with no brand or store names ' +
+    '(GV WHL MLK 1GL is whole milk; BNLS SKNLS CHKN BRST is chicken breast; ORG BABY SPIN is baby spinach).\n' +
+    '- If a line is clearly food but you are not sure what, STILL list your best specific guess with a lower confidence (0.3 to 0.6). ' +
+    'The user reviews the list and removes mistakes.\n' +
+    '- quantity and unit: use the weight for items sold by weight (1.25 lb), the package size when it is printed (1 gallon), otherwise the count with unit "each".\n' +
+    '- category and storage: where the product would be kept at home (pantry, fridge or spice_rack).\n' +
+    '- confidence 0-1: 0.85 or more when the line is clear, lower when you are expanding a hard abbreviation.\n' +
+    'What to leave out:\n' +
+    '- Anything that is not food or drink: cleaning supplies, paper goods, pet food, medicine, cosmetics, gift cards, clothing.\n' +
+    '- Lines that are not products: bag fees, bottle deposits (CRV), coupons, discounts, savings, tax, subtotal, total, payment, change, points.\n' +
+    '- Voided, refunded or returned lines.\n' +
+    '- Never output the store address, cashier name, card numbers, loyalty or member numbers, phone numbers or any other personal detail printed on the receipt.\n' +
+    'If the photo is not a receipt, or no food line can be read, return {"items":[]}.\n' +
+    'Examples: {"name":"whole milk","quantity":1,"unit":"gallon","category":"dairy","storage":"fridge","confidence":0.9}\n' +
+    '{"name":"chicken breast","quantity":1.25,"unit":"lb","category":"meats","storage":"fridge","confidence":0.88}\n' +
+    '{"name":"black beans","quantity":3,"unit":"can","category":"dry_goods","storage":"pantry","confidence":0.6}\n' +
+    'Return JSON only matching the schema.'
+  );
+}
+
+/**
+ * Receipt lines for the same product are purchases to add together. (A shelf scan keeps the
+ * larger count instead, because there the same product seen twice is the same physical item.)
+ */
+function sumDuplicateItems(items: DetectedPantryItem[]): DetectedPantryItem[] {
+  const byName = new Map<string, DetectedPantryItem>();
+  for (const item of items) {
+    const key = normalizeNameKey(item.name);
+    const prior = byName.get(key);
+    if (!prior) {
+      byName.set(key, { ...item });
+      continue;
+    }
+    const sameUnit = prior.unit.toLowerCase() === item.unit.toLowerCase();
+    byName.set(key, {
+      ...prior,
+      quantity: sameUnit ? Math.min(9999, prior.quantity + item.quantity) : Math.max(prior.quantity, item.quantity),
+      confidence: Math.max(prior.confidence, item.confidence),
+    });
+  }
+  return stableSortItems([...byName.values()]);
 }
 
 function parseGeminiErrorDetail(status: number, text: string): { detail: string; retryable: boolean } {
@@ -789,24 +947,112 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type GeminiImage = {
+  mimeType: string;
+  base64: string;
+  /** Short fixed caption placed before the image, e.g. "Zoomed crop: top left." */
+  caption?: string;
+};
+
 type GeminiVisionRequest = {
   prompt: string;
   schema: Record<string, unknown>;
   maxOutputTokens: number;
 };
 
+type GeminiUsage = {
+  promptTokens: number;
+  outputTokens: number;
+  thoughtTokens: number;
+};
+
 type GeminiCallSuccess = {
   text: string;
   finishReason?: string;
+  usage: GeminiUsage;
 };
+
+/** Running totals for one scan, for the log line. */
+class ScanStats {
+  calls = 0;
+  promptTokens = 0;
+  outputTokens = 0;
+  thoughtTokens = 0;
+  emptyAnswers = 0;
+  lastFinishReason = '';
+
+  add(usage: GeminiUsage, finishReason: string | undefined): void {
+    this.calls += 1;
+    this.promptTokens += usage.promptTokens;
+    this.outputTokens += usage.outputTokens;
+    this.thoughtTokens += usage.thoughtTokens;
+    this.lastFinishReason = finishReason ?? '';
+  }
+}
+
+function readUsage(raw: unknown): GeminiUsage {
+  const row = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0);
+  return {
+    promptTokens: count(row.promptTokenCount),
+    outputTokens: count(row.candidatesTokenCount),
+    thoughtTokens: count(row.thoughtsTokenCount),
+  };
+}
+
+const EMPTY_RESPONSE_DETAIL = 'Empty model response';
+const GEMINI_THINKING_LEVELS = new Set(['low', 'medium', 'high']);
+
+function isGemini3OrLater(model: string): boolean {
+  const match = /^gemini-(\d+)/.exec(model.trim().toLowerCase());
+  return match != null && Number(match[1]) >= 3;
+}
+
+/**
+ * Google's Gemini 3 guide says to remove temperature / top_p / top_k and warns that a
+ * temperature below the default can degrade results. Older fallback models keep the
+ * near-deterministic settings they were tuned with.
+ */
+function buildGenerationConfig(
+  model: string,
+  vision: GeminiVisionRequest,
+  env: { legacySampling?: string; thinkingLevel?: string } = {},
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    responseMimeType: 'application/json',
+    responseJsonSchema: vision.schema,
+    seed: GEMINI_DETERMINISTIC_SEED,
+    maxOutputTokens: vision.maxOutputTokens,
+  };
+  const gemini3 = isGemini3OrLater(model);
+  if (!gemini3 || (env.legacySampling ?? '').trim().toLowerCase() === 'on') {
+    config.temperature = 0;
+    config.topP = 0.1;
+  }
+  const thinkingLevel = (env.thinkingLevel ?? '').trim().toLowerCase();
+  if (gemini3 && GEMINI_THINKING_LEVELS.has(thinkingLevel)) {
+    config.thinkingConfig = { thinkingLevel };
+  }
+  return config;
+}
+
+function buildGeminiParts(images: GeminiImage[], prompt: string): Record<string, unknown>[] {
+  const parts: Record<string, unknown>[] = [];
+  for (const image of images) {
+    if (image.caption) parts.push({ text: image.caption });
+    parts.push({ inline_data: { mime_type: image.mimeType, data: image.base64 } });
+  }
+  parts.push({ text: prompt });
+  return parts;
+}
 
 async function callGeminiOnce(
   apiKey: string,
   model: string,
-  mimeType: string,
-  imageBase64: string,
+  images: GeminiImage[],
   vision: GeminiVisionRequest,
   budget: RequestTimeBudget,
+  stats?: ScanStats,
 ): Promise<GeminiCallSuccess | { error: GeminiAttemptError }> {
   const timeoutMs = budget.perCallTimeoutMs(perCallGeminiTimeoutMs());
   if (timeoutMs == null) {
@@ -816,22 +1062,11 @@ async function callGeminiOnce(
   const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const payload = {
-    contents: [
-      {
-        parts: [
-          { inline_data: { mime_type: mimeType, data: imageBase64 } },
-          { text: vision.prompt },
-        ],
-      },
-    ],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseJsonSchema: vision.schema,
-      temperature: 0,
-      topP: 0.1,
-      seed: GEMINI_DETERMINISTIC_SEED,
-      maxOutputTokens: vision.maxOutputTokens,
-    },
+    contents: [{ parts: buildGeminiParts(images, vision.prompt) }],
+    generationConfig: buildGenerationConfig(model, vision, {
+      legacySampling: Deno.env.get('PANTRY_LEGACY_SAMPLING') ?? undefined,
+      thinkingLevel: Deno.env.get('GEMINI_THINKING_LEVEL') ?? undefined,
+    }),
   };
 
   let upstream: Response;
@@ -876,22 +1111,31 @@ async function callGeminiOnce(
 
   try {
     const envelope = JSON.parse(text) as {
-      candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+      candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
+      usageMetadata?: unknown;
+      promptFeedback?: { blockReason?: string };
     };
     const candidate = envelope.candidates?.[0];
-    const partText = candidate?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-    const finishReason = candidate?.finishReason;
-    if (!partText) {
+    const partText =
+      candidate?.content?.parts
+        ?.filter((p) => p.thought !== true)
+        .map((p) => p.text ?? '')
+        .join('') ?? '';
+    const finishReason = candidate?.finishReason ?? envelope.promptFeedback?.blockReason;
+    const usage = readUsage(envelope.usageMetadata);
+    stats?.add(usage, finishReason);
+    if (!partText.trim()) {
+      if (stats) stats.emptyAnswers += 1;
       return {
         error: {
           kind: 'http',
           status: 502,
-          detail: 'Empty model response',
+          detail: finishReason ? `${EMPTY_RESPONSE_DETAIL} (${finishReason})` : EMPTY_RESPONSE_DETAIL,
           retryable: true,
         },
       };
     }
-    return { text: partText, finishReason };
+    return { text: partText, finishReason, usage };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to parse Gemini response';
     return {
@@ -905,53 +1149,42 @@ async function callGeminiOnce(
   }
 }
 
+/** The model ran out of output room (thinking counts against it) before finishing its answer. */
+function ranOutOfOutputTokens(result: GeminiCallSuccess | { error: GeminiAttemptError }): boolean {
+  if ('error' in result) {
+    return result.error.kind === 'http' && result.error.detail === `${EMPTY_RESPONSE_DETAIL} (MAX_TOKENS)`;
+  }
+  return result.finishReason === 'MAX_TOKENS';
+}
+
 async function callPantryGeminiPass(
   apiKey: string,
   model: string,
-  mimeType: string,
-  imageBase64: string,
+  images: GeminiImage[],
   prompt: string,
   maxOutputTokens: number,
   budget: RequestTimeBudget,
+  stats?: ScanStats,
 ): Promise<{ items: DetectedPantryItem[] } | { error: GeminiAttemptError }> {
-  const result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, {
+  let result = await callGeminiOnce(apiKey, model, images, {
     prompt,
     schema: RESPONSE_JSON_SCHEMA,
     maxOutputTokens,
-  }, budget);
-  if ('error' in result) {
-    if (result.error.detail === 'Empty model response') {
-      return { items: [] };
-    }
-    return result;
-  }
+  }, budget, stats);
 
-  if (result.finishReason === 'MAX_TOKENS') {
-    const retry = await callGeminiOnce(apiKey, model, mimeType, imageBase64, {
+  let retriedForLength = false;
+  if (ranOutOfOutputTokens(result)) {
+    retriedForLength = true;
+    result = await callGeminiOnce(apiKey, model, images, {
       prompt,
       schema: RESPONSE_JSON_SCHEMA,
       maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS_RETRY,
-    }, budget);
-    if ('error' in retry) {
-      if (retry.error.detail === 'Empty model response') {
-        return { items: [] };
-      }
-      return retry;
-    }
-    try {
-      const parsed = JSON.parse(retry.text) as unknown;
-      return { items: sanitizeItems(parsed) };
-    } catch {
-      return {
-        error: {
-          kind: 'http',
-          status: 502,
-          detail: 'Truncated JSON after MAX_TOKENS retry',
-          retryable: true,
-        },
-      };
-    }
+    }, budget, stats);
   }
+
+  // An empty answer is a failed call, not "nothing on the shelf": a real empty shelf comes
+  // back as {"items":[]}. Returning the error lets the caller retry and then try the next model.
+  if ('error' in result) return result;
 
   try {
     const parsed = JSON.parse(result.text) as unknown;
@@ -961,46 +1194,58 @@ async function callPantryGeminiPass(
       error: {
         kind: 'http',
         status: 502,
-        detail: 'Failed to parse pantry JSON',
+        detail: retriedForLength ? 'Truncated JSON after MAX_TOKENS retry' : 'Failed to parse pantry JSON',
         retryable: true,
       },
     };
   }
 }
 
+/** Second "what did I miss" call. Off unless the PANTRY_VERIFY_PASS secret is "on": it doubles the cost of a scan. */
+function verifyPassEnabled(raw: string | undefined): boolean {
+  return (raw ?? '').trim().toLowerCase() === 'on';
+}
+
 async function callPantryGeminiTwoPass(
   apiKey: string,
   model: string,
-  mimeType: string,
-  imageBase64: string,
+  images: GeminiImage[],
   scanLocation: (typeof PANTRY_STORAGE)[number],
   budget: RequestTimeBudget,
+  stats?: ScanStats,
+  /** Receipt scans: one pass with this prompt, and duplicate lines are added together. */
+  receipt: boolean = false,
 ): Promise<{ items: DetectedPantryItem[]; passes: 1 | 2 } | { error: GeminiAttemptError }> {
+  const tileCount = Math.max(0, images.length - 1);
   const passOne = await callPantryGeminiPass(
     apiKey,
     model,
-    mimeType,
-    imageBase64,
-    geminiEnumeratePrompt(scanLocation),
+    images,
+    receipt ? receiptPrompt(tileCount) : geminiEnumeratePrompt(scanLocation, tileCount),
     GEMINI_MAX_OUTPUT_TOKENS,
     budget,
+    stats,
   );
   if ('error' in passOne) return passOne;
 
+  if (receipt) {
+    return { items: sumDuplicateItems(passOne.items), passes: 1 };
+  }
+
   const passOneDeduped = dedupeItems(passOne.items);
 
-  if (!shouldRunPantryVerifySecondPass(budget.isExhausted())) {
+  if (!verifyPassEnabled(Deno.env.get('PANTRY_VERIFY_PASS') ?? undefined) || budget.isExhausted()) {
     return { items: passOneDeduped, passes: 1 };
   }
 
   const passTwo = await callPantryGeminiPass(
     apiKey,
     model,
-    mimeType,
-    imageBase64,
-    geminiVerifyPrompt(scanLocation, passOneDeduped.map((i) => i.name)),
+    images,
+    geminiVerifyPrompt(scanLocation, passOneDeduped.map((i) => i.name), tileCount),
     GEMINI_MAX_OUTPUT_TOKENS,
     budget,
+    stats,
   );
   if ('error' in passTwo) {
     return { items: passOneDeduped, passes: 1 };
@@ -1020,7 +1265,7 @@ async function callPriceTagGeminiOnce(
   imageBase64: string,
   budget: RequestTimeBudget,
 ): Promise<{ tag: SanitizedPriceTag } | { error: GeminiAttemptError }> {
-  const result = await callGeminiOnce(apiKey, model, mimeType, imageBase64, {
+  const result = await callGeminiOnce(apiKey, model, [{ mimeType, base64: imageBase64 }], {
     prompt: priceTagPrompt(),
     schema: PRICE_TAG_JSON_SCHEMA,
     maxOutputTokens: 1024,
@@ -1064,10 +1309,11 @@ function formatAttemptError(model: string, error: GeminiAttemptError, timeoutMs:
 async function callPantryGeminiOnModel(
   apiKey: string,
   model: string,
-  mimeType: string,
-  imageBase64: string,
+  images: GeminiImage[],
   scanLocation: (typeof PANTRY_STORAGE)[number],
   budget: RequestTimeBudget,
+  stats?: ScanStats,
+  receipt: boolean = false,
 ): Promise<{ items: DetectedPantryItem[]; passes: 1 | 2 } | { error: GeminiAttemptError }> {
   let httpRetries = 0;
 
@@ -1079,15 +1325,16 @@ async function callPantryGeminiOnModel(
     const result = await callPantryGeminiTwoPass(
       apiKey,
       model,
-      mimeType,
-      imageBase64,
+      images,
       scanLocation,
       budget,
+      stats,
+      receipt,
     );
     if ('items' in result) return result;
 
     if (result.error.kind === 'timeout') {
-      geminiModelTimeoutMemory.record(model, Date.now(), isLargePantryImageBase64(imageBase64));
+      geminiModelTimeoutMemory.record(model, Date.now(), isLargePantryImageBase64(images[0]?.base64 ?? ''));
       return result;
     }
 
@@ -1131,21 +1378,138 @@ async function callPriceTagGeminiOnModel(
   }
 }
 
+/**
+ * One line per scan for measuring cost and consistency. Numbers only: no user id, no item
+ * names, nothing from the photo.
+ */
+function formatScanLogLine(scan: {
+  ok: boolean;
+  model: string;
+  items: number;
+  passes: number;
+  images: number;
+  imageBytes: number;
+  ms: number;
+  attempts: number;
+  stats: ScanStats;
+  /** Items after the first whole-photo pass, before any thorough crop calls. */
+  firstPassItems?: number;
+  tileCalls?: number;
+  tilesOk?: number;
+  kind?: VisionAction;
+}): string {
+  const { stats } = scan;
+  return (
+    `pantry-vision: scan ${scan.ok ? 'ok' : 'failed'}` +
+    ` model=${scan.model || 'none'} items=${scan.items} passes=${scan.passes}` +
+    ` images=${scan.images} imageBytes=${scan.imageBytes} ms=${scan.ms}` +
+    ` calls=${stats.calls} modelsTried=${scan.attempts} emptyAnswers=${stats.emptyAnswers}` +
+    ` promptTokens=${stats.promptTokens} outputTokens=${stats.outputTokens} thoughtTokens=${stats.thoughtTokens}` +
+    ` finish=${stats.lastFinishReason || 'unknown'}` +
+    ` thorough=${(scan.tileCalls ?? 0) > 0 ? 1 : 0} firstPassItems=${scan.firstPassItems ?? scan.items}` +
+    ` tileCalls=${scan.tileCalls ?? 0} tilesOk=${scan.tilesOk ?? 0} kind=${scan.kind ?? 'pantry'}`
+  );
+}
+
+// --- Thorough scan: one call per zoomed crop ---
+// Asked to list a whole busy shelf in one answer, the model stops early (36 of 100+ on the
+// owner's pantry). Asked about one crop at a time it has a quarter as much to list, so less
+// gets left out. It costs about four extra calls, so by default it runs only on busy photos.
+
+type ThoroughScanMode = 'auto' | 'off' | 'always';
+const PANTRY_THOROUGH_MIN_ITEMS_DEFAULT = 20;
+
+function parseThoroughScanMode(raw: string | undefined): ThoroughScanMode {
+  const value = (raw ?? '').trim().toLowerCase();
+  return value === 'off' || value === 'always' ? value : 'auto';
+}
+
+function parseThoroughMinItems(raw: string | undefined): number {
+  const parsed = Number.parseInt((raw ?? '').trim(), 10);
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 500 ? parsed : PANTRY_THOROUGH_MIN_ITEMS_DEFAULT;
+}
+
+function shouldRunThoroughScan(input: {
+  mode: ThoroughScanMode;
+  tileCount: number;
+  firstPassItems: number;
+  minItems: number;
+}): boolean {
+  if (input.mode === 'off') return false;
+  if (input.tileCount < 2) return false; // small photo: no crops, nothing more to look at
+  if (input.mode === 'always') return true;
+  return input.firstPassItems >= input.minItems;
+}
+
+/** One crop, checked by itself (with the full photo for context). Same-model retries only. */
+async function scanOneTile(
+  apiKey: string,
+  model: string,
+  main: GeminiImage,
+  tile: GeminiImage,
+  cropFocus: string,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+  budget: RequestTimeBudget,
+  stats: ScanStats,
+): Promise<DetectedPantryItem[] | null> {
+  let httpRetries = 0;
+  while (true) {
+    if (budget.isExhausted()) return null;
+    const result = await callPantryGeminiPass(
+      apiKey,
+      model,
+      [{ ...main, caption: 'Full photo, for context:' }, tile],
+      geminiEnumeratePrompt(scanLocation, 1, cropFocus),
+      GEMINI_MAX_OUTPUT_TOKENS,
+      budget,
+      stats,
+    );
+    if ('items' in result) return result.items;
+    if (result.error.kind === 'timeout' || !shouldRetrySameModelAfterError(result.error, httpRetries)) {
+      console.warn(`pantry-vision: thorough crop failed ${formatAttemptError(model, result.error, perCallGeminiTimeoutMs())}`);
+      return null;
+    }
+    httpRetries += 1;
+    await sleep(GEMINI_RETRY_BACKOFF_MS * httpRetries);
+  }
+}
+
+/**
+ * Checks every crop in parallel and returns what they found. A crop that fails is skipped:
+ * the first pass and the other crops still stand.
+ */
+async function runThoroughTileScans(
+  apiKey: string,
+  model: string,
+  main: GeminiImage,
+  tiles: Array<{ image: GeminiImage; position: string }>,
+  scanLocation: (typeof PANTRY_STORAGE)[number],
+  budget: RequestTimeBudget,
+  stats: ScanStats,
+): Promise<{ items: DetectedPantryItem[]; tileCalls: number; tilesOk: number }> {
+  const results = await Promise.all(
+    tiles.map((tile) => scanOneTile(apiKey, model, main, tile.image, tile.position, scanLocation, budget, stats)),
+  );
+  const ok = results.filter((items): items is DetectedPantryItem[] => items != null);
+  return { items: ok.flat(), tileCalls: tiles.length, tilesOk: ok.length };
+}
+
 const UPSTREAM_BUSY_MESSAGE =
   'Vision scan is busy right now. Try again in a moment.';
 
 async function callPantryGeminiWithFallbacks(
   apiKey: string,
-  mimeType: string,
-  imageBase64: string,
+  images: GeminiImage[],
   scanLocation: (typeof PANTRY_STORAGE)[number],
+  stats: ScanStats = new ScanStats(),
+  budget: RequestTimeBudget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS),
+  receipt: boolean = false,
 ): Promise<{
   items: DetectedPantryItem[];
   model: string;
   debug: { modelAttempts: GeminiModelAttemptDebug[]; geminiPasses: number };
 }> {
-  const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
-  const imageIsLarge = isLargePantryImageBase64(imageBase64);
+  const imageIsLarge = isLargePantryImageBase64(images[0]?.base64 ?? '');
   const candidates = orderModelsForAttempt(
     Deno.env.get('GEMINI_MODEL') ?? undefined,
     Deno.env.get('GEMINI_FALLBACK_MODELS') ?? undefined,
@@ -1171,10 +1535,11 @@ async function callPantryGeminiWithFallbacks(
     const result = await callPantryGeminiOnModel(
       apiKey,
       model,
-      mimeType,
-      imageBase64,
+      images,
       scanLocation,
       budget,
+      stats,
+      receipt,
     );
     if ('items' in result) {
       modelAttempts.push({ model, ok: true });
@@ -1296,7 +1661,7 @@ Deno.serve(async (req) => {
 
     const imageBase64 = bytesToBase64(imageResult.bytes);
     const contentHash = imageResult.imageHash || (await sha256Hex(imageResult.bytes));
-    const cacheKey = `${PANTRY_VISION_CACHE_VERSION}|${imageResult.scanLocation}|${contentHash}`;
+    const cacheKey = `${PANTRY_VISION_CACHE_VERSION}|${imageResult.action}|${imageResult.scanLocation}|${contentHash}|t${imageResult.tiles.length}`;
 
     if (imageResult.action === 'price-tag') {
       const { tag, model } = await callPriceTagGeminiWithFallbacks(
@@ -1330,11 +1695,94 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { items, model, debug } = await callPantryGeminiWithFallbacks(
-      apiKey,
-      imageResult.mimeType,
-      imageBase64,
-      imageResult.scanLocation,
+    const isReceipt = imageResult.action === 'receipt';
+    const images: GeminiImage[] = [
+      {
+        mimeType: imageResult.mimeType,
+        base64: imageBase64,
+        caption: imageResult.tiles.length > 0 ? (isReceipt ? 'Whole receipt:' : 'Full photo:') : undefined,
+      },
+      ...imageResult.tiles.map((tile) => ({
+        mimeType: tile.mimeType,
+        base64: tile.base64,
+        caption: isReceipt
+          ? tile.position
+            ? `Zoomed strip of the same receipt (${tile.position}):`
+            : 'Zoomed strip of the same receipt:'
+          : tile.position
+            ? `Zoomed crop of the same photo (${tile.position}):`
+            : 'Zoomed crop of the same photo:',
+      })),
+    ];
+    const imageBytes = imageResult.bytes.byteLength + imageResult.tiles.reduce((sum, tile) => sum + tile.byteLength, 0);
+    const stats = new ScanStats();
+    const startedAt = Date.now();
+
+    const budget = new RequestTimeBudget(GEMINI_REQUEST_TOTAL_BUDGET_MS);
+    let scan: Awaited<ReturnType<typeof callPantryGeminiWithFallbacks>>;
+    try {
+      scan = await callPantryGeminiWithFallbacks(apiKey, images, imageResult.scanLocation, stats, budget, isReceipt);
+    } catch (scanError) {
+      console.warn(
+        formatScanLogLine({
+          ok: false,
+          model: '',
+          items: 0,
+          passes: 0,
+          images: images.length,
+          imageBytes,
+          ms: Date.now() - startedAt,
+          attempts: 0,
+          stats,
+          kind: imageResult.action,
+        }),
+      );
+      throw scanError;
+    }
+    const { model, debug } = scan;
+    let items = scan.items;
+    const firstPassItems = items.length;
+    let thorough = { tileCalls: 0, tilesOk: 0 };
+    if (
+      // A receipt is printed text read in one pass; splitting it would count lines on a seam twice.
+      !isReceipt &&
+      shouldRunThoroughScan({
+        mode: parseThoroughScanMode(Deno.env.get('PANTRY_THOROUGH_SCAN') ?? undefined),
+        tileCount: imageResult.tiles.length,
+        firstPassItems,
+        minItems: parseThoroughMinItems(Deno.env.get('PANTRY_THOROUGH_MIN_ITEMS') ?? undefined),
+      }) &&
+      !budget.isExhausted()
+    ) {
+      const tileScan = await runThoroughTileScans(
+        apiKey,
+        model,
+        images[0],
+        imageResult.tiles.map((tile, index) => ({ image: images[index + 1], position: tile.position })),
+        imageResult.scanLocation,
+        budget,
+        stats,
+      );
+      thorough = { tileCalls: tileScan.tileCalls, tilesOk: tileScan.tilesOk };
+      // The same product seen in the whole photo and in a crop, or in two overlapping crops, is one row.
+      items = mergeItemPasses(items, tileScan.items);
+    }
+    console.log(
+      formatScanLogLine({
+        ok: true,
+        model,
+        items: items.length,
+        passes: debug.geminiPasses,
+        images: images.length,
+        imageBytes,
+        ms: Date.now() - startedAt,
+        attempts: debug.modelAttempts.length,
+        stats,
+        firstPassItems,
+        tileCalls: thorough.tileCalls,
+        tilesOk: thorough.tilesOk,
+        kind: imageResult.action,
+      }),
     );
 
     setCachedScan(cacheKey, items, model);
@@ -1343,8 +1791,19 @@ Deno.serve(async (req) => {
       {
         items,
         model,
-        debug,
+        debug: {
+          ...debug,
+          images: images.length,
+          thorough: { ...thorough, firstPassItems },
+          usage: {
+            promptTokens: stats.promptTokens,
+            outputTokens: stats.outputTokens,
+            thoughtTokens: stats.thoughtTokens,
+            calls: stats.calls,
+          },
+        },
         scanLocation: imageResult.scanLocation,
+        kind: imageResult.action,
         cached: false,
         itemCount: items.length,
       },

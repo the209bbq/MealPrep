@@ -81,6 +81,19 @@ export function normalizeDetectionsForReview(
   }));
 }
 
+/**
+ * What a scan found against what the shopper already has. The review list only shows the new
+ * items, so without this a re-scan of a stocked shelf looks like the scanner missed most of it.
+ */
+export function summarizeScanAgainstPantry(
+  detections: PantryVisionDetection[],
+  pantry: PantryItem[],
+): { found: number; alreadyInPantry: number; fresh: number } {
+  const normalized = normalizeDetectionsForReview(detections);
+  const fresh = filterDetectionsNotAlreadyInPantry(normalized, pantry).length;
+  return { found: normalized.length, alreadyInPantry: normalized.length - fresh, fresh };
+}
+
 export function detectionsToReviewItems(
   detections: PantryVisionDetection[],
   pantry: PantryItem[],
@@ -88,11 +101,17 @@ export function detectionsToReviewItems(
   photoUri: string | null,
   isDemoSample: boolean,
   scanHint: PantryStorageLocation = DEFAULT_PANTRY_STORAGE_LOCATION,
+  options?: {
+    /**
+     * Receipts: keep items the shopper already has. They bought more, and saving adds the new
+     * quantity to the existing pantry row. Shelf scans leave this off: there the item on the
+     * shelf IS the one already in the pantry.
+     */
+    includeAlreadyInPantry?: boolean;
+  },
 ): PantryScanReviewItem[] {
-  const normalized = filterDetectionsNotAlreadyInPantry(
-    normalizeDetectionsForReview(detections),
-    pantry,
-  );
+  const usable = normalizeDetectionsForReview(detections);
+  const normalized = options?.includeAlreadyInPantry ? usable : filterDetectionsNotAlreadyInPantry(usable, pantry);
   const catalog = buildIngredientCatalog(pantry, recipes);
   const stamp = Date.now();
   return normalized.map((detection, index) => {
@@ -173,8 +192,17 @@ export function mergeSecondScanIntoReview(
   pantry: PantryItem[],
   recipes: Recipe[],
   scanHint: PantryStorageLocation,
+  options?: { includeAlreadyInPantry?: boolean },
 ): PantryScanReviewItem[] {
-  const fresh = detectionsToReviewItems(newDetections, pantry, recipes, existing[0]?.photoUri ?? null, false, scanHint);
+  const fresh = detectionsToReviewItems(
+    newDetections,
+    pantry,
+    recipes,
+    existing[0]?.photoUri ?? null,
+    false,
+    scanHint,
+    options,
+  );
   const byIngredient = new Map<string, PantryScanReviewItem>();
   for (const row of existing) {
     byIngredient.set(row.ingredientId, row);
@@ -195,6 +223,26 @@ export function mergeSecondScanIntoReview(
     });
   }
   return [...byIngredient.values()];
+}
+
+/**
+ * Grocery-list rows a receipt's items cover, so they can be ticked off. Matches on the same
+ * ingredient id or the same ingredient name; only rows not yet ticked are returned.
+ */
+export function groceryIdsBoughtOnReceipt(
+  reviewItems: Array<Pick<PantryScanReviewItem, 'enabled' | 'name' | 'ingredientId'>>,
+  grocery: Array<{ id: string; name: string; ingredientId: string; checked: boolean }>,
+): string[] {
+  const bought = reviewItems.filter((item) => item.enabled && item.name.trim().length > 0);
+  if (bought.length === 0) return [];
+  return grocery
+    .filter((row) => !row.checked)
+    .filter((row) =>
+      bought.some(
+        (item) => item.ingredientId === row.ingredientId || areSameIngredientForPantryDedupe(item.name, row.name),
+      ),
+    )
+    .map((row) => row.id);
 }
 
 export function reviewItemsToPantryItems(
